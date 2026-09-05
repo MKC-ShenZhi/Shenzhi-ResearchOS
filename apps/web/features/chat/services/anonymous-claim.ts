@@ -7,6 +7,19 @@ export interface AnonymousClaimResult {
   durable: boolean;
 }
 
+export const ANONYMOUS_CLAIM_RETRY_DELAY_MS = 2_000;
+/** First call plus at most three retries while a pre-login stream finishes. */
+export const ANONYMOUS_CLAIM_MAX_ATTEMPTS = 4;
+
+export function shouldRetryAnonymousClaim(
+  result: AnonymousClaimResult,
+  attemptsCompleted: number,
+): boolean {
+  return result.durable
+    && result.skipped_streaming_count > 0
+    && attemptsCompleted < ANONYMOUS_CLAIM_MAX_ATTEMPTS;
+}
+
 export function anonymousClaimAttemptUser(
   isPending: boolean,
   userId: string | undefined,

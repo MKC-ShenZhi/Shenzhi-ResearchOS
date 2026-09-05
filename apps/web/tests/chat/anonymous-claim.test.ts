@@ -4,8 +4,10 @@ import test from "node:test";
 
 import { ApiError } from "../../clients/backend/http";
 import {
+  ANONYMOUS_CLAIM_MAX_ATTEMPTS,
   anonymousClaimAttemptUser,
   claimAnonymousSessions,
+  shouldRetryAnonymousClaim,
   shouldRefreshAfterAnonymousClaim,
 } from "../../features/chat/services/anonymous-claim";
 
@@ -63,6 +65,18 @@ test("coordinator attempts once per stable user and refreshes only after durable
   assert.equal(shouldRefreshAfterAnonymousClaim({
     moved_count: 1, skipped_streaming_count: 0, durable: false,
   }), false);
+  assert.equal(shouldRetryAnonymousClaim({
+    moved_count: 0, skipped_streaming_count: 1, durable: true,
+  }, 1), true);
+  assert.equal(shouldRetryAnonymousClaim({
+    moved_count: 0, skipped_streaming_count: 0, durable: true,
+  }, 1), false);
+  assert.equal(shouldRetryAnonymousClaim({
+    moved_count: 0, skipped_streaming_count: 1, durable: false,
+  }, 1), false);
+  assert.equal(shouldRetryAnonymousClaim({
+    moved_count: 0, skipped_streaming_count: 1, durable: true,
+  }, ANONYMOUS_CLAIM_MAX_ATTEMPTS), false);
 
   const coordinator = readFileSync(
     "features/chat/components/anonymous-claim-coordinator.tsx",
@@ -70,5 +84,7 @@ test("coordinator attempts once per stable user and refreshes only after durable
   );
   assert.match(coordinator, /requestReset/);
   assert.match(coordinator, /bumpHistoryRefresh/);
+  assert.match(coordinator, /clearTimeout/);
+  assert.match(coordinator, /shouldRetryAnonymousClaim/);
   assert.doesNotMatch(coordinator, /requestNewChat/);
 });

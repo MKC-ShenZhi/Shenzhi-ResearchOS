@@ -303,6 +303,22 @@ class PostgresSessionRepository:
             'durable': True,
         }
 
+    async def purge_expired_anonymous_sessions(self, cutoff: datetime) -> int:
+        """Remove only expired anonymous sessions; message rows cascade in PostgreSQL."""
+        async with session_scope() as db:
+            deleted = await db.scalars(
+                delete(ChatSessionRow)
+                .where(ChatSessionRow.owner.like('anon:%'), ChatSessionRow.updated_at < cutoff)
+                .returning(ChatSessionRow.id)
+            )
+            session_ids = {str(session_id) for session_id in deleted.all()}
+        for message_id, message in list(self.messages.items()):
+            if message.session_id in session_ids:
+                if message.task and not message.task.done():
+                    message.task.cancel()
+                self._untrack(message_id)
+        return len(session_ids)
+
     def prune(self) -> None:
         cutoff = time.time() - self.ttl
         self.uploads = {key: value for key, value in self.uploads.items() if value['created_at'] > cutoff}

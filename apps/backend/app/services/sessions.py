@@ -3,6 +3,7 @@ import asyncio
 import os
 import time
 import uuid
+from datetime import datetime
 from typing import Protocol
 
 from app.core.errors import BusinessError
@@ -31,6 +32,7 @@ class SessionRepository(Protocol):
     async def purge_owner(self, owner: str) -> None: ...
     async def delete(self, session_id: str, owner: str) -> None: ...
     async def claim_anonymous_sessions(self, source_owner: str, target_owner: str) -> dict: ...
+    async def purge_expired_anonymous_sessions(self, cutoff: datetime) -> int: ...
     def prune(self) -> None: ...
     def save_upload(self, owner: str, filename: str, parsed: dict) -> dict: ...
     def upload(self, file_id: str, owner: str) -> dict: ...
@@ -137,6 +139,10 @@ class MemorySessionRepository:
     async def claim_anonymous_sessions(self, source_owner: str, target_owner: str) -> dict:
         """Memory mode must never claim that an ephemeral ownership change is durable."""
         return {'moved_count': 0, 'skipped_streaming_count': 0, 'durable': False}
+
+    async def purge_expired_anonymous_sessions(self, cutoff: datetime) -> int:
+        # Memory mode is process-local and already prunes its own short-lived cache.
+        return 0
 
     def _delete(self, session_id: str, owner: str) -> None:
         session = self.sessions.get(session_id)

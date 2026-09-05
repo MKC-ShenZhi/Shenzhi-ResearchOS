@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
+import logging
+from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from app.api import chat, knowledge, search, uploads
-from app.core.errors import BusinessError
+from app.core.errors import BusinessError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE
 from app.core.responses import fail
 from app.services.sessions import repository
 
@@ -15,8 +17,17 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title='ShenZhi AI API', version='1.0.0', lifespan=lifespan)
+logger = logging.getLogger(__name__)
 for router in (chat.router, knowledge.router, search.router, uploads.router):
     app.include_router(router)
+
+
+@app.middleware('http')
+async def request_id(request: Request, call_next):
+    request.state.request_id = request.headers.get('x-request-id') or str(uuid4())
+    response = await call_next(request)
+    response.headers['X-Request-Id'] = request.state.request_id
+    return response
 
 
 @app.exception_handler(BusinessError)
@@ -27,6 +38,16 @@ async def business_error(_request: Request, error: BusinessError):
 @app.exception_handler(RequestValidationError)
 async def validation_error(_request: Request, _error: RequestValidationError):
     return fail(20001, '请求参数不合法，请检查问题长度、模型和附件数量', 422)
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request: Request, _error: Exception):
+    request_id = getattr(request.state, 'request_id', '-')
+    logger.exception('Unhandled request error request_id=%s method=%s path=%s',
+                     request_id, request.method, request.url.path)
+    response = fail(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE, 500)
+    response.headers['X-Request-Id'] = request_id
+    return response
 
 
 @app.get('/health')
