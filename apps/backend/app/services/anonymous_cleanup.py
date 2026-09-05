@@ -35,8 +35,12 @@ async def main() -> int:
     except Exception:
         logger.exception('Anonymous session cleanup failed')
         return 1
-    logger.info('Anonymous session cleanup completed deleted_sessions=%s', deleted)
-    return 0
+    else:
+        logger.info('Anonymous session cleanup completed deleted_sessions=%s', deleted)
+        print(f'deleted_sessions={deleted}')
+        return 0
+    finally:
+        await repository.close()
 
 
 if __name__ == '__main__':

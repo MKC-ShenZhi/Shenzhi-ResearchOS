@@ -25,6 +25,7 @@ class SessionRepository(Protocol):
     async def add_message(self, session: Session, question: str, settings: dict,
                           context: str = '', warnings: list[str] | None = None) -> Message: ...
     async def list(self, owner: str) -> list[dict]: ...
+    async def touch_owner(self, owner: str) -> None: ...
     async def update(self, session_id: str, owner: str, *, title: str | None = None,
                      favorite: bool | None = None) -> Session: ...
     async def touch(self, session_id: str) -> None: ...
@@ -104,8 +105,20 @@ class MemorySessionRepository:
 
     async def list(self, owner: str) -> list[dict]:
         self._prune()
-        return [item.public() for item in sorted(self.sessions.values(),
+        items = [item.public() for item in sorted(self.sessions.values(),
                 key=lambda session: (session.favorite, session.updated_at), reverse=True) if item.owner == owner]
+        await self.touch_owner(owner)
+        return items
+
+    async def touch_owner(self, owner: str) -> None:
+        # The anonymous cookie represents one browser-local history, so refresh
+        # every session in that history when the history itself is successfully read.
+        if not owner.startswith('anon:'):
+            return
+        now = time.time()
+        for session in self.sessions.values():
+            if session.owner == owner:
+                session.updated_at = now
 
     async def update(self, session_id: str, owner: str, *, title: str | None = None,
                      favorite: bool | None = None) -> Session:

@@ -493,12 +493,25 @@ async def generate(message: Message) -> None:
         message.emit('error', {'code': 20004, 'message': message.error})
     finally:
         message.duration_ms += int((time.monotonic() - started) * 1000)
+        try:
+            # A terminal event is an acknowledgement that the final message is
+            # durable.  Do not send it before the database write succeeds.
+            await repository.persist_message(message)
+        except Exception:
+            logger.exception('Final Chat persistence failure message_id=%s', message.id)
+            message.status, message.error = 'failed', '对话保存失败，请稍后重试'
+            message.emit('error', {'code': 20004, 'message': message.error})
+        else:
+            try:
+                await repository.touch(message.session_id)
+            except Exception:
+                # Timestamp maintenance must not turn a durable answer into a
+                # false failure; it can be retried by later normal activity.
+                logger.exception('Chat session touch failure message_id=%s', message.id)
         done = {'duration_ms': message.duration_ms, 'status': message.status}
         if knowledge_grounding is not None:
             done['knowledge_grounding'] = knowledge_grounding
         message.emit('done', done)
-        await repository.persist_message(message)
-        await repository.touch(message.session_id)
 
 
 async def stop_message(message: Message) -> None:
@@ -509,8 +522,13 @@ async def stop_message(message: Message) -> None:
             await message.task
     if message.status == 'streaming':
         message.status = 'stopped'
-        message.emit('done', {'duration_ms': message.duration_ms, 'status': 'stopped'})
-        await repository.persist_message(message)
+        try:
+            await repository.persist_message(message)
+        except Exception:
+            logger.exception('Stopped Chat persistence failure message_id=%s', message.id)
+            message.status, message.error = 'failed', '对话保存失败，请稍后重试'
+            message.emit('error', {'code': 20004, 'message': message.error})
+        message.emit('done', {'duration_ms': message.duration_ms, 'status': message.status})
 
 
 async def stream_events(message: Message, cursor: int = 0):

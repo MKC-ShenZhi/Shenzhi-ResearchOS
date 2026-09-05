@@ -71,7 +71,7 @@ export async function forwardToBusinessBackend(
   });
   // Only anonymous traffic renews this access key. An authenticated request
   // must not silently extend data that has already been (or will be) claimed.
-  if (identity.kind === "anonymous") response.cookies.set("shenzhi-chat-anon", anonymousId, {
+  if (identity.kind === "anonymous" && upstream.ok) response.cookies.set("shenzhi-chat-anon", anonymousId, {
     httpOnly: true, sameSite: "lax", secure: req.nextUrl.protocol === "https:", path: "/", maxAge: ANONYMOUS_CHAT_TTL_SECONDS,
   });
   return response;

@@ -13,6 +13,7 @@ from sqlalchemy import select, text
 from app.core.database import session_scope
 from app.main import app
 from app.models.chat import ChatMessageRow, ChatSessionRow
+from app.schemas.knowledge import KnowledgeSearchResponse
 from app.services import chat
 from app.services.sessions import repository
 
@@ -31,6 +32,11 @@ class FakeProvider:
 
     async def followups(self, question, answer):
         return ['追问1？']
+
+
+class FakeKnowledge:
+    async def search(self, request):
+        return KnowledgeSearchResponse(results=[])
 
 
 def events(text: str):
@@ -69,9 +75,7 @@ class Acceptance2a(unittest.IsolatedAsyncioTestCase):
         FakeProvider.calls = []
         self.provider = patch.object(chat, 'ModelProvider', FakeProvider)
         self.provider.start()
-        self.retrieval = patch.object(chat, 'retrieval_search', return_value=[
-            {'id': 'p1', 'title': 'Paper', 'abstract': 'Evidence'},
-        ])
+        self.retrieval = patch.object(chat, 'knowledge_service', FakeKnowledge())
         self.retrieval.start()
         self.client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
@@ -236,7 +240,7 @@ class EnvironmentChecks(unittest.TestCase):
         tables, version = asyncio.run(check())
         self.assertIn('chat_sessions', tables)
         self.assertIn('chat_messages', tables)
-        self.assertEqual(version, '001_chat_tables')
+        self.assertEqual(version, '002_anon_expiry_idx')
 
 
 if __name__ == '__main__':

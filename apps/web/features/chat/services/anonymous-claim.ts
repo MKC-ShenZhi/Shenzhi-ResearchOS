@@ -11,6 +11,18 @@ export const ANONYMOUS_CLAIM_RETRY_DELAY_MS = 2_000;
 /** First call plus at most three retries while a pre-login stream finishes. */
 export const ANONYMOUS_CLAIM_MAX_ATTEMPTS = 4;
 
+export async function previewAnonymousSessions(
+  signal: AbortSignal,
+  fetcher: typeof fetch = fetch,
+): Promise<number> {
+  const response = await fetcher("/api/chat/anonymous-claim", { cache: "no-store", signal });
+  const body = await response.json();
+  if (!response.ok || body.code !== 0 || !Number.isInteger(body.data?.count)) {
+    throw new Error("无法检查匿名历史");
+  }
+  return body.data.count;
+}
+
 export function shouldRetryAnonymousClaim(
   result: AnonymousClaimResult,
   attemptsCompleted: number,

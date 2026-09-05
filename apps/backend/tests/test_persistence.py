@@ -144,6 +144,23 @@ class PostgresPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(recent.owner, 'anon:00000000-0000-4000-8000-000000000002')
         self.assertEqual(user.owner, 'user:a')
 
+    async def test_purge_expired_anonymous_sessions_keeps_active_streams(self):
+        owner = 'anon:00000000-0000-4000-8000-000000000001'
+        session = await self.repo.create(owner, 'active', {'mode': 'fast'})
+        message = await self.repo.add_message(session, 'active', session.settings)
+        async with session_scope() as db:
+            await db.execute(
+                ChatSessionRow.__table__.update()
+                .where(ChatSessionRow.id == uuid.UUID(session.id))
+                .values(updated_at=datetime.now(timezone.utc) - timedelta(days=8))
+            )
+
+        deleted = await self.repo.purge_expired_anonymous_sessions(
+            datetime.now(timezone.utc) - timedelta(days=7)
+        )
+        self.assertEqual(deleted, 0)
+        self.assertEqual((await self.repo.get(session.id, owner)).messages[0].id, message.id)
+
 
 class MemoryRepositoryAsyncTests(unittest.IsolatedAsyncioTestCase):
     async def test_async_wrapper_parity(self):

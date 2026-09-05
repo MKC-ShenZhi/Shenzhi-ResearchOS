@@ -4,7 +4,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = '002_anonymous_session_cleanup_index'
+revision: str = '002_anon_expiry_idx'
 down_revision: Union[str, Sequence[str], None] = '001_chat_tables'
 branch_labels = None
 depends_on = None
