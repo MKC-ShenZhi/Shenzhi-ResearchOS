@@ -1,6 +1,7 @@
 """Chat orchestration: context -> Knowledge/search -> provider -> product SSE."""
 import asyncio
 import json
+import logging
 import time
 from contextlib import suppress
 from dataclasses import dataclass
@@ -45,6 +46,7 @@ KNOWLEDGE_CITATION_WARNING = '本轮未能形成可验证的知识引用，以�
 # Constructed once so Chat has one server-side Capability boundary. The
 # integration client remains private to KnowledgeService.
 knowledge_service = KnowledgeService()
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -484,6 +486,9 @@ async def generate(message: Message) -> None:
         error_data = {'code': exc.code, 'message': exc.message}
         message.emit('error', error_data)
     except Exception:
+        # The client receives a stable message, while operators retain the
+        # traceback and opaque message id needed to diagnose this one turn.
+        logger.exception('Unexpected Chat generation failure message_id=%s', message.id)
         message.status, message.error = 'failed', '生成服务发生错误，请重试'
         message.emit('error', {'code': 20004, 'message': message.error})
     finally:
