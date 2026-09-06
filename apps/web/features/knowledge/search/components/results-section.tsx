@@ -17,7 +17,13 @@ async function fetchSearch(params: KnowledgeSearchParams) {
 }
 
 /** 论文搜索结果区 —— 负责 loading / empty / error 三种状态的区分 */
-export function KnowledgeResultsSection({ params }: { params: KnowledgeSearchParams }) {
+export function KnowledgeResultsSection({
+  params,
+  returnTo,
+}: {
+  params: KnowledgeSearchParams;
+  returnTo: string;
+}) {
   const query = params.query.trim();
   const { data, isPending, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["knowledge", "search", params],
@@ -59,7 +65,7 @@ export function KnowledgeResultsSection({ params }: { params: KnowledgeSearchPar
       </p>
       <div className="space-y-4">
         {results.map((hit, index) => (
-          <KnowledgeResultCard key={hit.id} hit={hit} index={index} />
+          <KnowledgeResultCard key={hit.id} hit={hit} index={index} returnTo={returnTo} />
         ))}
       </div>
     </div>

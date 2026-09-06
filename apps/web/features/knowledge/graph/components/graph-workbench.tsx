@@ -28,6 +28,8 @@ import {
   LAYOUT_LABELS,
   type GraphLayoutMode,
 } from "../lib/layouts";
+import { paperHref } from "@/lib/navigation/paper";
+import { useKnowledgePaper } from "../../paper/use-knowledge-paper";
 import { cn } from "@/lib/utils";
 import { knowledgeQueryRetry } from "../../retry";
 
@@ -35,7 +37,7 @@ const LAYOUT_OPTIONS: GraphLayoutMode[] = ["radial", "treeHorizontal", "treeVert
 const DEPTH_OPTIONS: KnowledgeGraphDepth[] = [1, 2];
 
 /** 图谱工作台 —— 三栏：左关联论文 / 中图谱 / 右详情 */
-export function KnowledgeGraphWorkbench({ paperId }: { paperId: string }) {
+export function KnowledgeGraphWorkbench({ paperId, returnTo }: { paperId: string; returnTo?: string | null }) {
   const router = useRouter();
   const [layoutMode, setLayoutMode] = useState<GraphLayoutMode>("radial");
   const [direction, setDirection] = useState<GraphDirectionFilter>("all");
@@ -67,13 +69,7 @@ export function KnowledgeGraphWorkbench({ paperId }: { paperId: string }) {
   const selectedPaperId = isPaperNode ? selectedNode.id : null;
 
   // 论文详情：仅选中 Paper 节点时获取；React Query 自动缓存
-  const detailQuery = useQuery({
-    queryKey: ["knowledge", "paper", selectedPaperId],
-    queryFn: () => getKnowledgeClient().paper(selectedPaperId as string),
-    enabled: Boolean(selectedPaperId),
-    staleTime: 60_000,
-    retry: knowledgeQueryRetry,
-  });
+  const detailQuery = useKnowledgePaper(selectedPaperId);
 
   const displayGraph = useMemo(
     () => (fullGraph ? filterGraphByDirection(fullGraph, direction) : null),
@@ -88,7 +84,7 @@ export function KnowledgeGraphWorkbench({ paperId }: { paperId: string }) {
 
   const pickCenter = (id: string) => {
     // 切换中心论文：更新 URL → 页面 key 重挂载重置图谱
-    router.push(`/knowledge/search/${encodeURIComponent(id)}/graph`);
+    router.push(paperHref(id, returnTo, true));
   };
 
   if (graphQuery.isLoading) {
@@ -127,11 +123,11 @@ export function KnowledgeGraphWorkbench({ paperId }: { paperId: string }) {
       {/* 顶栏 */}
       <header className="flex h-13 shrink-0 items-center gap-3 border-b border-line bg-card px-5 py-2.5">
         <Link
-          href="/knowledge/search"
+          href={paperHref(paperId, returnTo)}
           className="flex shrink-0 items-center gap-1.5 text-[13px] text-muted transition-colors hover:text-primary"
         >
           <ArrowLeft className="size-4" />
-          返回检索
+          返回论文
         </Link>
         <h1 className="min-w-0 flex-1 truncate text-center text-[15px] font-semibold text-ink">
           {centerTitle || "论文关系图谱"}
@@ -212,6 +208,7 @@ export function KnowledgeGraphWorkbench({ paperId }: { paperId: string }) {
             loading={detailQuery.isLoading}
             error={detailQuery.isError ? toKnowledgeError(detailQuery.error) : null}
             isCenter={selectedNode.id === fullGraph.rootId}
+            returnTo={returnTo}
             onRetry={() => void detailQuery.refetch()}
           />
         </aside>

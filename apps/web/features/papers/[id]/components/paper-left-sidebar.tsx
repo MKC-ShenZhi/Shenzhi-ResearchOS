@@ -1,108 +1,33 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { PaperToc } from "./paper-toc";
-import { PageThumbnails } from "./page-thumbnails";
-import { cn } from "@/lib/utils";
-import type { PaperDetail } from "@/types";
+import type { KnowledgePaperDetail } from "@/clients/knowledge";
+import { Badge } from "@/components/ui/badge";
 
-/** 悬停展开前需在左边缘停留的时间(ms),避免快速扫过时闪现 */
-const OPEN_DELAY = 80;
-/** 鼠标移出后延迟收起的时间(ms),期间回到栏内则取消 */
-const CLOSE_DELAY = 120;
-/** 触发悬停展开的左边缘宽度(px) */
-const EDGE_WIDTH = 12;
-
-/**
- * 左侧边栏(本文摘要 + 页码导航)—— 默认折叠。
- * - 悬停:鼠标在页面最左边缘停留片刻临时展开,移出左栏区域后恢复折叠;
- * - 点击:按钮固定展开/收起,固定后不受悬停影响。
- */
-export function PaperLeftSidebar({
-  toc,
-  current,
-  total,
-}: {
-  toc: PaperDetail["toc"];
-  current: number;
-  total: number;
-}) {
-  const [pinned, setPinned] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const open = pinned || hovered;
-
-  const openTimer = useRef<number | null>(null);
-  const closeTimer = useRef<number | null>(null);
-
-  const clearOpenTimer = () => {
-    if (openTimer.current !== null) {
-      window.clearTimeout(openTimer.current);
-      openTimer.current = null;
-    }
-  };
-  const clearCloseTimer = () => {
-    if (closeTimer.current !== null) {
-      window.clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-    }
-  };
-  useEffect(
-    () => () => {
-      clearOpenTimer();
-      clearCloseTimer();
-    },
-    [],
-  );
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    // 鼠标仍在栏内移动:取消待执行的收起
-    clearCloseTimer();
-    // 贴近左边缘:停留 OPEN_DELAY 后才展开,快速扫过不触发
-    if (!open && e.clientX <= EDGE_WIDTH && openTimer.current === null) {
-      openTimer.current = window.setTimeout(() => {
-        openTimer.current = null;
-        setHovered(true);
-      }, OPEN_DELAY);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    // 未满足停留时间就离开,不展开
-    clearOpenTimer();
-    if (hovered && closeTimer.current === null) {
-      closeTimer.current = window.setTimeout(() => {
-        closeTimer.current = null;
-        setHovered(false);
-      }, CLOSE_DELAY);
-    }
-  };
-
+/** Metadata summary; no fabricated PDF outline, page count or thumbnails. */
+export function PaperLeftSidebar({ paper }: { paper: KnowledgePaperDetail }) {
+  const [open, setOpen] = useState(true);
   return (
-    <div
-      className="flex min-h-0 shrink-0"
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    >
+    <aside className="shrink-0 border-b border-line bg-card lg:flex lg:min-h-0 lg:border-r lg:border-b-0">
       {open && (
-        <>
-          <PaperToc toc={toc} />
-          <PageThumbnails current={current} total={total} />
-        </>
+        <div className="max-h-80 overflow-y-auto p-5 lg:max-h-none lg:w-64">
+          <h2 className="text-sm font-semibold text-ink">摘要</h2>
+          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted">{paper.abstract?.trim() || "当前论文暂无摘要"}</p>
+          {(paper.keywords.length > 0 || paper.subjects.length > 0) && (
+            <section className="mt-5 border-t border-line pt-4">
+              <h2 className="mb-3 text-sm font-semibold text-ink">关键词与学科</h2>
+              <div className="flex flex-wrap gap-2">
+                {paper.keywords.map((word) => <Badge key={word} variant="violet">{word}</Badge>)}
+                {paper.subjects.map((word) => <Badge key={word} variant="amber">{word}</Badge>)}
+              </div>
+            </section>
+          )}
+        </div>
       )}
-
-      <button
-        type="button"
-        onClick={() => setPinned((v) => !v)}
-        aria-label={pinned ? "折叠侧边栏" : "展开侧边栏"}
-        title={pinned ? "折叠侧边栏" : "展开侧边栏"}
-        className={cn(
-          "z-10 hidden size-7 shrink-0 items-center justify-center self-center rounded-full border border-line bg-card text-muted shadow-sm transition-colors hover:text-primary lg:flex",
-          open ? "-ml-3.5" : "ml-1.5",
-        )}
-      >
+      <button type="button" aria-label={open ? "折叠摘要" : "展开摘要"} aria-expanded={open} onClick={() => setOpen(!open)} className="p-2 text-muted lg:self-center">
         {open ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
       </button>
-    </div>
+    </aside>
   );
 }

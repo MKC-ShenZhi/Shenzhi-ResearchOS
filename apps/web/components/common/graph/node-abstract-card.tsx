@@ -24,7 +24,7 @@ export function NodeAbstractCard({ node }: { node: GraphNode }) {
       </p>
       {node.paperId && (
         <Link
-          href={`/papers/${node.paperId}`}
+          href={`/papers/${encodeURIComponent(node.paperId)}`}
           className="inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
         >
           查看论文详情

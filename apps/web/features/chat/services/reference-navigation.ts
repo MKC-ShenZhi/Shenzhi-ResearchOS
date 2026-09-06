@@ -1,5 +1,5 @@
 import type { ChatReference } from "@/types/ai-search";
-import { appendInternalReturnTo } from "../../../lib/navigation/internal-return-to";
+import { paperHref } from "../../../lib/navigation/paper";
 
 function nonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -22,12 +22,12 @@ export function resourceIdOf(reference: ChatReference): string | null {
   return nonEmptyString(reference.resourceId) ?? nonEmptyString(reference.source_id);
 }
 
-/** The existing Knowledge Paper Detail route accepts the opaque resource ID. */
+/** The unified Paper Detail route accepts the opaque resource ID. */
 export function paperReferenceHref(reference: ChatReference, returnTo?: string | null): string | null {
   if (resourceTypeOf(reference) !== "paper") return null;
   const resourceId = resourceIdOf(reference);
   return resourceId
-    ? appendInternalReturnTo(`/knowledge/search/${encodeURIComponent(resourceId)}`, returnTo)
+    ? paperHref(resourceId, returnTo)
     : null;
 }
 

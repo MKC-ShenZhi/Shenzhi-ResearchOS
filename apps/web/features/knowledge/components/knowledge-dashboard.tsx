@@ -138,7 +138,7 @@ export function KnowledgeDashboard() {
       type: "论文" as const,
       title: item.title,
       meta: `${item.venue} · ${item.authors}`,
-      href: `/papers/${item.id}`,
+      href: `/papers/${encodeURIComponent(item.id)}`,
     })),
     ...patents.map((item) => ({
       type: "专利" as const,
@@ -294,7 +294,7 @@ export function KnowledgeDashboard() {
               </div>
               <div className="mt-2 divide-y divide-line">
                 {libraryItems.map((item) => (
-                  <Link key={item.id} href={`/papers/${item.id}`} onClick={(event) => event.stopPropagation()} className="group/item flex items-start gap-3 py-3 first:pt-1">
+                  <Link key={item.id} href={`/papers/${encodeURIComponent(item.id)}`} onClick={(event) => event.stopPropagation()} className="group/item flex items-start gap-3 py-3 first:pt-1">
                     <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><FileText className="size-4" /></span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium text-ink group-hover/item:text-primary">{item.title}</span>

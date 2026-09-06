@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { paperHref } from "@/lib/navigation/paper";
 import { motion } from "framer-motion";
 import { ArrowRight, Network, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -17,9 +18,11 @@ function venueTone(index: number) {
 export function KnowledgeResultCard({
   hit,
   index,
+  returnTo,
 }: {
   hit: KnowledgePaperHit;
   index: number;
+  returnTo: string;
 }) {
   const authors = hit.authors.length ? hit.authors.join(" · ") : "未知作者";
 
@@ -48,7 +51,7 @@ export function KnowledgeResultCard({
 
           {/* 标题 */}
           <Link
-            href={`/knowledge/search/${encodeURIComponent(hit.id)}`}
+            href={paperHref(hit.id, returnTo)}
             className="group mt-2 block"
           >
             <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
@@ -76,13 +79,13 @@ export function KnowledgeResultCard({
               )}
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Link href={`/knowledge/search/${encodeURIComponent(hit.id)}`}>
+              <Link href={paperHref(hit.id, returnTo)}>
                 <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-xs">
                   论文详情
                   <ArrowRight className="size-3.5" />
                 </Button>
               </Link>
-              <Link href={`/knowledge/search/${encodeURIComponent(hit.id)}/graph`}>
+              <Link href={paperHref(hit.id, returnTo, true)}>
                 <Button size="sm" className="h-8 rounded-lg px-3 text-xs">
                   <Network className="size-3.5" />
                   关系图谱
