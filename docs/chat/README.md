@@ -164,7 +164,7 @@ Web 仅配置 `BUSINESS_BACKEND_URL` 和 `BACKEND_BFF_SECRET`。模型/搜索 Ke
 
 正式会话仍由 FastAPI `MemorySessionRepository` 管理。仅当 **尚未获得后端 `session_id`**（例如 Backend 未启动、BFF 503、首轮建会话失败）时，Web 才将当前对话写入 `localStorage`（`features/chat/services/local-history.ts`）：
 
-- 最多 30 条、24 小时惰性过期；按浏览器隔离，不与 Better Auth 用户绑定。
+- 最多 30 条、24 小时惰性过期；由掌握 Auth 状态的上层按 Chat identity scope 显式读写：匿名使用 `anonymous`，登录用户使用 `user:<userId>`，同一浏览器内不同身份互不可见。
 - 一旦后端返回 `session_id`，**不再**写入本地缓存，并清除已晋升的本地条目；侧栏以 `/chat/sessions` 列表为准。
 - 侧栏合并展示时，本地条目标记为「本地」，不可收藏/重命名；成功接入后端后不应出现同一会话的双条目。
 

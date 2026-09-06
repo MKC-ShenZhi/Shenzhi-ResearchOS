@@ -69,7 +69,21 @@ test("auth identity changes clear the cached history selection before refetch", 
   const sidebar = readFileSync("components/common/layout/sidebar-chat-history.tsx", "utf8");
   assert.match(sidebar, /chatIdentityScope\(session\?\.user\.id\)/);
   assert.match(sidebar, /resetForIdentityChange\(\)/);
+  assert.equal((sidebar.match(/listLocalAskSessions\(identityScope\)/g) ?? []).length, 2);
+  assert.match(sidebar, /deleteLocalAskSession\(identityScope, item\.id\)/);
   assert.doesNotMatch(sidebar, /location\.reload/);
+});
+
+test("auth-owned identity scope is passed through every local-history operation", () => {
+  const workspace = readFileSync("features/chat/components/agent-chat.tsx", "utf8");
+  const hook = readFileSync("features/chat/hooks/use-chat-session.ts", "utf8");
+
+  assert.match(workspace, /identityScope=\{identityScope\}/);
+  assert.match(workspace, /useChatSession\(\{[\s\S]*?identityScope,/);
+  assert.match(hook, /upsertLocalAskSession\(identityScope,/);
+  assert.match(hook, /deleteLocalAskSession\(identityScope, retiringLocalId\)/);
+  assert.match(hook, /getLocalAskSession\(identityScope, pendingAction\.item\.id\)/);
+  assert.doesNotMatch(hook, /useAuth\(/);
 });
 
 test("missing delete is idempotent and removes the exact DB item", () => {

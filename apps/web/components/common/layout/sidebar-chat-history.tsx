@@ -80,11 +80,11 @@ export function SidebarChatHistory({ collapsed }: { collapsed?: boolean }) {
         if (requestId !== refreshSequence.current) return;
         // The backend response is authoritative. In particular, [] must
         // replace an old bridge snapshot after a Memory repository restart.
-        setHistoryItems(mergeHistorySources(data.sessions, listLocalAskSessions()));
+        setHistoryItems(mergeHistorySources(data.sessions, listLocalAskSessions(identityScope)));
       })
       .catch((error) => {
         if (requestId !== refreshSequence.current) return;
-        setHistoryItems(mergeHistorySources([], listLocalAskSessions()));
+        setHistoryItems(mergeHistorySources([], listLocalAskSessions(identityScope)));
         setHistoryError(messageForApiError(error));
       });
   }, [identityScope, setHistoryItems]);
@@ -337,7 +337,8 @@ export function SidebarChatHistory({ collapsed }: { collapsed?: boolean }) {
                                 }
                               });
                             } else {
-                              deleteLocalAskSession(item.id);
+                              if (!identityScope) return;
+                              deleteLocalAskSession(identityScope, item.id);
                               removeHistoryItem(item.id, "local");
                               refresh();
                               bumpHistoryRefresh();

@@ -9,7 +9,7 @@ import { ChatThread } from "./chat-thread";
 import { useChatSession } from "../hooks/use-chat-session";
 import { chatInputFromComposer, capabilitiesForEntryMode } from "../services/conversation";
 import { readAskDraft } from "../services/draft";
-import { chatIdentityScope } from "../services/identity-scope";
+import { chatIdentityScope, type ChatIdentityScope } from "../services/identity-scope";
 import { getChatConfig } from "@/clients/backend/chat";
 import { askSessionUrl, normalizeAskSessionId } from "../services/session-url";
 import type { ChatAttachment, ChatModelId, ChatReplyMode, ComposerSubmitPayload, ChatConfig } from "@/types/ai-search";
@@ -36,6 +36,7 @@ interface AgentChatProps {
 
 export function AgentChat(props: AgentChatProps) {
   const { session, isPending } = useAuth();
+  const identityScope = chatIdentityScope(session?.user.id);
   const [initialQuestionConsumed, setInitialQuestionConsumed] = useState(false);
   const [authBootstrapComplete, setAuthBootstrapComplete] = useState(() => !isPending);
 
@@ -58,8 +59,9 @@ export function AgentChat(props: AgentChatProps) {
     <>
       <AnonymousClaimCoordinator />
       <ChatWorkspace
-        key={chatIdentityScope(session?.user.id)}
+        key={identityScope}
         {...props}
+        identityScope={identityScope}
         question={initialQuestionConsumed ? "" : props.question}
         onInitialQuestion={() => setInitialQuestionConsumed(true)}
       />
@@ -76,7 +78,8 @@ function ChatWorkspace({
   initialSessionId,
   invalidSession,
   onInitialQuestion,
-}: AgentChatProps & { onInitialQuestion: () => void }) {
+  identityScope,
+}: AgentChatProps & { identityScope: ChatIdentityScope; onInitialQuestion: () => void }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const desiredSessionId = normalizeAskSessionId(searchParams.get("session") ?? undefined);
@@ -117,6 +120,7 @@ function ChatWorkspace({
     reset,
     openSession,
   } = useChatSession({
+    identityScope,
     initialSessionId,
     desiredSessionId,
     onSessionIdChange: syncSessionUrl,
