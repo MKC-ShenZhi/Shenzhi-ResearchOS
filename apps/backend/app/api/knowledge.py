@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -9,6 +10,8 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.core.identity import require_bff
+from app.core.logging import log_exception
+from app.core.request_context import get_request_id
 from app.core.responses import ok
 from app.schemas.knowledge import KnowledgeError, KnowledgeSearchRequest
 from app.services.knowledge import KnowledgeService, KnowledgeServiceError
@@ -16,9 +19,12 @@ from app.services.knowledge import KnowledgeService, KnowledgeServiceError
 
 router = APIRouter(prefix='/api/v1/knowledge', tags=['knowledge'])
 service = KnowledgeService()
+logger = logging.getLogger(__name__)
 
 
 def request_id(request: Request) -> str:
+    if contextual := get_request_id():
+        return contextual
     candidate = request.headers.get('x-request-id', '').strip()
     if candidate and len(candidate) <= 128:
         return candidate
@@ -45,7 +51,19 @@ def invalid_argument(request: Request, message: str = '请求参数不合法') -
     )
 
 
-def unknown_error(request: Request) -> JSONResponse:
+def unknown_error(request: Request, error: Exception) -> JSONResponse:
+    log_exception(
+        logger,
+        'exception.unexpected',
+        {
+            'route': request.url.path,
+            'method': request.method,
+            'status_code': 500,
+            'error_type': type(error).__name__,
+            'error_code': 'UNKNOWN',
+        },
+        error,
+    )
     return JSONResponse(
         status_code=500,
         content=KnowledgeError(
@@ -72,8 +90,8 @@ async def search(
         response = await service.search(search_request)
     except KnowledgeServiceError as error:
         return _error_payload(error, request)
-    except Exception:
-        return unknown_error(request)
+    except Exception as error:
+        return unknown_error(request, error)
     return ok(response.model_dump(mode='json', by_alias=True))
 
 
@@ -96,8 +114,8 @@ async def paper(
         response = await service.get_paper(resolved)
     except KnowledgeServiceError as error:
         return _error_payload(error, request)
-    except Exception:
-        return unknown_error(request)
+    except Exception as error:
+        return unknown_error(request, error)
     return ok(response.model_dump(mode='json', by_alias=True))
 
 
@@ -122,6 +140,6 @@ async def graph(
         response = await service.get_graph(resolved, depth=depth_value)
     except KnowledgeServiceError as error:
         return _error_payload(error, request)
-    except Exception:
-        return unknown_error(request)
+    except Exception as error:
+        return unknown_error(request, error)
     return ok(response.model_dump(mode='json', by_alias=True))

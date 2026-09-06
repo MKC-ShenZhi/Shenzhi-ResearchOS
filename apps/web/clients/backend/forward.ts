@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { ANONYMOUS_CHAT_TTL_SECONDS, backendConfig } from "@/config/backend";
+import { ANONYMOUS_CHAT_TTL_SECONDS, backendConfig } from "../../config/backend";
+import { logError, logInfo } from "../../lib/observability/logger";
+import { REQUEST_ID_HEADER, resolveRequestId } from "../../lib/observability/request-id";
 import { attachIdentity, resolveBackendIdentity } from "./identity";
 
 const FORWARDED_REQUEST_HEADERS = ["accept", "content-type", "last-event-id"] as const;
@@ -23,9 +25,13 @@ export async function forwardToBusinessBackend(
   backendOrigin: string,
   path: string[],
 ) {
-  const dest = `${backendOrigin.replace(/\/$/, "")}/api/v1/${path.join("/")}${req.nextUrl.search}`;
+  const route = `/api/v1/${path.join("/")}`;
+  const dest = `${backendOrigin.replace(/\/$/, "")}${route}${req.nextUrl.search}`;
+  const requestId = resolveRequestId(req.headers.get(REQUEST_ID_HEADER));
+  const startedAt = performance.now();
   // Browser headers are untrusted. Only copy headers the business protocol needs.
   const headers = forwardedHeaders(req.headers);
+  headers.set(REQUEST_ID_HEADER, requestId);
   const cookie = req.cookies.get("shenzhi-chat-anon")?.value;
   const anonymousId = cookie && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cookie)
     ? cookie : randomUUID();
@@ -36,10 +42,12 @@ export async function forwardToBusinessBackend(
     identity = await resolveBackendIdentity(req.headers);
     attachIdentity(headers, identity, anonymousId);
   } catch {
-    return NextResponse.json(
+    const response = NextResponse.json(
       { code: 10001, message: "鉴权服务异常，请稍后重试" },
       { status: 503 },
     );
+    response.headers.set(REQUEST_ID_HEADER, requestId);
+    return response;
   }
 
   const init: RequestInit = {
@@ -56,14 +64,32 @@ export async function forwardToBusinessBackend(
 
   let upstream: Response;
   try { upstream = await fetch(dest, init); }
-  catch {
-    return NextResponse.json({ code: 20004, message: "无法连接生成服务，请稍后重试" }, { status: 503 });
+  catch (error) {
+    logError("bff.backend.failed", {
+      request_id: requestId,
+      method: req.method,
+      route,
+      duration_ms: Math.round(performance.now() - startedAt),
+      error_type: error instanceof Error ? error.name : "UnknownError",
+    });
+    const response = NextResponse.json({ code: 20004, message: "无法连接生成服务，请稍后重试" }, { status: 503 });
+    response.headers.set(REQUEST_ID_HEADER, requestId);
+    return response;
   }
   const out = new Headers(upstream.headers);
   out.delete("content-encoding");
   out.delete("transfer-encoding");
   out.delete("set-cookie");
   out.set("Cache-Control", "no-store, no-transform");
+  out.set(REQUEST_ID_HEADER, requestId);
+
+  logInfo("bff.backend.completed", {
+    request_id: requestId,
+    method: req.method,
+    route,
+    status_code: upstream.status,
+    duration_ms: Math.round(performance.now() - startedAt),
+  });
 
   const response = new NextResponse(upstream.body, {
     status: upstream.status,
