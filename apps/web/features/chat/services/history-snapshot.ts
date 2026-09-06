@@ -13,7 +13,8 @@ export function mergeHistorySources(
     ...db.map((session) => ({
       id: session.id,
       title: session.title,
-      updatedAt: session.updated_at,
+      // Backend Chat timestamps are Unix seconds; browser Date APIs use ms.
+      updatedAt: session.updated_at * 1000,
       source: "db" as const,
       favorite: session.favorite,
     })),

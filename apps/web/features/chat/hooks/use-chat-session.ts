@@ -22,6 +22,7 @@ import {
   type SessionGenerationHandle,
 } from "../services/session-hydration";
 import { transitionSessionNavigation } from "../services/session-navigation";
+import type { ChatIdentityScope } from "../services/identity-scope";
 import type { ChatSendInput, ChatSessionPreferences, ChatTurn } from "../types";
 import type { ChatMessageStatus, ChatModelId, ChatReplyMode } from "@/types/ai-search";
 
@@ -45,6 +46,7 @@ function isLatestUrlEffect(lifecycle: { current: number }, effectId: number): bo
 }
 
 interface ChatSessionOptions {
+  identityScope: ChatIdentityScope;
   initialSessionId?: string | null;
   /** Reactive App Router identity. `null` is the explicit no-session route. */
   desiredSessionId?: string | null;
@@ -60,10 +62,11 @@ interface PendingCreate {
 type TurnsUpdater = ChatTurn[] | ((previous: ChatTurn[]) => ChatTurn[]);
 
 export function useChatSession({
+  identityScope,
   initialSessionId = null,
   desiredSessionId,
   onSessionIdChange,
-}: ChatSessionOptions = {}) {
+}: ChatSessionOptions) {
   const pathname = usePathname();
   // This is a mount-time continuity bootstrap only. Runtime route changes are
   // supplied by ChatWorkspace through desiredSessionId, so a render cannot
@@ -296,7 +299,7 @@ export function useChatSession({
     const id = localHistoryIdRef.current ?? `local_${Date.now().toString(36)}`;
     if (!localHistoryIdRef.current) setLocalId(id);
     const firstUser = nextTurns.find((turn) => turn.role === "user");
-    upsertLocalAskSession({
+    upsertLocalAskSession(identityScope, {
       id,
       title: titleFromQuestion(firstUser?.content ?? input.question),
       updatedAt: Date.now(),
@@ -307,7 +310,7 @@ export function useChatSession({
       knowledge_enabled: input.capabilities.knowledge.enabled,
     });
     bumpHistoryRefresh();
-  }, [bumpHistoryRefresh, setLocalId]);
+  }, [bumpHistoryRefresh, identityScope, setLocalId]);
 
   const send = useCallback(async (input: ChatSendInput) => {
     const question = input.question.trim();
@@ -334,7 +337,7 @@ export function useChatSession({
       }
       if (pendingCreate.current?.generation === generation) pendingCreate.current = null;
       setActiveSession(created.session_id);
-      if (retiringLocalId) deleteLocalAskSession(retiringLocalId);
+      if (retiringLocalId) deleteLocalAskSession(identityScope, retiringLocalId);
       patch(assistant.localId, { messageId: created.message_id });
       clearAskDraft();
       finalStatus = await runStream(generation, created.message_id, assistant.localId);
@@ -349,7 +352,7 @@ export function useChatSession({
       if (pendingCreate.current?.generation === generation) pendingCreate.current = null;
       finishGeneration(generation, finalStatus ?? "failed");
     }
-  }, [finishGeneration, patch, persistLocalFallback, runStream, setActiveSession, setBusyValue, setLocalId, startGeneration, writeTurns]);
+  }, [finishGeneration, identityScope, patch, persistLocalFallback, runStream, setActiveSession, setBusyValue, setLocalId, startGeneration, writeTurns]);
 
   const stop = useCallback(async () => {
     if (!busyRef.current && !pendingCreate.current && !currentMessageId.current) return;
@@ -602,10 +605,10 @@ export function useChatSession({
     if (resolvedInitialSessionId) return;
 
     handledPendingActionId.current = pendingAction.requestId;
-    const local = getLocalAskSession(pendingAction.item.id);
+    const local = getLocalAskSession(identityScope, pendingAction.item.id);
     if (local) loadLocalSession(local);
     clearPending();
-  }, [clearPending, loadLocalSession, pathname, pendingAction, reset, resolvedInitialSessionId]);
+  }, [clearPending, identityScope, loadLocalSession, pathname, pendingAction, reset, resolvedInitialSessionId]);
 
   useEffect(() => {
     const effectId = ++urlEffectLifecycle.current;

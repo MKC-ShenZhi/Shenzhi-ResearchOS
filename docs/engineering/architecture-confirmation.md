@@ -170,6 +170,10 @@ core/
 
 负责配置、身份、错误处理等基础能力。
 
+后端 Python 业务逻辑中的当前时间统一以 UTC 为基准，优先通过
+`app.core.time.utc_now()` 获取。数据库持久化事实时间继续由数据库自身的
+timezone-aware 时间逻辑负责，不与 Python 业务时钟强制合并。
+
 ---
 
 ## 四、页面与 Feature

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pydantic import ValidationError
 from app.core.config import MAX_HISTORY_CHARS
 from app.core.errors import BusinessError
+from app.core.time import utc_now
 from app.services.document_parser import attachment_context
 from app.services.knowledge import KnowledgeService, KnowledgeServiceError
 from app.services.knowledge_context import (
@@ -75,8 +76,10 @@ async def prepare_message(body, owner: str, session: Session | None = None):
 
 
 def model_messages(session: Session, message: Message, source_context: str) -> tuple[list[dict], bool]:
+    current_date = utc_now().date().isoformat()
     system = (
         '你是「深知」科研助手。' + STYLE_PROMPTS[message.settings['mode']] +
+        f'当前日期：{current_date}。当前时间基准：UTC。'
         '数学公式用 $...$ 或 $$...$$。'
         '当本轮提供 <reference_data> 时，优先依据其中的资料回答本轮问题。'
         '引用资料时必须使用 [n]；[n] 只能引用 reference_data 中真实存在的编号。'

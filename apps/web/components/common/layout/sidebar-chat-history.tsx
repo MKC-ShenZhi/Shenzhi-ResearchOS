@@ -12,11 +12,13 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
+import { useAuth } from "@/components/auth/auth-provider";
 import { cn } from "@/lib/utils";
 import { deleteChatSession, listChatSessions, updateChatSession } from "@/clients/backend/chat";
 import { deleteLocalAskSession, listLocalAskSessions } from "@/features/chat/services/local-history";
 import { isMissingSessionError, messageForApiError } from "@/features/chat/services/errors";
 import { mergeHistorySources } from "@/features/chat/services/history-snapshot";
+import { chatIdentityScope } from "@/features/chat/services/identity-scope";
 import { askSessionUrl } from "@/features/chat/services/session-url";
 import {
   useAskSidebarBridge,
@@ -42,6 +44,8 @@ function relativeTime(ts: number): string {
 export function SidebarChatHistory({ collapsed }: { collapsed?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { session, isPending: authPending } = useAuth();
+  const identityScope = authPending ? null : chatIdentityScope(session?.user.id);
   const bridgeItems = useAskSidebarBridge((s) => s.historyItems);
   const activeId = useAskSidebarBridge((s) => s.activeHistoryId);
   const setActiveSessionId = useAskSidebarBridge((s) => s.setActiveSessionId);
@@ -50,6 +54,7 @@ export function SidebarChatHistory({ collapsed }: { collapsed?: boolean }) {
   const requestLoad = useAskSidebarBridge((s) => s.requestLoad);
   const clearPending = useAskSidebarBridge((s) => s.clearPending);
   const bumpHistoryRefresh = useAskSidebarBridge((s) => s.bumpHistoryRefresh);
+  const resetForIdentityChange = useAskSidebarBridge((s) => s.resetForIdentityChange);
   const storedOpen = useSidebarStore((s) => s.expanded[HISTORY_KEY]);
   const setExpanded = useSidebarStore((s) => s.setExpanded);
   const open = storedOpen ?? false;
@@ -61,11 +66,13 @@ export function SidebarChatHistory({ collapsed }: { collapsed?: boolean }) {
   const [draftTitle, setDraftTitle] = useState("");
   const editRef = useRef<HTMLInputElement>(null);
   const refreshSequence = useRef(0);
+  const previousIdentityScope = useRef<string | null>(null);
 
   const setHistoryItems = useAskSidebarBridge((s) => s.setHistoryItems);
   const removeHistoryItem = useAskSidebarBridge((s) => s.removeHistoryItem);
 
   const refresh = useCallback(() => {
+    if (!identityScope) return;
     const requestId = ++refreshSequence.current;
     setHistoryError(null);
     void listChatSessions()
@@ -73,18 +80,30 @@ export function SidebarChatHistory({ collapsed }: { collapsed?: boolean }) {
         if (requestId !== refreshSequence.current) return;
         // The backend response is authoritative. In particular, [] must
         // replace an old bridge snapshot after a Memory repository restart.
-        setHistoryItems(mergeHistorySources(data.sessions, listLocalAskSessions()));
+        setHistoryItems(mergeHistorySources(data.sessions, listLocalAskSessions(identityScope)));
       })
       .catch((error) => {
         if (requestId !== refreshSequence.current) return;
-        setHistoryItems(mergeHistorySources([], listLocalAskSessions()));
+        setHistoryItems(mergeHistorySources([], listLocalAskSessions(identityScope)));
         setHistoryError(messageForApiError(error));
       });
-  }, [setHistoryItems]);
+  }, [identityScope, setHistoryItems]);
 
   useEffect(() => {
+    if (!identityScope) {
+      refreshSequence.current += 1;
+      return;
+    }
+    if (previousIdentityScope.current !== identityScope) {
+      previousIdentityScope.current = identityScope;
+      resetForIdentityChange();
+    }
     queueMicrotask(refresh);
-  }, [refresh, pathname, refreshNonce]);
+    return () => {
+      // Ignore a response started for an older route or auth identity.
+      refreshSequence.current += 1;
+    };
+  }, [identityScope, pathname, refresh, refreshNonce, resetForIdentityChange]);
 
   useEffect(() => {
     if (editingId) editRef.current?.focus();
@@ -318,7 +337,8 @@ export function SidebarChatHistory({ collapsed }: { collapsed?: boolean }) {
                                 }
                               });
                             } else {
-                              deleteLocalAskSession(item.id);
+                              if (!identityScope) return;
+                              deleteLocalAskSession(identityScope, item.id);
                               removeHistoryItem(item.id, "local");
                               refresh();
                               bumpHistoryRefresh();
