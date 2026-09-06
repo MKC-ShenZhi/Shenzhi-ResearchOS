@@ -554,4 +554,8 @@ async def stream_events(message: Message, cursor: int = 0):
         # Losing the last client cancels in-flight generation only; never abort finalize/persist.
         if (message.subscribers == 0 and message.status == 'streaming'
                 and message.task and not message.task.done()):
+            # Treat a lost last subscriber as an intentional stop.  This keeps
+            # cancellation from leaving a durable row in ``streaming`` when
+            # the browser navigates away or drops its connection.
+            message.stop_requested = True
             message.task.cancel()

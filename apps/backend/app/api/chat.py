@@ -101,5 +101,14 @@ async def resume(message_id: str, owner: str = Depends(request_owner)):
     cursor = str(len(message.events))
     message.status, message.error, message.task = 'streaming', None, None
     message.stop_requested = False
-    await repository.persist_message(message)
+    try:
+        await repository.persist_message(message)
+    except Exception as exc:
+        # Do not leave the in-memory message looking runnable when the durable
+        # reset was rejected by the database.  The global handler still
+        # returns a safe 500, while a later resume can retry from the terminal
+        # state.
+        message.status = 'failed'
+        message.error = '对话恢复失败，请稍后重试'
+        raise BusinessError(20004, message.error, 503) from exc
     return ok({'session_id': session.id, 'message_id': message.id, 'last_event_id': cursor})
