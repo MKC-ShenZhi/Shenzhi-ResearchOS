@@ -130,11 +130,17 @@ Knowledge 查询最多自动重试一次；`TIMEOUT`、`RATE_LIMITED`、
 | 路由 | 行为 |
 |---|---|
 | `/knowledge/search` | 论文搜索、筛选、loading、zero-result、error |
-| `/knowledge/search/[paperId]` | 论文详情 |
-| `/knowledge/search/[paperId]/graph` | fullGraph（保留异构节点/边）、References/Citations 筛选、节点详情 |
+| `/papers/[id]` | 统一论文详情与 PDF 阅读器；通过 Knowledge Client 加载真实详情 |
+| `/papers/[id]/graph` | fullGraph（保留异构节点/边）、References/Citations 筛选、节点详情 |
+| `/knowledge/search/[paperId]` | 旧链接兼容跳转到 `/papers/[id]`，保留合法 `returnTo` |
+| `/knowledge/search/[paperId]/graph` | 旧图谱链接兼容跳转到 `/papers/[id]/graph`，保留合法 `returnTo` |
 
-当前 Knowledge MVP 打通 Search → Detail → Graph，并由 Chat Core 复用 Search
-Capability 完成 Knowledge → Chat；
+当前 Knowledge MVP 打通 Search → 统一 Paper Detail → Graph，并由 Chat Core 复用
+Search Capability 完成 Knowledge → Chat。论文详情页的 Assistant 通过 `paper`
+attachment 显式绑定当前 `paperId`，由 Backend 重新读取对应论文详情，并仅使用
+title、authors、venue、year、abstract 等元信息回答；该流程不使用全局 Search
+猜测“这篇论文”，也不读取 PDF 全文。
+
 暂不包含
 multistep、会议浏览、ID resolver、scholar、patents、projects、funds、
 Deep Research 或 Auto Research。

@@ -1,23 +1,13 @@
-import { KnowledgePaperDetailPage } from "@/features/knowledge/paper/KnowledgePaperDetailPage";
+import { redirect } from "next/navigation";
 import { normalizeInternalReturnTo } from "@/lib/navigation/internal-return-to";
-import { decodeKnowledgePaperRouteId } from "../route-id";
+import { paperHref, paperIdFromRouteParam } from "@/lib/navigation/paper";
 
-export default async function Page({
-  params,
-  searchParams,
-}: {
+/** Compatibility for bookmarks; normalize the path segment before rebuilding its URL. */
+export default async function Page({ params, searchParams }: {
   params: Promise<{ paperId: string }>;
   searchParams?: Promise<{ returnTo?: string | string[] }>;
 }) {
-  const { paperId } = await params;
-  const query = searchParams ? await searchParams : undefined;
-  const returnTo = typeof query?.returnTo === "string"
-    ? normalizeInternalReturnTo(query.returnTo)
-    : null;
-  return (
-    <KnowledgePaperDetailPage
-      paperId={decodeKnowledgePaperRouteId(paperId)}
-      returnTo={returnTo}
-    />
-  );
+  const { paperId: routePaperId } = await params;
+  const query = await searchParams;
+  redirect(paperHref(paperIdFromRouteParam(routePaperId), normalizeInternalReturnTo(query?.returnTo)));
 }

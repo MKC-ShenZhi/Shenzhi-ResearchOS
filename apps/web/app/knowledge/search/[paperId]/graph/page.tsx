@@ -1,11 +1,13 @@
-import { KnowledgeRelationGraphPage } from "@/features/knowledge/graph/KnowledgeRelationGraphPage";
-import { decodeKnowledgePaperRouteId } from "../../route-id";
+import { redirect } from "next/navigation";
+import { normalizeInternalReturnTo } from "@/lib/navigation/internal-return-to";
+import { paperHref, paperIdFromRouteParam } from "@/lib/navigation/paper";
 
-export default async function Page({
-  params,
-}: {
+/** Compatibility for bookmarks; normalize the path segment before rebuilding its URL. */
+export default async function Page({ params, searchParams }: {
   params: Promise<{ paperId: string }>;
+  searchParams?: Promise<{ returnTo?: string | string[] }>;
 }) {
-  const { paperId } = await params;
-  return <KnowledgeRelationGraphPage paperId={decodeKnowledgePaperRouteId(paperId)} />;
+  const { paperId: routePaperId } = await params;
+  const query = await searchParams;
+  redirect(paperHref(paperIdFromRouteParam(routePaperId), normalizeInternalReturnTo(query?.returnTo), true));
 }

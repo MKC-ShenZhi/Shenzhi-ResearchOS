@@ -53,6 +53,14 @@ JSON 使用 `{code: 0, data: ...}` 或 `{code, message}`；错误同时使用适
 Chat API 边界转换为 `capabilities.knowledge.enabled`；Chat 核心不读取该旧字段。
 文件引用为 `{kind:"file", file_id, title}`；正文仅在 Backend 保存与注入。续问可省略模型/模式/联网参数以继承会话设置。
 
+论文详情页通过 `{kind:"paper", ref_id:paperId, title}` 使用同一 Session API 和 SSE
+协议。Backend 不信任客户端传入的 title，而是通过现有
+`KnowledgeService → integrations/knowledge` 按 `ref_id` 重新读取论文详情，把
+title、authors、venue、year、abstract 等受限元信息注入本轮上下文。论文 Session
+会绑定该 `paperId`，续问会重新读取同一论文，不能切换成另一篇论文；有显式论文
+上下文时不执行全局 Knowledge Search 或 Web Search。详情读取失败、ID 不匹配或
+abstract 为空时，本轮在模型调用前失败，前端可重试，不能降级为无论文依据的回答。
+
 ### 匿名会话归属切换
 
 - 浏览器只向同源 `POST /api/chat/anonymous-claim` 发送空 POST，不传用户 ID、匿名 ID 或 owner。
@@ -146,7 +154,9 @@ Web 仅配置 `BUSINESS_BACKEND_URL` 和 `BACKEND_BFF_SECRET`。模型/搜索 Ke
 仅 PDF（文字版、未加密）、UTF-8 TXT、MD/Markdown。20MB/份、最多 5 份。
 自定义受限 multipart reader 不使用磁盘临时文件，PDF 用 `pypdf` 在内存解析，CPU 解析在线程池执行。
 单附件最多 30,000 字、多附件拼接最多 60,000 字；上传返回截断 warning，Chat 再显示合计截断 warning。空文档、坏 PDF、加密 PDF、不支持类型都明确失败。
-不支持 DOCX、OCR、图片、Excel。既有知识库/项目选择器仅传条目名称，会显示“未接入全文”告警；没有声称已读取全文。
+不支持 DOCX、OCR、图片、Excel。`paper` 引用会按上节规则读取当前论文元信息与
+摘要，并显示“未读取 PDF 全文”告警；其他既有知识库/项目选择器仍仅传条目名称，
+会显示“未接入全文”告警。
 
 ## 临时 Session 与 Auth
 

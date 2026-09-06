@@ -45,7 +45,7 @@ export function PaperCard({
           </div>
 
           {/* 标题 */}
-          <Link href={`/papers/${paper.id}`} className="group mt-2 block">
+          <Link href={`/papers/${encodeURIComponent(paper.id)}`} className="group mt-2 block">
             <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
               {paper.title}
             </h3>
@@ -58,7 +58,7 @@ export function PaperCard({
 
           {/* AI 解读入口 */}
           <Link
-            href={`/papers/${paper.id}`}
+            href={`/papers/${encodeURIComponent(paper.id)}`}
             className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
           >
             <Plus className="size-3.5" />
@@ -97,7 +97,7 @@ export function PaperCard({
                 收藏
               </Button>
               {layout === "feed" && (
-                <Link href={`/papers/${paper.id}`}>
+                <Link href={`/papers/${encodeURIComponent(paper.id)}`}>
                   <Button size="sm" className="h-9 rounded-lg px-4 text-[13px]">
                     立即阅读
                     <ArrowRight className="size-3.5" />

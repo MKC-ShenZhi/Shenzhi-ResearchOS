@@ -1,5 +1,6 @@
 """In-memory PDF/TXT/Markdown extraction with B's 30k/60k context limits."""
 import io
+import json
 import re
 from pathlib import Path
 from pypdf import PdfReader
@@ -32,7 +33,7 @@ def parse_document(data: bytes, filename: str) -> dict:
             'warning': f'附件「{filename}」已截断至前 30,000 字' if truncated else None}
 
 
-def attachment_context(attachments, owner: str, repository) -> tuple[str, list[str]]:
+def attachment_context(attachments, owner: str, repository, paper_contexts: dict[str, str] | None = None) -> tuple[str, list[str]]:
     parts, warnings = [], []
     remaining = MAX_ATTACHMENT_CHARS
     for attachment in attachments:
@@ -42,6 +43,12 @@ def attachment_context(attachments, owner: str, repository) -> tuple[str, list[s
             if item['warning']:
                 warnings.append(item['warning'])
             label = item['filename']
+        elif attachment.kind == 'paper':
+            text = (paper_contexts or {}).get(attachment.ref_id or '')
+            if text is None:
+                raise BusinessError(20007, '当前论文上下文不可用，请重新加载论文后重试', 503)
+            label = 'paper_metadata'
+            warnings.append('本轮仅使用论文元信息与摘要，未读取 PDF 全文')
         else:
             # A's references remain selectable, but are NOT passed off as retrieved full texts.
             text = f'用户引用的条目：{attachment.title or attachment.ref_id or attachment.kind}（未接入全文解析）'
@@ -50,8 +57,29 @@ def attachment_context(attachments, owner: str, repository) -> tuple[str, list[s
         prefix = f'\n<attachment name={label!r}>\n'
         suffix = '\n</attachment>\n'
         block = prefix + text + suffix
+        if attachment.kind == 'paper' and len(block) > remaining:
+            raise BusinessError(20007, '论文上下文超过附件容量，请减少附件后重试', 422)
         if len(block) > remaining:
             warnings.append('多附件上下文已截断至合计 60,000 字')
         parts.append(block[:remaining])
         remaining = max(0, remaining - len(block))
     return ''.join(parts), list(dict.fromkeys(warnings))
+
+
+def format_paper_context(paper) -> tuple[str, bool]:
+    """Bounded server-resolved data; never interpolate external delimiters."""
+    abstract = paper.abstract or ''
+    data = {
+        'paper_id': paper.id,
+        'title': paper.title[:1000],
+        'authors': [author[:200] for author in paper.authors[:50]],
+        'venue': (paper.venue or '')[:500],
+        'year': paper.year,
+        'abstract': abstract[:20_000],
+        'doi': (paper.doi or '')[:500],
+        'citation_count': paper.citation_count,
+        'reference_count': paper.reference_count,
+    }
+    # JSON escapes newlines/quotes; escape markup delimiters as literal data.
+    text = json.dumps(data, ensure_ascii=False).replace('<', r'\u003c').replace('>', r'\u003e')
+    return text, len(abstract) > 20_000

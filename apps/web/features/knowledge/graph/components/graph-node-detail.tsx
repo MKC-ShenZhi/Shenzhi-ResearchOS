@@ -10,10 +10,11 @@ import type {
   KnowledgePaperDetail,
 } from "@/clients/knowledge";
 import { kindLabel, nodeColor } from "../lib/graph-utils";
+import { paperDoiUrl, paperHref } from "@/lib/navigation/paper";
 import { cn } from "@/lib/utils";
 
 function doiHref(doi: string): string {
-  return doi.startsWith("http") ? doi : `https://doi.org/${doi}`;
+  return paperDoiUrl(doi) ?? "";
 }
 
 function EntityMeta({ label, value }: { label: string; value: string | null }) {
@@ -89,6 +90,7 @@ function PaperDetailPanel({
   error,
   isCenter,
   onRetry,
+  returnTo,
 }: {
   node: KnowledgeGraphNode;
   paper: KnowledgePaperDetail | null;
@@ -96,6 +98,7 @@ function PaperDetailPanel({
   error: KnowledgeClientError | null;
   isCenter: boolean;
   onRetry: () => void;
+  returnTo?: string | null;
 }) {
   if (loading) {
     return (
@@ -204,10 +207,12 @@ function PaperDetailPanel({
         </div>
       )}
 
+      <Link href={paperHref(node.id, returnTo)} className="inline-flex text-sm text-primary hover:underline">阅读论文</Link>
+
       {/* 关系图谱入口 */}
       <div className="border-t border-line pt-3">
         <Link
-          href={`/knowledge/search/${encodeURIComponent(node.id)}/graph`}
+          href={paperHref(node.id, returnTo, true)}
           className="inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
         >
           在图中聚焦此论文
@@ -240,6 +245,7 @@ export function GraphNodeDetail({
   error,
   isCenter,
   onRetry,
+  returnTo,
 }: {
   node: KnowledgeGraphNode | null;
   paper: KnowledgePaperDetail | null;
@@ -247,6 +253,7 @@ export function GraphNodeDetail({
   error: KnowledgeClientError | null;
   isCenter: boolean;
   onRetry: () => void;
+  returnTo?: string | null;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -267,6 +274,7 @@ export function GraphNodeDetail({
             error={error}
             isCenter={isCenter}
             onRetry={onRetry}
+            returnTo={returnTo}
           />
         ) : (
           <EntityDetail node={node} />

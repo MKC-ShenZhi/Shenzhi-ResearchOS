@@ -9,7 +9,7 @@ import {
   MockKnowledgeClient,
 } from "../../clients/knowledge/index.js";
 import { apiJson, ApiError } from "../../clients/backend/http.js";
-import { decodeKnowledgePaperRouteId } from "../../app/knowledge/search/route-id.js";
+import { paperHref, paperIdFromRouteParam } from "../../lib/navigation/paper";
 import { knowledgeQueryRetry } from "../../features/knowledge/retry.js";
 
 const SEARCH_PARAMS = {
@@ -66,7 +66,8 @@ test("BFF client unwraps the Search success envelope and preserves the request c
 
 test("BFF client requests Detail and Graph through same-origin routes", async () => {
   const requests: string[] = [];
-  const paperId = "paper:AAAI:ref/%2Fsection";
+  const rawPaperId = "paper:2025_findings_acl_1253_acl:012e17bab23d";
+  const paperId = paperIdFromRouteParam(encodeURIComponent(rawPaperId));
   await withFetch(async (input) => {
     requests.push(String(input));
     if (requests.length === 1) {
@@ -104,6 +105,7 @@ test("BFF client requests Detail and Graph through same-origin routes", async ()
     `/api/v1/knowledge/paper?paperId=${encodeURIComponent(paperId)}`,
     `/api/v1/knowledge/graph?paperId=${encodeURIComponent(paperId)}&depth=2`,
   ]);
+  assert.ok(requests.every((request) => !request.includes("%253A")));
 });
 
 test("BFF client preserves formal Knowledge errors and request metadata", async () => {
@@ -269,25 +271,27 @@ test("Knowledge retry policy retries only retryable failures once", () => {
   );
 });
 
-test("Knowledge route decoding restores the logical opaque ID after one path encoding", () => {
-  const logicalId = "paper:abc:def";
-  const pathSegment = encodeURIComponent(logicalId);
+test("paper route boundary restores the ACL opaque ID after one path encoding", () => {
+  const logicalId = "paper:2025_findings_acl_1253_acl:012e17bab23d";
+  const href = paperHref(logicalId);
+  const pathSegment = new URL(href, "https://local.test").pathname.slice("/papers/".length);
 
-  assert.equal(pathSegment, "paper%3Aabc%3Adef");
-  assert.equal(decodeKnowledgePaperRouteId(pathSegment), logicalId);
+  assert.equal(pathSegment, "paper%3A2025_findings_acl_1253_acl%3A012e17bab23d");
+  assert.equal(paperIdFromRouteParam(pathSegment), logicalId);
 });
 
-test("Knowledge route decoding preserves a literal percent without decoding twice", () => {
-  const logicalId = "paper:abc%xyz";
-  const pathSegment = encodeURIComponent(logicalId);
+test("paper route boundary decodes exactly one layer and preserves a literal percent escape", () => {
+  const logicalId = "paper:abc%2Fxyz";
+  const href = paperHref(logicalId);
+  const pathSegment = new URL(href, "https://local.test").pathname.slice("/papers/".length);
 
-  assert.equal(pathSegment, "paper%3Aabc%25xyz");
-  assert.equal(decodeKnowledgePaperRouteId(pathSegment), logicalId);
+  assert.equal(pathSegment, "paper%3Aabc%252Fxyz");
+  assert.equal(paperIdFromRouteParam(pathSegment), logicalId);
 });
 
 test("one decoded logical ID becomes one encoded BFF query value", async () => {
   const logicalId = "paper:abc:def";
-  const paperId = decodeKnowledgePaperRouteId(encodeURIComponent(logicalId));
+  const paperId = logicalId;
   const requests: string[] = [];
 
   await withFetch(async (input) => {
@@ -303,17 +307,10 @@ test("one decoded logical ID becomes one encoded BFF query value", async () => {
   assert.doesNotMatch(requests[0], /%253A/);
 });
 
-test("Knowledge routes decode opaque App Router params exactly once", () => {
-  const detailRoute = readFileSync("app/knowledge/search/[paperId]/page.tsx", "utf8");
-  const graphRoute = readFileSync("app/knowledge/search/[paperId]/graph/page.tsx", "utf8");
-  assert.match(detailRoute, /decodeKnowledgePaperRouteId\s*\(\s*paperId\s*\)/);
-  assert.match(graphRoute, /decodeKnowledgePaperRouteId\s*\(\s*paperId\s*\)/);
-  assert.equal(
-    (detailRoute.match(/decodeKnowledgePaperRouteId\s*\(\s*paperId\s*\)/g) ?? []).length,
-    1,
-  );
-  assert.equal(
-    (graphRoute.match(/decodeKnowledgePaperRouteId\s*\(\s*paperId\s*\)/g) ?? []).length,
-    1,
-  );
+test("all paper routes decode their path segment at the business boundary exactly once", () => {
+  for (const path of ["app/knowledge/search/[paperId]/page.tsx", "app/knowledge/search/[paperId]/graph/page.tsx", "app/papers/[id]/page.tsx", "app/papers/[id]/graph/page.tsx"]) {
+    const source = readFileSync(path, "utf8");
+    assert.equal((source.match(/paperIdFromRouteParam\s*\(/g) ?? []).length, 1);
+    assert.doesNotMatch(source, /decodeURIComponent/);
+  }
 });

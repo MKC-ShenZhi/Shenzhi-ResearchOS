@@ -75,7 +75,10 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
           {/* 结果区 */}
           <main className="min-w-0 flex-1">
             {searchParamsForQuery ? (
-              <KnowledgeResultsSection params={searchParamsForQuery} />
+              <KnowledgeResultsSection
+                params={searchParamsForQuery}
+                returnTo={`/knowledge/search?q=${encodeURIComponent(committedQuery)}`}
+              />
             ) : (
               <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-line bg-card/40 px-6 text-center shadow-card">
                 <p className="text-sm font-medium text-ink-2">输入关键词开始检索论文</p>

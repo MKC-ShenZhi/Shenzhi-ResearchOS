@@ -47,7 +47,7 @@ test("formal simple search uses Knowledge retrieval and paper result states", ()
   assert.match(RESULTS_SOURCE, /retry:\s*knowledgeQueryRetry/);
   assert.match(KNOWLEDGE_PAGE_SOURCE, /KnowledgeResultsSection/);
   assert.match(KNOWLEDGE_PAGE_SOURCE, /KnowledgeFilterPanel/);
-  assert.match(RESULT_CARD_SOURCE, /href=\{`\/knowledge\/search\/\$\{encodeURIComponent\(hit\.id\)\}`\}/);
+  assert.match(RESULT_CARD_SOURCE, /href=\{paperHref\(hit\.id, returnTo\)\}/);
   assert.doesNotMatch(RESULTS_SOURCE, /深知 AI|思考完成|Reasoning|ModelProvider|引用 \[\d+\]/);
 });
 

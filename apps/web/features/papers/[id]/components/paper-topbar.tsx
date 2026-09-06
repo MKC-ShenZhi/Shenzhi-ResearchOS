@@ -1,69 +1,30 @@
 "use client";
 
-import {
-  Bookmark,
-  Download,
-  MessageSquare,
-  Share2,
-  ThumbsUp,
-} from "lucide-react";
-import { useUserPreferences } from "@/stores/user-preferences";
-import { cn } from "@/lib/utils";
+import Link from "next/link";
+import { ArrowLeft, Network } from "lucide-react";
+import type { KnowledgePaperDetail } from "@/clients/knowledge";
+import { paperDoiUrl, paperHref } from "@/lib/navigation/paper";
 
-/** 阅读器顶栏 —— Paper / AI Blog 切换 + 标题 + 操作 */
-export function PaperTopbar({ paperId, title, likes }: { paperId: string; title: string; likes: number }) {
-  const { likedPapers, bookmarkedPapers, toggleLike, toggleBookmark } =
-    useUserPreferences();
-  const liked = !!likedPapers[paperId];
-  const bookmarked = !!bookmarkedPapers[paperId];
-
+export function PaperTopbar({ paper, returnTo }: { paper: KnowledgePaperDetail; returnTo?: string | null }) {
+  const doiUrl = paperDoiUrl(paper.doi);
   return (
-    <header className="flex h-12 shrink-0 items-center gap-6 border-b border-line bg-card px-5">
-      <div className="flex items-center gap-2 text-sm">
-        <span className="flex items-center gap-1.5 rounded-md border border-primary px-2.5 py-1 font-medium text-primary">
-          <Bookmark className="size-3.5" />
-          Paper
-        </span>
-        <button
-          type="button"
-          className="flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-muted transition-colors hover:text-ink-2"
-        >
-          <MessageSquare className="size-3.5" />
-          AI Blog
-        </button>
+    <header className="shrink-0 border-b border-line bg-card px-5 py-3">
+      <div className="flex items-center justify-between gap-4 text-xs text-primary">
+        <Link href={returnTo ?? "/knowledge/search"} className="inline-flex items-center gap-1">
+          <ArrowLeft className="size-4" />
+          {returnTo?.startsWith("/agents") ? "返回对话" : returnTo ? "返回来源" : "返回论文检索"}
+        </Link>
+        <Link href={paperHref(paper.id, returnTo, true)} className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2">
+          <Network className="size-4" />关系图谱
+        </Link>
       </div>
-
-      <p className="min-w-0 flex-1 truncate text-sm text-muted">{title}</p>
-
-      <div className="flex items-center gap-1 text-muted">
-        <button
-          type="button"
-          onClick={() => toggleLike(paperId)}
-          className={cn(
-            "flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] transition-colors",
-            liked ? "text-primary" : "hover:bg-chip",
-          )}
-        >
-          <ThumbsUp className="size-4" fill={liked ? "currentColor" : "none"} />
-          {likes + (liked ? 1 : 0)}
-        </button>
-        <button
-          type="button"
-          aria-label="收藏"
-          onClick={() => toggleBookmark(paperId)}
-          className={cn(
-            "cursor-pointer rounded-lg p-2 transition-colors",
-            bookmarked ? "text-primary" : "hover:bg-chip",
-          )}
-        >
-          <Bookmark className="size-4" fill={bookmarked ? "currentColor" : "none"} />
-        </button>
-        <button type="button" aria-label="下载" className="cursor-pointer rounded-lg p-2 hover:bg-chip">
-          <Download className="size-4" />
-        </button>
-        <button type="button" aria-label="分享" className="cursor-pointer rounded-lg p-2 hover:bg-chip">
-          <Share2 className="size-4" />
-        </button>
+      <h1 className="mt-2 text-lg font-semibold leading-snug text-ink">{paper.title}</h1>
+      <p className="mt-1 text-sm text-muted">{paper.authors.length ? paper.authors.join(" · ") : "未知作者"}</p>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">
+        <span>{paper.venue ?? "暂无会议"} · {paper.year ?? "—"}</span>
+        <span>被引用：{paper.citationCount?.toLocaleString() ?? "暂无数据"}</span>
+        <span>参考文献：{paper.referenceCount?.toLocaleString() ?? "暂无数据"}</span>
+        {doiUrl && <a href={doiUrl} target="_blank" rel="noreferrer" className="break-all text-primary">DOI：{paper.doi}</a>}
       </div>
     </header>
   );

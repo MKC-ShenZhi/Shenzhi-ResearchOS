@@ -31,6 +31,8 @@ const newTurn = (role: ChatTurn["role"], content = ""): ChatTurn => ({
   status: role === "user" ? "done" : "streaming", references: [], followups: [], warnings: [],
 });
 
+const ignoreWorkspaceUpdate = () => {};
+
 const PHASES: Record<string, string> = {
   retrieving: "正在检索", web_search: "正在联网搜索", generating: "正在生成", followups: "正在生成追问",
 };
@@ -46,6 +48,8 @@ function isLatestUrlEffect(lifecycle: { current: number }, effectId: number): bo
 }
 
 interface ChatSessionOptions {
+  /** Reuse session/stream lifecycle without the main Chat URL, sidebar or draft. */
+  embedded?: boolean;
   identityScope: ChatIdentityScope;
   initialSessionId?: string | null;
   /** Reactive App Router identity. `null` is the explicit no-session route. */
@@ -63,6 +67,7 @@ type TurnsUpdater = ChatTurn[] | ((previous: ChatTurn[]) => ChatTurn[]);
 
 export function useChatSession({
   identityScope,
+  embedded = false,
   initialSessionId = null,
   desiredSessionId,
   onSessionIdChange,
@@ -72,7 +77,7 @@ export function useChatSession({
   // supplied by ChatWorkspace through desiredSessionId, so a render cannot
   // observe window.location before Next's HistoryUpdater commits it.
   const [bootstrapSessionId] = useState<string | null>(
-    () => readCurrentSessionId() ?? initialSessionId ?? null,
+    () => embedded ? null : readCurrentSessionId() ?? initialSessionId ?? null,
   );
   const routeIdentity = desiredSessionId !== undefined
     ? desiredSessionId
@@ -109,7 +114,7 @@ export function useChatSession({
   const handledPendingActionId = useRef<number | null>(null);
   const urlEffectLifecycle = useRef(0);
   const onSessionIdChangeRef = useRef(onSessionIdChange);
-  const pendingAction = useAskSidebarBridge((s) => s.pendingAction);
+  const pendingAction = useAskSidebarBridge((s) => embedded ? null : s.pendingAction);
   const pendingActionRef = useRef(pendingAction);
   const pathnameRef = useRef(pathname);
 
@@ -117,11 +122,11 @@ export function useChatSession({
   pendingActionRef.current = pendingAction;
   pathnameRef.current = pathname;
 
-  const setActiveHistoryId = useAskSidebarBridge((s) => s.setActiveHistoryId);
-  const setActiveSessionId = useAskSidebarBridge((s) => s.setActiveSessionId);
-  const removeHistoryItem = useAskSidebarBridge((s) => s.removeHistoryItem);
-  const clearPending = useAskSidebarBridge((s) => s.clearPending);
-  const bumpHistoryRefresh = useAskSidebarBridge((s) => s.bumpHistoryRefresh);
+  const setActiveHistoryId = useAskSidebarBridge((s) => embedded ? ignoreWorkspaceUpdate : s.setActiveHistoryId);
+  const setActiveSessionId = useAskSidebarBridge((s) => embedded ? ignoreWorkspaceUpdate : s.setActiveSessionId);
+  const removeHistoryItem = useAskSidebarBridge((s) => embedded ? ignoreWorkspaceUpdate : s.removeHistoryItem);
+  const clearPending = useAskSidebarBridge((s) => embedded ? ignoreWorkspaceUpdate : s.clearPending);
+  const bumpHistoryRefresh = useAskSidebarBridge((s) => embedded ? ignoreWorkspaceUpdate : s.bumpHistoryRefresh);
 
   const setBusyValue = useCallback((value: boolean) => {
     busyRef.current = value;
@@ -295,7 +300,7 @@ export function useChatSession({
 
   /** 仅在后端未分配 session_id 时写入 localStorage。 */
   const persistLocalFallback = useCallback((input: ChatSendInput, nextTurns: ChatTurn[]) => {
-    if (sessionRef.current) return;
+    if (embedded || sessionRef.current) return;
     const id = localHistoryIdRef.current ?? `local_${Date.now().toString(36)}`;
     if (!localHistoryIdRef.current) setLocalId(id);
     const firstUser = nextTurns.find((turn) => turn.role === "user");
@@ -310,7 +315,7 @@ export function useChatSession({
       knowledge_enabled: input.capabilities.knowledge.enabled,
     });
     bumpHistoryRefresh();
-  }, [bumpHistoryRefresh, identityScope, setLocalId]);
+  }, [bumpHistoryRefresh, embedded, identityScope, setLocalId]);
 
   const send = useCallback(async (input: ChatSendInput) => {
     const question = input.question.trim();
@@ -339,7 +344,7 @@ export function useChatSession({
       setActiveSession(created.session_id);
       if (retiringLocalId) deleteLocalAskSession(identityScope, retiringLocalId);
       patch(assistant.localId, { messageId: created.message_id });
-      clearAskDraft();
+      if (!embedded) clearAskDraft();
       finalStatus = await runStream(generation, created.message_id, assistant.localId);
     } catch (error) {
       if (generation.isCurrent() && !isAbortError(error)) {
@@ -352,7 +357,7 @@ export function useChatSession({
       if (pendingCreate.current?.generation === generation) pendingCreate.current = null;
       finishGeneration(generation, finalStatus ?? "failed");
     }
-  }, [finishGeneration, identityScope, patch, persistLocalFallback, runStream, setActiveSession, setBusyValue, setLocalId, startGeneration, writeTurns]);
+  }, [embedded, finishGeneration, identityScope, patch, persistLocalFallback, runStream, setActiveSession, setBusyValue, setLocalId, startGeneration, writeTurns]);
 
   const stop = useCallback(async () => {
     if (!busyRef.current && !pendingCreate.current && !currentMessageId.current) return;
