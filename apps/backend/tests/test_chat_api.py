@@ -228,6 +228,23 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
             response = await self.client.post('/api/v1/chat/sessions', json={'question': 'capacity'})
         self.assertEqual(response.status_code, 200 if repository.is_durable else 429)
 
+    async def test_resume_rejects_terminal_and_non_latest_messages(self):
+        first = await self.create()
+        await self.client.get(f"/api/v1/chat/messages/{first['message_id']}/stream")
+        follow = (await self.client.post(
+            f"/api/v1/chat/sessions/{first['session_id']}/messages",
+            json={'question': '续问'},
+        )).json()['data']
+        await self.client.get(f"/api/v1/chat/messages/{follow['message_id']}/stream")
+        self.assertEqual(
+            (await self.client.post(f"/api/v1/chat/messages/{first['message_id']}/resume")).status_code,
+            409,
+        )
+        self.assertEqual(
+            (await self.client.post(f"/api/v1/chat/messages/{follow['message_id']}/resume")).status_code,
+            409,
+        )
+
     async def test_disconnect_and_product_error(self):
         created = await self.create(); message = await repository.message(created['message_id'], OWNER_KEY)
         class WaitingProvider(FakeProvider):

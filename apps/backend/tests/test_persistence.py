@@ -43,6 +43,9 @@ class PostgresPersistenceTests(unittest.IsolatedAsyncioTestCase):
 
         detail = await self.repo.get(session.id, 'user:a')
         self.assertEqual(detail.messages[0].content, 'answer')
+        with self.assertRaises(BusinessError) as caught:
+            await self.repo.get(session.id, 'user:b')
+        self.assertEqual(caught.exception.status, 404)
 
     async def test_streaming_recover_marks_failed(self):
         session = await self.repo.create('user:a', 'q', {'type': 'ask', 'mode': 'fast', 'model': 'm', 'web_search': False})

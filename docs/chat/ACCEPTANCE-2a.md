@@ -73,6 +73,7 @@
 | 匿名生命周期与清理 | Pass | PostgreSQL 契约测试覆盖：只清理过期匿名终态 session、保留 user 数据和 active streaming session；匿名历史成功列表读取会续期同一匿名 owner 的全部 session。 |
 | Web 弹窗与认领服务 | Pass（自动化） | Web 类型检查与 117 项测试通过；预览只返回 durable 匿名会话数，用户确认后才发送认领请求。 |
 | PostgreSQL 自动化验收 | Pass | `tests.test_persistence`（7 项）与 `tests.test_acceptance_2a`（11 项）通过；Windows asyncio/asyncpg 在多事件循环收尾时仍会输出资源关闭告警，但进程以成功状态结束，所有数据库断言通过。 |
+| 状态机与多账号隔离补测 | Pass（自动化） | Chat API 增加 done/非最新消息禁止 resume；PostgreSQL persistence 增加账号 B 访问账号 A 会话返回 404 的断言。 |
 | 浏览器 P0 | Blocked | 已启动本地页面，但当前会话未完成真实账号登录；匿名→账号确认弹窗需要在持久化后端和已登录测试账号下做实际 UI 操作，不能以自动化结果替代。 |
 
 ### 复跑命令
