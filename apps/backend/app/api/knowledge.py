@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from app.core.identity import require_bff
 from app.core.logging import log_exception
+from app.core.request_context import get_request_id
 from app.core.responses import ok
 from app.schemas.knowledge import KnowledgeError, KnowledgeSearchRequest
 from app.services.knowledge import KnowledgeService, KnowledgeServiceError
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 def request_id(request: Request) -> str:
+    if contextual := get_request_id():
+        return contextual
     candidate = request.headers.get('x-request-id', '').strip()
     if candidate and len(candidate) <= 128:
         return candidate

@@ -5,7 +5,7 @@ from starlette.requests import Request
 
 import httpx
 
-from app.api.knowledge import unknown_error
+from app.api.knowledge import request_id, unknown_error
 from app.core.logging import JsonFormatter, log_event
 from app.core.request_context import get_request_id, reset_request_id, set_request_id
 from app.main import app
@@ -148,6 +148,18 @@ class LoggingCoreTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(errors[0]['error_type'], 'RuntimeError')
         self.assertEqual(errors[0]['error_code'], 'UNKNOWN')
         self.assertIn('RuntimeError', errors[0]['traceback'])
+
+    async def test_knowledge_error_request_id_prefers_context(self):
+        request = Request({
+            'type': 'http', 'method': 'POST', 'path': '/api/v1/knowledge/search',
+            'headers': [(b'x-request-id', b'header-request-id')],
+            'query_string': b'', 'server': ('test', 80), 'scheme': 'http',
+        })
+        token = set_request_id('context-request-id')
+        try:
+            self.assertEqual(request_id(request), 'context-request-id')
+        finally:
+            reset_request_id(token)
 
 
 if __name__ == '__main__':
