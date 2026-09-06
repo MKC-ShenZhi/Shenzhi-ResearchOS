@@ -26,11 +26,17 @@ Page / Feature
         ↓
 Feature Service（按需）
         ↓
-Client / Adapter
+apps/web/clients/<capability>
         ↓
-FastAPI / External Research Service
+Next.js BFF（按需转发）
         ↓
-Database / AI / Knowledge Service
+ShenZhi FastAPI / Backend API
+        ↓
+Backend Service
+        ↓
+Backend Integration
+        ↓
+Database / External Research Service
 ```
 
 核心原则：
@@ -40,7 +46,7 @@ Database / AI / Knowledge Service
 业务逻辑进入 Feature
 服务调用通过 Client / Adapter 隔离
 核心业务由 FastAPI 承载
-科研能力通过稳定接口接入
+科研能力统一经 ShenZhi FastAPI 与 Backend Integration 接入
 ```
 
 架构允许根据业务复杂度简化调用层级，但必须保持职责清晰，不为了形式机械增加空 Service、Hook、Client 或目录。
@@ -293,14 +299,19 @@ API
 apps/web/clients/
 ```
 
-主要负责：
+其中：
+
+```text
+apps/web/clients/backend/
+```
+
+负责 ShenZhi Backend 的通用请求基础设施：
 
 - HTTP / SSE 请求
-- 服务地址管理
-- Header / Token
-- 请求协议封装
-- 通用错误标准化
-- 与 FastAPI、BFF 或外部服务通信
+- Header 与身份转发边界
+- Next.js BFF 转发
+- 通用 Backend Error
+- 请求路径、协议等基础设施
 
 当前后端调用应优先收敛至：
 
@@ -310,54 +321,139 @@ clients/backend/
 
 等明确边界，不在 `lib/api`、`services/backend` 或不同业务组件中重复建立功能相同的请求实现。
 
+而：
+
+```text
+apps/web/clients/knowledge/
+apps/web/clients/deep-research/
+apps/web/clients/auto-research/
+```
+
+这类 `apps/web/clients/<capability>/` 属于前端领域 Client，负责面向当前业务能力提供稳定接口，使用 ShenZhi 自身的 Backend Contract，并可复用 `clients/backend` 的 transport。它们不感知科研组原始 API，不保存科研服务地址，也不直接处理科研组原始 Schema。当前仓库已经存在 `clients/knowledge`；其余路径表示后续能力采用这一边界时的命名示例，不代表对应 Client 已经实现。
+
+因此，`clients/knowledge` 表示前端的 Knowledge 领域调用边界，不表示浏览器直接连接知识底座科研组。
+
 ---
 
 ## 六、科研能力接入边界
 
-科研能力原则上不直接绑定页面或业务组件。
+Knowledge Base、Deep Research、Auto Research 及后续科研能力原则上统一经 ShenZhi FastAPI 接入；科研组服务不直接绑定页面、Feature 或前端领域 Client。
 
-推荐：
+统一产品调用链为：
 
 ```text
-React Component
-      ↓
-Feature Service
-      ↓
-Client / Adapter
-      ↓
-FastAPI / Research API
-      ↓
-Knowledge / Deep Research / Auto Research / AI Service
+Page / Component
+        ↓
+Feature
+        ↓
+apps/web/clients/<capability>
+        ↓
+Next.js BFF（按需转发）
+        ↓
+ShenZhi FastAPI
+        ↓
+Backend API
+        ↓
+Backend Service
+        ↓
+backend integrations/<capability>
+        ↓
+科研组 API
 ```
 
-Knowledge Base 在 FastAPI 内部采用明确的后端调用链：
+前端领域 Client 只依赖 ShenZhi Backend Contract。科研组 API 的原始协议、字段、服务地址和异常统一隔离在 `apps/backend/app/integrations/<capability>/`，External Research Service 不作为前端的直接调用目标。
+
+### Backend Service 与 Integration
 
 ```text
-FastAPI API
-      ↓
+apps/backend/app/services/
+```
+
+负责 ShenZhi 自身的产品业务逻辑，包括：
+
+- 产品级能力编排与参数组织
+- Query / Intent 处理
+- 多个能力的组合
+- 缓存、降级等产品策略
+- 返回 ShenZhi Domain Schema
+
+```text
+apps/backend/app/integrations/<capability>/
+```
+
+负责连接上游科研能力，包括：
+
+- 上游服务 URL、HTTP method/path、Header、Timeout
+- Retry / transport 等按需采用的通信策略
+- 上游输入输出 Schema
+- 上游 Schema 与 ShenZhi Domain Schema 之间的 Adapter
+- timeout、connection、rate limit、invalid response、upstream unavailable 等上游异常的统一转换与隔离
+
+可以概括为：
+
+```text
+services：深知怎么使用能力
+integrations：深知怎么连接能力
+```
+
+ShenZhi 的产品业务逻辑不应大量进入 integrations。例如，自然语言问题如何组织为产品级检索参数属于 Service / 业务层问题；科研组接口字段如何映射为 ShenZhi Schema 属于 Integration Adapter 问题。
+
+一个 `integrations/<capability>/` 按实际职责通常可以包含：
+
+```text
+client.py
+schemas.py
+adapter.py
+exceptions.py
+```
+
+- `client.py`：调用科研组 API，封装 base URL、HTTP method/path、Header、Timeout，以及按需采用的 Retry / transport 等连接细节。
+- `schemas.py`：描述科研组上游接口自身的输入输出格式，不作为 ShenZhi Domain Contract。
+- `adapter.py`：在上游 Schema 与 ShenZhi 自身业务 Schema 之间完成转换。
+- `exceptions.py`：统一转换并隔离上游异常。
+
+只有职责真实存在时才创建相应文件，不要求所有 Integration 机械具备完整结构。
+
+### Knowledge Base 当前实现
+
+Knowledge Base 是 `integrations/<capability>/` 通用结构在当前仓库已经落地的第一个实例，其真实调用链为：
+
+```text
+Frontend Page / Feature
+        ↓
+apps/web/clients/knowledge
+        ↓
+ShenZhi BFF / FastAPI
+        ↓
+backend api
+        ↓
 backend services
-      ↓
+        ↓
 backend integrations/knowledge
-      ↓
-上游知识底座科研组 API
+        ↓
+知识底座科研组 API
 ```
 
-其中 `app/integrations/knowledge/` 是外部 Research Capability 的唯一接入边界：
+当前 `app/integrations/knowledge/` 已包含：
 
 - `client.py` 只负责 base URL、HTTP method/path、query/body、timeout 与 transport。
 - `schemas.py` 只描述科研组上游实际字段，不作为 ShenZhi Domain Contract。
-- `adapter.py` 只将上游 Schema 映射为 `app/schemas/knowledge.py` 的 Domain Schema。
+- `adapter.py` 集中完成上游协议与 `app/schemas/knowledge.py` Domain Schema 之间的映射。
 - `exceptions.py` 统一 timeout、connection、rate limit、not found、invalid response、contract violation 与 upstream unavailable 等上游异常。
 
 Knowledge Base 当前只承诺 Search、Paper Detail、Paper Graph；科研组内部业务由科研组维护，ShenZhi 只调用、隔离和适配，不在此边界内修改、补偿或修复科研组业务。
+
+当前仓库尚未存在 `integrations/deep_research` 或 `integrations/auto_research`。Deep Research、Auto Research 等能力后续在真实服务化、接口稳定并开始产品接入时，优先遵循 `backend integrations/<capability>` 边界；在职责尚未出现前，不创建空目录，也不描述为已存在稳定 Integration。
 
 接入科研能力前，需要明确：
 
 - 输入 Schema
 - 输出 Schema
 - 状态定义
+- Timeout
+- Retry
+- 错误码
 - 错误处理
-- 超时策略
 - 服务可用性
 - Mock 方式
 - 降级方案

@@ -9,6 +9,7 @@
 - 保持 Next.js 与 FastAPI 的职责边界：Web 层负责页面、交互及框架相关能力，核心业务逻辑与数据处理由 FastAPI 承载。
 - 页面保持轻量，业务逻辑放入对应 Feature；后端或外部服务调用通过现有 Service、Client 或 Adapter 边界完成。
 - 科研能力和第三方服务不得直接绑定页面；接口尚未确定时，不虚构稳定能力或生产行为。
+- 知识底座、Deep Research、Auto Research 等科研能力原则上统一经 ShenZhi FastAPI 接入；前端 `clients/<capability>` 只调用 ShenZhi 自身 BFF / Backend API，不直接连接科研组服务；上游科研接口适配统一放在 `apps/backend/app/integrations/<capability>/`。
 - 根据实际复杂度组织代码，不为满足目录形式机械创建没有独立职责的层级、文件或抽象。
 - 依赖与工具链沿用仓库现有配置和锁文件；新增依赖前先确认确有必要。
 - 完成修改后执行与改动范围相符的检查或测试。架构、公共接口或关键开发方式发生变化时，同步更新相关文档。
