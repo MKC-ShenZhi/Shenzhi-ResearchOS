@@ -153,6 +153,7 @@ Web 仅配置 `BUSINESS_BACKEND_URL` 和 `BACKEND_BFF_SECRET`。模型/搜索 Ke
 - `MemorySessionRepository`：单进程 / **一个 worker**；最多 500 会话、500 已解析附件、每会话 100 轮；24 小时过期，访问列表/创建时惰性清理。未配置 `CHAT_DATABASE_URL` 时使用；重启丢失，API 返回 `ephemeral: true`。
 - 配置 `CHAT_DATABASE_URL` 后启用 PostgreSQL 持久化（见 `PERSISTENCE-PLAN.md`）：会话与消息跨重启保留，`ephemeral: false`；流式生成仍绑定单 worker 进程内缓存。迁移：`cd apps/backend && uv run alembic -c alembic.ini upgrade head`。
 - BFF 继续使用 dev 的 Better Auth 获取用户身份；不改登录、注册、邮箱验证、OAuth、PostgreSQL schema。
+- 登录身份变化时 Chat 工作区按身份重新挂载，侧栏会先清除旧身份的历史快照与选择，再重新请求当前身份的会话列表；无需整页刷新。
 - BFF 清除浏览器伪造的用户/内部凭据头，再注入经 Better Auth 验证的用户 ID。匿名请求使用 HttpOnly、SameSite=Lax 随机会话 cookie，不按 IP 共用数据。
 - 所有会话/消息/上传操作校验 owner。登录后仅通过上述专用端点认领同一浏览器的已完成匿名会话；不同用户或不同匿名浏览器之间仍严格隔离，过期附件需要重传。
 - Backend 不读取 Better Auth 数据库，不引入 B 的 ORM/用户系统。

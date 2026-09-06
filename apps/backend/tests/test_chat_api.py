@@ -1,6 +1,7 @@
 import asyncio
 import json
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 import httpx
 from app.main import app
@@ -83,6 +84,17 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((listing[0]['favorite'], listing[0]['title']), (True, '重命名'))
         await self.client.delete(f'/api/v1/chat/sessions/{sid}')
         self.assertEqual((await self.client.get(f'/api/v1/chat/messages/{mid}/stream')).status_code, 404)
+
+    async def test_system_prompt_includes_fixed_current_utc_date(self):
+        fixed_now = datetime(2026, 9, 6, 10, tzinfo=timezone.utc)
+        with patch.object(chat, 'utc_now', return_value=fixed_now):
+            created = await self.create(capabilities={'knowledge': {'enabled': False}})
+            await self.client.get(f"/api/v1/chat/messages/{created['message_id']}/stream")
+
+        system_prompt = FakeProvider.calls[-1][0]
+        self.assertEqual(system_prompt['role'], 'system')
+        self.assertIn('当前日期：2026-09-06', system_prompt['content'])
+        self.assertIn('当前时间基准：UTC', system_prompt['content'])
 
     async def test_owner_checks_all_operations(self):
         data = await self.create(); sid, mid = data['session_id'], data['message_id']

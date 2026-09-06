@@ -30,6 +30,7 @@ interface AskSidebarBridgeState {
   requestLoad: (item: SidebarChatHistoryItem, targetPath?: string) => void;
   clearPending: () => void;
   bumpHistoryRefresh: () => void;
+  resetForIdentityChange: () => void;
 }
 
 export const useAskSidebarBridge = create<AskSidebarBridgeState>((set) => ({
@@ -65,4 +66,10 @@ export const useAskSidebarBridge = create<AskSidebarBridgeState>((set) => ({
   clearPending: () => set({ pendingAction: null }),
   bumpHistoryRefresh: () =>
     set((s) => ({ historyRefreshNonce: s.historyRefreshNonce + 1 })),
+  resetForIdentityChange: () => set({
+    historyItems: [],
+    activeHistoryId: null,
+    activeSessionId: null,
+    pendingAction: null,
+  }),
 }));
