@@ -55,12 +55,15 @@ Chat API 边界转换为 `capabilities.knowledge.enabled`；Chat 核心不读取
 
 ### 匿名会话归属切换
 
+- 登录进入 Chat 后，先只读检查此浏览器的匿名历史；仅当存在持久化匿名会话时弹出“迁移对话历史？”确认框，显示会话数量和当前账号。用户点击“迁移到当前账号”后才发送认领 POST 并开启下述有限补试。
+- “暂不迁移”或 Escape 关闭弹窗，不执行认领、不删除历史；当前组件挂载期间不再询问，刷新或重新进入 Chat 时可再次询问。迁移中显示 loading，失败或仍有生成中的会话时提示重试；重复认领保持幂等。
+
 - 浏览器只向同源 `POST /api/chat/anonymous-claim` 发送空 POST，不传用户 ID、匿名 ID 或 owner。
 - 专用 Next.js Route 从 Better Auth Session 读取目标用户，并从 `shenzhi-chat-anon` HttpOnly Cookie 读取来源匿名 UUID；普通 `/api/v1` 转发仍只注入一个主身份。
 - FastAPI 专用端点只接受 BFF 注入的 `X-ShenZhi-User-Id` 与 `X-ShenZhi-Source-Anonymous-Id`，请求体不能指定来源或目标。
 - PostgreSQL 在一个事务中只更新没有 `streaming` 消息的 Session owner；Session ID 和 Message 行保持不变。重复或多标签并发调用不会复制数据。
-- streaming Session 保持匿名归属；生成完成后刷新页面可再次安全认领。内存模式返回 `durable=false`，不宣称已完成持久化切换。
-- Chat Coordinator 在当前页面的登录 Session 稳定后对该用户尝试一次；只有 `durable=true` 且 `moved_count>0` 时才通过当前 Chat lifecycle 清空旧选择并刷新历史。失败不会影响登录和 Chat，页面重载可重试。
+- streaming Session 首次保持匿名归属；Coordinator 收到 `skipped_streaming_count>0` 时每 2 秒最多补试 3 次（含首次共最多 4 次）。生成转为 done/stopped/failed 后可在当前页面自动认领；内存模式返回 `durable=false`，不宣称已完成持久化切换。
+- 只有 `durable=true` 且 `moved_count>0` 时才通过当前 Chat lifecycle 清空旧选择并刷新历史。补试会在登出、切换用户、组件卸载、请求失败或达到上限时停止；失败不会影响登录和 Chat，页面重载可重试。
 
 ### Simple Search / Smart Search
 
@@ -150,13 +153,14 @@ Web 仅配置 `BUSINESS_BACKEND_URL` 和 `BACKEND_BFF_SECRET`。模型/搜索 Ke
 
 ## 临时 Session 与 Auth
 
-- `MemorySessionRepository`：单进程 / **一个 worker**；最多 500 会话、500 已解析附件、每会话 100 轮；24 小时过期，访问列表/创建时惰性清理。未配置 `CHAT_DATABASE_URL` 时使用；重启丢失，API 返回 `ephemeral: true`。
+- `MemorySessionRepository`：单进程 / **一个 worker**；最多 500 会话、500 已解析附件、每会话 100 轮；24 小时过期，访问列表/创建时惰性清理。未配置 `CHAT_DATABASE_URL` 时使用；重启丢失，API 返回 `ephemeral: true`，不具备 durable anonymous cleanup。
 - 配置 `CHAT_DATABASE_URL` 后启用 PostgreSQL 持久化（见 `PERSISTENCE-PLAN.md`）：会话与消息跨重启保留，`ephemeral: false`；流式生成仍绑定单 worker 进程内缓存。迁移：`cd apps/backend && uv run alembic -c alembic.ini upgrade head`。
 - BFF 继续使用 dev 的 Better Auth 获取用户身份；不改登录、注册、邮箱验证、OAuth、PostgreSQL schema。
 - 登录身份变化时 Chat 工作区按身份重新挂载，侧栏会先清除旧身份的历史快照与选择，再重新请求当前身份的会话列表；无需整页刷新。
 - BFF 清除浏览器伪造的用户/内部凭据头，再注入经 Better Auth 验证的用户 ID。匿名请求使用 HttpOnly、SameSite=Lax 随机会话 cookie，不按 IP 共用数据。
 - 所有会话/消息/上传操作校验 owner。登录后仅通过上述专用端点认领同一浏览器的已完成匿名会话；不同用户或不同匿名浏览器之间仍严格隔离，过期附件需要重传。
 - Backend 不读取 Better Auth 数据库，不引入 B 的 ORM/用户系统。
+- `CHAT_ANONYMOUS_TTL_SECONDS` 默认为 `604800`（7 天），Web 匿名 Cookie 与 PostgreSQL 匿名 session 必须使用同一配置。只有匿名 Chat BFF 请求得到成功上游响应后 Cookie 才滚动续期；匿名历史列表成功读取时，会同时刷新该浏览器所有匿名 session 的 `updated_at`，使数据保留期与 Cookie 使用期一致；用户 session 不会续期匿名 Cookie。过期清理由显式维护命令执行：`cd apps/backend && uv run --locked python -m app.services.anonymous_cleanup`。它只删除 `owner LIKE 'anon:%' AND updated_at < cutoff` 且不存在 streaming message 的 session，数据库通过外键级联删除 message；不在普通请求中删数据。命令输出删除数，生产环境应先观察日志/删除数后由 cron/Job 调用。
 - 未配置 `BACKEND_BFF_SECRET` 时 Web 与 Backend 均默认拒绝。仅 loopback 本地开发可在两端显式设置 `BACKEND_ALLOW_INSECURE_LOCAL_BFF=true`；非 loopback 部署必须设置同一高熵 Secret，并只允许 BFF 访问 FastAPI。现有 infra/CI 不自动部署新后端。
 - Better Auth 正常返回空 Session 时 BFF 按匿名会话转发；Better Auth 调用抛错时 BFF 返回 503，不会静默降级为匿名用户。
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { mergeHistorySources } from "../../features/chat/services/history-snapshot";
+import { chatTimestampMs, mergeHistorySources } from "../../features/chat/services/history-snapshot";
 import { useAskSidebarBridge } from "../../stores/ask-sidebar-bridge";
 
 test("backend list [] replaces old DB history while preserving local fallback entries", () => {
@@ -93,6 +93,16 @@ test("missing delete is idempotent and removes the exact DB item", () => {
   assert.match(errors, /export function isMissingSessionError/);
   assert.match(sidebar, /isMissingSessionError\(error\)/);
   assert.match(sidebar, /removeHistoryItem/);
+});
+
+test("backend unix seconds become millisecond timestamps for sidebar dates", () => {
+  assert.equal(chatTimestampMs(1_767_686_400), 1_767_686_400_000);
+  assert.equal(chatTimestampMs(1_767_686_400_000), 1_767_686_400_000);
+  const [item] = mergeHistorySources(
+    [{ id: "s", title: "t", updated_at: 1_767_686_400, favorite: false }],
+    [],
+  );
+  assert.equal(new Date(item.updatedAt).getFullYear(), 2026);
 });
 
 test("non-404 delete errors remain ordinary errors", () => {

@@ -1,6 +1,7 @@
 """Chat orchestration: context -> Knowledge/search -> provider -> product SSE."""
 import asyncio
 import json
+import logging
 import time
 from contextlib import suppress
 from dataclasses import dataclass
@@ -45,6 +46,7 @@ KNOWLEDGE_CITATION_WARNING = '本轮未能形成可验证的知识引用，以�
 # Constructed once so Chat has one server-side Capability boundary. The
 # integration client remains private to KnowledgeService.
 knowledge_service = KnowledgeService()
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -484,16 +486,32 @@ async def generate(message: Message) -> None:
         error_data = {'code': exc.code, 'message': exc.message}
         message.emit('error', error_data)
     except Exception:
+        # The client receives a stable message, while operators retain the
+        # traceback and opaque message id needed to diagnose this one turn.
+        logger.exception('Unexpected Chat generation failure message_id=%s', message.id)
         message.status, message.error = 'failed', '生成服务发生错误，请重试'
         message.emit('error', {'code': 20004, 'message': message.error})
     finally:
         message.duration_ms += int((time.monotonic() - started) * 1000)
+        try:
+            # A terminal event is an acknowledgement that the final message is
+            # durable.  Do not send it before the database write succeeds.
+            await repository.persist_message(message)
+        except Exception:
+            logger.exception('Final Chat persistence failure message_id=%s', message.id)
+            message.status, message.error = 'failed', '对话保存失败，请稍后重试'
+            message.emit('error', {'code': 20004, 'message': message.error})
+        else:
+            try:
+                await repository.touch(message.session_id)
+            except Exception:
+                # Timestamp maintenance must not turn a durable answer into a
+                # false failure; it can be retried by later normal activity.
+                logger.exception('Chat session touch failure message_id=%s', message.id)
         done = {'duration_ms': message.duration_ms, 'status': message.status}
         if knowledge_grounding is not None:
             done['knowledge_grounding'] = knowledge_grounding
         message.emit('done', done)
-        await repository.persist_message(message)
-        await repository.touch(message.session_id)
 
 
 async def stop_message(message: Message) -> None:
@@ -504,8 +522,13 @@ async def stop_message(message: Message) -> None:
             await message.task
     if message.status == 'streaming':
         message.status = 'stopped'
-        message.emit('done', {'duration_ms': message.duration_ms, 'status': 'stopped'})
-        await repository.persist_message(message)
+        try:
+            await repository.persist_message(message)
+        except Exception:
+            logger.exception('Stopped Chat persistence failure message_id=%s', message.id)
+            message.status, message.error = 'failed', '对话保存失败，请稍后重试'
+            message.emit('error', {'code': 20004, 'message': message.error})
+        message.emit('done', {'duration_ms': message.duration_ms, 'status': message.status})
 
 
 async def stream_events(message: Message, cursor: int = 0):
@@ -531,4 +554,8 @@ async def stream_events(message: Message, cursor: int = 0):
         # Losing the last client cancels in-flight generation only; never abort finalize/persist.
         if (message.subscribers == 0 and message.status == 'streaming'
                 and message.task and not message.task.done()):
+            # Treat a lost last subscriber as an intentional stop.  This keeps
+            # cancellation from leaving a durable row in ``streaming`` when
+            # the browser navigates away or drops its connection.
+            message.stop_requested = True
             message.task.cancel()

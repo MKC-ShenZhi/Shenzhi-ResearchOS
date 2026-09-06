@@ -2,7 +2,7 @@ import asyncio
 import json
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 import httpx
 from app.main import app
 from app.schemas.knowledge import KnowledgeSearchResponse, PaperSearchResult, Provenance
@@ -95,6 +95,30 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(system_prompt['role'], 'system')
         self.assertIn('当前日期：2026-09-06', system_prompt['content'])
         self.assertIn('当前时间基准：UTC', system_prompt['content'])
+
+    async def test_terminal_persistence_failure_emits_error_before_failed_done(self):
+        created = await self.create()
+        with patch.object(repository, 'persist_message', AsyncMock(side_effect=RuntimeError('database down'))):
+            response = await self.client.get(f"/api/v1/chat/messages/{created['message_id']}/stream")
+        stream = events(response.text)
+        kinds = [kind for kind, _ in stream]
+        self.assertIn('error', kinds)
+        self.assertLess(kinds.index('error'), kinds.index('done'))
+        self.assertEqual(stream[-1][0], 'done')
+        self.assertEqual(stream[-1][1]['status'], 'failed')
+        self.assertIsInstance(stream[-1][1]['duration_ms'], int)
+        self.assertEqual(stream[kinds.index('error')][1]['message'], '对话保存失败，请稍后重试')
+
+    async def test_stop_persistence_failure_emits_failed_terminal_state(self):
+        created = await self.create()
+        message = await repository.message(created['message_id'], OWNER_KEY)
+        with patch.object(repository, 'persist_message', AsyncMock(side_effect=RuntimeError('database down'))):
+            await chat.stop_message(message)
+        self.assertEqual(message.status, 'failed')
+        self.assertEqual(message.events, [
+            ('error', {'code': 20004, 'message': '对话保存失败，请稍后重试'}),
+            ('done', {'duration_ms': 0, 'status': 'failed'}),
+        ])
 
     async def test_owner_checks_all_operations(self):
         data = await self.create(); sid, mid = data['session_id'], data['message_id']
@@ -203,6 +227,23 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(repository, 'max_sessions', 1):
             response = await self.client.post('/api/v1/chat/sessions', json={'question': 'capacity'})
         self.assertEqual(response.status_code, 200 if repository.is_durable else 429)
+
+    async def test_resume_rejects_terminal_and_non_latest_messages(self):
+        first = await self.create()
+        await self.client.get(f"/api/v1/chat/messages/{first['message_id']}/stream")
+        follow = (await self.client.post(
+            f"/api/v1/chat/sessions/{first['session_id']}/messages",
+            json={'question': '续问'},
+        )).json()['data']
+        await self.client.get(f"/api/v1/chat/messages/{follow['message_id']}/stream")
+        self.assertEqual(
+            (await self.client.post(f"/api/v1/chat/messages/{first['message_id']}/resume")).status_code,
+            409,
+        )
+        self.assertEqual(
+            (await self.client.post(f"/api/v1/chat/messages/{follow['message_id']}/resume")).status_code,
+            409,
+        )
 
     async def test_disconnect_and_product_error(self):
         created = await self.create(); message = await repository.message(created['message_id'], OWNER_KEY)

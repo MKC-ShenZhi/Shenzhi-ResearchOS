@@ -4,6 +4,11 @@ import type { LocalAskSession } from "./local-history";
 
 type BackendHistoryRecord = Pick<ChatSessionSummary, "id" | "title" | "updated_at" | "favorite">;
 
+/** Backend `updated_at` is Unix seconds; local fallback uses `Date.now()` milliseconds. */
+export function chatTimestampMs(value: number): number {
+  return value > 0 && value < 1e12 ? value * 1000 : value;
+}
+
 /** Merge the authoritative backend list with separately owned local fallback entries. */
 export function mergeHistorySources(
   db: BackendHistoryRecord[],
@@ -13,8 +18,7 @@ export function mergeHistorySources(
     ...db.map((session) => ({
       id: session.id,
       title: session.title,
-      // Backend Chat timestamps are Unix seconds; browser Date APIs use ms.
-      updatedAt: session.updated_at * 1000,
+      updatedAt: chatTimestampMs(session.updated_at),
       source: "db" as const,
       favorite: session.favorite,
     })),

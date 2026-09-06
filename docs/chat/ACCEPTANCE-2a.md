@@ -6,7 +6,7 @@
 | ID | 前置 | 步骤 | 期望 | 等级 |
 | --- | --- | --- | --- | --- |
 | E-01 | 本机 PG 可连 | `pg_isready`；`psql` 连 `shenzhi_chat` | 服务就绪；库存在 | P0 |
-| E-02 | 已 upgrade | `\dt`；`alembic_version` | 有 `chat_sessions`/`chat_messages`；版本 `001_chat_tables` | P0 |
+| E-02 | 已 upgrade | `\dt`；`alembic_version` | 有 `chat_sessions`/`chat_messages`；版本 `002_anon_expiry_idx`，且匿名过期索引存在 | P0 |
 | C-01 | PG 模式 | `GET /chat/sessions` | `ephemeral=false`；`code=0` | P0 |
 | C-02 | 无会话 owner | `POST /chat/sessions` 首问 | 返回 session_id/message_id；DB 有 1 session + 1 message(streaming→终态) | P0 |
 | C-03 | C-02 完成 | SSE 跑完；`GET /sessions/{id}` | content/status=done；refs/followups 可空非必失败 | P0 |
@@ -17,7 +17,7 @@
 | C-08 | owner A 有数据 | owner B 访问 A 的 session/message | 全部 404；B 列表为空 | P0 |
 | C-09 | streaming 行 | 调 `recover()` 或模拟重启 | status=failed；content 保留 | P0 |
 | C-10 | 已 done | 再 `persist_message` 改 content | DB content 不变（幂等） | P0 |
-| C-11 | 未配 CHAT_DATABASE_URL | 跑原 ChatApiTests | 16 项全过；`ephemeral=true` | P0 |
+| C-11 | 未配 CHAT_DATABASE_URL | 跑 Chat API 与匿名清理单元测试 | 14 项全过；`ephemeral=true` | P0 |
 | C-12 | PG 模式 | 单元/契约 `test_persistence` | 契约项全过 | P0 |
 | M-01 | 可选 | 匿名→登录改 owner | 会话内容不变仅 owner 变更 | P2（2a 后置） |
 
@@ -61,6 +61,20 @@
 | 2a 持久化验收 | Pass | `tests.test_acceptance_2a` 11/11。Windows asyncio 关闭连接时输出资源清理告警，但没有测试失败或数据库断言失败。 |
 
 说明：本批次验证了后端持久化链路与匿名认领事务。Better Auth 登录后的实际浏览器页面联调仍需在启动 Web/Backend 后单独验收。
+
+### 2026-09-05 · 持久化、匿名生命周期与迁移确认补测
+
+环境：本机 PostgreSQL 16 测试库；Alembic 已从 `001_chat_tables` 升级至 `002_anon_expiry_idx`。测试仅使用本机开发数据库，不记录连接凭据。
+
+| 项目 | 结果 | 证据 |
+| --- | --- | --- |
+| E-01 / E-02 | Pass | PostgreSQL 端口可连；Alembic 成功应用 `002_anon_expiry_idx`，匿名 session 过期 partial index 已建立。 |
+| 终态写库失败语义 | Pass | 内存模式 Chat API 测试验证：`persist_message` 抛错时先发送 SSE `error`，最后 `done.status=failed`，不会先向客户端确认成功。 |
+| 匿名生命周期与清理 | Pass | PostgreSQL 契约测试覆盖：只清理过期匿名终态 session、保留 user 数据和 active streaming session；匿名历史成功列表读取会续期同一匿名 owner 的全部 session。 |
+| Web 弹窗与认领服务 | Pass（自动化） | Web 类型检查与 117 项测试通过；预览只返回 durable 匿名会话数，用户确认后才发送认领请求。 |
+| PostgreSQL 自动化验收 | Pass | `tests.test_persistence`（7 项）与 `tests.test_acceptance_2a`（11 项）通过；Windows asyncio/asyncpg 在多事件循环收尾时仍会输出资源关闭告警，但进程以成功状态结束，所有数据库断言通过。 |
+| 状态机与多账号隔离补测 | Pass（自动化） | Chat API 增加 done/非最新消息禁止 resume；PostgreSQL persistence 增加账号 B 访问账号 A 会话返回 404 的断言。 |
+| 浏览器 P0 | Blocked | 已启动本地页面，但当前会话未完成真实账号登录；匿名→账号确认弹窗需要在持久化后端和已登录测试账号下做实际 UI 操作，不能以自动化结果替代。 |
 
 ### 复跑命令
 
