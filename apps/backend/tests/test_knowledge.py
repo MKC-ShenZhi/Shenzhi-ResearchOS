@@ -294,6 +294,61 @@ class KnowledgeContinuityTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response.results, [])
 
+    async def test_paginated_search_fetches_and_slices_the_requested_page(self):
+        many_results = []
+        for index in range(45):
+            item = copy.deepcopy(SEARCH_RESPONSE['results'][0])
+            item.update({
+                'paper_id': f'paper:{index + 1}',
+                'title': f'Paper {index + 1}',
+                'rank': index + 1,
+            })
+            many_results.append(item)
+
+        class ManyResultsClient(FixtureClient):
+            def __init__(self):
+                self.search_requests = []
+
+            async def search(self, request):
+                self.search_requests.append(request)
+                return {'results': many_results[:request['top_k']]}
+
+        client = ManyResultsClient()
+        adapter = KnowledgeAdapter(client)
+
+        first_page = await adapter.search(KnowledgeSearchRequest.model_validate({
+            'query': 'machine learning',
+            'topK': 20,
+            'offset': 0,
+        }))
+        self.assertEqual(client.search_requests[0]['top_k'], 21)
+        self.assertEqual(len(first_page.results), 20)
+        self.assertEqual(first_page.results[0].id, 'paper:1')
+        self.assertEqual(first_page.results[-1].id, 'paper:20')
+        self.assertTrue(first_page.has_more)
+
+        second_page = await adapter.search(KnowledgeSearchRequest.model_validate({
+            'query': 'machine learning',
+            'topK': 20,
+            'offset': 20,
+        }))
+        self.assertEqual(client.search_requests[1]['top_k'], 41)
+        self.assertEqual(len(second_page.results), 20)
+        self.assertEqual(second_page.results[0].id, 'paper:21')
+        self.assertEqual(second_page.results[-1].id, 'paper:40')
+        self.assertTrue(second_page.has_more)
+
+        third_page = await adapter.search(KnowledgeSearchRequest.model_validate({
+            'query': 'machine learning',
+            'topK': 20,
+            'offset': 40,
+        }))
+        self.assertEqual(client.search_requests[2]['top_k'], 61)
+        self.assertEqual(len(third_page.results), 5)
+        self.assertEqual(third_page.results[0].id, 'paper:41')
+        self.assertEqual(third_page.results[-1].id, 'paper:45')
+        self.assertFalse(third_page.has_more)
+
 
 class KnowledgeServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_service_delegates_domain_use_cases_to_adapter(self):
@@ -558,6 +613,7 @@ class KnowledgeApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(search_response.status_code, 200, search_response.text)
         search_data = search_response.json()['data']
         self.assertEqual(search_data['results'][0]['id'], PAPER_ID)
+        self.assertFalse(search_data['hasMore'])
         self.assertEqual(search_data['results'][0]['provenance']['externalId'], PAPER_ID)
         self.assertNotIn('paper_id', search_data['results'][0])
         self.assertNotIn('query_parse', search_data)

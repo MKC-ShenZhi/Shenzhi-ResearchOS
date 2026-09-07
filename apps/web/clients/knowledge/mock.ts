@@ -11,6 +11,7 @@ import type {
   KnowledgePaperDetail,
   KnowledgePaperHit,
   KnowledgeSearchParams,
+  KnowledgeSearchResponse,
 } from "./types";
 
 /** Mock 可模拟的行为状态 */
@@ -73,7 +74,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
     return effective;
   }
 
-  async search(params: KnowledgeSearchParams): Promise<{ results: KnowledgePaperHit[] }> {
+  async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {
     await this.wait();
     const scenario = this.throwIfNeeded(params.query);
 
@@ -97,11 +98,14 @@ export class MockKnowledgeClient implements KnowledgeClient {
         } satisfies KnowledgePaperHit;
       })
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-      .slice(0, params.topK)
       .map((hit, index) => ({ ...hit, rank: index + 1 }));
 
-    if (scenario === "zero_results") return { results: [] };
-    return { results: hits };
+    if (scenario === "zero_results") return { results: [], hasMore: false };
+    const offset = params.offset ?? 0;
+    return {
+      results: hits.slice(offset, offset + params.topK),
+      hasMore: hits.length > offset + params.topK,
+    };
   }
 
   async paper(paperId: string): Promise<KnowledgePaperDetail> {

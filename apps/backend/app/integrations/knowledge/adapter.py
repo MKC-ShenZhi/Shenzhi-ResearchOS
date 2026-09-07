@@ -147,11 +147,13 @@ def _property_key(key: Any) -> str:
     return aliases.get(text, text)
 
 
-def _upstream_search_payload(request: KnowledgeSearchRequest) -> UpstreamSearchPayload:
+def _upstream_search_payload(
+    request: KnowledgeSearchRequest, *, top_k: int | None = None
+) -> UpstreamSearchPayload:
     """Translate the public request once at the anti-corruption boundary."""
     payload: UpstreamSearchPayload = {
         'query': request.query,
-        'top_k': request.top_k,
+        'top_k': request.top_k if top_k is None else top_k,
     }
     if request.year_from is not None:
         payload['year_gte'] = request.year_from
@@ -317,13 +319,29 @@ class KnowledgeAdapter:
         self.client = client or KnowledgeBaseClient()
 
     async def search(self, request: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
-        body = await self.client.search(_upstream_search_payload(request))
+        # The current upstream accepts larger top_k values but ignores offset
+        # and exposes no total count. Paginated Paper Search therefore asks for
+        # all hits through the requested page plus one look-ahead hit, then
+        # slices at this backend boundary. Callers that omit offset retain the
+        # original top_k request (Knowledge2Chat relies on that behavior).
+        upstream_top_k = request.top_k
+        if request.offset is not None:
+            upstream_top_k = request.offset + request.top_k + 1
+        body = await self.client.search(
+            _upstream_search_payload(request, top_k=upstream_top_k)
+        )
         results = body.get('results') if isinstance(body, dict) else None
         if not isinstance(results, list):
             raise KnowledgeIntegrationError.contract_violation()
         retrieved_at = datetime.now(timezone.utc)
         mapped = [map_search_result(item, retrieved_at=retrieved_at) for item in results]
-        return KnowledgeSearchResponse(results=mapped)
+        if request.offset is None:
+            return KnowledgeSearchResponse(results=mapped)
+        page_end = request.offset + request.top_k
+        return KnowledgeSearchResponse(
+            results=mapped[request.offset:page_end],
+            has_more=len(mapped) > page_end,
+        )
 
     async def paper(self, paper_id: str) -> PaperDetail:
         body = await self.client.paper(paper_id)

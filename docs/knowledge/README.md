@@ -89,9 +89,14 @@ Detail Contract。前端使用 PDF.js 的 Canvas 与 Text Layer 渲染，阅读�
 因此在 ShenZhi 内保持 external-only；未来若要站内阅读，需要 Knowledge Base
 提供稳定可读的 PDF URL、PDF binary API，或合法的 server-side credential。
 
-Search 请求使用 `query`、`topK`、`yearFrom`、`yearTo`、`venue`、`author`、
-`keyword`、`subject`。Backend 只在 adapter 边界把它们映射为外部 API 所需的
-字段（例如 `top_k`、`year_gte`、`conference`）。
+Search 请求使用 `query`、`topK`、`offset`、`yearFrom`、`yearTo`、`venue`、
+`author`、`keyword`、`subject`。论文检索页固定 `topK=20`，并按
+`offset=(page-1)*20` 请求；响应通过 `hasMore` 表示是否存在下一页。当前外部
+接口接受较大的 `top_k`，但会忽略 `offset` 且不返回总数，因此 Backend adapter
+为显式携带 `offset` 的论文检索请求读取至目标页后一条、在服务端截取目标页并
+计算 `hasMore`。未携带 `offset` 的 Knowledge2Chat 请求仍保持原有 `top_k` 行为。
+其余筛选字段只在 adapter 边界映射为外部 API 所需字段（例如 `year_gte`、
+`conference`）。
 
 图谱 `depth` 只支持 `1 | 2`，默认值为 `1`。Backend 可以返回异构节点和边；
 前端保持 `kind`、`relation` 为开放字符串，未知值使用默认展示。

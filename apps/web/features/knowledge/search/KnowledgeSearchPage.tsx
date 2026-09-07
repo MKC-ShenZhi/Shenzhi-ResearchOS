@@ -7,6 +7,10 @@ import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { KnowledgeFilterPanel, type KnowledgeFilters } from "./components/filter-panel";
 import { KnowledgeResultsSection } from "./components/results-section";
 import { KnowledgeSearchHero } from "./components/search-hero";
+import {
+  KNOWLEDGE_SEARCH_PAGE_SIZE,
+  knowledgeSearchOffset,
+} from "./pagination";
 
 const EMPTY_FILTERS: KnowledgeFilters = {
   yearFrom: null,
@@ -29,11 +33,13 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
   const [query, setQuery] = useState(initialQuery);
   const [committedQuery, setCommittedQuery] = useState(initialQuery);
   const [filters, setFilters] = useState<KnowledgeFilters>(EMPTY_FILTERS);
+  const [page, setPage] = useState(1);
 
   /** 提交搜索：更新查询词并同步 URL */
   const submitSearch = (q: string) => {
     const text = q.trim();
     setCommittedQuery(text);
+    setPage(1);
     const next = new URLSearchParams();
     if (text) next.set("q", text);
     router.replace(`/knowledge/search?${next.toString()}`);
@@ -43,7 +49,8 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
     if (!committedQuery) return null;
     return {
       query: committedQuery,
-      topK: 20,
+      topK: KNOWLEDGE_SEARCH_PAGE_SIZE,
+      offset: knowledgeSearchOffset(page),
       yearFrom: filters.yearFrom,
       yearTo: filters.yearTo,
       venue: filters.venue,
@@ -51,7 +58,12 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
       keyword: filters.keyword,
       subject: filters.subject,
     };
-  }, [committedQuery, filters]);
+  }, [committedQuery, filters, page]);
+
+  const updateFilters = (nextFilters: KnowledgeFilters) => {
+    setFilters(nextFilters);
+    setPage(1);
+  };
 
   return (
     <AppShell>
@@ -67,7 +79,7 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
           <aside className="w-full shrink-0 lg:w-64">
             <KnowledgeFilterPanel
               filters={filters}
-              onChange={setFilters}
+              onChange={updateFilters}
               disabled={!committedQuery}
             />
           </aside>
@@ -78,6 +90,8 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
               <KnowledgeResultsSection
                 params={searchParamsForQuery}
                 returnTo={`/knowledge/search?q=${encodeURIComponent(committedQuery)}`}
+                page={page}
+                onPageChange={setPage}
               />
             ) : (
               <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-line bg-card/40 px-6 text-center shadow-card">
