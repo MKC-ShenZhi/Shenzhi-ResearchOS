@@ -58,6 +58,10 @@ class KnowledgeSearchRequest(KnowledgeModel):
         validation_alias='topK',
         serialization_alias='topK',
     )
+    # None keeps non-paginated callers (notably Knowledge2Chat) on the
+    # existing upstream request. Paper Search sends an explicit offset,
+    # including 0 for its first page.
+    offset: int | None = Field(default=None, ge=0)
     year_from: int | None = Field(
         default=None,
         validation_alias='yearFrom',
@@ -125,6 +129,7 @@ class PaperSearchResult(KnowledgeModel):
 
 class KnowledgeSearchResponse(KnowledgeModel):
     results: list[PaperSearchResult] = Field(default_factory=list)
+    has_more: bool = Field(default=False, serialization_alias='hasMore')
 
 
 class PaperDetail(KnowledgeModel):
