@@ -17,6 +17,8 @@
 export interface KnowledgeSearchParams {
   query: string;
   topK: number;
+  /** 论文检索分页偏移；不传时保持非分页调用方的原有行为 */
+  offset?: number;
 
   yearFrom: number | null;
   yearTo: number | null;
@@ -25,6 +27,12 @@ export interface KnowledgeSearchParams {
   author: string[];
   keyword: string[];
   subject: string[];
+}
+
+/** 论文搜索响应；上游无总数，使用 look-ahead 结果判断是否还有下一页 */
+export interface KnowledgeSearchResponse {
+  results: KnowledgePaperHit[];
+  hasMore?: boolean;
 }
 
 /** 搜索结果单条（论文） */

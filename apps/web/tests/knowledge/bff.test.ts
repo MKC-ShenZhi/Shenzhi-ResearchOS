@@ -15,6 +15,7 @@ import { knowledgeQueryRetry } from "../../features/knowledge/retry.js";
 const SEARCH_PARAMS = {
   query: "graph neural network",
   topK: 20,
+  offset: 20,
   yearFrom: 2021,
   yearTo: 2026,
   venue: ["AAAI"],
