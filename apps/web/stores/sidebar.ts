@@ -14,6 +14,9 @@ interface SidebarState {
   collapsed: boolean;
   toggleCollapsed: () => void;
   setCollapsed: (collapsed: boolean) => void;
+  /** 展开态侧栏导航自身的滚动位置 */
+  navScrollTop: number;
+  setNavScrollTop: (scrollTop: number) => void;
 }
 
 export const useSidebarStore = create<SidebarState>()(
@@ -25,6 +28,8 @@ export const useSidebarStore = create<SidebarState>()(
       collapsed: false,
       toggleCollapsed: () => set((s) => ({ collapsed: !s.collapsed })),
       setCollapsed: (collapsed) => set({ collapsed }),
+      navScrollTop: 0,
+      setNavScrollTop: (navScrollTop) => set({ navScrollTop }),
     }),
     { name: "shenzhi-sidebar" },
   ),
