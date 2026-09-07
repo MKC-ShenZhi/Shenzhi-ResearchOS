@@ -6,7 +6,7 @@ import logging
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 
 from app.core.identity import require_bff
@@ -101,6 +101,40 @@ def _paper_id_or_error(paper_id: str | None, request: Request) -> str | JSONResp
     return paper_id
 
 
+def _pdf_error(
+    request: Request,
+    *,
+    code: str,
+    message: str,
+    retryable: bool,
+    status_code: int,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content=KnowledgeError(
+            code=code,
+            message=message,
+            retryable=retryable,
+            request_id=request_id(request),
+        ).model_dump(mode='json', by_alias=True),
+    )
+
+
+def _pdf_headers(source_headers: dict[str, str]) -> dict[str, str]:
+    headers = {'Content-Type': 'application/pdf'}
+    for name in (
+        'content-length',
+        'content-disposition',
+        'accept-ranges',
+        'content-range',
+        'cache-control',
+    ):
+        if value := source_headers.get(name):
+            headers[name] = value
+    headers.setdefault('content-disposition', 'inline')
+    return headers
+
+
 @router.get('/paper')
 async def paper(
     request: Request,
@@ -117,6 +151,61 @@ async def paper(
     except Exception as error:
         return unknown_error(request, error)
     return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/paper/pdf')
+async def paper_pdf(
+    request: Request,
+    paper_id: str | None = Query(default=None, alias='paperId'),
+    _credential: None = Depends(require_bff),
+):
+    if 'url' in request.query_params:
+        return invalid_argument(request, '不支持 url 参数')
+    resolved = _paper_id_or_error(paper_id, request)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    try:
+        source = await service.get_paper_pdf_source(
+            resolved, range_header=request.headers.get('range')
+        )
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+
+    if source is None:
+        return _pdf_error(
+            request,
+            code='NOT_FOUND',
+            message='当前论文暂无可用 PDF',
+            retryable=False,
+            status_code=404,
+        )
+    if source.probe.status == 'external_only':
+        await service.close_paper_pdf(source)
+        return _pdf_error(
+            request,
+            code='UPSTREAM_UNAVAILABLE',
+            message='该 PDF 来源需要在原站完成访问验证',
+            retryable=False,
+            status_code=403,
+        )
+    if source.probe.status != 'available':
+        await service.close_paper_pdf(source)
+        return _pdf_error(
+            request,
+            code='UPSTREAM_UNAVAILABLE',
+            message='PDF 暂时无法获取',
+            retryable=source.probe.retryable,
+            status_code=503 if source.probe.retryable else 502,
+        )
+
+    return StreamingResponse(
+        service.stream_paper_pdf(source),
+        status_code=source.probe.status_code,
+        media_type='application/pdf',
+        headers=_pdf_headers(dict(source.probe.headers)),
+    )
 
 
 @router.get('/graph')

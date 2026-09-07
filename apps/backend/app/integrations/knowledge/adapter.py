@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from pydantic import ValidationError
 
-from app.integrations.knowledge.client import KnowledgeBaseClient
+from app.integrations.knowledge.client import KnowledgeBaseClient, PdfFetch
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.integrations.knowledge.schemas import UpstreamSearchPayload
 from app.schemas.knowledge import (
@@ -331,6 +331,11 @@ class KnowledgeAdapter:
         if detail.id != paper_id:
             raise KnowledgeIntegrationError.contract_violation()
         return detail
+
+    async def fetch_pdf(
+        self, url: str, *, range_header: str | None = None
+    ) -> PdfFetch:
+        return await self.client.fetch_pdf(url, range_header=range_header)
 
     async def graph(self, paper_id: str, *, depth: int = 1) -> PaperGraph:
         body = await self.client.graph(paper_id, depth)

@@ -33,7 +33,7 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <PaperLeftSidebar key={`metadata-${paperId}`} paper={paper} />
           <main className="min-w-0 flex-1 p-3 lg:overflow-y-auto lg:p-5">
-            <PaperPdfViewer key={paper.pdfUrl} pdfUrl={paper.pdfUrl} title={paper.title} />
+            <PaperPdfViewer key={paperId} paperId={paperId} pdfUrl={paper.pdfUrl} title={paper.title} />
           </main>
           <PaperRightPanel key={`assistant-${paperId}`} paper={paper} />
         </div>

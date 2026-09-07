@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import os
 import logging
+import ipaddress
 from time import perf_counter
-from collections.abc import Callable
-from typing import Any, Mapping, cast
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
+from typing import Any, Literal, Mapping, cast
+from urllib.parse import urlparse
 
 import httpx
 
@@ -21,6 +24,43 @@ from app.integrations.knowledge.schemas import (
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PdfProbe:
+    status: Literal['available', 'external_only', 'unavailable']
+    retryable: bool
+    status_code: int
+    headers: Mapping[str, str]
+
+
+class PdfFetch:
+    """One upstream PDF response whose headers are already available."""
+
+    def __init__(
+        self,
+        probe: PdfProbe,
+        *,
+        client: httpx.AsyncClient | None = None,
+        response: httpx.Response | None = None,
+    ):
+        self.probe = probe
+        self._client = client
+        self._response = response
+
+    async def iter_bytes(self) -> AsyncIterator[bytes]:
+        if self._response is None:
+            return
+        async for chunk in self._response.aiter_bytes():
+            yield chunk
+
+    async def close(self) -> None:
+        if self._response is not None:
+            await self._response.aclose()
+            self._response = None
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
 
 def _configured_timeout() -> float:
@@ -81,6 +121,45 @@ class KnowledgeBaseClient:
             ),
         )
         return cast(UpstreamGraphResponse, body)
+
+    async def fetch_pdf(
+        self, url: str, *, range_header: str | None = None
+    ) -> PdfFetch:
+        """Open one PDF response and classify it from response headers."""
+        _validate_pdf_url(url)
+        validated_range = (
+            _validate_pdf_range(range_header) if range_header is not None else None
+        )
+        client = httpx.AsyncClient(
+            timeout=self.timeout,
+            transport=self.transport,
+            follow_redirects=False,
+        )
+        try:
+            headers = {}
+            if validated_range is not None:
+                headers['Range'] = validated_range
+            request = client.build_request('GET', url, headers=headers)
+            response = await client.send(request, stream=True)
+        except httpx.TimeoutException as exc:
+            await client.aclose()
+            raise KnowledgeIntegrationError.timeout() from exc
+        except (httpx.ConnectError, httpx.NetworkError) as exc:
+            await client.aclose()
+            raise KnowledgeIntegrationError.connection_unavailable() from exc
+        except (httpx.InvalidURL, httpx.UnsupportedProtocol) as exc:
+            await client.aclose()
+            raise KnowledgeIntegrationError.invalid_configuration() from exc
+        except httpx.HTTPError as exc:
+            await client.aclose()
+            raise KnowledgeIntegrationError.request_failed() from exc
+
+        probe = _classify_pdf_response(response)
+        if probe.status != 'available':
+            await response.aclose()
+            await client.aclose()
+            return PdfFetch(probe)
+        return PdfFetch(probe, client=client, response=response)
 
     async def _request_json(
         self,
@@ -155,3 +234,67 @@ class KnowledgeBaseClient:
         return KnowledgeIntegrationError(
             'UPSTREAM_UNAVAILABLE', '知识底座请求失败', True, 502
         )
+
+
+def _validate_pdf_url(url: str) -> None:
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if parsed.scheme.lower() not in {'http', 'https'} or not hostname:
+            raise ValueError('unsupported PDF URL')
+        parsed.port
+    except (TypeError, ValueError) as exc:
+        raise KnowledgeIntegrationError.invalid_configuration() from exc
+
+    hostname = hostname.lower().rstrip('.')
+    if hostname == 'localhost':
+        raise KnowledgeIntegrationError.invalid_configuration()
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        return
+    if (
+        address.is_loopback
+        or address.is_private
+        or address.is_link_local
+        or address.is_reserved
+        or address.is_unspecified
+        or address.is_multicast
+    ):
+        raise KnowledgeIntegrationError.invalid_configuration()
+
+
+def _is_pdf_content_type(content_type: str | None) -> bool:
+    if not content_type:
+        return False
+    return content_type.split(';', 1)[0].strip().lower() == 'application/pdf'
+
+
+def _validate_pdf_range(value: str) -> str:
+    value = value.strip()
+    if not value.startswith('bytes=') or ',' in value:
+        raise KnowledgeIntegrationError.invalid_argument()
+
+    spec = value.removeprefix('bytes=')
+    if spec.startswith('-'):
+        valid = spec[1:].isdigit()
+    else:
+        start, separator, end = spec.partition('-')
+        valid = bool(separator) and start.isdigit() and (not end or end.isdigit())
+    if not valid:
+        raise KnowledgeIntegrationError.invalid_argument()
+    return value
+
+
+def _classify_pdf_response(response: httpx.Response) -> PdfProbe:
+    status_code = response.status_code
+    headers = dict(response.headers)
+    if status_code in (401, 403):
+        return PdfProbe('external_only', False, status_code, headers)
+    if status_code >= 500:
+        return PdfProbe('unavailable', True, status_code, headers)
+    if not 200 <= status_code < 300:
+        return PdfProbe('unavailable', False, status_code, headers)
+    if not _is_pdf_content_type(response.headers.get('content-type')):
+        return PdfProbe('unavailable', False, status_code, headers)
+    return PdfProbe('available', False, status_code, headers)

@@ -440,6 +440,89 @@ class KnowledgeClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(caught.exception.retryable)
         self.assertEqual(caught.exception.status_code, 503)
 
+    async def test_client_rejects_non_http_pdf_urls(self):
+        client = KnowledgeBaseClient(
+            base_url='https://knowledge.test',
+            transport=httpx.MockTransport(lambda request: httpx.Response(200)),
+        )
+
+        with self.assertRaises(KnowledgeIntegrationError) as caught:
+            await client.fetch_pdf('file:///tmp/paper.pdf')
+
+        self.assertEqual(caught.exception.code, 'UPSTREAM_UNAVAILABLE')
+        self.assertFalse(caught.exception.retryable)
+
+    async def test_client_classifies_pdf_status_and_mime(self):
+        cases = [
+            (403, 'text/html', 'external_only', False),
+            (404, 'text/html', 'unavailable', False),
+            (500, 'text/html', 'unavailable', True),
+            (200, 'text/html', 'unavailable', False),
+        ]
+        for status_code, content_type, expected_status, retryable in cases:
+            with self.subTest(status=status_code, content_type=content_type):
+                client = KnowledgeBaseClient(
+                    base_url='https://knowledge.test',
+                    transport=httpx.MockTransport(
+                        lambda request, status_code=status_code, content_type=content_type: httpx.Response(
+                            status_code,
+                            headers={'content-type': content_type},
+                        )
+                    ),
+                )
+                fetch = await client.fetch_pdf('https://pdf.test/paper.pdf')
+                self.assertEqual(fetch.probe.status, expected_status)
+                self.assertEqual(fetch.probe.retryable, retryable)
+                await fetch.close()
+
+    async def test_client_maps_pdf_timeout_to_retryable_error(self):
+        client = KnowledgeBaseClient(
+            base_url='https://knowledge.test',
+            transport=httpx.MockTransport(
+                lambda request: (_ for _ in ()).throw(
+                    httpx.ReadTimeout('timed out', request=request)
+                )
+            ),
+        )
+
+        with self.assertRaises(KnowledgeIntegrationError) as caught:
+            await client.fetch_pdf('https://pdf.test/paper.pdf')
+
+        self.assertEqual(caught.exception.code, 'TIMEOUT')
+        self.assertTrue(caught.exception.retryable)
+
+    async def test_client_forwards_single_pdf_range_and_keeps_partial_headers(self):
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            return httpx.Response(
+                206,
+                headers={
+                    'content-type': 'application/pdf',
+                    'content-range': 'bytes 0-99/1000',
+                    'accept-ranges': 'bytes',
+                    'content-length': '100',
+                },
+                content=b'%PDF',
+            )
+
+        client = KnowledgeBaseClient(
+            base_url='https://knowledge.test',
+            transport=httpx.MockTransport(handler),
+        )
+
+        fetch = await client.fetch_pdf(
+            'https://pdf.test/paper.pdf', range_header='bytes=0-99'
+        )
+
+        self.assertEqual(requests[0].headers['range'], 'bytes=0-99')
+        self.assertEqual(fetch.probe.status_code, 206)
+        self.assertEqual(fetch.probe.headers['content-range'], 'bytes 0-99/1000')
+        self.assertEqual(fetch.probe.headers['accept-ranges'], 'bytes')
+        self.assertEqual(fetch.probe.headers['content-length'], '100')
+        await fetch.close()
+
 
 class KnowledgeApiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -571,6 +654,198 @@ class KnowledgeApiTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()['code'], 'INVALID_ARGUMENT')
+
+    async def test_pdf_endpoint_reports_no_pdf_without_creating_a_proxy_target(self):
+        response = await self.client.get(
+            '/api/v1/knowledge/paper/pdf', params={'paperId': PAPER_ID}
+        )
+
+        self.assertEqual(response.status_code, 404, response.text)
+        self.assertEqual(response.json()['code'], 'NOT_FOUND')
+
+    async def test_pdf_endpoint_streams_public_pdf_and_uses_paper_id_only(self):
+        detail = copy.deepcopy(DETAIL_RESPONSE)
+        detail['pdf_url'] = 'https://pdf.test/paper.pdf'
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            if request.url.path == '/api/kg/paper':
+                return httpx.Response(200, json=detail)
+            if request.url.host == 'pdf.test':
+                return httpx.Response(
+                    200,
+                    headers={
+                        'content-type': 'application/pdf',
+                        'content-length': '8',
+                        'accept-ranges': 'bytes',
+                        'cache-control': 'public, max-age=60',
+                    },
+                    content=b'%PDF-1.7',
+                )
+            return httpx.Response(404)
+
+        service = KnowledgeService(KnowledgeAdapter(KnowledgeBaseClient(
+            base_url='https://knowledge.test',
+            transport=httpx.MockTransport(handler),
+        )))
+        self.service_patch.stop()
+        self.service_patch = patch('app.api.knowledge.service', service)
+        self.service_patch.start()
+
+        pdf = await self.client.get(
+            '/api/v1/knowledge/paper/pdf', params={'paperId': PAPER_ID}
+        )
+        arbitrary = await self.client.get(
+            '/api/v1/knowledge/paper/pdf',
+            params={'paperId': PAPER_ID, 'url': 'https://pdf.test/paper.pdf'},
+        )
+
+        self.assertEqual(pdf.status_code, 200, pdf.text)
+        self.assertEqual(pdf.headers['content-type'], 'application/pdf')
+        self.assertEqual(pdf.headers['content-disposition'], 'inline')
+        self.assertEqual(pdf.headers['content-length'], '8')
+        self.assertEqual(pdf.headers['accept-ranges'], 'bytes')
+        self.assertEqual(pdf.headers['cache-control'], 'public, max-age=60')
+        self.assertEqual(pdf.content, b'%PDF-1.7')
+        self.assertEqual(arbitrary.status_code, 422)
+        self.assertEqual(arbitrary.json()['code'], 'INVALID_ARGUMENT')
+        self.assertEqual(
+            [request.url.host for request in requests],
+            ['knowledge.test', 'pdf.test'],
+        )
+
+    async def test_pdf_endpoint_forwards_range_and_partial_response_headers(self):
+        detail = copy.deepcopy(DETAIL_RESPONSE)
+        detail['pdf_url'] = 'https://pdf.test/paper.pdf'
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            if request.url.path == '/api/kg/paper':
+                return httpx.Response(200, json=detail)
+            return httpx.Response(
+                206,
+                headers={
+                    'content-type': 'application/pdf',
+                    'content-range': 'bytes 0-99/1000',
+                    'accept-ranges': 'bytes',
+                    'content-length': '100',
+                    'cache-control': 'public, max-age=60',
+                },
+                content=b'%PDF-partial',
+            )
+
+        service = KnowledgeService(KnowledgeAdapter(KnowledgeBaseClient(
+            base_url='https://knowledge.test',
+            transport=httpx.MockTransport(handler),
+        )))
+        self.service_patch.stop()
+        self.service_patch = patch('app.api.knowledge.service', service)
+        self.service_patch.start()
+
+        response = await self.client.get(
+            '/api/v1/knowledge/paper/pdf',
+            params={'paperId': PAPER_ID},
+            headers={'Range': 'bytes=0-99'},
+        )
+
+        self.assertEqual(response.status_code, 206, response.text)
+        self.assertEqual(response.headers['content-range'], 'bytes 0-99/1000')
+        self.assertEqual(response.headers['accept-ranges'], 'bytes')
+        self.assertEqual(response.headers['content-length'], '100')
+        self.assertEqual(response.headers['cache-control'], 'public, max-age=60')
+        self.assertEqual(response.content, b'%PDF-partial')
+        self.assertEqual(requests[-1].headers['range'], 'bytes=0-99')
+
+    async def test_pdf_endpoint_keeps_full_response_when_upstream_ignores_range(self):
+        detail = copy.deepcopy(DETAIL_RESPONSE)
+        detail['pdf_url'] = 'https://pdf.test/paper.pdf'
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            if request.url.path == '/api/kg/paper':
+                return httpx.Response(200, json=detail)
+            return httpx.Response(
+                200,
+                headers={
+                    'content-type': 'application/pdf',
+                    'content-length': '12',
+                    'accept-ranges': 'bytes',
+                },
+                content=b'%PDF-complete',
+            )
+
+        service = KnowledgeService(KnowledgeAdapter(KnowledgeBaseClient(
+            base_url='https://knowledge.test',
+            transport=httpx.MockTransport(handler),
+        )))
+        self.service_patch.stop()
+        self.service_patch = patch('app.api.knowledge.service', service)
+        self.service_patch.start()
+
+        response = await self.client.get(
+            '/api/v1/knowledge/paper/pdf',
+            params={'paperId': PAPER_ID},
+            headers={'Range': 'bytes=0-99'},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.headers['content-length'], '12')
+        self.assertNotIn('content-range', response.headers)
+        self.assertEqual(response.content, b'%PDF-complete')
+        self.assertEqual(requests[-1].headers['range'], 'bytes=0-99')
+
+    async def test_pdf_endpoint_classifies_openreview_style_access_denial(self):
+        detail = copy.deepcopy(DETAIL_RESPONSE)
+        detail['pdf_url'] = 'https://openreview.test/pdf?id=paper'
+
+        def handler(request):
+            if request.url.path == '/api/kg/paper':
+                return httpx.Response(200, json=detail)
+            return httpx.Response(403, text='<html>login required</html>')
+
+        service = KnowledgeService(KnowledgeAdapter(KnowledgeBaseClient(
+            base_url='https://knowledge.test',
+            transport=httpx.MockTransport(handler),
+        )))
+        self.service_patch.stop()
+        self.service_patch = patch('app.api.knowledge.service', service)
+        self.service_patch.start()
+
+        pdf = await self.client.get(
+            '/api/v1/knowledge/paper/pdf', params={'paperId': PAPER_ID}
+        )
+
+        self.assertEqual(pdf.status_code, 403)
+        self.assertEqual(pdf.json()['code'], 'UPSTREAM_UNAVAILABLE')
+        self.assertNotEqual(pdf.headers.get('content-type'), 'application/pdf')
+
+    async def test_pdf_endpoint_marks_timeout_retryable(self):
+        detail = copy.deepcopy(DETAIL_RESPONSE)
+        detail['pdf_url'] = 'https://pdf.test/paper.pdf'
+
+        def handler(request):
+            if request.url.path == '/api/kg/paper':
+                return httpx.Response(200, json=detail)
+            raise httpx.ReadTimeout('timed out', request=request)
+
+        service = KnowledgeService(KnowledgeAdapter(KnowledgeBaseClient(
+            base_url='https://knowledge.test',
+            transport=httpx.MockTransport(handler),
+        )))
+        self.service_patch.stop()
+        self.service_patch = patch('app.api.knowledge.service', service)
+        self.service_patch.start()
+
+        response = await self.client.get(
+            '/api/v1/knowledge/paper/pdf', params={'paperId': PAPER_ID}
+        )
+
+        self.assertEqual(response.status_code, 504, response.text)
+        self.assertEqual(response.json()['code'], 'TIMEOUT')
+        self.assertTrue(response.json()['retryable'])
 
 
 if __name__ == '__main__':

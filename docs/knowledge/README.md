@@ -81,6 +81,14 @@ KNOWLEDGE_BASE_TIMEOUT_SEC=30
 | 论文详情 | `GET /api/v1/knowledge/paper?paperId=...` | `GET /api/kg/paper?paperId=...` |
 | 论文图谱 | `GET /api/v1/knowledge/graph?paperId=...&depth=1\|2` | `GET /api/kg/graph?paperId=...&depth=1\|2` |
 
+论文 PDF 使用专用的同源流式入口：`GET /api/v1/knowledge/paper/pdf?paperId=...`。
+Browser 只提供 `paperId`；Backend 复用论文详情中的 `pdf_url`，向公开来源透传
+必要的单段 `Range` 并流式返回 PDF，不提供任意 URL 代理，也不改变 Knowledge
+Detail Contract。前端使用 PDF.js 的 Canvas 与 Text Layer 渲染，阅读器高亮只保留
+在当前会话中。当前 Knowledge 返回的 OpenReview `pdf_url` 需要原站访问验证，
+因此在 ShenZhi 内保持 external-only；未来若要站内阅读，需要 Knowledge Base
+提供稳定可读的 PDF URL、PDF binary API，或合法的 server-side credential。
+
 Search 请求使用 `query`、`topK`、`yearFrom`、`yearTo`、`venue`、`author`、
 `keyword`、`subject`。Backend 只在 adapter 边界把它们映射为外部 API 所需的
 字段（例如 `top_k`、`year_gte`、`conference`）。
