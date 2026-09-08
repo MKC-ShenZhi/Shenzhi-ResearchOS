@@ -105,6 +105,7 @@ export function resumeChatMessage(messageId: string, init?: RequestInit) {
 }
 
 export interface ChatStreamHandlers {
+  onRequestId?: (requestId: string | null) => void;
   onMeta?: (data: StreamMetaEvent) => void;
   onDelta?: (data: StreamDeltaEvent) => void;
   onRefs?: (data: StreamRefsEvent) => void;
@@ -178,6 +179,7 @@ export async function streamChatMessage(
   await readSseStream(apiPath(`/chat/messages/${messageId}/stream`), {
     signal: options.signal,
     lastEventId: lastId,
+    onRequestId: handlers.onRequestId,
     onEvent: dispatch,
   });
 

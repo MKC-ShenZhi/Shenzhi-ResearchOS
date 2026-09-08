@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pydantic import ValidationError
 from app.core.config import MAX_HISTORY_CHARS
 from app.core.errors import BusinessError
+from app.core.logging import log_event
 from app.core.time import utc_now
 from app.services.document_parser import attachment_context
 from app.services.knowledge import KnowledgeService, KnowledgeServiceError
@@ -326,6 +327,29 @@ def _commit_candidate(message: Message, deltas: list[dict]) -> None:
         message.emit('delta', delta)
 
 
+def _log_stream_terminal(message: Message, error: BaseException | None = None) -> None:
+    event = {
+        'done': 'chat.stream.completed',
+        'stopped': 'chat.stream.stopped',
+        'failed': 'chat.stream.failed',
+    }.get(message.status)
+    if event is None:
+        return
+    fields = {
+        'request_id': message.stream_request_id or message.stop_request_id,
+        'session_id': message.session_id,
+        'message_id': message.id,
+        'duration_ms': message.duration_ms,
+        'error_type': type(error).__name__ if error is not None else None,
+        'error_code': getattr(error, 'code', None) if error is not None else None,
+    }
+    try:
+        log_event(logger, logging.ERROR if message.status == 'failed' else logging.INFO, event, fields)
+    except Exception:
+        # Observability is best-effort and must never change the Chat terminal state.
+        pass
+
+
 async def generate(message: Message) -> None:
     started = time.monotonic()
     knowledge_grounding: str | None = None
@@ -333,6 +357,7 @@ async def generate(message: Message) -> None:
     candidate_in_progress = False
     candidate_deltas: list[dict] = []
     candidate_context_truncated = False
+    terminal_error: BaseException | None = None
     try:
         session = await repository.session_for_message(message)
         knowledge_enabled = _knowledge_enabled(message)
@@ -482,10 +507,12 @@ async def generate(message: Message) -> None:
             _commit_candidate(message, candidate_deltas)
         message.status = 'stopped'
     except BusinessError as exc:
+        terminal_error = exc
         message.status, message.error = 'failed', exc.message
         error_data = {'code': exc.code, 'message': exc.message}
         message.emit('error', error_data)
-    except Exception:
+    except Exception as exc:
+        terminal_error = exc
         # The client receives a stable message, while operators retain the
         # traceback and opaque message id needed to diagnose this one turn.
         logger.exception('Unexpected Chat generation failure message_id=%s', message.id)
@@ -497,7 +524,8 @@ async def generate(message: Message) -> None:
             # A terminal event is an acknowledgement that the final message is
             # durable.  Do not send it before the database write succeeds.
             await repository.persist_message(message)
-        except Exception:
+        except Exception as exc:
+            terminal_error = exc
             logger.exception('Final Chat persistence failure message_id=%s', message.id)
             message.status, message.error = 'failed', '对话保存失败，请稍后重试'
             message.emit('error', {'code': 20004, 'message': message.error})
@@ -508,6 +536,7 @@ async def generate(message: Message) -> None:
                 # Timestamp maintenance must not turn a durable answer into a
                 # false failure; it can be retried by later normal activity.
                 logger.exception('Chat session touch failure message_id=%s', message.id)
+        _log_stream_terminal(message, terminal_error)
         done = {'duration_ms': message.duration_ms, 'status': message.status}
         if knowledge_grounding is not None:
             done['knowledge_grounding'] = knowledge_grounding
@@ -522,12 +551,15 @@ async def stop_message(message: Message) -> None:
             await message.task
     if message.status == 'streaming':
         message.status = 'stopped'
+        terminal_error: BaseException | None = None
         try:
             await repository.persist_message(message)
-        except Exception:
+        except Exception as exc:
+            terminal_error = exc
             logger.exception('Stopped Chat persistence failure message_id=%s', message.id)
             message.status, message.error = 'failed', '对话保存失败，请稍后重试'
             message.emit('error', {'code': 20004, 'message': message.error})
+        _log_stream_terminal(message, terminal_error)
         message.emit('done', {'duration_ms': message.duration_ms, 'status': message.status})
 
 

@@ -24,6 +24,7 @@ export interface ChatTurn {
   lastEventId?: string;
   resumeFromStreaming?: boolean;
   error?: string;
+  requestId?: string;
   knowledgeGrounding?: KnowledgeGroundingState;
 }
 

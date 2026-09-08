@@ -1,18 +1,25 @@
-import { requestHeaders } from "./http";
+import { ApiError, requestHeaders } from "./http";
 
 export interface SseEvent { id?: string; event: string; data: string }
 
 /** Incremental SSE parser: UTF-8, CRLF, comments and multiline data. */
 export async function readSseStream(
   url: string,
-  options: { signal?: AbortSignal; lastEventId?: string; onEvent: (event: SseEvent) => void },
+  options: {
+    signal?: AbortSignal;
+    lastEventId?: string;
+    onEvent: (event: SseEvent) => void;
+    onRequestId?: (requestId: string | null) => void;
+  },
 ): Promise<void> {
   const headers = requestHeaders({ Accept: "text/event-stream" });
   if (options.lastEventId) headers.set("Last-Event-ID", options.lastEventId);
   const res = await fetch(url, { headers, signal: options.signal, cache: "no-store" });
-  if (!res.ok || !res.body) throw new Error(`SSE 连接失败 (${res.status})`);
+  const requestId = res.headers.get("X-Request-ID");
+  options.onRequestId?.(requestId);
+  if (!res.ok || !res.body) throw new ApiError(20004, `SSE 连接失败 (${res.status})`, res.status, { requestId });
   if (!res.headers.get("content-type")?.includes("text/event-stream")) {
-    throw new Error("生成服务未返回 SSE 数据");
+    throw new ApiError(20004, "生成服务未返回 SSE 数据", res.status, { requestId });
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

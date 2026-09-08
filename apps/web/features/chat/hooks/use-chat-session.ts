@@ -6,7 +6,7 @@ import { getChatSession, resumeChatMessage, stopChatMessage, streamChatMessage }
 import { useAskSidebarBridge } from "@/stores/ask-sidebar-bridge";
 import { beginTurn, restoreTurns } from "../services/conversation";
 import { clearAskDraft } from "../services/draft";
-import { isAbortError, isMissingSessionError, messageForApiError } from "../services/errors";
+import { isAbortError, isMissingSessionError, messageForApiError, requestIdForApiError } from "../services/errors";
 import { readCurrentSessionId } from "../services/session-url";
 import {
   deleteLocalAskSession,
@@ -248,6 +248,9 @@ export function useChatSession({
     let finalStatus: ChatMessageStatus | undefined;
     try {
       await streamChatMessage(messageId, {
+        onRequestId: (requestId) => {
+          if (active() && requestId) patch(localId, { requestId });
+        },
         onMeta: (meta) => {
           if (!active()) return;
           patch(localId, {
@@ -287,7 +290,11 @@ export function useChatSession({
       // stream failure, and stale aborts are intentionally silent.
       if (active() && !isAbortError(error)) {
         finalStatus = "failed";
-        patch(localId, { status: "failed", error: messageForApiError(error) });
+        patch(localId, {
+          status: "failed",
+          error: messageForApiError(error),
+          ...(requestIdForApiError(error) ? { requestId: requestIdForApiError(error) } : {}),
+        });
       }
     }
     return finalStatus;
@@ -344,7 +351,11 @@ export function useChatSession({
     } catch (error) {
       if (generation.isCurrent() && !isAbortError(error)) {
         finalStatus = "failed";
-        patch(assistant.localId, { status: "failed", error: messageForApiError(error) });
+        patch(assistant.localId, {
+          status: "failed",
+          error: messageForApiError(error),
+          ...(requestIdForApiError(error) ? { requestId: requestIdForApiError(error) } : {}),
+        });
         if (!sessionRef.current) persistLocalFallback(input, turnsRef.current);
       }
     } finally {
@@ -439,7 +450,11 @@ export function useChatSession({
           finalStatus = "failed";
         } else {
           finalStatus = "failed";
-          patch(last.localId, { status: "failed", error: messageForApiError(error) });
+          patch(last.localId, {
+            status: "failed",
+            error: messageForApiError(error),
+            ...(requestIdForApiError(error) ? { requestId: requestIdForApiError(error) } : {}),
+          });
         }
       }
     } finally {

@@ -45,7 +45,9 @@ let identityReady: Promise<void> | undefined;
 async function ensureBackendIdentity() {
   if (typeof window === "undefined") return;
   identityReady ??= fetch(apiPath("/chat/config"), { cache: "no-store", signal: AbortSignal.timeout(30000) }).then((response) => {
-    if (!response.ok) throw new ApiError(20004, "无法连接生成服务", response.status);
+    if (!response.ok) throw new ApiError(20004, "无法连接生成服务", response.status, {
+      requestId: response.headers.get("X-Request-ID"),
+    });
   }).catch((error) => { identityReady = undefined; throw error; });
   await identityReady;
 }
@@ -61,6 +63,7 @@ export async function apiJson<T>(
   }
 
   const res = await fetch(apiPath(path), { ...init, headers, signal: init.signal ?? AbortSignal.timeout(30000) });
+  const requestId = res.headers.get("X-Request-ID");
   let payload: unknown;
   try {
     payload = await res.json();
@@ -69,13 +72,14 @@ export async function apiJson<T>(
       20004,
       res.ok ? "响应无法解析" : `请求失败 (${res.status})`,
       res.status,
+      { requestId },
     );
   }
 
   if (isKnowledgeErrorPayload(payload)) {
     throw new ApiError(payload.code, payload.message, res.status, {
       retryable: payload.retryable,
-      requestId: payload.requestId,
+      requestId: payload.requestId ?? requestId,
     });
   }
 
@@ -85,6 +89,7 @@ export async function apiJson<T>(
       envelope?.code ?? 20004,
       envelope?.message || "生成服务暂不可用",
       res.status,
+      { requestId },
     );
   }
 
