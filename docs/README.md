@@ -11,6 +11,7 @@ docs/
 ├── engineering/     # 全局工程架构与开发规范
 ├── auth/            # 登录、注册、认证与账号体系
 ├── chat/            # AI 对话模块
+├── logging/         # Logging Core 与异常观测
 ├── design/          # 产品视觉、品牌与设计规范
 ├── dev/             # 阶段性开发记录与历史开发资料
 ├── prd/             # 产品需求文档
@@ -53,6 +54,18 @@ docs/
 * 数据与状态流
 * 迁移记录
 * 验证与维护说明
+* 浏览器手工走查：`docs/chat/BROWSER-WALKTHROUGH.md`
+
+---
+
+### `logging/`
+
+维护 Logging Core 与异常观测说明，例如：
+
+* 实现基线：`docs/logging/README.md`
+* 两人分工与合入进度：`docs/logging/分工.md`
+
+Logging 不改 Chat 状态机、错误码或 BFF fail-closed。
 
 ---
 

@@ -61,7 +61,7 @@ function PaperAssistant({ paper, identityScope }: { paper: KnowledgePaperDetail;
               {turn.content && <MarkdownContent text={turn.content} />}
               {busy && turn.status === "streaming" && !turn.content && <p className="animate-pulse">正在读取论文资料并生成回答…</p>}
               {turn.warnings.map((warning) => <p key={warning} className="mt-2 text-xs text-muted">{warning}</p>)}
-              {turn.error && <ErrorBubble message={turn.error} canResume={!disabled && index === turns.length - 1} onResume={() => void resumeLast()} />}
+              {turn.error && <ErrorBubble message={turn.error} requestId={turn.requestId} canResume={!disabled && index === turns.length - 1} onResume={() => void resumeLast()} />}
               {turn.status === "stopped" && <p className="mt-2 text-xs text-muted">已停止生成{index === turns.length - 1 && <button disabled={disabled} onClick={() => void resumeLast()} className="ml-2 text-primary">继续生成</button>}</p>}
             </>}
           </div>
