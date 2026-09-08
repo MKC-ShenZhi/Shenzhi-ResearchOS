@@ -9,7 +9,7 @@ from time import perf_counter
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping, cast
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -23,6 +23,8 @@ from app.integrations.knowledge.schemas import (
 
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
+MAX_PDF_REDIRECTS = 3
+PDF_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 logger = logging.getLogger(__name__)
 
 
@@ -51,7 +53,7 @@ class PdfFetch:
     async def iter_bytes(self) -> AsyncIterator[bytes]:
         if self._response is None:
             return
-        async for chunk in self._response.aiter_bytes():
+        async for chunk in self._response.aiter_raw():
             yield chunk
 
     async def close(self) -> None:
@@ -135,12 +137,29 @@ class KnowledgeBaseClient:
             transport=self.transport,
             follow_redirects=False,
         )
+        headers = {'Accept-Encoding': 'identity'}
+        if validated_range is not None:
+            headers['Range'] = validated_range
+        current_url = url
         try:
-            headers = {}
-            if validated_range is not None:
-                headers['Range'] = validated_range
-            request = client.build_request('GET', url, headers=headers)
-            response = await client.send(request, stream=True)
+            for redirect_count in range(MAX_PDF_REDIRECTS + 1):
+                request = client.build_request('GET', current_url, headers=headers)
+                response = await client.send(request, stream=True)
+                if response.status_code not in PDF_REDIRECT_STATUSES:
+                    break
+
+                location = response.headers.get('location')
+                if not location or redirect_count == MAX_PDF_REDIRECTS:
+                    break
+
+                next_url = urljoin(current_url, location)
+                await response.aclose()
+                try:
+                    _validate_pdf_url(next_url)
+                except KnowledgeIntegrationError:
+                    await client.aclose()
+                    raise
+                current_url = next_url
         except httpx.TimeoutException as exc:
             await client.aclose()
             raise KnowledgeIntegrationError.timeout() from exc

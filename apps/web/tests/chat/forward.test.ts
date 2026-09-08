@@ -6,9 +6,17 @@ import { NextRequest } from "next/server";
 import * as identity from "../../clients/backend/identity";
 import { forwardToBusinessBackend } from "../../clients/backend/forward";
 
-function request(requestId?: string) {
+function request(options: {
+  requestId?: string;
+  range?: string;
+  cookie?: string;
+} = {}) {
+  const headers = new Headers();
+  if (options.requestId) headers.set("X-Request-ID", options.requestId);
+  if (options.range) headers.set("Range", options.range);
+  if (options.cookie) headers.set("Cookie", options.cookie);
   return new NextRequest("http://web.test/api/v1/health", {
-    headers: requestId ? { "X-Request-ID": requestId } : undefined,
+    headers,
   });
 }
 
@@ -22,7 +30,7 @@ test("BFF forwards and returns the same request ID", async (t) => {
   });
 
   const response = await forwardToBusinessBackend(
-    request("request-forward-1"),
+    request({ requestId: "request-forward-1" }),
     "http://backend.test",
     ["health"],
   );
@@ -55,7 +63,7 @@ test("BFF replaces an invalid incoming request ID", async (t) => {
   });
 
   const response = await forwardToBusinessBackend(
-    request("invalid request id"),
+    request({ requestId: "invalid request id" }),
     "http://backend.test",
     ["health"],
   );
@@ -78,7 +86,7 @@ test("BFF logs a failed backend fetch with request ID but no error message", asy
 
   try {
     const response = await forwardToBusinessBackend(
-      request("request-failed-1"),
+      request({ requestId: "request-failed-1" }),
       "http://backend.test",
       ["health"],
     );
@@ -96,4 +104,39 @@ test("BFF logs a failed backend fetch with request ID but no error message", asy
   assert.equal(record.error_type, "Error");
   assert.equal(record.message, undefined);
   assert.equal(record.authorization, undefined);
+});
+
+test("BFF forwards PDF Range and keeps the anonymous cookie identity across requests", async (t) => {
+  t.mock.method(identity, "resolveBackendIdentity", async () => ({ kind: "anonymous" }));
+  const outgoing: Headers[] = [];
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    outgoing.push(new Headers(init.headers));
+    return new Response("pdf", {
+      status: 206,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Range": "bytes 0-2/3",
+      },
+    });
+  });
+
+  const first = await forwardToBusinessBackend(
+    request({ range: "bytes=0-2" }),
+    "http://backend.test",
+    ["knowledge", "paper", "pdf"],
+  );
+  const setCookie = first.headers.get("set-cookie");
+  const anonymousId = setCookie?.match(/shenzhi-chat-anon=([^;]+)/)?.[1];
+  assert.ok(anonymousId);
+
+  await forwardToBusinessBackend(
+    request({ range: "bytes=3-5", cookie: `shenzhi-chat-anon=${anonymousId}` }),
+    "http://backend.test",
+    ["knowledge", "paper", "pdf"],
+  );
+
+  assert.equal(outgoing[0].get("range"), "bytes=0-2");
+  assert.equal(outgoing[1].get("range"), "bytes=3-5");
+  assert.equal(outgoing[0].get("x-shenzhi-anonymous-id"), anonymousId);
+  assert.equal(outgoing[1].get("x-shenzhi-anonymous-id"), anonymousId);
 });

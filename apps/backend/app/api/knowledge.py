@@ -108,9 +108,11 @@ def _pdf_error(
     message: str,
     retryable: bool,
     status_code: int,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
+        headers=headers,
         content=KnowledgeError(
             code=code,
             message=message,
@@ -180,6 +182,17 @@ async def paper_pdf(
             message='当前论文暂无可用 PDF',
             retryable=False,
             status_code=404,
+        )
+    if source.probe.status_code == 416:
+        await service.close_paper_pdf(source)
+        content_range = source.probe.headers.get('content-range')
+        return _pdf_error(
+            request,
+            code='INVALID_ARGUMENT',
+            message='PDF Range 无法满足',
+            retryable=False,
+            status_code=416,
+            headers={'Content-Range': content_range} if content_range else None,
         )
     if source.probe.status == 'external_only':
         await service.close_paper_pdf(source)

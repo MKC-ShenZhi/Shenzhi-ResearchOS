@@ -148,6 +148,8 @@ export function PaperPdfViewer({
     currentPageRef.current = 1;
     pageInputEditingRef.current = false;
     pageRefs.current.clear();
+    // Reset the local reader state when the displayed paper changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPageNumber(1);
     setPageInputValue("1");
     setNumPages(null);
@@ -471,7 +473,7 @@ export function PaperPdfViewer({
 
       {state === "no_pdf" && (
         <StatePanel>
-          <p>当前论文暂无可用 PDF</p>
+          <p>当前论文暂无可用 PDF 链接</p>
           <p className="px-5 text-xs">可继续阅读摘要与元信息，或通过 DOI 访问论文主页。</p>
         </StatePanel>
       )}
