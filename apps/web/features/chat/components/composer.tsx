@@ -272,6 +272,7 @@ export function ComposerShell({
   const [innerFiles, setInnerFiles] = useState<ChatAttachment[]>([]);
   const [controlOpen, setControlOpen] = useState(false);
   const controlRef = useRef<HTMLDivElement>(null);
+  const stopInvoked = useRef(false);
 
   const replyMode = replyModeProp ?? innerMode;
   const entryMode = entryModeProp ?? innerEntryMode;
@@ -309,6 +310,10 @@ export function ComposerShell({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [controlOpen]);
 
+  useEffect(() => {
+    if (!busy) stopInvoked.current = false;
+  }, [busy]);
+
   const buildPayload = (intent?: ComposerEntryMode): ComposerSubmitPayload => ({
     entryMode: intent ?? entryMode,
     knowledgeEnabled,
@@ -323,6 +328,12 @@ export function ComposerShell({
     const parsed = questionSchema.safeParse(value);
     if (!parsed.success || busy || disabled || uploading) return;
     onSend(buildPayload(intent));
+  };
+
+  const requestStop = () => {
+    if (!onStop || stopInvoked.current) return;
+    stopInvoked.current = true;
+    onStop();
   };
 
   return (
@@ -416,7 +427,8 @@ export function ComposerShell({
             <button
               type="button"
               aria-label="停止生成"
-              onClick={onStop}
+              onPointerDown={requestStop}
+              onClick={requestStop}
               className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-ink text-white transition-colors hover:bg-ink/90"
             >
               <Square className="size-3.5 fill-current" />

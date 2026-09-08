@@ -7,10 +7,14 @@ const THREAD = readFileSync("features/chat/components/chat-thread.tsx", "utf8");
 const COMPOSER = readFileSync("features/chat/components/composer.tsx", "utf8");
 
 test("stop request is independent from the retired SSE abort signal", () => {
-  assert.match(HOOK, /const streamingMessageId = \[\.\.\.turnsRef\.current\]/);
+  assert.match(HOOK, /const streamingTurn = \[\.\.\.turnsRef\.current\]/);
   assert.match(HOOK, /let messageId = currentMessageId\.current \?\? streamingMessageId/);
-  assert.match(HOOK, /await stopChatMessage\(messageId\);/);
-  assert.doesNotMatch(HOOK, /await stopChatMessage\(messageId, \{ signal: generation\.controller\.signal \}\);/);
+  assert.match(HOOK, /const stopRequest = stopChatMessage\(messageId\);/);
+  assert.match(HOOK, /invalidateGeneration\(\{ stopBackend: false \}\);/);
+  assert.match(HOOK, /await stopRequest;/);
+  assert.doesNotMatch(HOOK, /stopChatMessage\(messageId, \{ signal:/);
+  assert.match(COMPOSER, /onPointerDown=\{requestStop\}/);
+  assert.match(COMPOSER, /onClick=\{requestStop\}/);
 });
 
 test("completed turns expose the guarded resume path and retain an error bubble", () => {
