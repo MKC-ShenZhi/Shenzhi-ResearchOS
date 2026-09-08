@@ -83,6 +83,15 @@ function AssistantTurn({ turn, canResume, busy, onResume, onFollowup }: {
             </div>
           )}
 
+          {!failed && turn.error && (
+            <ErrorBubble
+              message={turn.error}
+              requestId={turn.requestId}
+              onResume={onResume}
+              canResume={canResume}
+            />
+          )}
+
           {stopped && (
             <div className="flex items-center gap-2 text-[12px] text-muted">
               <span>已停止生成（内容仅为部分回复）</span>
@@ -173,7 +182,7 @@ export function ChatThread({ turns, busy, onResume, onFollowup }: {
             busy={busy}
             onResume={onResume}
             onFollowup={onFollowup}
-            canResume={index === turns.length - 1 && ["failed", "stopped"].includes(turn.status)}
+            canResume={index === turns.length - 1 && ["done", "failed", "stopped"].includes(turn.status)}
           />
         ),
       )}

@@ -130,9 +130,13 @@ function RightSubmenuRow({
 function PlusMenu({
   webSearch,
   onWebSearchChange,
+  knowledgeEnabled,
+  onKnowledgeEnabledChange,
 }: {
   webSearch: boolean;
   onWebSearchChange: (v: boolean) => void;
+  knowledgeEnabled: boolean;
+  onKnowledgeEnabledChange: (v: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useCloseOnOutside(open, () => setOpen(false));
@@ -192,6 +196,17 @@ function PlusMenu({
               />
             </span>
           </button>
+          <button
+            type="button"
+            onClick={() => onKnowledgeEnabledChange(!knowledgeEnabled)}
+            className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 text-sm transition-colors hover:bg-chip"
+          >
+            <Sparkles className="size-4 text-muted" strokeWidth={1.8} />
+            <span className="flex-1 text-left text-ink-2">知识库</span>
+            <span className={cn("relative h-5 w-9 shrink-0 rounded-full transition-colors", knowledgeEnabled ? "bg-agent" : "bg-line")}>
+              <span className={cn("absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform", knowledgeEnabled ? "left-4" : "left-0.5")} />
+            </span>
+          </button>
         </div>
       )}
     </div>
@@ -212,6 +227,8 @@ export function ComposerShell({
   onModelChange,
   webSearch: webSearchProp,
   onWebSearchChange,
+  knowledgeEnabled: knowledgeEnabledProp,
+  onKnowledgeEnabledChange,
   attachments: attachmentsProp,
   onAttachmentsChange,
   config = FALLBACK_CHAT_CONFIG,
@@ -232,6 +249,8 @@ export function ComposerShell({
   onModelChange?: (model: ChatModelId) => void;
   webSearch?: boolean;
   onWebSearchChange?: (v: boolean) => void;
+  knowledgeEnabled?: boolean;
+  onKnowledgeEnabledChange?: (v: boolean) => void;
   attachments?: ChatAttachment[];
   onAttachmentsChange?: (items: ChatAttachment[]) => void;
   config?: ChatConfig;
@@ -249,6 +268,7 @@ export function ComposerShell({
   const [innerDepth, setInnerDepth] = useState<"fast" | "deep">("fast");
   const [innerModel, setInnerModel] = useState<ChatModelId>(DEFAULT_CHAT_MODEL);
   const [innerWeb, setInnerWeb] = useState(false);
+  const [innerKnowledgeEnabled, setInnerKnowledgeEnabled] = useState(true);
   const [innerFiles, setInnerFiles] = useState<ChatAttachment[]>([]);
   const [controlOpen, setControlOpen] = useState(false);
   const controlRef = useRef<HTMLDivElement>(null);
@@ -265,6 +285,7 @@ export function ComposerShell({
   const model = config.models.some((option) => option.value === preferredModel && option.enabled)
     ? preferredModel : config.default_model ?? config.models.find((option) => option.enabled)?.value ?? preferredModel;
   const webSearch = webSearchProp ?? innerWeb;
+  const knowledgeEnabled = knowledgeEnabledProp ?? innerKnowledgeEnabled;
   const attachments = attachmentsProp ?? innerFiles;
 
   const setReplyMode = onReplyModeChange ?? setInnerMode;
@@ -274,6 +295,7 @@ export function ComposerShell({
   };
   const setModel = onModelChange ?? setInnerModel;
   const setWebSearch = onWebSearchChange ?? setInnerWeb;
+  const setKnowledgeEnabled = onKnowledgeEnabledChange ?? setInnerKnowledgeEnabled;
   const setAttachments = onAttachmentsChange ?? setInnerFiles;
 
   useEffect(() => {
@@ -289,6 +311,7 @@ export function ComposerShell({
 
   const buildPayload = (intent?: ComposerEntryMode): ComposerSubmitPayload => ({
     entryMode: intent ?? entryMode,
+    knowledgeEnabled,
     question: value.trim(),
     mode: replyMode,
     model,
@@ -354,7 +377,12 @@ export function ComposerShell({
 
       <div className="mt-1.5 flex items-center gap-1.5">
         <SearchModeSwitch mode={entryMode} onChange={setEntryMode} />
-        <PlusMenu webSearch={webSearch} onWebSearchChange={setWebSearch} />
+        <PlusMenu
+          webSearch={webSearch}
+          onWebSearchChange={setWebSearch}
+          knowledgeEnabled={knowledgeEnabled}
+          onKnowledgeEnabledChange={setKnowledgeEnabled}
+        />
         <AttachmentMenu
           disabled={busy || disabled}
           onUploadingChange={setUploading}

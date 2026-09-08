@@ -33,6 +33,7 @@ export interface ChatSessionPreferences {
   model: ChatModelId;
   webSearch: boolean;
   entryMode: "search" | "ai";
+  knowledgeEnabled: boolean;
 }
 
 export interface ChatSendInput {

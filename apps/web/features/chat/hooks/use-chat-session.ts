@@ -371,55 +371,66 @@ export function useChatSession({
   }, [embedded, finishGeneration, identityScope, patch, persistLocalFallback, runStream, setActiveSession, setBusyValue, setLocalId, startGeneration, writeTurns]);
 
   const stop = useCallback(async () => {
-    if (!busyRef.current && !pendingCreate.current && !currentMessageId.current) return;
+    const streamingMessageId = [...turnsRef.current].reverse().find(
+      (turn) => turn.role === "assistant" && turn.status === "streaming" && turn.messageId,
+    )?.messageId;
+    if (!busyRef.current && !pendingCreate.current && !currentMessageId.current && !streamingMessageId) return;
 
-    const messageIdBeforeStop = currentMessageId.current;
+    let messageId = currentMessageId.current ?? streamingMessageId;
     const pendingBeforeStop = pendingCreate.current;
-    const generation = startGeneration(sessionRef.current, { stopBackend: false });
-    let messageId = messageIdBeforeStop;
-    setBusyValue(false);
     setInteraction(true);
-    setPhase("STOPPED");
-    writeTurns((previous) => previous.map((turn) => turn.status === "streaming"
-      ? { ...turn, status: "stopped", thought: "已停止" }
-      : turn));
+    let confirmed = false;
 
     try {
       if (pendingBeforeStop) {
         try {
           const created = await pendingBeforeStop.request;
-          if (!generation.isCurrent()) {
-            await stopChatMessage(created.message_id).catch(() => {});
-            return;
-          }
           messageId = created.message_id;
           setActiveSession(created.session_id);
-          patch(pendingBeforeStop.localId, { messageId, status: "stopped" });
+          patch(pendingBeforeStop.localId, { messageId });
         } catch {
-          // An aborted create request may never allocate a server message.
+          // Creation can fail before a server message exists; there is then
+          // nothing for the stop endpoint to retire.
         }
       }
-      if (generation.isCurrent() && messageId) {
-        await stopChatMessage(messageId, { signal: generation.controller.signal });
+      if (messageId) {
+        // Confirm the stop before aborting the SSE owner.  Otherwise the
+        // generation cleanup can race this request out of the browser.
+        await stopChatMessage(messageId);
+        confirmed = true;
       }
-      if (generation.isCurrent() && lastInput.current && !sessionRef.current) {
+      if (confirmed && lastInput.current && !sessionRef.current) {
         persistLocalFallback(lastInput.current, turnsRef.current);
       }
     } catch (error) {
-      if (generation.isCurrent() && !isAbortError(error)) {
+      if (!isAbortError(error)) {
         writeTurns((previous) => previous.map((turn) => turn.messageId === messageId
-          ? { ...turn, error: `停止请求未确认：${messageForApiError(error)}` } : turn));
+          ? {
+              ...turn,
+              error: `停止请求未确认：${messageForApiError(error)}`,
+              ...(requestIdForApiError(error) ? { requestId: requestIdForApiError(error) } : {}),
+            } : turn));
       }
     } finally {
-      if (!generation.isCurrent()) return;
-      finishGeneration(generation, "stopped", "STOPPED");
+      // This abort happens only after the stop request settled.  The old
+      // stream can no longer overwrite the terminal state through callbacks.
+      invalidateGeneration({ stopBackend: false });
+      if (confirmed) {
+        writeTurns((previous) => previous.map((turn) => turn.messageId === messageId
+          ? { ...turn, status: "stopped", thought: "已停止" }
+          : turn));
+        setPhase("STOPPED");
+      } else {
+        setPhase("FAILED");
+      }
+      setInteraction(false);
     }
-  }, [finishGeneration, patch, persistLocalFallback, setActiveSession, setBusyValue, setInteraction, startGeneration, writeTurns]);
+  }, [invalidateGeneration, patch, persistLocalFallback, setActiveSession, setInteraction, writeTurns]);
 
   const resumeLast = useCallback(async () => {
     if (busyRef.current || hydratingRef.current || interactionLockedRef.current) return;
     const last = turnsRef.current.at(-1);
-    if (!last || !["stopped", "failed"].includes(last.status)) return;
+    if (!last || !["done", "stopped", "failed"].includes(last.status)) return;
     if (!last.messageId) {
       if (lastInput.current) {
         writeTurns((previous) => previous.slice(0, -2));
@@ -454,9 +465,10 @@ export function useChatSession({
           resend = lastInput.current;
           finalStatus = "failed";
         } else {
-          finalStatus = "failed";
+          finalStatus = last.status === "done" ? "done" : "failed";
           patch(last.localId, {
-            status: "failed",
+            status: last.status === "done" ? "done" : "failed",
+            ...(last.status === "done" ? { thought: "生成结束" } : {}),
             error: messageForApiError(error),
             ...(requestIdForApiError(error) ? { requestId: requestIdForApiError(error) } : {}),
           });
@@ -509,7 +521,8 @@ export function useChatSession({
         mode: session.mode,
         model: session.model,
         webSearch: session.web_search,
-        entryMode: session.capabilities?.knowledge.enabled ? "ai" : "search",
+        entryMode: "ai",
+        knowledgeEnabled: session.capabilities?.knowledge.enabled ?? false,
       };
       const restored = restoreTurns(session);
       const latestUser = [...restored].reverse().find((turn) => turn.role === "user");
@@ -522,7 +535,7 @@ export function useChatSession({
           model: preferences.model,
           web_search: preferences.webSearch,
           attachments: [],
-          capabilities: { knowledge: { enabled: preferences.entryMode === "ai" } },
+          capabilities: { knowledge: { enabled: preferences.knowledgeEnabled } },
         };
       }
       // A successful hydration reasserts the canonical URL. This is a no-op
@@ -581,7 +594,8 @@ export function useChatSession({
       mode: item.mode as ChatReplyMode,
       model: item.model as ChatModelId,
       webSearch: item.web_search,
-      entryMode: item.knowledge_enabled ? "ai" : "search",
+      entryMode: "ai",
+      knowledgeEnabled: item.knowledge_enabled ?? false,
     });
     writeTurns(restored);
     const firstUser = restored.find((turn) => turn.role === "user");
