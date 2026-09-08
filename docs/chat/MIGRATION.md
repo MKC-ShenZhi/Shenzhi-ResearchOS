@@ -22,12 +22,12 @@
 | `features/agents/deep-search` | `features/search/deep-search` | 既有静态搜索结果原型，不再另建一级 Feature |
 | `lib/ask/use-ask-session.ts` | `features/chat/hooks/use-chat-session.ts` | 统一状态、历史、取消和续写 |
 | `lib/ask/{draft,errors}.ts` | `features/chat/services/` | 首页草稿与错误显示 |
-| `lib/api/{http,auth-token,uploads,search}.ts` | `clients/backend/` | Chat HTTP/SSE 再拆到 `chat.ts` |
+| `lib/api/{http,auth-token,uploads}.ts` | `clients/backend/` | Chat HTTP/SSE 再拆到 `chat.ts` |
 | `lib/sse.ts` | `clients/backend/sse.ts` | 单协议、增量 UTF-8/CRLF 解析 |
 | `services/backend/{forward.ts,README.md}` | `clients/backend/` | BFF 边界与文档 |
 | `components/{layout,graph}` | `components/common/{layout,graph}` | 跨 Feature UI |
 | `lib/citations.tsx` | `components/common/citations.tsx` | 保留原静态引用；Chat 双向引用单独放 Feature |
-| `apps/backend/app/retrieval.py` | `apps/backend/app/services/retrieval.py` | 保留论文检索接口，改为显式配置地址 |
+| 旧论文检索代理 | `apps/backend/app/services/knowledge.py` + `integrations/knowledge` | 统一由 Knowledge Capability 提供 |
 | `apps/backend/app/main.py` | `api/*`、`schemas/chat.py`、`core/*`、`services/*` | main 只保留应用、生命周期、全局错误、注册 |
 
 第一提交仅 `git mv`（54 文件、零行内容变化），第二提交单独修复 imports 和拆分后端入口。历史可按 `git log --follow` 查看。
@@ -43,7 +43,7 @@ B 路径相对旧仓库根目录；没有将 B 同名组件覆盖 dev。
 | `components/features/agent/session-list.tsx` | `components/common/layout/sidebar-chat-history.tsx` | 侧栏历史列表、切换、删除；DB 走 FastAPI，本地降级见 `local-history` |
 | `components/features/agent/reference-grid.tsx`、`lib/citations.tsx` | Chat `reference-grid.tsx`、`citations.tsx` | 真实来源、展开、双向定位；去掉空结果 mock fallback |
 | `lib/markdown-content.tsx` | Chat `markdown-content.tsx` | Markdown、表格、代码、KaTeX；不移植会误改代码块的裸 LaTeX 猜测 |
-| `lib/chat-stream.ts`、`lib/api/search.ts` | `clients/backend/{chat,sse}` + Feature hook/service | 吸收 streaming/reasoning/恢复逻辑，只保留 dev 产品协议 |
+| 旧 Search client | `clients/knowledge` + Knowledge Search Feature | 统一论文搜索产品协议 |
 | `lib/ask/draft.ts`、`lib/ask/errors.ts` | Chat `services/{draft,errors}` | 草稿安全读写、匹配、成功后清理；错误保留 Backend 具体原因 |
 | `stores/composer.ts` | dev 受控 Composer + Chat hook | 不保留 A/B/C 数据总线；状态/草稿功能由统一链路承载 |
 | `app/api/ai/chat/route.ts` | FastAPI `services/model_provider.py` | DashScope/DeepSeek、真实 HTTP SSE、reasoning、取消、标准错误、模型/参数、追问 |
