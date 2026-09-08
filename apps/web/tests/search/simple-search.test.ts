@@ -64,5 +64,5 @@ test("smart search keeps the Knowledge2Chat adapter and Chat send path", () => {
   assert.match(AGENT_CHAT_SOURCE, /const request = chatInputFromComposer\(payload\)/);
   assert.match(AGENT_CHAT_SOURCE, /void send\(request\)/);
   assert.match(AGENT_CHAT_SOURCE, /setEntryMode\(payload\.entryMode\)/);
-  assert.match(AGENT_CHAT_SOURCE, /capabilitiesForEntryMode\("ai"\)/);
+  assert.match(AGENT_CHAT_SOURCE, /capabilitiesForEntryMode\("ai", knowledgeEnabled\)/);
 });
