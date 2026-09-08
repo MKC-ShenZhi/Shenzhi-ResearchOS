@@ -10,14 +10,13 @@ app/agents/page.tsx 或 app/agents/ask/page.tsx（URL 兼容）
   → hooks/use-chat-session（UI 状态、取消、历史恢复、防止过期请求写入）
   → services/conversation（建会话/续问编排、历史数据适配）
   → services/local-history（仅后端不可用时的浏览器降级缓存，见下文）
-  → clients/backend/{chat,http,sse,uploads,search}
+  → clients/backend/{chat,http,sse,uploads}
   → Next.js app/api/v1/[...path] → clients/backend/forward（通用单身份 BFF）
      或 app/api/chat/anonymous-claim（专用双身份 BFF）
-  → FastAPI api/{chat,search,uploads}
+  → FastAPI api/{chat,uploads}
   → services/chat
       ├─ model_provider（OpenAI-compatible HTTP）
       ├─ knowledge_context（Knowledge2Chat runtime Evidence / prompt / citation）
-      ├─ retrieval（仅保留 dev 论文搜索接口）
       ├─ web_search（Tavily → SearXNG）
       ├─ document_parser / upload_reader
       └─ sessions（Memory / PostgreSQL Repository）
@@ -36,7 +35,6 @@ JSON 使用 `{code: 0, data: ...}` 或 `{code, message}`；错误同时使用适
 | 方法 | 路径（前缀 `/api/v1`） | 职责 |
 | --- | --- | --- |
 | GET | `/chat/config` | 已配置模型、回答模式、附件限制；不含 Key |
-| POST | `/search/explore` | 保留 dev 论文检索 |
 | GET / POST | `/chat/sessions` | 列表 / 创建会话及首轮消息 |
 | POST | `/chat/anonymous-claim` | 登录后将当前浏览器已完成匿名会话归入账号（仅专用 BFF） |
 | GET / PATCH / DELETE | `/chat/sessions/{id}` | 详情 / 标题与收藏 / 删除 |
@@ -145,8 +143,7 @@ Web 仅配置 `BUSINESS_BACKEND_URL` 和 `BACKEND_BFF_SECRET`。模型/搜索 Ke
 
 ## 检索与联网搜索
 
-- `RETRIEVAL_API_URL` 仅供现有 `/search/explore` dev 论文搜索接口使用；Chat 的智能搜索
-  不再调用该旧路径，而是复用 Knowledge Capability。
+- 论文搜索由 Knowledge Capability 统一提供；Chat 的智能搜索复用同一 Knowledge Capability。
 - `TAVILY_API_KEY` 优先；失败或无结果后使用 `SEARXNG_BASE_URL` 的 JSON `/search`。
 - 每个搜索请求 10 秒超时，归一化标题、URL、摘要、引擎、发布日期，并过滤非 HTTP(S) 来源。
 - 新闻/近期问题使用 Tavily `news`（week），概念问题使用 `general`（不机械限制一个月）。

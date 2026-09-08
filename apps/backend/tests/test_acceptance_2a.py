@@ -75,8 +75,8 @@ class Acceptance2a(unittest.IsolatedAsyncioTestCase):
         FakeProvider.calls = []
         self.provider = patch.object(chat, 'ModelProvider', FakeProvider)
         self.provider.start()
-        self.retrieval = patch.object(chat, 'knowledge_service', FakeKnowledge())
-        self.retrieval.start()
+        self.knowledge_service = patch.object(chat, 'knowledge_service', FakeKnowledge())
+        self.knowledge_service.start()
         self.client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
             base_url='http://test', headers=OWNER,
@@ -85,7 +85,7 @@ class Acceptance2a(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.client.aclose()
         self.provider.stop()
-        self.retrieval.stop()
+        self.knowledge_service.stop()
         self.env.stop()
 
     async def test_C01_ephemeral_false(self):

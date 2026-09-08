@@ -163,9 +163,7 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_bff_secret_is_fail_closed_with_explicit_loopback_escape_hatch(self):
         with patch.dict('os.environ', {'BACKEND_BFF_SECRET': '', 'BACKEND_ALLOW_INSECURE_LOCAL_BFF': ''}):
             self.assertEqual((await self.client.get('/api/v1/chat/config')).status_code, 503)
-            self.assertEqual((await self.client.post('/api/v1/search/explore', json={'query': 'test'})).status_code, 503)
         self.assertEqual((await self.client.get('/api/v1/chat/config')).status_code, 200)
-        self.assertEqual((await self.client.get('/api/v1/search/config')).status_code, 404)
         remote = httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=('203.0.113.10', 123)),
                                    base_url='http://test', headers=OWNER)
         try:
