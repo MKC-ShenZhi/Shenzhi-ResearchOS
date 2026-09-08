@@ -68,10 +68,27 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_multiturn_history_favorite_and_delete(self):
         created = await self.create(); sid, mid = created['session_id'], created['message_id']
-        response = await self.client.get(f'/api/v1/chat/messages/{mid}/stream')
+        terminal_logs = []
+        with patch.object(chat, 'log_event', side_effect=lambda _logger, _level, event, fields: terminal_logs.append((event, fields))):
+            response = await self.client.get(
+                f'/api/v1/chat/messages/{mid}/stream',
+                headers={'X-Request-ID': 'stream-completed-1'},
+            )
         stream = events(response.text)
         self.assertEqual(set(kind for kind, data in stream), {'meta', 'delta', 'refs', 'followups', 'done'})
         self.assertEqual(stream[-1][1]['status'], 'done')
+        self.assertEqual(terminal_logs, [(
+            'chat.stream.completed',
+            {
+                'request_id': 'stream-completed-1',
+                'session_id': sid,
+                'message_id': mid,
+                'duration_ms': terminal_logs[0][1]['duration_ms'],
+                'error_type': None,
+                'error_code': None,
+            },
+        )])
+        self.assertIsInstance(terminal_logs[0][1]['duration_ms'], int)
         detail = (await self.client.get(f'/api/v1/chat/sessions/{sid}')).json()['data']
         self.assertIn('公式', detail['messages'][0]['content'])
         self.assertEqual(detail['messages'][0]['reasoning'], '分析过程')
@@ -98,8 +115,15 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_terminal_persistence_failure_emits_error_before_failed_done(self):
         created = await self.create()
-        with patch.object(repository, 'persist_message', AsyncMock(side_effect=RuntimeError('database down'))):
-            response = await self.client.get(f"/api/v1/chat/messages/{created['message_id']}/stream")
+        terminal_logs = []
+        with (
+            patch.object(repository, 'persist_message', AsyncMock(side_effect=RuntimeError('database down'))),
+            patch.object(chat, 'log_event', side_effect=lambda _logger, _level, event, fields: terminal_logs.append((event, fields))),
+        ):
+            response = await self.client.get(
+                f"/api/v1/chat/messages/{created['message_id']}/stream",
+                headers={'X-Request-ID': 'stream-failed-1'},
+            )
         stream = events(response.text)
         kinds = [kind for kind, _ in stream]
         self.assertIn('error', kinds)
@@ -108,6 +132,11 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stream[-1][1]['status'], 'failed')
         self.assertIsInstance(stream[-1][1]['duration_ms'], int)
         self.assertEqual(stream[kinds.index('error')][1]['message'], '对话保存失败，请稍后重试')
+        self.assertEqual(terminal_logs[0][0], 'chat.stream.failed')
+        self.assertEqual(terminal_logs[0][1]['request_id'], 'stream-failed-1')
+        self.assertEqual(terminal_logs[0][1]['session_id'], created['session_id'])
+        self.assertEqual(terminal_logs[0][1]['message_id'], created['message_id'])
+        self.assertEqual(terminal_logs[0][1]['error_type'], 'RuntimeError')
 
     async def test_stop_persistence_failure_emits_failed_terminal_state(self):
         created = await self.create()
@@ -220,8 +249,17 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_stop_before_stream_and_memory_capacity(self):
         created = await self.create(); mid = created['message_id']
-        await self.client.post(f'/api/v1/chat/messages/{mid}/stop')
+        terminal_logs = []
+        with patch.object(chat, 'log_event', side_effect=lambda _logger, _level, event, fields: terminal_logs.append((event, fields))):
+            await self.client.post(
+                f'/api/v1/chat/messages/{mid}/stop',
+                headers={'X-Request-ID': 'stream-stopped-1'},
+            )
         self.assertEqual((await repository.message(mid, OWNER_KEY)).status, 'stopped')
+        self.assertEqual(terminal_logs[0][0], 'chat.stream.stopped')
+        self.assertEqual(terminal_logs[0][1]['request_id'], 'stream-stopped-1')
+        self.assertEqual(terminal_logs[0][1]['session_id'], created['session_id'])
+        self.assertEqual(terminal_logs[0][1]['message_id'], mid)
         self.assertEqual(FakeProvider.calls, [])
         self.assertEqual((await self.client.post(f'/api/v1/chat/messages/{mid}/resume')).status_code, 200)
         with patch.object(repository, 'max_sessions', 1):

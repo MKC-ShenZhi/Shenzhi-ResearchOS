@@ -54,7 +54,12 @@ function AssistantTurn({ turn, canResume, busy, onResume, onFollowup }: {
           ) : null}
 
           {failed && turn.error ? (
-            <ErrorBubble message={turn.error} onResume={onResume} canResume={canResume} />
+            <ErrorBubble
+              message={turn.error}
+              requestId={turn.requestId}
+              onResume={onResume}
+              canResume={canResume}
+            />
           ) : (
             <div className="overflow-hidden rounded-2xl border border-line/60 bg-card shadow-card">
               <div className="flex items-center gap-2.5 border-b border-line/60 px-4 py-2.5">
