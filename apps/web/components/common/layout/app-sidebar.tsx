@@ -383,7 +383,13 @@ export function AppSidebar() {
     openLogin,
     signOut,
   } = useAuth();
-  const userName = sessionPending
+  const [sessionReady, setSessionReady] = React.useState(false);
+  React.useEffect(() => {
+    setSessionReady(true);
+  }, []);
+  // Cookie session is visible on the client before hydration; keep the first
+  // paint identical to SSR (logged-out chrome) to avoid a hard-refresh mismatch.
+  const userName = !sessionReady || sessionPending
     ? null
     : session?.user.name?.trim() || session?.user.email || null;
   const [logoutOpen, setLogoutOpen] = React.useState(false);
