@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { paperHref } from "@/lib/navigation/paper";
 import { motion } from "framer-motion";
-import { ArrowRight, Bookmark, Network, Users } from "lucide-react";
+import { ArrowRight, Network, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { KnowledgePaperHit } from "@/clients/knowledge";
-import { useUserPreferences } from "@/stores/user-preferences";
+import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
 
 const VENUE_VARIANT = ["violet", "amber", "green"] as const;
 
@@ -30,8 +30,6 @@ export function KnowledgeResultCard({
   lastViewedAt?: string;
 }) {
   const authors = hit.authors.length ? hit.authors.join(" · ") : "未知作者";
-  const { bookmarkedPapers, toggleBookmark } = useUserPreferences();
-  const bookmarked = !!bookmarkedPapers[hit.id];
 
   return (
     <motion.article
@@ -66,15 +64,7 @@ export function KnowledgeResultCard({
               <Users className="size-3.5 shrink-0 text-faint" />
               <span className="truncate">{authors}</span>
             </span>
-            {!historyMode && <button
-              type="button"
-              onClick={() => toggleBookmark(hit.id)}
-              aria-pressed={bookmarked}
-              className={`ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] transition-colors ${bookmarked ? "text-primary" : "text-muted hover:bg-chip"}`}
-            >
-              <Bookmark className="size-4" fill={bookmarked ? "currentColor" : "none"} />
-              收藏
-            </button>}
+            {!historyMode && <CollectionPicker paperId={hit.id} />}
           </div>
 
           {/* 标题 */}

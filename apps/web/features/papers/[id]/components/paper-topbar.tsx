@@ -1,16 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Bookmark, Network } from "lucide-react";
+import { ArrowLeft, Network } from "lucide-react";
 import type { KnowledgePaperDetail } from "@/clients/knowledge";
 import { paperDoiUrl, paperHref } from "@/lib/navigation/paper";
-import { useUserPreferences } from "@/stores/user-preferences";
+import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
 
 export function PaperTopbar({ paper, returnTo }: { paper: KnowledgePaperDetail; returnTo?: string | null }) {
   const doiUrl = paperDoiUrl(paper.doi);
-  const { bookmarkedPapers, toggleBookmark } = useUserPreferences();
-  const bookmarked = !!bookmarkedPapers[paper.id];
-
   return (
     <header className="shrink-0 border-b border-line bg-card px-5 py-3">
       <div className="flex items-center justify-between gap-4 text-xs text-primary">
@@ -18,18 +15,14 @@ export function PaperTopbar({ paper, returnTo }: { paper: KnowledgePaperDetail; 
           <ArrowLeft className="size-4" />
           {returnTo?.startsWith("/agents") ? "返回对话" : returnTo ? "返回来源" : "返回论文检索"}
         </Link>
-        <div className="flex flex-col items-end gap-2">
-          <Link href={paperHref(paper.id, returnTo, true)} className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2">
+        <div className="flex flex-row items-center gap-2">
+          <CollectionPicker paperId={paper.id} />
+          <Link
+            href={paperHref(paper.id, returnTo, true)}
+            className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2"
+          >
             <Network className="size-4" />关系图谱
           </Link>
-          <button
-            type="button"
-            onClick={() => toggleBookmark(paper.id)}
-            aria-pressed={bookmarked}
-            className={`inline-flex cursor-pointer items-center gap-1 rounded-lg border border-line px-3 py-2 transition-colors ${bookmarked ? "text-primary" : "text-muted hover:bg-chip"}`}
-          >
-            <Bookmark className="size-4" fill={bookmarked ? "currentColor" : "none"} />收藏
-          </button>
         </div>
       </div>
       <h1 className="mt-2 text-lg font-semibold leading-snug text-ink">{paper.title}</h1>

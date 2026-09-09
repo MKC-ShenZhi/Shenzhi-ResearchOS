@@ -77,6 +77,18 @@ export interface ReadingHistoryResponse {
   page_size: number;
 }
 
+export interface CollectionPaperItem extends KnowledgePaperDetail {
+  paper_id: string;
+  added_at: string;
+}
+
+export interface CollectionPaperListResponse {
+  items: CollectionPaperItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 /** 图谱节点 kind 是开放字符串；这里只列出当前已知类型，未知类型默认展示 */
 export type KnowledgeNodeKind =
   | "Paper"

@@ -16,6 +16,8 @@ export type {
   KnowledgePaperDetail,
   ReadingHistoryItem,
   ReadingHistoryResponse,
+  CollectionPaperItem,
+  CollectionPaperListResponse,
   KnowledgeGraph,
   KnowledgeGraphDepth,
   KnowledgeGraphNode,
