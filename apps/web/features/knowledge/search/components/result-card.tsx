@@ -64,7 +64,7 @@ export function KnowledgeResultCard({
               <Users className="size-3.5 shrink-0 text-faint" />
               <span className="truncate">{authors}</span>
             </span>
-            {!historyMode && <CollectionPicker paperId={hit.id} />}
+            {!historyMode && <CollectionPicker className="ml-auto" paperId={hit.id} />}
           </div>
 
           {/* 标题 */}

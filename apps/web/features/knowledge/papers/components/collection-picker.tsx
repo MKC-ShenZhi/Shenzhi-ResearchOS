@@ -6,7 +6,7 @@ import { ApiError } from "@/clients/backend/http";
 import { Button } from "@/components/ui/button";
 import { useCollections } from "@/stores/collections";
 
-export function CollectionPicker({ paperId }: { paperId: string }) {
+export function CollectionPicker({ paperId, className = "" }: { paperId: string; className?: string }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
   const [name, setName] = useState("");
@@ -41,7 +41,8 @@ export function CollectionPicker({ paperId }: { paperId: string }) {
       setName("");
       setMessage("");
     } catch (error) {
-      setMessage(error instanceof ApiError && error.status === 409 ? "名称已存在" : "创建文件夹失败");
+      if (error instanceof ApiError && error.status === 401) setMessage("该功能需要登录后使用，请先登录");
+      else setMessage(error instanceof ApiError && error.status === 409 ? "名称已存在" : "创建文件夹失败");
     }
   }
 
@@ -60,7 +61,7 @@ export function CollectionPicker({ paperId }: { paperId: string }) {
 
   const active = checked.length > 0;
   return (
-    <div ref={rootRef} className="relative inline-flex">
+    <div ref={rootRef} className={`relative inline-flex ${className}`.trim()}>
       <button
         type="button"
         onClick={() => { setOpen((value) => !value); setMessage(""); }}

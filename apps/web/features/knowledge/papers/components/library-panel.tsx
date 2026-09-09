@@ -35,7 +35,7 @@ export function LibraryPanel({
   async function submitDialog() {
     if (dialog === "delete" && editingId !== null) {
       try { await deleteFolder(editingId); if (selectedFolderId === editingId) onFolderClick(folders.find((folder) => folder.id !== editingId)?.id ?? 0); setDialog(null); }
-      catch { setError("删除失败，请重试"); }
+      catch (reason) { setError(reason instanceof ApiError && reason.status === 401 ? "该功能需要登录后使用，请先登录" : "删除失败，请重试"); }
       return;
     }
     if (!name.trim()) { setError("文件夹名称不能为空"); return; }
@@ -48,7 +48,8 @@ export function LibraryPanel({
       }
       setDialog(null);
     } catch (reason) {
-      setError(reason instanceof ApiError && reason.status === 409 ? "名称已存在，请更换" : "操作失败，请重试");
+      if (reason instanceof ApiError && reason.status === 401) setError("该功能需要登录后使用，请先登录");
+      else setError(reason instanceof ApiError && reason.status === 409 ? "名称已存在，请更换" : "操作失败，请重试");
     }
   }
 
