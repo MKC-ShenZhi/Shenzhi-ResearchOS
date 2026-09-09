@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
+import { apiJson } from "@/clients/backend/http";
 import { KnowledgeClientError } from "@/clients/knowledge";
 import { useKnowledgePaper } from "@/features/knowledge/paper/use-knowledge-paper";
 import { KnowledgePaperSkeleton } from "@/features/knowledge/paper/components/paper-skeleton";
@@ -13,6 +15,13 @@ import { PaperRightPanel } from "./components/right-panel";
 export function PaperDetailPage({ paperId, returnTo }: { paperId: string; returnTo?: string | null }) {
   const { data: paper, isPending, isError, error, refetch } = useKnowledgePaper(paperId);
   const safeReturnTo = normalizeInternalReturnTo(returnTo);
+
+  useEffect(() => {
+    if (!paper) return;
+    void apiJson(`/papers/${encodeURIComponent(paper.id)}/view`, { method: "POST" }).catch(() => {
+      // Viewing a paper must remain available when history storage is unavailable.
+    });
+  }, [paper]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-background lg:h-dvh lg:overflow-hidden">

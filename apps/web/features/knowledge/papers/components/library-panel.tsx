@@ -3,7 +3,13 @@ import { libraryFolders } from "@/lib/data/library";
 import { cn } from "@/lib/utils";
 
 /** 我的文献库面板 —— 文件夹树 + 标签(对应知识库页面 SVG 第二栏) */
-export function LibraryPanel() {
+export function LibraryPanel({
+  historyActive,
+  onHistoryClick,
+}: {
+  historyActive: boolean;
+  onHistoryClick: () => void;
+}) {
   return (
     <aside className="flex w-60 shrink-0 flex-col self-stretch border-r border-line bg-card p-5">
       <div className="flex items-center justify-between">
@@ -58,9 +64,10 @@ export function LibraryPanel() {
         
         <button
           type="button"
+          onClick={onHistoryClick}
           className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-sm text-ink-2 transition-colors hover:bg-chip"
         >
-          <History className="size-3.5" />
+          <History className={cn("size-3.5", historyActive && "text-primary")} />
           浏览历史
         </button>
       </div>

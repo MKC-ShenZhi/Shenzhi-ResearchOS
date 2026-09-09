@@ -14,6 +14,8 @@ export type {
   KnowledgeSearchParams,
   KnowledgePaperHit,
   KnowledgePaperDetail,
+  ReadingHistoryItem,
+  ReadingHistoryResponse,
   KnowledgeGraph,
   KnowledgeGraphDepth,
   KnowledgeGraphNode,

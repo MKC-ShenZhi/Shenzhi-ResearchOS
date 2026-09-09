@@ -20,10 +20,14 @@ export function KnowledgeResultCard({
   hit,
   index,
   returnTo,
+  historyMode = false,
+  lastViewedAt,
 }: {
   hit: KnowledgePaperHit;
   index: number;
   returnTo: string;
+  historyMode?: boolean;
+  lastViewedAt?: string;
 }) {
   const authors = hit.authors.length ? hit.authors.join(" · ") : "未知作者";
   const { bookmarkedPapers, toggleBookmark } = useUserPreferences();
@@ -34,7 +38,19 @@ export function KnowledgeResultCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.06 }}
-      className="rounded-2xl bg-card p-6 shadow-card"
+      className={`rounded-2xl bg-card p-6 shadow-card ${historyMode ? "cursor-pointer transition-colors hover:bg-card/80" : ""}`}
+      onClick={(event) => {
+        if (!historyMode || (event.target as HTMLElement).closest("a, button")) return;
+        window.location.href = paperHref(hit.id, returnTo);
+      }}
+      onKeyDown={(event) => {
+        if (historyMode && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          window.location.href = paperHref(hit.id, returnTo);
+        }
+      }}
+      role={historyMode ? "link" : undefined}
+      tabIndex={historyMode ? 0 : undefined}
     >
       <div className="flex gap-5">
         <div className="min-w-0 flex-1">
@@ -50,7 +66,7 @@ export function KnowledgeResultCard({
               <Users className="size-3.5 shrink-0 text-faint" />
               <span className="truncate">{authors}</span>
             </span>
-            <button
+            {!historyMode && <button
               type="button"
               onClick={() => toggleBookmark(hit.id)}
               aria-pressed={bookmarked}
@@ -58,7 +74,7 @@ export function KnowledgeResultCard({
             >
               <Bookmark className="size-4" fill={bookmarked ? "currentColor" : "none"} />
               收藏
-            </button>
+            </button>}
           </div>
 
           {/* 标题 */}
@@ -90,7 +106,11 @@ export function KnowledgeResultCard({
                 <span className="text-[11px] text-faint">暂无关键词</span>
               )}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            {historyMode ? (
+              <time dateTime={lastViewedAt} className="shrink-0 text-xs text-faint">
+                上次浏览：{lastViewedAt ? formatLastViewedAt(lastViewedAt) : "未知"}
+              </time>
+            ) : <div className="flex shrink-0 items-center gap-2">
               <Link href={paperHref(hit.id, returnTo)}>
                 <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-xs">
                   论文详情
@@ -103,7 +123,7 @@ export function KnowledgeResultCard({
                   关系图谱
                 </Button>
               </Link>
-            </div>
+            </div>}
           </div>
         </div>
 
@@ -120,4 +140,14 @@ export function KnowledgeResultCard({
       </div>
     </motion.article>
   );
+}
+
+function formatLastViewedAt(value: string) {
+  const viewedAt = new Date(value);
+  if (Number.isNaN(viewedAt.getTime())) return value;
+  const elapsedMinutes = Math.floor((Date.now() - viewedAt.getTime()) / 60000);
+  if (elapsedMinutes < 60) return `${Math.max(1, elapsedMinutes)}分钟前`;
+  if (elapsedMinutes < 1440) return `${Math.floor(elapsedMinutes / 60)}小时前`;
+  if (elapsedMinutes < 10080) return `${Math.floor(elapsedMinutes / 1440)}天前`;
+  return viewedAt.toLocaleString("zh-CN", { hour12: false });
 }

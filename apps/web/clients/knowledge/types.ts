@@ -65,6 +65,18 @@ export interface KnowledgePaperDetail {
   provenance: unknown;
 }
 
+export interface ReadingHistoryItem extends KnowledgePaperDetail {
+  paper_id: string;
+  last_viewed_at: string;
+}
+
+export interface ReadingHistoryResponse {
+  items: ReadingHistoryItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 /** 图谱节点 kind 是开放字符串；这里只列出当前已知类型，未知类型默认展示 */
 export type KnowledgeNodeKind =
   | "Paper"
