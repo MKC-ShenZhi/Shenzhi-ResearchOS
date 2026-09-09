@@ -13,6 +13,8 @@ from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.paper_resource import PaperResource
+
 
 class KnowledgeModel(BaseModel):
     """Common model configuration for the public knowledge contract."""
@@ -144,6 +146,11 @@ class PaperDetail(KnowledgeModel):
         default=None,
         validation_alias=AliasChoices('pdfUrl', 'pdf_url'),
         serialization_alias='pdfUrl',
+    )
+    pdf_resource: PaperResource | None = Field(
+        default=None,
+        validation_alias=AliasChoices('pdfResource', 'pdf_resource'),
+        serialization_alias='pdfResource',
     )
     keywords: list[str] = Field(default_factory=list)
     subjects: list[str] = Field(default_factory=list)

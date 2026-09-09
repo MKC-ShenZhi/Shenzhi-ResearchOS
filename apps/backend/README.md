@@ -57,11 +57,18 @@ Integration 内部职责保持分离：`client.py` 负责上游 HTTP transport�
 侧修复上游数据和检索能力。
 
 Contract v0 的核心字段为：Search `results[].id/title/abstract/authors/year/venue/keywords/subjects/score/rank`；
-Detail `id/title/abstract/authors/year/venue/doi/pdfUrl/keywords/subjects/citationCount/referenceCount`；
+Detail `id/title/abstract/authors/year/venue/doi/pdfUrl/pdfResource/keywords/subjects/citationCount/referenceCount`；
 Graph `rootId/nodes/edges`，边使用 `sourceId/targetId/relation`。空字符串归一化为 `null`，
 未知引用数保持 `null`，节点和关系类型为开放字符串。错误响应包含
 `code/message/retryable/requestId`。Search 请求只使用 `query/topK/yearFrom/yearTo/venue/author/keyword/subject`；
 上游的 snake_case 字段只在 Adapter 到 HTTP Client 的边界出现。
+
+`pdfResource` 由独立的 `app/services/paper_resource/` 在论文详情返回前解析。
+它执行 OpenReview URL 适配与轻量 HTTP 资源校验。站内 PDF.js 通过受控的
+`GET /api/v1/paper-resource/pdf?paperId=...` 同源端点读取字节流，避免科研源站缺少
+CORS 响应头导致浏览器拒绝加载。端点只接受可信 `paperId`，不接受任意 URL；Backend
+不持久化或缓存 PDF。配置项为 `PAPER_RESOURCE_TIMEOUT`（秒）与
+`PAPER_MAX_SIZE_MB`（可获取资源大小上限）。
 
 当前仅支持 **单进程 / 单 worker**，Session 与解析后的附件为临时内存数据，重启清空。
 

@@ -15,6 +15,7 @@ export type {
   KnowledgeSearchResponse,
   KnowledgePaperHit,
   KnowledgePaperDetail,
+  PaperResource,
   KnowledgeGraph,
   KnowledgeGraphDepth,
   KnowledgeGraphNode,

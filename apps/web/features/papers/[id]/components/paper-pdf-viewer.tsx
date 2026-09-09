@@ -14,6 +14,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { PaperResource } from "@/clients/knowledge";
 import { apiPath } from "@/clients/backend/http";
 import { cn } from "@/lib/utils";
 import { paperExternalUrl } from "@/lib/navigation/paper";
@@ -34,7 +35,6 @@ type ViewerState =
   | "loading"
   | "rendering"
   | "ready"
-  | "external_only"
   | "unavailable"
   | "no_pdf";
 
@@ -66,12 +66,6 @@ function StatePanel({
   );
 }
 
-function isOpenReviewSource(value: string | null) {
-  if (!value) return false;
-
-  return new URL(value).hostname.toLowerCase() === "openreview.net";
-}
-
 const HIGHLIGHT_COLOR_OPTIONS: Array<{
   color: HighlightColor;
   label: string;
@@ -90,17 +84,21 @@ function textRangesOverlap(left: PdfTextRange, right: PdfTextRange) {
 export function PaperPdfViewer({
   paperId,
   pdfUrl,
+  resource,
   title,
 }: {
   paperId: string;
   pdfUrl: string | null;
+  resource: PaperResource | null;
   title: string;
 }) {
-  const externalUrl = paperExternalUrl(pdfUrl);
-  const isExternalOnly = isOpenReviewSource(externalUrl);
+  const resourceUrl = resource?.status === "available"
+    ? paperExternalUrl(resource.url)
+    : null;
+  const externalUrl = paperExternalUrl(resource?.url ?? pdfUrl);
   const [state, setState] = useState<ViewerState>(() => {
     if (!pdfUrl) return "no_pdf";
-    return isExternalOnly ? "external_only" : "loading";
+    return resourceUrl ? "loading" : "unavailable";
   });
   const [pageNumber, setPageNumber] = useState(1);
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -115,7 +113,9 @@ export function PaperPdfViewer({
   const pageRefs = useRef(new Map<number, HTMLDivElement>());
   const currentPageRef = useRef(1);
   const pageInputEditingRef = useRef(false);
-  const pdfPath = apiPath(`/knowledge/paper/pdf?paperId=${encodeURIComponent(paperId)}`);
+  const pdfPath = apiPath(
+    `/paper-resource/pdf?paperId=${encodeURIComponent(paperId)}`,
+  );
 
   const setCurrentPage = useCallback((nextPage: number) => {
     currentPageRef.current = nextPage;
@@ -157,13 +157,13 @@ export function PaperPdfViewer({
     setSelectedColor("yellow");
     setPendingSelection(null);
     setHighlights([]);
-    setState(!pdfUrl ? "no_pdf" : isExternalOnly ? "external_only" : "loading");
-  }, [paperId, pdfUrl, retryKey, isExternalOnly]);
+    setState(!pdfUrl ? "no_pdf" : resourceUrl ? "loading" : "unavailable");
+  }, [paperId, pdfUrl, retryKey, resourceUrl]);
 
   const fittedWidth = Math.max(280, contentWidth - 32);
   const pageWidth = Math.round(fittedWidth * zoom);
   const isViewerState = state === "loading" || state === "rendering" || state === "ready";
-  const showViewer = Boolean(pdfUrl) && !isExternalOnly && isViewerState;
+  const showViewer = Boolean(resourceUrl) && isViewerState;
   const hasDocument = state === "rendering" || state === "ready";
   const canNavigate = Boolean(numPages) && state === "ready";
 
@@ -250,9 +250,7 @@ export function PaperPdfViewer({
 
   const handleDocumentError = useCallback((error: Error) => {
     const status = (error as Error & { status?: unknown }).status;
-    if (status === 403) {
-      setState("external_only");
-    } else if (status === 404) {
+    if (status === 404) {
       setState("no_pdf");
     } else {
       setState("unavailable");
@@ -452,13 +450,6 @@ export function PaperPdfViewer({
             onLoadError={handleDocumentError}
           />
         </div>
-      )}
-
-      {state === "external_only" && (
-        <StatePanel>
-          <p>该论文来源需要在原站完成访问验证，当前暂不支持站内阅读。</p>
-          {externalUrl && <ExternalSourceLink href={externalUrl} />}
-        </StatePanel>
       )}
 
       {state === "unavailable" && (

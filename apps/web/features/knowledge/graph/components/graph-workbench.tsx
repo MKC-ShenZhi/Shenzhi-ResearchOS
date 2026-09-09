@@ -235,6 +235,7 @@ function paperDetailFromNode(node: KnowledgeGraphNode): KnowledgePaperDetail {
     venue: node.properties.venue ?? null,
     doi: node.properties.doi ?? null,
     pdfUrl: node.properties.pdfUrl ?? null,
+    pdfResource: null,
     keywords: Array.isArray(node.properties.keywords) ? (node.properties.keywords as string[]) : [],
     subjects: [],
     citationCount: null,

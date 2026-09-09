@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { normalizeInternalReturnTo } from "../../lib/navigation/internal-return-to";
 import {
@@ -78,7 +78,6 @@ test("paper journey uses one real detail and graph implementation with compatibi
   const graphRoute = readFileSync("app/papers/[id]/graph/page.tsx", "utf8");
   const legacyDetail = readFileSync("app/knowledge/search/[paperId]/page.tsx", "utf8");
   const legacyGraph = readFileSync("app/knowledge/search/[paperId]/graph/page.tsx", "utf8");
-  const catchAll = readFileSync("app/api/v1/[...path]/route.ts", "utf8");
 
   assert.match(detailPage, /useKnowledgePaper\(paperId\)/);
   assert.match(detailPage, /<PaperPdfViewer/);
@@ -89,9 +88,7 @@ test("paper journey uses one real detail and graph implementation with compatibi
   assert.match(assistant, /web_search:\s*false/);
   assert.match(pdf, /在新窗口打开 PDF/);
   assert.match(pdf, /当前论文暂无可用 PDF 链接/);
-  assert.equal(existsSync("app/api/v1/knowledge/paper/pdf/route.ts"), false);
-  assert.match(catchAll, /forwardToBusinessBackend/);
-  assert.match(catchAll, /GET = handle/);
+  assert.match(pdf, /\/paper-resource\/pdf\?paperId=/);
   assert.match(rightPanel, /相似论文能力正在接入/);
   assert.match(rightPanel, /暂不支持保存笔记/);
   assert.match(graphRoute, /KnowledgeRelationGraphPage/);

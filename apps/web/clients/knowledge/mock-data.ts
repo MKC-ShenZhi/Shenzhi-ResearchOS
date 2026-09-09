@@ -326,6 +326,17 @@ export function mockPaperDetail(id: string): KnowledgePaperDetail | null {
     venue: paper.venue,
     doi: paper.doi,
     pdfUrl: paper.pdfUrl,
+    pdfResource: paper.pdfUrl ? {
+      url: paper.pdfUrl,
+      provider: "http",
+      status: "available",
+      reason: null,
+    } : {
+      url: null,
+      provider: "http",
+      status: "unavailable",
+      reason: "invalid_pdf_url",
+    },
     keywords: paper.keywords,
     subjects: paper.subjects,
     citationCount: paper.citationCount,

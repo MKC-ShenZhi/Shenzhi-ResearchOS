@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from dataclasses import dataclass
-
 from app.integrations.knowledge.adapter import KnowledgeAdapter
-from app.integrations.knowledge.client import PdfFetch
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.schemas.knowledge import (
     KnowledgeError,
@@ -47,15 +43,6 @@ class KnowledgeServiceError(Exception):
         )
 
 
-@dataclass(frozen=True)
-class PaperPdfSource:
-    fetch: PdfFetch
-
-    @property
-    def probe(self):
-        return self.fetch.probe
-
-
 class KnowledgeService:
     """Thin business boundary shared by the API and future backend callers."""
 
@@ -73,30 +60,6 @@ class KnowledgeService:
             return await self.adapter.paper(paper_id)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
-
-    async def get_paper_pdf_source(
-        self, paper_id: str, *, range_header: str | None = None
-    ) -> PaperPdfSource | None:
-        detail = await self.get_paper(paper_id)
-        if not detail.pdf_url:
-            return None
-        try:
-            fetch = await self.adapter.fetch_pdf(
-                detail.pdf_url, range_header=range_header
-            )
-        except KnowledgeIntegrationError as error:
-            raise KnowledgeServiceError.from_integration_error(error) from error
-        return PaperPdfSource(fetch=fetch)
-
-    async def close_paper_pdf(self, source: PaperPdfSource) -> None:
-        await source.fetch.close()
-
-    async def stream_paper_pdf(self, source: PaperPdfSource) -> AsyncIterator[bytes]:
-        try:
-            async for chunk in source.fetch.iter_bytes():
-                yield chunk
-        finally:
-            await source.fetch.close()
 
     async def get_graph(self, paper_id: str, *, depth: int = 1) -> PaperGraph:
         try:

@@ -42,7 +42,10 @@ External Knowledge Base
 | 路径 | 职责 |
 |---|---|
 | `apps/backend/app/api/knowledge.py` | `/api/v1/knowledge/*` HTTP 边界、鉴权和错误状态 |
+| `apps/backend/app/api/paper_resource.py` | 仅按可信 `paperId` 提供同源 PDF Range 字节流 |
 | `apps/backend/app/services/knowledge.py` | Knowledge 业务服务边界 |
+| `apps/backend/app/services/paper_resource/` | PDF Provider 选择、OpenReview URL 适配及 HTTP 轻量校验 |
+| `apps/backend/app/schemas/paper_resource.py` | 浏览器可消费的 PDF 资源状态契约 |
 | `apps/backend/app/integrations/knowledge/client.py` | 外部 HTTP、timeout 和外部异常映射 |
 | `apps/backend/app/integrations/knowledge/schemas.py` | 外部 Knowledge Base transport schema |
 | `apps/backend/app/integrations/knowledge/adapter.py` | 外部 snake_case/异构字段到 ShenZhi 契约的适配与 normalization |
@@ -68,6 +71,8 @@ Backend（`apps/backend/.env.example`）：
 ```dotenv
 KNOWLEDGE_BASE_API_URL=
 KNOWLEDGE_BASE_TIMEOUT_SEC=30
+PAPER_RESOURCE_TIMEOUT=30
+PAPER_MAX_SIZE_MB=150
 ```
 
 `KNOWLEDGE_BASE_API_URL` 和 Backend 的 BFF secret 只能注入服务端环境，不能
@@ -80,14 +85,31 @@ KNOWLEDGE_BASE_TIMEOUT_SEC=30
 | 论文检索 | `POST /api/v1/knowledge/search` | `POST /api/retrieval/search` |
 | 论文详情 | `GET /api/v1/knowledge/paper?paperId=...` | `GET /api/kg/paper?paperId=...` |
 | 论文图谱 | `GET /api/v1/knowledge/graph?paperId=...&depth=1\|2` | `GET /api/kg/graph?paperId=...&depth=1\|2` |
+| PDF 字节流 | `GET /api/v1/paper-resource/pdf?paperId=...` | `pdf_url` 对应资源 |
 
-论文 PDF 使用专用的同源流式入口：`GET /api/v1/knowledge/paper/pdf?paperId=...`。
-Browser 只提供 `paperId`；Backend 复用论文详情中的 `pdf_url`，向公开来源透传
-必要的单段 `Range` 并流式返回 PDF，不提供任意 URL 代理，也不改变 Knowledge
-Detail Contract。前端使用 PDF.js 的 Canvas 与 Text Layer 渲染，阅读器高亮只保留
-在当前会话中。当前 Knowledge 返回的 OpenReview `pdf_url` 需要原站访问验证，
-因此在 ShenZhi 内保持 external-only；未来若要站内阅读，需要 Knowledge Base
-提供稳定可读的 PDF URL、PDF binary API，或合法的 server-side credential。
+论文详情中的 `pdf_url` 仍只由 Knowledge Integration 读取和映射。随后独立的
+`paper_resource` Service 按 Provider 解析资源：OpenReview Provider 负责来源识别和
+论坛链接转换，HTTP Provider 使用带超时的一字节 Range 请求检查状态、Content-Type
+和可获取的文件总大小。详情响应新增 `pdfResource`：`available` 时浏览器将其中的
+资源交给 PDF.js；`unavailable` 时根据 `reason` 展示降级提示。由于多数科研 PDF
+源站没有开放 CORS，PDF.js 实际从 ShenZhi 同源的 `paper-resource/pdf` 端点读取临时
+字节流。该端点通过 `paperId` 再取可信详情，不接受任意 URL，并透传合法的单段 Range。
+Backend 不保存或缓存 PDF，也不创建下载任务。
+
+`pdfResource` 契约示例：
+
+```json
+{
+  "url": "https://openreview.net/pdf?id=note-123",
+  "provider": "openreview",
+  "status": "available",
+  "reason": null
+}
+```
+
+不可用原因目前为 `invalid_pdf_url`、`request_timeout`、`resource_unavailable`、
+`invalid_content_type` 或 `pdf_too_large`。资源不可用只改变 `pdfResource.status`，
+不会把成功的论文详情请求转为错误响应。
 
 Search 请求使用 `query`、`topK`、`offset`、`yearFrom`、`yearTo`、`venue`、
 `author`、`keyword`、`subject`。论文检索页固定 `topK=20`，并按

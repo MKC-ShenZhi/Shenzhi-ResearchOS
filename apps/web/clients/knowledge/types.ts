@@ -4,7 +4,7 @@
  * 契约来源：知识底座科研组 Contract（同学调研确认）。
  * 稳定依赖字段：
  *   Search   → id / title / abstract / authors / year / venue / keywords / subjects / score / rank
- *   Detail   → 同上 + doi / pdfUrl / citationCount / referenceCount
+ *   Detail   → 同上 + doi / pdfUrl / pdfResource / citationCount / referenceCount
  *   Graph    → rootId / nodes[{id,kind,label,properties}] / edges[{sourceId,targetId,relation,description,weight}]
  *
  * 约定：
@@ -52,6 +52,19 @@ export interface KnowledgePaperHit {
 }
 
 /** 论文详情 */
+export interface PaperResource {
+  url: string | null;
+  provider: "openreview" | "http";
+  status: "available" | "unavailable";
+  reason:
+    | "invalid_pdf_url"
+    | "request_timeout"
+    | "resource_unavailable"
+    | "invalid_content_type"
+    | "pdf_too_large"
+    | null;
+}
+
 export interface KnowledgePaperDetail {
   id: string;
   title: string;
@@ -62,6 +75,8 @@ export interface KnowledgePaperDetail {
 
   doi: string | null;
   pdfUrl: string | null;
+  /** Backend-resolved URL and availability for direct browser rendering. */
+  pdfResource: PaperResource | null;
 
   keywords: string[];
   subjects: string[];
