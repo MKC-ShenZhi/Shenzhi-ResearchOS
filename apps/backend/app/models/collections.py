@@ -7,6 +7,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.chat import Base
 
 
+class CollectionUserStateRow(Base):
+    __tablename__ = 'collection_user_states'
+
+    user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    initialized_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text('now()'))
+
+
 class CollectionFolderRow(Base):
     __tablename__ = 'collection_folders'
 

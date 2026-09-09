@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 
 from app.core.database import session_scope
 from app.core.errors import BusinessError
-from app.models.collections import CollectionFolderRow, CollectionItemRow
+from app.models.collections import CollectionFolderRow, CollectionItemRow, CollectionUserStateRow
 from app.schemas.collections import (
     CollectionFolder,
     CollectionPaperItem,
@@ -25,11 +25,16 @@ class CollectionService:
 
     async def ensure_default_folders(self, user_id: str) -> None:
         async with session_scope() as session:
-            existing = set(await session.scalars(
-                select(CollectionFolderRow.name).where(CollectionFolderRow.user_id == user_id)
-            ))
-            for name in DEFAULT_FOLDERS:
-                if name not in existing:
+            state = await session.get(CollectionUserStateRow, user_id)
+            if state is not None:
+                return
+
+            # Existing rows can come from the first version of this feature.
+            # Mark those users initialized without recreating deleted defaults.
+            has_folders = await session.scalar(select(CollectionFolderRow.id).where(CollectionFolderRow.user_id == user_id).limit(1))
+            session.add(CollectionUserStateRow(user_id=user_id))
+            if has_folders is None:
+                for name in DEFAULT_FOLDERS:
                     session.add(CollectionFolderRow(user_id=user_id, name=name, is_default=True))
 
     async def folders(self, user_id: str) -> FolderListResponse:
