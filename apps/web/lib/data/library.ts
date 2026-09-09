@@ -2,11 +2,9 @@ import type { LibraryFolder, LibraryItem } from "@/types";
 
 /** 知识库文件夹 —— 内容提取自「深知-知识库页面.svg」 */
 export const libraryFolders: LibraryFolder[] = [
-  { name: "我的发表", count: 3 },
   { name: "想读", count: 8 },
   { name: "在读", count: 12, active: true },
-  { name: "已读", count: 47 },
-  { name: "归档", count: 23 },
+  { name: "已读", count: 47 }
 ];
 
 export const libraryTags = ["扩散模型", "Transformer", "智能体", "视频生成", "长上下文"];

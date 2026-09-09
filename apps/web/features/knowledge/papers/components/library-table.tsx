@@ -52,7 +52,7 @@ export function LibraryTable() {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索标题、作者、会议或 arXiv 编号…"
+            placeholder="搜索论文的标题/作者/会议"
             className="h-10 w-full rounded-xl border border-line bg-card pl-10 pr-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
           />
         </div>
