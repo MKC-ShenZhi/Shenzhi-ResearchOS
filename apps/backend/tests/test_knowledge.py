@@ -2,7 +2,7 @@ import copy
 import json
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 
@@ -18,6 +18,7 @@ from app.integrations.knowledge.adapter import (
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.services.knowledge import KnowledgeService, KnowledgeServiceError
+from app.services.paper_resource import PaperResourceService
 
 
 PAPER_ID = 'paper:17203_aaai:911ff38f19e8'
@@ -541,6 +542,7 @@ class KnowledgeApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detail_response.status_code, 200, detail_response.text)
         self.assertEqual(detail_response.json()['data']['id'], PAPER_ID)
         self.assertIsNone(detail_response.json()['data']['citationCount'])
+        self.assertNotIn('pdfResource', detail_response.json()['data'])
 
         graph_response = await self.client.get(
             '/api/v1/knowledge/graph', params={'paperId': PAPER_ID, 'depth': 1}
@@ -549,6 +551,31 @@ class KnowledgeApiTests(unittest.IsolatedAsyncioTestCase):
         graph_data = graph_response.json()['data']
         self.assertEqual(graph_data['rootId'], PAPER_ID)
         self.assertEqual(graph_data['edges'][0]['sourceId'], PAPER_ID)
+
+    async def test_paper_detail_returns_invalid_pdf_url_without_resource_preflight(self):
+        source_url = 'not-a-valid-pdf-url'
+        with (
+            patch.dict(DETAIL_RESPONSE, {'pdf_url': source_url}),
+            patch.object(
+                PaperResourceService,
+                'resolve_paper_resource',
+                new_callable=AsyncMock,
+            ) as resolve_resource,
+            patch.object(
+                PaperResourceService,
+                'open_paper_resource',
+                new_callable=AsyncMock,
+            ) as open_resource,
+        ):
+            response = await self.client.get(
+                '/api/v1/knowledge/paper', params={'paperId': PAPER_ID}
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['data']['pdfUrl'], source_url)
+        self.assertNotIn('pdfResource', response.json()['data'])
+        resolve_resource.assert_not_awaited()
+        open_resource.assert_not_awaited()
 
     async def test_api_chain_uses_configured_client_and_never_needs_public_network(self):
         requests = []

@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/common/layout/app-shell";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { KnowledgeFilterPanel, type KnowledgeFilters } from "./components/filter-panel";
 import { KnowledgeResultsSection } from "./components/results-section";
@@ -27,8 +28,9 @@ const EMPTY_FILTERS: KnowledgeFilters = {
  * 业务链路：页面 → KnowledgeClient 接口 → Next.js BFF → FastAPI。
  * 页面只依赖 clients/knowledge 的契约类型与 Client 工厂。
  */
-export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: string }) {
+function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }) {
   const router = useRouter();
+  const returnTo = useCurrentInternalPath();
 
   const [query, setQuery] = useState(initialQuery);
   const [committedQuery, setCommittedQuery] = useState(initialQuery);
@@ -89,7 +91,7 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
             {searchParamsForQuery ? (
               <KnowledgeResultsSection
                 params={searchParamsForQuery}
-                returnTo={`/knowledge/search?q=${encodeURIComponent(committedQuery)}`}
+                returnTo={returnTo}
                 page={page}
                 onPageChange={setPage}
               />
@@ -105,5 +107,13 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
         </div>
       </div>
     </AppShell>
+  );
+}
+
+export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: string }) {
+  return (
+    <Suspense fallback={<p className="p-8 text-sm text-muted">正在加载论文检索…</p>}>
+      <KnowledgeSearchContent initialQuery={initialQuery} />
+    </Suspense>
   );
 }

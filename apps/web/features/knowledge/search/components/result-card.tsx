@@ -51,7 +51,7 @@ export function KnowledgeResultCard({
 
           {/* 标题 */}
           <Link
-            href={paperHref(hit.id, returnTo)}
+            href={paperHref(hit.id, { mode: "create", source: returnTo })}
             className="group mt-2 block"
           >
             <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
@@ -79,13 +79,13 @@ export function KnowledgeResultCard({
               )}
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Link href={paperHref(hit.id, returnTo)}>
+              <Link href={paperHref(hit.id, { mode: "create", source: returnTo })}>
                 <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-xs">
                   论文详情
                   <ArrowRight className="size-3.5" />
                 </Button>
               </Link>
-              <Link href={paperHref(hit.id, returnTo, true)}>
+              <Link href={paperHref(hit.id, { mode: "create", source: returnTo, graph: true })}>
                 <Button size="sm" className="h-8 rounded-lg px-3 text-xs">
                   <Network className="size-3.5" />
                   关系图谱

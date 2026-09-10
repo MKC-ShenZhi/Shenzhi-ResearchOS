@@ -5,7 +5,7 @@ import { logError, logInfo } from "../../lib/observability/logger";
 import { REQUEST_ID_HEADER, resolveRequestId } from "../../lib/observability/request-id";
 import { attachIdentity, resolveBackendIdentity } from "./identity";
 
-const FORWARDED_REQUEST_HEADERS = ["accept", "content-type", "last-event-id"] as const;
+const FORWARDED_REQUEST_HEADERS = ["accept", "content-type", "last-event-id", "range"] as const;
 
 function forwardedHeaders(requestHeaders: Headers): Headers {
   const headers = new Headers();

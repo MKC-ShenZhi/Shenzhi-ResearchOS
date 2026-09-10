@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { Suspense, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { PaperGraph } from "@/types";
@@ -71,7 +71,9 @@ export function GraphPageLayout({
           />
         </main>
         <aside className="order-3 w-full shrink-0 border-line bg-card p-5 lg:w-80 lg:overflow-y-auto lg:border-l">
-          <NodeAbstractCard node={selected} />
+          <Suspense fallback={<p className="text-xs text-faint">正在加载论文信息…</p>}>
+            <NodeAbstractCard node={selected} />
+          </Suspense>
         </aside>
       </div>
     </>

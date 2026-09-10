@@ -117,7 +117,7 @@ test("discovery UI caches by tab and never uses mock feed placeholders", () => {
 });
 
 test("all paper card detail entries build a route from the same opaque real id", () => {
-  assert.equal(PAPER_CARD_SOURCE.match(/paperHref\(paper\.id\)/g)?.length, 3);
+  assert.equal(PAPER_CARD_SOURCE.match(/paperHref\(paper\.id, \{ mode: "create", source: returnTo \}\)/g)?.length, 3);
 });
 
 test("the temporary service is removable and never performs per-paper detail requests", () => {

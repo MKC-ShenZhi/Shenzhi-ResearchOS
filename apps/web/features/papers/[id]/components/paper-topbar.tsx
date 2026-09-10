@@ -1,20 +1,34 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Network } from "lucide-react";
 import type { KnowledgePaperDetail } from "@/clients/knowledge";
 import { paperDoiUrl, paperHref } from "@/lib/navigation/paper";
+import { navigateBackFromPaper } from "../paper-back-navigation";
+
+export function PaperBackButton({ returnTo }: { returnTo?: string | null }) {
+  const router = useRouter();
+
+  return (
+    <button
+      type="button"
+      onClick={() => navigateBackFromPaper(router, returnTo)}
+      className="inline-flex items-center gap-1"
+    >
+      <ArrowLeft className="size-4" />
+      返回
+    </button>
+  );
+}
 
 export function PaperTopbar({ paper, returnTo }: { paper: KnowledgePaperDetail; returnTo?: string | null }) {
   const doiUrl = paperDoiUrl(paper.doi);
   return (
     <header className="shrink-0 border-b border-line bg-card px-5 py-3">
       <div className="flex items-center justify-between gap-4 text-xs text-primary">
-        <Link href={returnTo ?? "/knowledge/search"} className="inline-flex items-center gap-1">
-          <ArrowLeft className="size-4" />
-          {returnTo?.startsWith("/agents") ? "返回对话" : returnTo ? "返回来源" : "返回论文检索"}
-        </Link>
-        <Link href={paperHref(paper.id, returnTo, true)} className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2">
+        <PaperBackButton returnTo={returnTo} />
+        <Link href={paperHref(paper.id, { mode: "preserve", returnTo, graph: true })} className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2">
           <Network className="size-4" />关系图谱
         </Link>
       </div>

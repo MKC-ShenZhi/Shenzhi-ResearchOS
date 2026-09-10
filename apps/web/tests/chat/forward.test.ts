@@ -6,9 +6,12 @@ import { NextRequest } from "next/server";
 import * as identity from "../../clients/backend/identity";
 import { forwardToBusinessBackend } from "../../clients/backend/forward";
 
-function request(requestId?: string) {
+function request(requestId?: string, range?: string) {
+  const headers = new Headers();
+  if (requestId) headers.set("X-Request-ID", requestId);
+  if (range) headers.set("Range", range);
   return new NextRequest("http://web.test/api/v1/health", {
-    headers: requestId ? { "X-Request-ID": requestId } : undefined,
+    headers,
   });
 }
 
@@ -96,4 +99,29 @@ test("BFF logs a failed backend fetch with request ID but no error message", asy
   assert.equal(record.error_type, "Error");
   assert.equal(record.message, undefined);
   assert.equal(record.authorization, undefined);
+});
+
+test("BFF forwards PDF Range and preserves partial response headers", async (t) => {
+  t.mock.method(identity, "resolveBackendIdentity", async () => ({ kind: "anonymous" }));
+  let outgoingHeaders: Headers | undefined;
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    outgoingHeaders = new Headers(init.headers);
+    return new Response("pdf", {
+      status: 206,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Range": "bytes 0-2/3",
+      },
+    });
+  });
+
+  const response = await forwardToBusinessBackend(
+    request(undefined, "bytes=0-2"),
+    "http://backend.test",
+    ["paper-resource", "pdf"],
+  );
+
+  assert.equal(outgoingHeaders?.get("range"), "bytes=0-2");
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get("content-range"), "bytes 0-2/3");
 });

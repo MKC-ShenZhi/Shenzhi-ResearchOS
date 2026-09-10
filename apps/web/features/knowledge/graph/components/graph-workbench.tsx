@@ -84,7 +84,7 @@ export function KnowledgeGraphWorkbench({ paperId, returnTo }: { paperId: string
 
   const pickCenter = (id: string) => {
     // 切换中心论文：更新 URL → 页面 key 重挂载重置图谱
-    router.push(paperHref(id, returnTo, true));
+    router.push(paperHref(id, { mode: "preserve", returnTo, graph: true }));
   };
 
   if (graphQuery.isLoading) {
@@ -123,7 +123,7 @@ export function KnowledgeGraphWorkbench({ paperId, returnTo }: { paperId: string
       {/* 顶栏 */}
       <header className="flex h-13 shrink-0 items-center gap-3 border-b border-line bg-card px-5 py-2.5">
         <Link
-          href={paperHref(paperId, returnTo)}
+          href={paperHref(paperId, { mode: "preserve", returnTo })}
           className="flex shrink-0 items-center gap-1.5 text-[13px] text-muted transition-colors hover:text-primary"
         >
           <ArrowLeft className="size-4" />

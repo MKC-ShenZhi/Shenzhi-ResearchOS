@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ExternalLink, FileText, Globe } from "lucide-react";
 import type { ChatReference, KnowledgeGroundingState } from "@/types/ai-search";
 import { cn } from "@/lib/utils";
-import { normalizeInternalReturnTo } from "@/lib/navigation/internal-return-to";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import {
   citedReferenceIds,
   paperReferenceHref,
@@ -31,10 +31,7 @@ export function ReferenceGrid({
 }) {
   const [all, setAll] = useState(false);
   const { active, jump } = useCitation();
-  const returnTo = useMemo(() => {
-    if (!references.length || typeof window === "undefined") return null;
-    return normalizeInternalReturnTo(`${window.location.pathname}${window.location.search}`);
-  }, [references.length]);
+  const returnTo = useCurrentInternalPath();
   if (!references.length) return null;
 
   const citedIds = new Set(citedReferenceIds(answer, references));

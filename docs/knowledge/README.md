@@ -42,7 +42,10 @@ External Knowledge Base
 | 路径 | 职责 |
 |---|---|
 | `apps/backend/app/api/knowledge.py` | `/api/v1/knowledge/*` HTTP 边界、鉴权和错误状态 |
+| `apps/backend/app/api/paper_resource.py` | 仅按可信 `paperId` 提供同源 PDF Range 字节流 |
 | `apps/backend/app/services/knowledge.py` | Knowledge 业务服务边界 |
+| `apps/backend/app/services/paper_resource/` | PDF Provider 选择、OpenReview URL 适配及 HTTP 轻量校验 |
+| `apps/backend/app/schemas/paper_resource.py` | 浏览器可消费的 PDF 资源状态契约 |
 | `apps/backend/app/integrations/knowledge/client.py` | 外部 HTTP、timeout 和外部异常映射 |
 | `apps/backend/app/integrations/knowledge/schemas.py` | 外部 Knowledge Base transport schema |
 | `apps/backend/app/integrations/knowledge/adapter.py` | 外部 snake_case/异构字段到 ShenZhi 契约的适配与 normalization |
@@ -68,6 +71,8 @@ Backend（`apps/backend/.env.example`）：
 ```dotenv
 KNOWLEDGE_BASE_API_URL=
 KNOWLEDGE_BASE_TIMEOUT_SEC=30
+PAPER_RESOURCE_TIMEOUT=30
+PAPER_MAX_SIZE_MB=150
 ```
 
 `KNOWLEDGE_BASE_API_URL` 和 Backend 的 BFF secret 只能注入服务端环境，不能
@@ -80,6 +85,18 @@ KNOWLEDGE_BASE_TIMEOUT_SEC=30
 | 论文检索 | `POST /api/v1/knowledge/search` | `POST /api/retrieval/search` |
 | 论文详情 | `GET /api/v1/knowledge/paper?paperId=...` | `GET /api/kg/paper?paperId=...` |
 | 论文图谱 | `GET /api/v1/knowledge/graph?paperId=...&depth=1\|2` | `GET /api/kg/graph?paperId=...&depth=1\|2` |
+| PDF 字节流 | `GET /api/v1/paper-resource/pdf?paperId=...` | `pdf_url` 对应资源 |
+
+论文详情中的 `pdf_url` 只由 Knowledge Integration 读取和映射，公共 Detail Contract
+仅保留 `pdfUrl`。`GET /api/v1/knowledge/paper` 不调用 `paper_resource` Service，也不访问
+PDF 源站；因此 PDF 的超时、404 或格式异常不会阻塞详情与摘要。
+
+用户首次打开 Paper 视图时，PDF.js 才请求 ShenZhi 同源的
+`GET /api/v1/paper-resource/pdf?paperId=...` 端点。该端点通过 `paperId` 再取可信详情，
+随后使用 `PaperResourceService` 按 Provider 解析与打开资源：OpenReview Provider 负责来源
+识别和论坛链接转换，HTTP Provider 负责超时、Content-Type、大小限制及流式读取。
+端点不接受任意 URL，并透传合法的单段 Range。Backend 不保存或缓存 PDF，
+也不创建下载任务。
 
 Search 请求使用 `query`、`topK`、`offset`、`yearFrom`、`yearTo`、`venue`、
 `author`、`keyword`、`subject`。论文检索页固定 `topK=20`，并按
