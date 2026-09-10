@@ -39,6 +39,36 @@ test("product stream dispatches reasoning and detects a truncated connection", a
   await assert.rejects(streamChatMessage("id", {}), /提前结束/);
 });
 
+test("knowledge warning and unverified grounding remain non-terminal metadata", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => responseFor([
+    'event: meta\ndata: {"phase":"generating","warnings":["本轮未能形成可验证的知识引用，以下回答未作为知识增强结果。"],"knowledge_grounding":"unverified"}\n\n',
+    'event: delta\ndata: {"reasoning":"分析"}\n\n',
+    'event: delta\ndata: {"text":"普通回答"}\n\n',
+    'event: done\ndata: {"status":"done","duration_ms":20,"knowledge_grounding":"unverified"}\n\n',
+  ].join("")));
+
+  const received = { warnings: [] as string[], grounding: "", reasoning: "", text: "", status: "" };
+  await streamChatMessage("id", {
+    onMeta: (meta) => {
+      received.warnings = meta.warnings ?? [];
+      received.grounding = meta.knowledge_grounding ?? "";
+    },
+    onDelta: (delta) => {
+      received.reasoning += delta.reasoning ?? "";
+      received.text += delta.text ?? "";
+    },
+    onDone: (done) => { received.status = done.status; },
+  });
+
+  assert.deepEqual(received, {
+    warnings: ["本轮未能形成可验证的知识引用，以下回答未作为知识增强结果。"],
+    grounding: "unverified",
+    reasoning: "分析",
+    text: "普通回答",
+    status: "done",
+  });
+});
+
 test("HTTP checks status even if the body claims success, and keeps backend error details", async (t) => {
   t.mock.method(globalThis, "fetch", async () => Response.json({ code: 0, data: {} }, { status: 500 }));
   await assert.rejects(apiJson("/test"), (error: unknown) => error instanceof ApiError && error.status === 500);
