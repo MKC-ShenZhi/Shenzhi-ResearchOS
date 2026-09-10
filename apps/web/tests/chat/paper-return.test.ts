@@ -81,6 +81,7 @@ test("paper journey uses one real detail and graph implementation with compatibi
 
   assert.match(detailPage, /useKnowledgePaper\(paperId\)/);
   assert.match(detailPage, /<PaperPdfViewer/);
+  assert.match(detailPage, /<PaperAbstractView/);
   assert.match(detailPage, /<PaperRightPanel/);
   assert.match(assistant, /embedded:\s*true/);
   assert.match(assistant, /kind:\s*"paper"/);
@@ -94,4 +95,20 @@ test("paper journey uses one real detail and graph implementation with compatibi
   assert.match(graphRoute, /KnowledgeRelationGraphPage/);
   assert.match(legacyDetail, /redirect\(paperHref/);
   assert.match(legacyGraph, /redirect\(paperHref/);
+});
+
+test("Paper Detail loads the PDF only after opening Paper and keeps the viewer mounted", () => {
+  const detailPage = readFileSync("features/papers/[id]/PaperDetailPage.tsx", "utf8");
+  const pdf = readFileSync("features/papers/[id]/components/paper-pdf-viewer.tsx", "utf8");
+
+  assert.match(detailPage, /type PaperViewMode = "abstract" \| "paper"/);
+  assert.match(detailPage, /useState<PaperViewMode>\("abstract"\)/);
+  assert.match(detailPage, /useState\(false\)/);
+  assert.match(detailPage, /if \(nextMode === "paper"\) setHasOpenedPaper\(true\)/);
+  assert.match(detailPage, /\{hasOpenedPaper && \(/);
+  assert.match(detailPage, /className=\{viewMode === "paper" \? "h-full" : "hidden"\}/);
+  assert.doesNotMatch(detailPage, /paper-resource\/pdf\?paperId=/);
+  assert.equal((pdf.match(/paper-resource\/pdf\?paperId=/g) ?? []).length, 1);
+  assert.match(pdf, /setState\(!pdfUrl \? "no_pdf" : "loading"\)/);
+  assert.match(pdf, /当前论文暂无法在线加载 PDF/);
 });

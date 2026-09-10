@@ -87,29 +87,16 @@ PAPER_MAX_SIZE_MB=150
 | 论文图谱 | `GET /api/v1/knowledge/graph?paperId=...&depth=1\|2` | `GET /api/kg/graph?paperId=...&depth=1\|2` |
 | PDF 字节流 | `GET /api/v1/paper-resource/pdf?paperId=...` | `pdf_url` 对应资源 |
 
-论文详情中的 `pdf_url` 仍只由 Knowledge Integration 读取和映射。随后独立的
-`paper_resource` Service 按 Provider 解析资源：OpenReview Provider 负责来源识别和
-论坛链接转换，HTTP Provider 使用带超时的一字节 Range 请求检查状态、Content-Type
-和可获取的文件总大小。详情响应新增 `pdfResource`：`available` 时浏览器将其中的
-资源交给 PDF.js；`unavailable` 时根据 `reason` 展示降级提示。由于多数科研 PDF
-源站没有开放 CORS，PDF.js 实际从 ShenZhi 同源的 `paper-resource/pdf` 端点读取临时
-字节流。该端点通过 `paperId` 再取可信详情，不接受任意 URL，并透传合法的单段 Range。
-Backend 不保存或缓存 PDF，也不创建下载任务。
+论文详情中的 `pdf_url` 只由 Knowledge Integration 读取和映射，公共 Detail Contract
+仅保留 `pdfUrl`。`GET /api/v1/knowledge/paper` 不调用 `paper_resource` Service，也不访问
+PDF 源站；因此 PDF 的超时、404 或格式异常不会阻塞详情与摘要。
 
-`pdfResource` 契约示例：
-
-```json
-{
-  "url": "https://openreview.net/pdf?id=note-123",
-  "provider": "openreview",
-  "status": "available",
-  "reason": null
-}
-```
-
-不可用原因目前为 `invalid_pdf_url`、`request_timeout`、`resource_unavailable`、
-`invalid_content_type` 或 `pdf_too_large`。资源不可用只改变 `pdfResource.status`，
-不会把成功的论文详情请求转为错误响应。
+用户首次打开 Paper 视图时，PDF.js 才请求 ShenZhi 同源的
+`GET /api/v1/paper-resource/pdf?paperId=...` 端点。该端点通过 `paperId` 再取可信详情，
+随后使用 `PaperResourceService` 按 Provider 解析与打开资源：OpenReview Provider 负责来源
+识别和论坛链接转换，HTTP Provider 负责超时、Content-Type、大小限制及流式读取。
+端点不接受任意 URL，并透传合法的单段 Range。Backend 不保存或缓存 PDF，
+也不创建下载任务。
 
 Search 请求使用 `query`、`topK`、`offset`、`yearFrom`、`yearTo`、`venue`、
 `author`、`keyword`、`subject`。论文检索页固定 `topK=20`，并按

@@ -15,12 +15,10 @@ from app.core.request_context import get_request_id
 from app.core.responses import ok
 from app.schemas.knowledge import KnowledgeError, KnowledgeSearchRequest
 from app.services.knowledge import KnowledgeService, KnowledgeServiceError
-from app.services.paper_resource import PaperResourceService
 
 
 router = APIRouter(prefix='/api/v1/knowledge', tags=['knowledge'])
 service = KnowledgeService()
-paper_resource_service = PaperResourceService()
 logger = logging.getLogger(__name__)
 
 
@@ -118,8 +116,6 @@ async def paper(
         return _error_payload(error, request)
     except Exception as error:
         return unknown_error(request, error)
-    resource = await paper_resource_service.resolve_paper_resource(response.pdf_url)
-    response = response.model_copy(update={'pdf_resource': resource})
     return ok(response.model_dump(mode='json', by_alias=True))
 
 

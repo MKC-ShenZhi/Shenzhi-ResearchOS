@@ -14,7 +14,6 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { PaperResource } from "@/clients/knowledge";
 import { apiPath } from "@/clients/backend/http";
 import { cn } from "@/lib/utils";
 import { paperExternalUrl } from "@/lib/navigation/paper";
@@ -84,21 +83,16 @@ function textRangesOverlap(left: PdfTextRange, right: PdfTextRange) {
 export function PaperPdfViewer({
   paperId,
   pdfUrl,
-  resource,
   title,
 }: {
   paperId: string;
   pdfUrl: string | null;
-  resource: PaperResource | null;
   title: string;
 }) {
-  const resourceUrl = resource?.status === "available"
-    ? paperExternalUrl(resource.url)
-    : null;
-  const externalUrl = paperExternalUrl(resource?.url ?? pdfUrl);
+  const externalUrl = paperExternalUrl(pdfUrl);
   const [state, setState] = useState<ViewerState>(() => {
     if (!pdfUrl) return "no_pdf";
-    return resourceUrl ? "loading" : "unavailable";
+    return "loading";
   });
   const [pageNumber, setPageNumber] = useState(1);
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -157,13 +151,13 @@ export function PaperPdfViewer({
     setSelectedColor("yellow");
     setPendingSelection(null);
     setHighlights([]);
-    setState(!pdfUrl ? "no_pdf" : resourceUrl ? "loading" : "unavailable");
-  }, [paperId, pdfUrl, retryKey, resourceUrl]);
+    setState(!pdfUrl ? "no_pdf" : "loading");
+  }, [paperId, pdfUrl, retryKey]);
 
   const fittedWidth = Math.max(280, contentWidth - 32);
   const pageWidth = Math.round(fittedWidth * zoom);
   const isViewerState = state === "loading" || state === "rendering" || state === "ready";
-  const showViewer = Boolean(resourceUrl) && isViewerState;
+  const showViewer = Boolean(pdfUrl) && isViewerState;
   const hasDocument = state === "rendering" || state === "ready";
   const canNavigate = Boolean(numPages) && state === "ready";
 
@@ -434,7 +428,7 @@ export function PaperPdfViewer({
           {(state === "loading" || state === "rendering") && (
             <div className="pointer-events-none absolute inset-x-0 top-4 z-10 flex justify-center">
               <span role="status" className="inline-flex items-center gap-2 rounded-lg border border-line bg-card px-3 py-2 text-xs text-muted shadow-card">
-                <Loader2 className="size-3.5 animate-spin" /> {state === "loading" ? "正在加载 PDF…" : "正在渲染 PDF…"}
+                <Loader2 className="size-3.5 animate-spin" /> {state === "loading" ? "正在加载论文 PDF..." : "正在渲染论文 PDF..."}
               </span>
             </div>
           )}
@@ -454,7 +448,7 @@ export function PaperPdfViewer({
 
       {state === "unavailable" && (
         <StatePanel>
-          <p>PDF 暂时加载或渲染失败</p>
+          <p>当前论文暂无法在线加载 PDF</p>
           <Button variant="outline" size="sm" onClick={() => setRetryKey((current) => current + 1)}>
             重试
           </Button>

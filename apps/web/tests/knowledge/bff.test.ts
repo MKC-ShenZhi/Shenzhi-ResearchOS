@@ -81,12 +81,6 @@ test("BFF client requests Detail and Graph through same-origin routes", async ()
         venue: null,
         doi: null,
         pdfUrl: null,
-        pdfResource: {
-          url: null,
-          provider: "http",
-          status: "unavailable",
-          reason: "invalid_pdf_url",
-        },
         keywords: [],
         subjects: [],
         citationCount: null,
