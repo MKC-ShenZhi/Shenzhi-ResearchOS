@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import {
   ExternalLink,
   FileText,
@@ -17,7 +17,7 @@ const PdfDocumentView = dynamic(
   { ssr: false },
 );
 
-type ViewerState =
+export type ViewerState =
   | "loading"
   | "rendering"
   | "ready"
@@ -45,7 +45,7 @@ function StatePanel({
   icon?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-96 flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted">
+    <div className="mx-4 my-4 flex min-h-96 flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-line/70 bg-card/80 p-8 text-center text-sm text-muted">
       {icon}
       {children}
     </div>
@@ -56,10 +56,16 @@ export function PaperPdfViewer({
   paperId,
   pdfUrl,
   title,
+  zoom,
+  setZoom,
+  onViewerStateChange,
 }: {
   paperId: string;
   pdfUrl: string | null;
   title: string;
+  zoom: number;
+  setZoom: Dispatch<SetStateAction<number>>;
+  onViewerStateChange: (state: ViewerState) => void;
 }) {
   const externalUrl = paperExternalUrl(pdfUrl);
   const [state, setState] = useState<ViewerState>(() => {
@@ -67,13 +73,16 @@ export function PaperPdfViewer({
     return "loading";
   });
   const [numPages, setNumPages] = useState<number | null>(null);
-  const [zoom, setZoom] = useState(1);
   const [contentWidth, setContentWidth] = useState(0);
   const [retryKey, setRetryKey] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
   const pdfPath = apiPath(
     `/paper-resource/pdf?paperId=${encodeURIComponent(paperId)}`,
   );
+  const updateState = useCallback((nextState: ViewerState) => {
+    setState(nextState);
+    onViewerStateChange(nextState);
+  }, [onViewerStateChange]);
 
   useEffect(() => {
     const element = contentRef.current;
@@ -91,8 +100,8 @@ export function PaperPdfViewer({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNumPages(null);
     setZoom(1);
-    setState(!pdfUrl ? "no_pdf" : "loading");
-  }, [paperId, pdfUrl, retryKey]);
+    updateState(!pdfUrl ? "no_pdf" : "loading");
+  }, [paperId, pdfUrl, retryKey, setZoom, updateState]);
 
   const fittedWidth = Math.max(280, contentWidth - 32);
   const pageWidth = Math.round(fittedWidth * zoom);
@@ -114,26 +123,26 @@ export function PaperPdfViewer({
 
     element.addEventListener("wheel", handleWheel, { passive: false });
     return () => element.removeEventListener("wheel", handleWheel);
-  }, [showViewer]);
+  }, [setZoom, showViewer]);
 
   const handleDocumentLoad = useCallback(({ numPages: loadedPages }: { numPages: number }) => {
     setNumPages(loadedPages);
-    setState("ready");
-  }, []);
+    updateState("ready");
+  }, [updateState]);
 
   const handleDocumentError = useCallback((error: Error) => {
     const status = (error as Error & { status?: unknown }).status;
     if (status === 404) {
-      setState("no_pdf");
+      updateState("no_pdf");
     } else {
-      setState("unavailable");
+      updateState("unavailable");
     }
-  }, []);
+  }, [updateState]);
 
   return (
     <section
       aria-label={`${title} PDF 阅读区`}
-      className="flex h-[75dvh] min-h-96 flex-col overflow-hidden rounded-xl border border-line bg-card lg:h-full"
+      className="flex h-[75dvh] min-h-96 flex-col overflow-hidden bg-background lg:h-full"
     >
       {showViewer && (
         <div

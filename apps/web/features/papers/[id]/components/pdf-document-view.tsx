@@ -30,6 +30,8 @@ export function PdfDocumentView({
       <style>{`
         .pdf-viewer-page {
           position: relative;
+          background: #fff;
+          box-shadow: var(--shadow-card);
         }
 
         .pdf-viewer-page .textLayer {
