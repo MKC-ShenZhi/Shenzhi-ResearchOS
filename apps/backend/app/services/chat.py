@@ -608,11 +608,20 @@ async def stream_events(message: Message, cursor: int = 0):
         while True:
             # Clear before reading; an event arriving during wait always wakes us.
             message.changed.clear()
+            terminal_emitted = False
             while cursor < len(message.events):
                 event, data = message.events[cursor]
                 cursor += 1
                 yield f'id: {cursor}\nevent: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'
-            if message.status != 'streaming':
+                terminal_emitted = terminal_emitted or event == 'done'
+            if terminal_emitted:
+                break
+            # ``generate`` sets the persisted status before its final write and
+            # only emits ``done`` afterwards.  During that window the status is
+            # terminal but the SSE protocol is not.  Keep the connection open
+            # until the producer publishes the terminal acknowledgement.
+            if (message.status != 'streaming'
+                    and (message.task is None or message.task.done())):
                 break
             try:
                 await asyncio.wait_for(message.changed.wait(), timeout=15)

@@ -138,6 +138,33 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(terminal_logs[0][1]['message_id'], created['message_id'])
         self.assertEqual(terminal_logs[0][1]['error_type'], 'RuntimeError')
 
+    async def test_stream_waits_for_done_while_terminal_state_is_being_persisted(self):
+        created = await self.create(capabilities={'knowledge': {'enabled': False}})
+        persist_started = asyncio.Event()
+        release_persist = asyncio.Event()
+
+        async def delayed_persist(_message):
+            persist_started.set()
+            await release_persist.wait()
+
+        message = await repository.message(created['message_id'], OWNER_KEY)
+        with patch.object(repository, 'persist_message', side_effect=delayed_persist):
+            consumer = asyncio.create_task(
+                self.client.get(f"/api/v1/chat/messages/{message.id}/stream")
+            )
+            await asyncio.wait_for(persist_started.wait(), 1)
+            await asyncio.sleep(0)
+
+            self.assertEqual(message.status, 'done')
+            self.assertFalse(consumer.done(), 'SSE closed before the done event was emitted')
+
+            release_persist.set()
+            response = await asyncio.wait_for(consumer, 1)
+
+        stream = events(response.text)
+        self.assertEqual(stream[-1][0], 'done')
+        self.assertEqual(stream[-1][1]['status'], 'done')
+
     async def test_stop_persistence_failure_emits_failed_terminal_state(self):
         created = await self.create()
         message = await repository.message(created['message_id'], OWNER_KEY)
