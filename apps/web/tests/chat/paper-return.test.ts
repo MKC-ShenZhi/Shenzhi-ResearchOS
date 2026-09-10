@@ -224,6 +224,84 @@ test("Paper Detail loads the PDF only after opening Paper and keeps the viewer m
   assert.match(detailPage, /className=\{viewMode === "paper" \? "h-full" : "hidden"\}/);
   assert.doesNotMatch(detailPage, /paper-resource\/pdf\?paperId=/);
   assert.equal((pdf.match(/paper-resource\/pdf\?paperId=/g) ?? []).length, 1);
-  assert.match(pdf, /setState\(!pdfUrl \? "no_pdf" : "loading"\)/);
+  assert.match(pdf, /updateState\(!pdfUrl \? "no_pdf" : "loading"\)/);
   assert.match(pdf, /当前论文暂无法在线加载 PDF/);
+});
+
+test("PDF reader removes page and highlight controls while preserving TextLayer and local wheel zoom", () => {
+  const pdf = readFileSync("features/papers/[id]/components/paper-pdf-viewer.tsx", "utf8");
+  const documentView = readFileSync("features/papers/[id]/components/pdf-document-view.tsx", "utf8");
+  const topbar = readFileSync("features/papers/[id]/components/paper-topbar.tsx", "utf8");
+
+  assert.doesNotMatch(pdf, /pageNumber|pageInputValue|currentPageRef|pageRefs|scrollToPage|handlePageInputKeyDown|canNavigate/);
+  assert.doesNotMatch(pdf, /ChevronLeft|ChevronRight|Highlighter|PdfHighlight|PdfSelection|PdfTextRange|readPdfTextSelection|HIGHLIGHT_COLOR_OPTIONS/);
+  assert.match(topbar, /ZoomOut/);
+  assert.match(topbar, /ZoomIn/);
+  assert.match(topbar, /Download/);
+  assert.match(topbar, /aria-label="Zoom Out"/);
+  assert.match(topbar, /aria-label="Zoom In"/);
+  assert.match(topbar, /aria-label="Download PDF"/);
+  assert.match(topbar, /download="paper\.pdf"/);
+  assert.match(topbar, /aria-hidden/);
+  assert.match(topbar, /invisible/);
+  assert.doesNotMatch(`${topbar}\n${pdf}`, /fetch\(|blob|arrayBuffer|createObjectURL|File\(/);
+  assert.equal((pdf.match(/在新窗口打开 PDF/g) ?? []).length, 1);
+  assert.match(pdf, /contentRef/);
+  assert.match(pdf, /ctrlKey/);
+  assert.match(pdf, /metaKey/);
+  assert.match(pdf, /preventDefault/);
+  assert.match(pdf, /0\.75/);
+  assert.match(pdf, /2\.5/);
+
+  assert.match(documentView, /const pageNumbers/);
+  assert.match(documentView, /pageNumber=\{pageNumber\}/);
+  assert.match(documentView, /react-pdf\/dist\/Page\/TextLayer\.css/);
+  assert.match(documentView, /renderTextLayer=\{true\}/);
+  assert.match(documentView, /renderAnnotationLayer=\{false\}/);
+  assert.doesNotMatch(documentView, /PdfHighlight|pdfTextRangeToRects|highlightRects|ResizeObserver/);
+});
+
+test("Paper Detail uses a slim reader header and a proportional dual workspace", () => {
+  const detailPage = readFileSync("features/papers/[id]/PaperDetailPage.tsx", "utf8");
+  const topbar = readFileSync("features/papers/[id]/components/paper-topbar.tsx", "utf8");
+  const abstract = readFileSync("features/papers/[id]/components/paper-abstract-view.tsx", "utf8");
+  const rightPanel = readFileSync("features/papers/[id]/components/right-panel.tsx", "utf8");
+
+  assert.match(topbar, /h-14/);
+  assert.doesNotMatch(topbar, /paper\.title|paper\.authors|citationCount|referenceCount|paper\.doi/);
+  assert.match(abstract, /paper\.title/);
+  assert.match(abstract, /paper\.authors/);
+  assert.match(abstract, /paper\.citationCount/);
+  assert.match(abstract, /paper\.referenceCount/);
+  assert.match(detailPage, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(26rem,42%\)\]/);
+  assert.ok(detailPage.indexOf("lg:grid-cols-[minmax(0,1fr)_minmax(26rem,42%)]") < detailPage.indexOf("<PaperTopbar"));
+  assert.doesNotMatch(`${detailPage}\n${rightPanel}`, /lg:w-\[360px\]|xl:w-96/);
+  assert.match(rightPanel, /value="assistant"/);
+  assert.match(rightPanel, /value="notes"/);
+  assert.match(rightPanel, /value="similar"/);
+});
+
+test("Paper Assistant uses abstract-safe prompt cards and role-specific message surfaces", () => {
+  const assistant = readFileSync("features/papers/[id]/components/paper-assistant-panel.tsx", "utf8");
+
+  assert.match(assistant, /尚未读取 PDF 全文/);
+  assert.match(assistant, /grid-cols-2/);
+  assert.match(assistant, /这篇论文主要解决什么问题？/);
+  assert.match(assistant, /论文的核心贡献是什么？/);
+  assert.match(assistant, /作者采用了什么方法？/);
+  assert.match(assistant, /这篇论文的主要结论是什么？/);
+  assert.match(assistant, /bg-primary-soft/);
+  assert.doesNotMatch(assistant, /break-words rounded-xl bg-panel p-3/);
+});
+
+test("Paper controls share the page zoom state without moving PDF state ownership", () => {
+  const detailPage = readFileSync("features/papers/[id]/PaperDetailPage.tsx", "utf8");
+  const topbar = readFileSync("features/papers/[id]/components/paper-topbar.tsx", "utf8");
+  const pdf = readFileSync("features/papers/[id]/components/paper-pdf-viewer.tsx", "utf8");
+
+  assert.match(detailPage, /const \[zoom, setZoom\] = useState\(1\)/);
+  assert.match(topbar, /setZoom\(\(prev\) => Math\.max\(0\.75, prev - 0\.1\)\)/);
+  assert.match(topbar, /setZoom\(\(prev\) => Math\.min\(2\.5, prev \+ 0\.1\)\)/);
+  assert.doesNotMatch(pdf, /useState\(1\)/);
+  assert.match(pdf, /onViewerStateChange/);
 });
