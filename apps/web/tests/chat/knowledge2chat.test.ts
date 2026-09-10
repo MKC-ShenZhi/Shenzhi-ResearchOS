@@ -37,6 +37,16 @@ test("Chat request adapter maps smart-search UI mode to nested Knowledge capabil
     web_search: false,
     attachments: [],
   }).capabilities.knowledge.enabled, false);
+
+  assert.equal(conversation.chatInputFromComposer({
+    entryMode: "ai",
+    knowledgeEnabled: false,
+    question: "ordinary chat without knowledge",
+    mode: "fast",
+    model: "m",
+    web_search: false,
+    attachments: [],
+  }).capabilities.knowledge.enabled, false);
 });
 
 test("citation rendering keeps an unknown reference as ordinary text", () => {

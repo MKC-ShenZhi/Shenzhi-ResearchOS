@@ -16,13 +16,13 @@ export function beginTurn(sessionId: string | null, input: ChatSendInput, init?:
 }
 
 /** UI-only adapter: the Chat domain receives the nested capability contract. */
-export function capabilitiesForEntryMode(entryMode: ComposerEntryMode): ChatCapabilities {
-  return { knowledge: { enabled: entryMode === "ai" } };
+export function capabilitiesForEntryMode(entryMode: ComposerEntryMode, knowledgeEnabled?: boolean): ChatCapabilities {
+  return { knowledge: { enabled: knowledgeEnabled ?? entryMode === "ai" } };
 }
 
 export function chatInputFromComposer(payload: ComposerSubmitPayload): ChatSendInput {
-  const { entryMode, ...input } = payload;
-  return { ...input, capabilities: capabilitiesForEntryMode(entryMode) };
+  const { entryMode, knowledgeEnabled, ...input } = payload;
+  return { ...input, capabilities: capabilitiesForEntryMode(entryMode, knowledgeEnabled) };
 }
 
 export function restoreTurns(session: ChatSessionDetail): ChatTurn[] {

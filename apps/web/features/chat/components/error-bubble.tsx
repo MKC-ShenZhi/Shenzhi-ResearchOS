@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Copy, RotateCcw } from "lucide-react";
 
 function hintForError(message: string) {
   const lower = message.toLowerCase();
@@ -19,14 +20,17 @@ function hintForError(message: string) {
 /** Agent B 风格错误气泡 */
 export function ErrorBubble({
   message,
+  requestId,
   onResume,
   canResume,
 }: {
   message: string;
+  requestId?: string;
   onResume: () => void;
   canResume: boolean;
 }) {
   const hint = hintForError(message);
+  const [copyState, setCopyState] = useState("");
   return (
     <div className="rounded-2xl rounded-tl-md border border-red-200/70 bg-red-50/60 p-4 dark:border-red-900/50 dark:bg-red-950/30">
       <div className="mb-2 flex items-start gap-2">
@@ -38,6 +42,25 @@ export function ErrorBubble({
             <p className="mt-2 rounded-lg bg-white/70 p-2 text-[12px] leading-relaxed text-red-900/90 dark:bg-black/20 dark:text-red-100/90">
               {hint.action}
             </p>
+          )}
+          {requestId && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-red-800/80 dark:text-red-100/80">
+              <span>请求 ID：</span>
+              <code className="rounded bg-white/70 px-1.5 py-0.5 font-mono dark:bg-black/20">{requestId}</code>
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard.writeText(requestId).then(
+                    () => setCopyState("已复制"),
+                    () => setCopyState("复制失败"),
+                  );
+                }}
+                className="inline-flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 font-medium hover:bg-white/70 dark:hover:bg-black/20"
+              >
+                <Copy className="size-3" />
+                {copyState || "复制 ID"}
+              </button>
+            </div>
           )}
         </div>
       </div>

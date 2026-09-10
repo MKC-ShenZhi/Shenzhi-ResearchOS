@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from app.core.config import MAX_FILES, UPLOAD_ACCEPT, model_config
 from app.core.errors import BusinessError
 from app.core.identity import MigrationIdentity, migration_identity, request_owner, require_bff
+from app.core.request_context import get_request_id
 from app.core.responses import ok
 from app.schemas.chat import AnonymousClaimResult, CreateSessionBody, FollowupBody, UpdateSessionBody
 from app.services.chat import prepare_message, stop_message, stream_events
@@ -75,6 +76,8 @@ async def followup(session_id: str, body: FollowupBody, owner: str = Depends(req
 async def stream(message_id: str, owner: str = Depends(request_owner),
                  last_event_id: str | None = Header(default=None)):
     message = await repository.message(message_id, owner)
+    if message.status == 'streaming' and message.task is None:
+        message.stream_request_id = get_request_id()
     try:
         cursor = int(last_event_id or '0')
     except ValueError:
@@ -87,7 +90,9 @@ async def stream(message_id: str, owner: str = Depends(request_owner),
 
 @router.post('/messages/{message_id}/stop')
 async def stop(message_id: str, owner: str = Depends(request_owner)):
-    await stop_message(await repository.message(message_id, owner))
+    message = await repository.message(message_id, owner)
+    message.stop_request_id = get_request_id()
+    await stop_message(message)
     return ok({'ok': True})
 
 

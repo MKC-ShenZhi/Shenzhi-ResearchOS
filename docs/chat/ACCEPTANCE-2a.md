@@ -1,7 +1,8 @@
 # Chat 持久化 2a · 验收用例表
 
 基线：Backend 配置 `CHAT_DATABASE_URL`，单 worker；表已 `alembic upgrade head`。  
-判定：Pass / Fail / Skip；Fail 须附现象与复现步骤。
+判定：Pass / Fail / Skip；Fail 须附现象与复现步骤。  
+浏览器主路径（登录 / 迁移 / 账号隔离）按 [BROWSER-WALKTHROUGH.md](./BROWSER-WALKTHROUGH.md) 走，不在本表逐条展开。
 
 | ID | 前置 | 步骤 | 期望 | 等级 |
 | --- | --- | --- | --- | --- |
