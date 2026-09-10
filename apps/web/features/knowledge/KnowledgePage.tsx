@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AppShell } from "@/components/common/layout/app-shell";
 import { KnowledgeDashboard } from "@/features/knowledge/components/knowledge-dashboard";
 
@@ -5,7 +6,9 @@ import { KnowledgeDashboard } from "@/features/knowledge/components/knowledge-da
 export function KnowledgePage() {
   return (
     <AppShell>
-      <KnowledgeDashboard />
+      <Suspense fallback={<p className="p-8 text-sm text-muted">正在加载知识库…</p>}>
+        <KnowledgeDashboard />
+      </Suspense>
     </AppShell>
   );
 }

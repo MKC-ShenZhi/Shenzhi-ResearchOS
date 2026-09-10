@@ -1,13 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { KnowledgeClientError } from "@/clients/knowledge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useKnowledgePaper } from "@/features/knowledge/paper/use-knowledge-paper";
 import { KnowledgePaperSkeleton } from "@/features/knowledge/paper/components/paper-skeleton";
 import { normalizeInternalReturnTo } from "@/lib/navigation/internal-return-to";
-import { PaperTopbar } from "./components/paper-topbar";
+import { PaperBackButton, PaperTopbar } from "./components/paper-topbar";
 import { PaperAbstractView } from "./components/paper-abstract-view";
 import { PaperPdfViewer } from "./components/paper-pdf-viewer";
 import { PaperRightPanel } from "./components/right-panel";
@@ -30,7 +29,9 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
     <div className="flex min-h-dvh flex-col bg-background lg:h-dvh lg:overflow-hidden">
       {paper ? <PaperTopbar paper={paper} returnTo={safeReturnTo} /> : (
         <header className="border-b border-line bg-card px-5 py-4">
-          <Link href={safeReturnTo ?? "/knowledge/search"} className="text-sm text-primary">返回来源</Link>
+          <div className="text-sm text-primary">
+            <PaperBackButton returnTo={safeReturnTo} />
+          </div>
         </header>
       )}
       {isPending && <KnowledgePaperSkeleton />}
