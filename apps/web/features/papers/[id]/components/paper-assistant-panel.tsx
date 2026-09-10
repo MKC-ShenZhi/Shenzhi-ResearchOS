@@ -8,6 +8,13 @@ import { chatIdentityScope, type ChatIdentityScope } from "@/features/chat/servi
 import { MarkdownContent } from "@/features/chat/components/markdown-content";
 import { ErrorBubble } from "@/features/chat/components/error-bubble";
 
+const PAPER_PROMPTS = [
+  "这篇论文主要解决什么问题？",
+  "论文的核心贡献是什么？",
+  "作者采用了什么方法？",
+  "这篇论文的主要结论是什么？",
+];
+
 export function PaperAssistantPanel({ paper }: { paper: KnowledgePaperDetail }) {
   const { session, isPending } = useAuth();
   const identityScope = chatIdentityScope(session?.user.id);
@@ -53,13 +60,32 @@ function PaperAssistant({ paper, identityScope }: { paper: KnowledgePaperDetail;
         const node = event.currentTarget;
         nearBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
       }} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4" aria-label="论文问答消息" aria-busy={busy}>
-        {turns.length === 0 && <button disabled={disabled} onClick={() => submit("这篇论文主要解决什么问题？")} className="rounded-xl border border-line p-3 text-left text-sm text-primary disabled:opacity-50">这篇论文主要解决什么问题？</button>}
+        {turns.length === 0 && (
+          <div className="grid grid-cols-2 gap-2">
+            {PAPER_PROMPTS.map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                disabled={disabled}
+                onClick={() => submit(prompt)}
+                className="min-h-20 rounded-xl border border-line bg-card p-3 text-left text-sm leading-5 text-primary transition-colors hover:bg-primary-soft disabled:opacity-50"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        )}
         {turns.map((turn, index) => (
-          <div key={turn.localId} className="break-words rounded-xl bg-panel p-3 text-sm text-ink-2">
+          <div
+            key={turn.localId}
+            className={turn.role === "user"
+              ? "ml-auto max-w-[88%] break-words rounded-xl bg-primary-soft p-3 text-sm text-ink-2"
+              : "break-words text-sm leading-7 text-ink-2"}
+          >
             <p className="mb-2 text-xs font-semibold text-muted">{turn.role === "user" ? "你" : "Assistant"}</p>
             {turn.role === "user" ? <p className="whitespace-pre-wrap">{turn.content}</p> : <>
               {turn.content && <MarkdownContent text={turn.content} />}
-              {busy && turn.status === "streaming" && !turn.content && <p className="animate-pulse">正在读取论文资料并生成回答…</p>}
+              {busy && turn.status === "streaming" && !turn.content && <p className="animate-pulse">正在根据论文摘要生成回答…</p>}
               {turn.warnings.map((warning) => <p key={warning} className="mt-2 text-xs text-muted">{warning}</p>)}
               {turn.error && <ErrorBubble message={turn.error} requestId={turn.requestId} canResume={!disabled && index === turns.length - 1} onResume={() => void resumeLast()} />}
               {turn.status === "stopped" && <p className="mt-2 text-xs text-muted">已停止生成{index === turns.length - 1 && <button disabled={disabled} onClick={() => void resumeLast()} className="ml-2 text-primary">继续生成</button>}</p>}

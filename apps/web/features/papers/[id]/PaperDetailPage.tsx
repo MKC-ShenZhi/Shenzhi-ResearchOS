@@ -27,7 +27,7 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
 
   return (
     <div className="flex min-h-dvh flex-col bg-background lg:h-dvh lg:overflow-hidden">
-      {paper ? <PaperTopbar paper={paper} returnTo={safeReturnTo} /> : (
+      {!paper && (
         <header className="border-b border-line bg-card px-5 py-4">
           <div className="text-sm text-primary">
             <PaperBackButton returnTo={safeReturnTo} />
@@ -43,21 +43,20 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
         </div>
       )}
       {paper && (
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <main className="flex min-w-0 flex-1 flex-col p-3 lg:overflow-hidden lg:p-5">
-            <Tabs
-              value={viewMode}
-              onValueChange={handleViewModeChange}
-              className="flex min-h-0 flex-1 flex-col"
-            >
-              <TabsList
-                aria-label="论文内容"
-                className="w-fit shrink-0 rounded-xl border border-line bg-card p-1"
-              >
-                <TabsTrigger value="abstract">Abstract</TabsTrigger>
-                <TabsTrigger value="paper">Paper</TabsTrigger>
-              </TabsList>
-              <div className="mt-3 min-h-0 flex-1">
+        <Tabs
+          value={viewMode}
+          onValueChange={handleViewModeChange}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <PaperTopbar paper={paper} returnTo={safeReturnTo}>
+            <TabsList aria-label="论文内容" className="rounded-lg bg-transparent p-0">
+              <TabsTrigger value="abstract" className="px-2.5 py-1 text-xs">Abstract</TabsTrigger>
+              <TabsTrigger value="paper" className="px-2.5 py-1 text-xs">Paper</TabsTrigger>
+            </TabsList>
+          </PaperTopbar>
+          <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(26rem,42%)] lg:gap-3 lg:p-3">
+            <main className="min-h-0 min-w-0 lg:overflow-hidden">
+              <div className="h-full min-h-0">
                 {viewMode === "abstract" && (
                   <div role="tabpanel" aria-label="Abstract" className="h-full overflow-y-auto">
                     <PaperAbstractView key={`abstract-${paperId}`} paper={paper} />
@@ -79,10 +78,10 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
                   </div>
                 )}
               </div>
-            </Tabs>
-          </main>
-          <PaperRightPanel key={`assistant-${paperId}`} paper={paper} />
-        </div>
+            </main>
+            <PaperRightPanel key={`assistant-${paperId}`} paper={paper} />
+          </div>
+        </Tabs>
       )}
     </div>
   );
