@@ -60,9 +60,19 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
                 zoom={zoom}
                 setZoom={setZoom}
               >
-                <TabsList aria-label="论文内容" className="gap-0.5 rounded-lg bg-transparent p-0 sm:gap-1">
-                  <TabsTrigger value="abstract" className="px-1 py-1 text-xs sm:px-2.5">Abstract</TabsTrigger>
-                  <TabsTrigger value="paper" className="px-1 py-1 text-xs sm:px-2.5">Paper</TabsTrigger>
+                <TabsList aria-label="论文内容" className="h-10 shrink-0 gap-0.5 rounded-full bg-chip p-1">
+                  <TabsTrigger
+                    value="abstract"
+                    className="h-8 rounded-full px-3.5 text-base font-medium text-muted hover:bg-primary-soft hover:text-primary data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm sm:px-4"
+                  >
+                    Abstract
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="paper"
+                    className="h-8 rounded-full px-3.5 text-base font-medium text-muted hover:bg-primary-soft hover:text-primary data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm sm:px-4"
+                  >
+                    Paper
+                  </TabsTrigger>
                 </TabsList>
               </PaperTopbar>
               <main className="min-h-0 min-w-0 flex-1 lg:overflow-hidden">
