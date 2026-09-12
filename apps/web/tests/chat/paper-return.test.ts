@@ -228,7 +228,7 @@ test("Paper Detail loads the PDF only after opening Paper and keeps the viewer m
   assert.match(pdf, /当前论文暂无法在线加载 PDF/);
 });
 
-test("PDF reader removes page and highlight controls while preserving TextLayer and local wheel zoom", () => {
+test("PDF reader keeps only zoom and download controls without a hidden header slot", () => {
   const pdf = readFileSync("features/papers/[id]/components/paper-pdf-viewer.tsx", "utf8");
   const documentView = readFileSync("features/papers/[id]/components/pdf-document-view.tsx", "utf8");
   const topbar = readFileSync("features/papers/[id]/components/paper-topbar.tsx", "utf8");
@@ -242,8 +242,10 @@ test("PDF reader removes page and highlight controls while preserving TextLayer 
   assert.match(topbar, /aria-label="Zoom In"/);
   assert.match(topbar, /aria-label="Download PDF"/);
   assert.match(topbar, /download="paper\.pdf"/);
-  assert.match(topbar, /aria-hidden/);
-  assert.match(topbar, /invisible/);
+  assert.match(topbar, /controlsVisible && \(/);
+  assert.doesNotMatch(topbar, /aria-hidden/);
+  assert.doesNotMatch(topbar, /invisible/);
+  assert.doesNotMatch(topbar, /w-\[6\.5rem\]/);
   assert.doesNotMatch(`${topbar}\n${pdf}`, /fetch\(|blob|arrayBuffer|createObjectURL|File\(/);
   assert.equal((pdf.match(/在新窗口打开 PDF/g) ?? []).length, 1);
   assert.match(pdf, /contentRef/);
@@ -268,6 +270,11 @@ test("Paper Detail uses a slim reader header and a proportional dual workspace",
   const rightPanel = readFileSync("features/papers/[id]/components/right-panel.tsx", "utf8");
 
   assert.match(topbar, /h-14/);
+  assert.match(topbar, /grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/);
+  assert.match(topbar, /justify-self-center/);
+  assert.match(topbar, /ml-auto/);
+  assert.ok(topbar.indexOf(">{children}") < topbar.indexOf("controlsVisible && ("));
+  assert.ok(topbar.indexOf("controlsVisible && (") < topbar.indexOf("<Link"));
   assert.doesNotMatch(topbar, /paper\.title|paper\.authors|citationCount|referenceCount|paper\.doi/);
   assert.match(abstract, /paper\.title/);
   assert.match(abstract, /paper\.authors/);
@@ -279,6 +286,9 @@ test("Paper Detail uses a slim reader header and a proportional dual workspace",
   assert.match(rightPanel, /value="assistant"/);
   assert.match(rightPanel, /value="notes"/);
   assert.match(rightPanel, /value="similar"/);
+  assert.match(detailPage, /h-10 shrink-0 gap-0\.5 rounded-full bg-chip p-1/);
+  assert.match(detailPage, /h-8 rounded-full px-3\.5 text-base font-medium/);
+  assert.match(detailPage, /data-\[state=active\]:bg-card/);
 });
 
 test("Paper Assistant uses abstract-safe prompt cards and role-specific message surfaces", () => {
