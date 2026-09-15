@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.models.chat import Base  # noqa: E402
+from app.models import settings as _settings_models  # noqa: E402,F401
 
 config = context.config
 if config.config_file_name is not None:

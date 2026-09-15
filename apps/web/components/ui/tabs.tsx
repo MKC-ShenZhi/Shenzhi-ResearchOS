@@ -52,12 +52,31 @@ function Tabs({
   );
 }
 
-function TabsList({ className, ...props }: React.ComponentProps<"div">) {
+function TabsList({ className, onKeyDown, ...props }: React.ComponentProps<"div">) {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    onKeyDown?.(event);
+    if (event.defaultPrevented) return;
+    const tabs = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]:not(:disabled)'),
+    );
+    const current = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    if (current < 0) return;
+    let next = current;
+    if (event.key === "ArrowRight") next = (current + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") next = (current - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    tabs[next]?.focus();
+    tabs[next]?.click();
+  };
   return (
     <div
       data-slot="tabs-list"
       role="tablist"
       className={cn("inline-flex items-center gap-1", className)}
+      onKeyDown={handleKeyDown}
       {...props}
     />
   );
@@ -75,6 +94,7 @@ function TabsTrigger({
       type="button"
       role="tab"
       aria-selected={selected}
+      tabIndex={selected ? 0 : -1}
       data-state={selected ? "active" : "inactive"}
       data-slot="tabs-trigger"
       className={cn(
