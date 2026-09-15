@@ -23,7 +23,8 @@ export function useUserSettings() {
   const { session, isPending } = useAuth();
   const themeMode = useThemeStore((state) => state.mode);
   const setThemeMode = useThemeStore((state) => state.setMode);
-  const [locale, setLocaleState] = useState<SettingsLocale>(readLocalLocale);
+  // Match the server render first; hydrate the browser preference in the deferred effect below.
+  const [locale, setLocaleState] = useState<SettingsLocale>("zh-CN");
   const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
