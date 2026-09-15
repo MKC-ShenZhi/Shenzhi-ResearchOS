@@ -177,6 +177,8 @@ export interface ApiEnvelope<T> {
 /** Composer payload；Chat adapter 会补充 capabilities。 */
 export interface ComposerSubmitPayload {
   entryMode: "search" | "ai";
+  /** Chat-only capability toggle; independent from the page entry mode. */
+  knowledgeEnabled?: boolean;
   question: string;
   mode: ChatReplyMode;
   model: ChatModelId;

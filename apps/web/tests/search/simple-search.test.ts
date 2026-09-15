@@ -47,7 +47,10 @@ test("formal simple search uses Knowledge retrieval and paper result states", ()
   assert.match(RESULTS_SOURCE, /retry:\s*knowledgeQueryRetry/);
   assert.match(KNOWLEDGE_PAGE_SOURCE, /KnowledgeResultsSection/);
   assert.match(KNOWLEDGE_PAGE_SOURCE, /KnowledgeFilterPanel/);
-  assert.match(RESULT_CARD_SOURCE, /href=\{`\/knowledge\/search\/\$\{encodeURIComponent\(hit\.id\)\}`\}/);
+  assert.match(
+    RESULT_CARD_SOURCE,
+    /href=\{paperHref\(hit\.id, \{ mode: "create", source: returnTo \}\)\}/,
+  );
   assert.doesNotMatch(RESULTS_SOURCE, /深知 AI|思考完成|Reasoning|ModelProvider|引用 \[\d+\]/);
 });
 
@@ -64,5 +67,5 @@ test("smart search keeps the Knowledge2Chat adapter and Chat send path", () => {
   assert.match(AGENT_CHAT_SOURCE, /const request = chatInputFromComposer\(payload\)/);
   assert.match(AGENT_CHAT_SOURCE, /void send\(request\)/);
   assert.match(AGENT_CHAT_SOURCE, /setEntryMode\(payload\.entryMode\)/);
-  assert.match(AGENT_CHAT_SOURCE, /capabilitiesForEntryMode\("ai"\)/);
+  assert.match(AGENT_CHAT_SOURCE, /capabilitiesForEntryMode\("ai", knowledgeEnabled\)/);
 });

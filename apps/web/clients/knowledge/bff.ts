@@ -7,8 +7,8 @@ import type {
   KnowledgeGraph,
   KnowledgeGraphDepth,
   KnowledgePaperDetail,
-  KnowledgePaperHit,
   KnowledgeSearchParams,
+  KnowledgeSearchResponse,
 } from "./types";
 
 /**
@@ -65,13 +65,14 @@ function toKnowledgeError(error: unknown): KnowledgeClientError {
 }
 
 export class BffKnowledgeClient implements KnowledgeClient {
-  async search(params: KnowledgeSearchParams): Promise<{ results: KnowledgePaperHit[] }> {
+  async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {
     try {
-      return await apiJson<{ results: KnowledgePaperHit[] }>("/knowledge/search", {
+      return await apiJson<KnowledgeSearchResponse>("/knowledge/search", {
         method: "POST",
         body: JSON.stringify({
           query: params.query,
           topK: params.topK,
+          offset: params.offset,
           yearFrom: params.yearFrom,
           yearTo: params.yearTo,
           venue: params.venue,

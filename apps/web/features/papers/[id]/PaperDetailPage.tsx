@@ -1,73 +1,102 @@
-import { PaperTopbar } from "@/features/papers/[id]/components/paper-topbar";
-import { PaperLeftSidebar } from "@/features/papers/[id]/components/paper-left-sidebar";
-import { PaperRightPanel } from "@/features/papers/[id]/components/right-panel";
-import { PaperZoom } from "@/features/papers/[id]/components/paper-zoom";
-import { paperDetail } from "@/lib/data/paper-detail";
+"use client";
 
-/**
- * 论文详情页 `/papers/[id]` —— 对应「深知-论文详情页.svg」
- * 沉浸式阅读器布局(不使用全局侧边栏)
- */
-export function PaperDetailPage({ paperId }: { paperId: string }) {
-  // 原型阶段:任意 id 均展示 RDT-1B 详情(与 prototype_v1.html 行为一致)
-  const paper = { ...paperDetail, id: paperId || paperDetail.id };
+import { useState } from "react";
+import { KnowledgeClientError } from "@/clients/knowledge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useKnowledgePaper } from "@/features/knowledge/paper/use-knowledge-paper";
+import { KnowledgePaperSkeleton } from "@/features/knowledge/paper/components/paper-skeleton";
+import { normalizeInternalReturnTo } from "@/lib/navigation/internal-return-to";
+import { PaperBackButton, PaperTopbar } from "./components/paper-topbar";
+import { PaperAbstractView } from "./components/paper-abstract-view";
+import { PaperPdfViewer, type ViewerState } from "./components/paper-pdf-viewer";
+import { PaperRightPanel } from "./components/right-panel";
+
+type PaperViewMode = "abstract" | "paper";
+
+export function PaperDetailPage({ paperId, returnTo }: { paperId: string; returnTo?: string | null }) {
+  const { data: paper, isPending, isError, error, refetch } = useKnowledgePaper(paperId);
+  const safeReturnTo = normalizeInternalReturnTo(returnTo);
+  const [viewMode, setViewMode] = useState<PaperViewMode>("abstract");
+  const [hasOpenedPaper, setHasOpenedPaper] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [viewerState, setViewerState] = useState<ViewerState>("loading");
+
+  const handleViewModeChange = (nextMode: string) => {
+    if (nextMode !== "abstract" && nextMode !== "paper") return;
+    setViewMode(nextMode);
+    if (nextMode === "paper") setHasOpenedPaper(true);
+  };
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <PaperTopbar paperId={paper.id} title={paper.title} likes={paper.likes} />
-
-      <div className="flex min-h-0 flex-1">
-        <PaperLeftSidebar
-          toc={paper.toc}
-          current={paper.page.current}
-          total={paper.page.total}
-        />
-
-        {/* 正文:整页等比缩放,宽度随侧栏展开/收起填满可用空间 */}
-        <main className="min-w-0 flex-1 overflow-y-auto px-8 py-8">
-          <PaperZoom>
-            <article className="rounded-2xl bg-card p-10 shadow-card">
-            <h1 className="text-center text-[22px] font-bold leading-snug text-ink">
-              {paper.title}
-            </h1>
-            <p className="mt-4 text-center text-sm leading-relaxed text-muted">
-              {paper.authors.join(", ")}
-            </p>
-            <p className="mt-1.5 text-center text-xs text-faint">
-              {paper.affiliation}
-            </p>
-
-            <hr className="mx-auto mt-6 w-16 border-line" />
-
-            <h2
-              id="abstract"
-              className="mt-8 text-[17px] font-bold text-ink"
-            >
-              Abstract
-            </h2>
-            <p className="mt-3 text-justify text-[15px] leading-7 text-ink-2">
-              {paper.abstract}
-            </p>
-
-            <h2 id="intro" className="mt-8 text-[17px] font-bold text-ink">
-              1. Introduction
-            </h2>
-            <p className="mt-3 text-justify text-[15px] leading-7 text-ink-2">
-              {paper.introduction}
-            </p>
-
-            <figure className="mt-6">
-              <figcaption className="py-2 text-center text-xs text-faint">
-                Figure 1
-              </figcaption>
-              <div className="h-72 rounded-xl bg-panel" />
-            </figure>
-            </article>
-          </PaperZoom>
-        </main>
-
-        <PaperRightPanel />
-      </div>
+    <div className="flex min-h-dvh flex-col bg-background lg:h-dvh lg:overflow-hidden">
+      {!paper && (
+        <header className="border-b border-line bg-card px-5 py-4">
+          <div className="text-sm text-primary">
+            <PaperBackButton returnTo={safeReturnTo} />
+          </div>
+        </header>
+      )}
+      {isPending && <KnowledgePaperSkeleton />}
+      {isError && (
+        <div role="alert" className="p-8 text-center text-sm text-muted">
+          <p>{error instanceof KnowledgeClientError && error.code === "NOT_FOUND" ? "未找到这篇论文" : "论文详情加载失败"}</p>
+          <p className="mt-2">{error instanceof Error ? error.message : "请稍后重试"}</p>
+          <button onClick={() => void refetch()} className="mt-4 text-primary">重新加载</button>
+        </div>
+      )}
+      {paper && (
+        <Tabs
+          value={viewMode}
+          onValueChange={handleViewModeChange}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(26rem,42%)] lg:gap-3 lg:p-3">
+            <div className="flex min-h-0 min-w-0 flex-col lg:overflow-hidden">
+              <PaperTopbar
+                paper={paper}
+                returnTo={safeReturnTo}
+                viewMode={viewMode}
+                viewerState={!paper.pdfUrl ? "no_pdf" : viewerState}
+                zoom={zoom}
+                setZoom={setZoom}
+              >
+                <TabsList aria-label="论文内容" className="gap-0.5 rounded-lg bg-transparent p-0 sm:gap-1">
+                  <TabsTrigger value="abstract" className="px-1 py-1 text-xs sm:px-2.5">Abstract</TabsTrigger>
+                  <TabsTrigger value="paper" className="px-1 py-1 text-xs sm:px-2.5">Paper</TabsTrigger>
+                </TabsList>
+              </PaperTopbar>
+              <main className="min-h-0 min-w-0 flex-1 lg:overflow-hidden">
+                <div className="h-full min-h-0">
+                  {viewMode === "abstract" && (
+                    <div role="tabpanel" aria-label="Abstract" className="h-full overflow-y-auto">
+                      <PaperAbstractView key={`abstract-${paperId}`} paper={paper} />
+                    </div>
+                  )}
+                  {hasOpenedPaper && (
+                    <div
+                      role="tabpanel"
+                      aria-label="Paper"
+                      aria-hidden={viewMode !== "paper"}
+                      className={viewMode === "paper" ? "h-full" : "hidden"}
+                    >
+                      <PaperPdfViewer
+                        key={paperId}
+                        paperId={paperId}
+                        pdfUrl={paper.pdfUrl}
+                        title={paper.title}
+                        zoom={zoom}
+                        setZoom={setZoom}
+                        onViewerStateChange={setViewerState}
+                      />
+                    </div>
+                  )}
+                </div>
+              </main>
+            </div>
+            <PaperRightPanel key={`assistant-${paperId}`} paper={paper} />
+          </div>
+        </Tabs>
+      )}
     </div>
   );
 }

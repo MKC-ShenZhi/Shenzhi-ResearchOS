@@ -24,6 +24,7 @@ export interface ChatTurn {
   lastEventId?: string;
   resumeFromStreaming?: boolean;
   error?: string;
+  requestId?: string;
   knowledgeGrounding?: KnowledgeGroundingState;
 }
 
@@ -32,6 +33,7 @@ export interface ChatSessionPreferences {
   model: ChatModelId;
   webSearch: boolean;
   entryMode: "search" | "ai";
+  knowledgeEnabled: boolean;
 }
 
 export interface ChatSendInput {

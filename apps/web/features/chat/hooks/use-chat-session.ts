@@ -6,7 +6,7 @@ import { getChatSession, resumeChatMessage, stopChatMessage, streamChatMessage }
 import { useAskSidebarBridge } from "@/stores/ask-sidebar-bridge";
 import { beginTurn, restoreTurns } from "../services/conversation";
 import { clearAskDraft } from "../services/draft";
-import { isAbortError, isMissingSessionError, messageForApiError } from "../services/errors";
+import { isAbortError, isMissingSessionError, messageForApiError, requestIdForApiError } from "../services/errors";
 import { readCurrentSessionId } from "../services/session-url";
 import {
   deleteLocalAskSession,
@@ -22,6 +22,7 @@ import {
   type SessionGenerationHandle,
 } from "../services/session-hydration";
 import { transitionSessionNavigation } from "../services/session-navigation";
+import type { ChatIdentityScope } from "../services/identity-scope";
 import type { ChatSendInput, ChatSessionPreferences, ChatTurn } from "../types";
 import type { ChatMessageStatus, ChatModelId, ChatReplyMode } from "@/types/ai-search";
 
@@ -29,6 +30,8 @@ const newTurn = (role: ChatTurn["role"], content = ""): ChatTurn => ({
   localId: crypto.randomUUID(), role, content, reasoning: "", thought: "正在连接生成服务…",
   status: role === "user" ? "done" : "streaming", references: [], followups: [], warnings: [],
 });
+
+const ignoreWorkspaceUpdate = () => {};
 
 const PHASES: Record<string, string> = {
   retrieving: "正在检索", web_search: "正在联网搜索", generating: "正在生成", followups: "正在生成追问",
@@ -45,6 +48,9 @@ function isLatestUrlEffect(lifecycle: { current: number }, effectId: number): bo
 }
 
 interface ChatSessionOptions {
+  /** Reuse session/stream lifecycle without the main Chat URL, sidebar or draft. */
+  embedded?: boolean;
+  identityScope: ChatIdentityScope;
   initialSessionId?: string | null;
   /** Reactive App Router identity. `null` is the explicit no-session route. */
   desiredSessionId?: string | null;
@@ -60,16 +66,18 @@ interface PendingCreate {
 type TurnsUpdater = ChatTurn[] | ((previous: ChatTurn[]) => ChatTurn[]);
 
 export function useChatSession({
+  identityScope,
+  embedded = false,
   initialSessionId = null,
   desiredSessionId,
   onSessionIdChange,
-}: ChatSessionOptions = {}) {
+}: ChatSessionOptions) {
   const pathname = usePathname();
   // This is a mount-time continuity bootstrap only. Runtime route changes are
   // supplied by ChatWorkspace through desiredSessionId, so a render cannot
   // observe window.location before Next's HistoryUpdater commits it.
   const [bootstrapSessionId] = useState<string | null>(
-    () => readCurrentSessionId() ?? initialSessionId ?? null,
+    () => embedded ? null : readCurrentSessionId() ?? initialSessionId ?? null,
   );
   const routeIdentity = desiredSessionId !== undefined
     ? desiredSessionId
@@ -101,12 +109,16 @@ export function useChatSession({
   const currentMessageId = useRef<string | null>(null);
   const lastInput = useRef<ChatSendInput | null>(null);
   const pendingCreate = useRef<PendingCreate | null>(null);
+  // A user can stop after the UI becomes busy but before create-session has
+  // returned its server message ID. Keep that intent until `send` can retire
+  // the durable message instead of making the button appear unresponsive.
+  const stopAfterCreate = useRef<SessionGenerationHandle | null>(null);
   const turnsRef = useRef<ChatTurn[]>([]);
   const handledUrlSessionId = useRef<string | null | undefined>(undefined);
   const handledPendingActionId = useRef<number | null>(null);
   const urlEffectLifecycle = useRef(0);
   const onSessionIdChangeRef = useRef(onSessionIdChange);
-  const pendingAction = useAskSidebarBridge((s) => s.pendingAction);
+  const pendingAction = useAskSidebarBridge((s) => embedded ? null : s.pendingAction);
   const pendingActionRef = useRef(pendingAction);
   const pathnameRef = useRef(pathname);
 
@@ -114,11 +126,11 @@ export function useChatSession({
   pendingActionRef.current = pendingAction;
   pathnameRef.current = pathname;
 
-  const setActiveHistoryId = useAskSidebarBridge((s) => s.setActiveHistoryId);
-  const setActiveSessionId = useAskSidebarBridge((s) => s.setActiveSessionId);
-  const removeHistoryItem = useAskSidebarBridge((s) => s.removeHistoryItem);
-  const clearPending = useAskSidebarBridge((s) => s.clearPending);
-  const bumpHistoryRefresh = useAskSidebarBridge((s) => s.bumpHistoryRefresh);
+  const setActiveHistoryId = useAskSidebarBridge((s) => embedded ? ignoreWorkspaceUpdate : s.setActiveHistoryId);
+  const setActiveSessionId = useAskSidebarBridge((s) => embedded ? ignoreWorkspaceUpdate : s.setActiveSessionId);
+  const removeHistoryItem = useAskSidebarBridge((s) => embedded ? ignoreWorkspaceUpdate : s.removeHistoryItem);
+  const clearPending = useAskSidebarBridge((s) => embedded ? ignoreWorkspaceUpdate : s.clearPending);
+  const bumpHistoryRefresh = useAskSidebarBridge((s) => embedded ? ignoreWorkspaceUpdate : s.bumpHistoryRefresh);
 
   const setBusyValue = useCallback((value: boolean) => {
     busyRef.current = value;
@@ -175,6 +187,7 @@ export function useChatSession({
     activeGenerationRef.current = null;
     currentMessageId.current = null;
     pendingCreate.current = null;
+    stopAfterCreate.current = null;
     setBusyValue(false);
     setHydration(false);
 
@@ -220,6 +233,7 @@ export function useChatSession({
     if (abortRef.current === generation.controller) abortRef.current = null;
     currentMessageId.current = null;
     if (pendingCreate.current?.generation === generation) pendingCreate.current = null;
+    if (stopAfterCreate.current === generation) stopAfterCreate.current = null;
     setBusyValue(false);
     setHydration(false);
     setInteraction(false);
@@ -245,6 +259,9 @@ export function useChatSession({
     let finalStatus: ChatMessageStatus | undefined;
     try {
       await streamChatMessage(messageId, {
+        onRequestId: (requestId) => {
+          if (active() && requestId) patch(localId, { requestId });
+        },
         onMeta: (meta) => {
           if (!active()) return;
           patch(localId, {
@@ -284,7 +301,11 @@ export function useChatSession({
       // stream failure, and stale aborts are intentionally silent.
       if (active() && !isAbortError(error)) {
         finalStatus = "failed";
-        patch(localId, { status: "failed", error: messageForApiError(error) });
+        patch(localId, {
+          status: "failed",
+          error: messageForApiError(error),
+          ...(requestIdForApiError(error) ? { requestId: requestIdForApiError(error) } : {}),
+        });
       }
     }
     return finalStatus;
@@ -292,11 +313,11 @@ export function useChatSession({
 
   /** 仅在后端未分配 session_id 时写入 localStorage。 */
   const persistLocalFallback = useCallback((input: ChatSendInput, nextTurns: ChatTurn[]) => {
-    if (sessionRef.current) return;
+    if (embedded || sessionRef.current) return;
     const id = localHistoryIdRef.current ?? `local_${Date.now().toString(36)}`;
     if (!localHistoryIdRef.current) setLocalId(id);
     const firstUser = nextTurns.find((turn) => turn.role === "user");
-    upsertLocalAskSession({
+    upsertLocalAskSession(identityScope, {
       id,
       title: titleFromQuestion(firstUser?.content ?? input.question),
       updatedAt: Date.now(),
@@ -307,7 +328,7 @@ export function useChatSession({
       knowledge_enabled: input.capabilities.knowledge.enabled,
     });
     bumpHistoryRefresh();
-  }, [bumpHistoryRefresh, setLocalId]);
+  }, [bumpHistoryRefresh, embedded, identityScope, setLocalId]);
 
   const send = useCallback(async (input: ChatSendInput) => {
     const question = input.question.trim();
@@ -334,14 +355,34 @@ export function useChatSession({
       }
       if (pendingCreate.current?.generation === generation) pendingCreate.current = null;
       setActiveSession(created.session_id);
-      if (retiringLocalId) deleteLocalAskSession(retiringLocalId);
+      if (retiringLocalId) deleteLocalAskSession(identityScope, retiringLocalId);
       patch(assistant.localId, { messageId: created.message_id });
-      clearAskDraft();
+      if (!embedded) clearAskDraft();
+      if (stopAfterCreate.current === generation) {
+        currentMessageId.current = created.message_id;
+        try {
+          await stopChatMessage(created.message_id);
+          patch(assistant.localId, { status: "stopped", thought: "已停止" });
+          finalStatus = "stopped";
+        } catch (error) {
+          finalStatus = "failed";
+          patch(assistant.localId, {
+            status: "failed",
+            error: `停止请求未确认：${messageForApiError(error)}`,
+            ...(requestIdForApiError(error) ? { requestId: requestIdForApiError(error) } : {}),
+          });
+        }
+        return;
+      }
       finalStatus = await runStream(generation, created.message_id, assistant.localId);
     } catch (error) {
       if (generation.isCurrent() && !isAbortError(error)) {
         finalStatus = "failed";
-        patch(assistant.localId, { status: "failed", error: messageForApiError(error) });
+        patch(assistant.localId, {
+          status: "failed",
+          error: messageForApiError(error),
+          ...(requestIdForApiError(error) ? { requestId: requestIdForApiError(error) } : {}),
+        });
         if (!sessionRef.current) persistLocalFallback(input, turnsRef.current);
       }
     } finally {
@@ -349,58 +390,89 @@ export function useChatSession({
       if (pendingCreate.current?.generation === generation) pendingCreate.current = null;
       finishGeneration(generation, finalStatus ?? "failed");
     }
-  }, [finishGeneration, patch, persistLocalFallback, runStream, setActiveSession, setBusyValue, setLocalId, startGeneration, writeTurns]);
+  }, [embedded, finishGeneration, identityScope, patch, persistLocalFallback, runStream, setActiveSession, setBusyValue, setLocalId, startGeneration, writeTurns]);
 
   const stop = useCallback(async () => {
-    if (!busyRef.current && !pendingCreate.current && !currentMessageId.current) return;
+    // `busy` renders the stop button, while these refs own the actual
+    // request.  During the short create -> stream hand-off React can render
+    // busy before `currentMessageId` is populated, so retain the turn as a
+    // second source of truth instead of silently dropping the click.
+    const streamingTurn = [...turnsRef.current].reverse().find(
+      (turn) => turn.role === "assistant" && turn.status === "streaming",
+    );
+    const streamingMessageId = streamingTurn?.messageId;
+    if (!busyRef.current && !pendingCreate.current && !currentMessageId.current && !streamingTurn) return;
 
-    const messageIdBeforeStop = currentMessageId.current;
+    let messageId = currentMessageId.current ?? streamingMessageId;
+    const activeGeneration = activeGenerationRef.current;
+    const generation = activeGeneration ?? { isCurrent: () => false };
     const pendingBeforeStop = pendingCreate.current;
-    const generation = startGeneration(sessionRef.current, { stopBackend: false });
-    let messageId = messageIdBeforeStop;
-    setBusyValue(false);
     setInteraction(true);
-    setPhase("STOPPED");
-    writeTurns((previous) => previous.map((turn) => turn.status === "streaming"
-      ? { ...turn, status: "stopped", thought: "已停止" }
-      : turn));
+    let confirmed = false;
+    let deferred = false;
 
     try {
-      if (pendingBeforeStop) {
-        try {
-          const created = await pendingBeforeStop.request;
-          if (!generation.isCurrent()) {
-            await stopChatMessage(created.message_id).catch(() => {});
-            return;
-          }
-          messageId = created.message_id;
-          setActiveSession(created.session_id);
-          patch(pendingBeforeStop.localId, { messageId, status: "stopped" });
-        } catch {
-          // An aborted create request may never allocate a server message.
+      if (!messageId && pendingBeforeStop && activeGeneration === pendingBeforeStop.generation) {
+        stopAfterCreate.current = activeGeneration;
+        setBusyValue(false);
+        patch(pendingBeforeStop.localId, { status: "stopped", thought: "已停止" });
+        setPhase("STOPPED");
+        deferred = true;
+        return;
+      }
+      if (messageId) {
+        // Start the independent POST first, then retire SSE immediately.
+        // Waiting for /stop left the visible button active for the entire
+        // upstream generation whenever a proxy delayed the request.  The
+        // request has no generation AbortSignal, so the following cleanup
+        // cannot cancel it; the backend also observes the SSE disconnect.
+        const stopRequest = stopChatMessage(messageId);
+        if (generation.isCurrent() && lastInput.current && !sessionRef.current) {
+          persistLocalFallback(lastInput.current, turnsRef.current);
         }
-      }
-      if (generation.isCurrent() && messageId) {
-        await stopChatMessage(messageId, { signal: generation.controller.signal });
-      }
-      if (generation.isCurrent() && lastInput.current && !sessionRef.current) {
-        persistLocalFallback(lastInput.current, turnsRef.current);
+        invalidateGeneration({ stopBackend: false });
+        writeTurns((previous) => previous.map((turn) => turn.messageId === messageId
+          ? { ...turn, status: "stopped", thought: "已停止" }
+          : turn));
+        setPhase("STOPPED");
+        await stopRequest;
+        confirmed = true;
       }
     } catch (error) {
-      if (generation.isCurrent() && !isAbortError(error)) {
+      if (!isAbortError(error)) {
         writeTurns((previous) => previous.map((turn) => turn.messageId === messageId
-          ? { ...turn, error: `停止请求未确认：${messageForApiError(error)}` } : turn));
+          ? {
+              ...turn,
+              error: `停止请求未确认：${messageForApiError(error)}`,
+              ...(requestIdForApiError(error) ? { requestId: requestIdForApiError(error) } : {}),
+            } : turn));
       }
     } finally {
-      if (!generation.isCurrent()) return;
-      finishGeneration(generation, "stopped", "STOPPED");
+      if (deferred) {
+        setInteraction(false);
+        return;
+      }
+      // A deferred stop lets `send` finish creation and retire the server
+      // message. All other no-ID paths own no durable generation.
+      if (!messageId && stopAfterCreate.current !== activeGeneration) {
+        invalidateGeneration({ stopBackend: false });
+      }
+      if (confirmed) {
+        writeTurns((previous) => previous.map((turn) => turn.messageId === messageId
+          ? { ...turn, status: "stopped", thought: "已停止" }
+          : turn));
+        setPhase("STOPPED");
+      } else {
+        setPhase("FAILED");
+      }
+      setInteraction(false);
     }
-  }, [finishGeneration, patch, persistLocalFallback, setActiveSession, setBusyValue, setInteraction, startGeneration, writeTurns]);
+  }, [invalidateGeneration, patch, persistLocalFallback, setActiveSession, setInteraction, writeTurns]);
 
   const resumeLast = useCallback(async () => {
     if (busyRef.current || hydratingRef.current || interactionLockedRef.current) return;
     const last = turnsRef.current.at(-1);
-    if (!last || !["stopped", "failed"].includes(last.status)) return;
+    if (!last || !["done", "stopped", "failed"].includes(last.status)) return;
     if (!last.messageId) {
       if (lastInput.current) {
         writeTurns((previous) => previous.slice(0, -2));
@@ -435,8 +507,13 @@ export function useChatSession({
           resend = lastInput.current;
           finalStatus = "failed";
         } else {
-          finalStatus = "failed";
-          patch(last.localId, { status: "failed", error: messageForApiError(error) });
+          finalStatus = last.status === "done" ? "done" : "failed";
+          patch(last.localId, {
+            status: last.status === "done" ? "done" : "failed",
+            ...(last.status === "done" ? { thought: "生成结束" } : {}),
+            error: messageForApiError(error),
+            ...(requestIdForApiError(error) ? { requestId: requestIdForApiError(error) } : {}),
+          });
         }
       }
     } finally {
@@ -486,7 +563,8 @@ export function useChatSession({
         mode: session.mode,
         model: session.model,
         webSearch: session.web_search,
-        entryMode: session.capabilities?.knowledge.enabled ? "ai" : "search",
+        entryMode: "ai",
+        knowledgeEnabled: session.capabilities?.knowledge.enabled ?? false,
       };
       const restored = restoreTurns(session);
       const latestUser = [...restored].reverse().find((turn) => turn.role === "user");
@@ -499,7 +577,7 @@ export function useChatSession({
           model: preferences.model,
           web_search: preferences.webSearch,
           attachments: [],
-          capabilities: { knowledge: { enabled: preferences.entryMode === "ai" } },
+          capabilities: { knowledge: { enabled: preferences.knowledgeEnabled } },
         };
       }
       // A successful hydration reasserts the canonical URL. This is a no-op
@@ -558,7 +636,8 @@ export function useChatSession({
       mode: item.mode as ChatReplyMode,
       model: item.model as ChatModelId,
       webSearch: item.web_search,
-      entryMode: item.knowledge_enabled ? "ai" : "search",
+      entryMode: "ai",
+      knowledgeEnabled: item.knowledge_enabled ?? false,
     });
     writeTurns(restored);
     const firstUser = restored.find((turn) => turn.role === "user");
@@ -602,10 +681,10 @@ export function useChatSession({
     if (resolvedInitialSessionId) return;
 
     handledPendingActionId.current = pendingAction.requestId;
-    const local = getLocalAskSession(pendingAction.item.id);
+    const local = getLocalAskSession(identityScope, pendingAction.item.id);
     if (local) loadLocalSession(local);
     clearPending();
-  }, [clearPending, loadLocalSession, pathname, pendingAction, reset, resolvedInitialSessionId]);
+  }, [clearPending, identityScope, loadLocalSession, pathname, pendingAction, reset, resolvedInitialSessionId]);
 
   useEffect(() => {
     const effectId = ++urlEffectLifecycle.current;

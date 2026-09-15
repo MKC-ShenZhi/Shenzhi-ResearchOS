@@ -48,7 +48,7 @@ test("only valid citations become cited sources, with duplicates removed", () =>
   assert.deepEqual(cited, ["1"]);
   assert.equal(cited.length, 1);
   assert.equal(references.length, 10);
-  assert.equal(paperReferenceHref(references[0]), "/knowledge/search/opaque-1");
+  assert.equal(paperReferenceHref(references[0]), "/papers/opaque-1");
   assert.equal(
     paperReferenceHref({ ...references[0], resourceType: "web" }),
     null,

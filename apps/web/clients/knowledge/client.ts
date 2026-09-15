@@ -6,8 +6,8 @@ import type {
   KnowledgeGraphDepth,
   KnowledgeGraph,
   KnowledgePaperDetail,
-  KnowledgePaperHit,
   KnowledgeSearchParams,
+  KnowledgeSearchResponse,
 } from "./types";
 
 /**
@@ -19,7 +19,7 @@ import type {
  */
 export interface KnowledgeClient {
   /** 论文搜索；无匹配返回空 results（不是错误） */
-  search(params: KnowledgeSearchParams): Promise<{ results: KnowledgePaperHit[] }>;
+  search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse>;
   /** 论文详情；id 作为 opaque string 使用 */
   paper(paperId: string): Promise<KnowledgePaperDetail>;
   /** 论文关系图谱；默认 depth=1 */

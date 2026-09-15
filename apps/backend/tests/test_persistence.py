@@ -3,12 +3,13 @@ import asyncio
 import os
 import unittest
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
 from app.core.errors import BusinessError
 from app.core.database import session_scope
-from app.models.chat import ChatMessageRow
+from app.models.chat import ChatMessageRow, ChatSessionRow
 from app.services.postgres_sessions import PostgresSessionRepository
 from app.services.sessions import MemorySessionRepository
 
@@ -42,6 +43,9 @@ class PostgresPersistenceTests(unittest.IsolatedAsyncioTestCase):
 
         detail = await self.repo.get(session.id, 'user:a')
         self.assertEqual(detail.messages[0].content, 'answer')
+        with self.assertRaises(BusinessError) as caught:
+            await self.repo.get(session.id, 'user:b')
+        self.assertEqual(caught.exception.status, 404)
 
     async def test_streaming_recover_marks_failed(self):
         session = await self.repo.create('user:a', 'q', {'type': 'ask', 'mode': 'fast', 'model': 'm', 'web_search': False})
@@ -115,6 +119,51 @@ class PostgresPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sorted((first['moved_count'], second['moved_count'])), [0, 1])
         self.assertEqual(len(await self.repo.list('user:a')), 1)
 
+    async def test_purge_expired_anonymous_sessions_keeps_users_and_recent_rows(self):
+        expired = await self.repo.create('anon:00000000-0000-4000-8000-000000000001', 'expired', {'mode': 'fast'})
+        expired_message = await self.repo.add_message(expired, 'expired', expired.settings)
+        expired_message.status = 'done'
+        await self.repo.persist_message(expired_message)
+        recent = await self.repo.create('anon:00000000-0000-4000-8000-000000000002', 'recent', {'mode': 'fast'})
+        user = await self.repo.create('user:a', 'user', {'mode': 'fast'})
+        async with session_scope() as db:
+            await db.execute(
+                ChatSessionRow.__table__.update()
+                .where(ChatSessionRow.id == uuid.UUID(expired.id))
+                .values(updated_at=datetime.now(timezone.utc) - timedelta(days=8))
+            )
+
+        deleted = await self.repo.purge_expired_anonymous_sessions(
+            datetime.now(timezone.utc) - timedelta(days=7)
+        )
+        self.assertEqual(deleted, 1)
+        self.assertEqual(await self.repo.list('anon:00000000-0000-4000-8000-000000000001'), [])
+        self.assertEqual(len(await self.repo.list('anon:00000000-0000-4000-8000-000000000002')), 1)
+        self.assertEqual(len(await self.repo.list('user:a')), 1)
+        async with session_scope() as db:
+            self.assertIsNone(await db.scalar(select(ChatMessageRow).where(
+                ChatMessageRow.id == uuid.UUID(expired_message.id)
+            )))
+        self.assertEqual(recent.owner, 'anon:00000000-0000-4000-8000-000000000002')
+        self.assertEqual(user.owner, 'user:a')
+
+    async def test_purge_expired_anonymous_sessions_keeps_active_streams(self):
+        owner = 'anon:00000000-0000-4000-8000-000000000001'
+        session = await self.repo.create(owner, 'active', {'mode': 'fast'})
+        message = await self.repo.add_message(session, 'active', session.settings)
+        async with session_scope() as db:
+            await db.execute(
+                ChatSessionRow.__table__.update()
+                .where(ChatSessionRow.id == uuid.UUID(session.id))
+                .values(updated_at=datetime.now(timezone.utc) - timedelta(days=8))
+            )
+
+        deleted = await self.repo.purge_expired_anonymous_sessions(
+            datetime.now(timezone.utc) - timedelta(days=7)
+        )
+        self.assertEqual(deleted, 0)
+        self.assertEqual((await self.repo.get(session.id, owner)).messages[0].id, message.id)
+
 
 class MemoryRepositoryAsyncTests(unittest.IsolatedAsyncioTestCase):
     async def test_async_wrapper_parity(self):
@@ -150,6 +199,10 @@ class MemoryRepositoryAsyncTests(unittest.IsolatedAsyncioTestCase):
             'durable': False,
         })
         self.assertEqual(len(await repo.list('anon:00000000-0000-4000-8000-000000000001')), 1)
+
+    async def test_memory_cleanup_is_explicit_noop(self):
+        repo = MemorySessionRepository()
+        self.assertEqual(await repo.purge_expired_anonymous_sessions(datetime.now(timezone.utc)), 0)
 
 
 if __name__ == '__main__':

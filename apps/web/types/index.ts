@@ -9,8 +9,9 @@ export interface FeedPaper {
   abstract: string;
   aiLink: string;
   tags: string[];
-  likes: number;
-  citations: number;
+  /** 仅在真实数据源提供时展示；发现页 Knowledge 搜索结果不伪造指标。 */
+  likes?: number;
+  citations?: number;
   thumb: string;
 }
 

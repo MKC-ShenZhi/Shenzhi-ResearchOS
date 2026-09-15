@@ -8,6 +8,7 @@ from pypdf import PdfWriter
 from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
 from app.core.config import ModelConfig
 from app.core.errors import BusinessError
+from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.schemas.chat import ChatAttachment
 from app.services.document_parser import parse_document, attachment_context
 from app.services.model_provider import ModelProvider, completion_payload, resolve_model
@@ -115,9 +116,89 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(json.loads(requests[0].content)['topic'], 'news')
         self.assertEqual(requests[1].url.params['format'], 'json')
         with patch.dict('os.environ', {}, clear=True):
-            items, warnings = await web_search('q')
+            items, warnings = await web_search(
+                'q',
+                transport=httpx.MockTransport(lambda request: httpx.Response(500)),
+            )
         self.assertEqual(items, [])
         self.assertTrue(warnings)
+
+
+class P2ObservabilityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_knowledge_client_records_completed_and_failed_external_requests(self):
+        records = []
+
+        def record(_logger, _level, event, fields):
+            records.append((event, fields))
+
+        with patch('app.integrations.knowledge.client.log_event', side_effect=record):
+            client = KnowledgeBaseClient(
+                base_url='https://knowledge.test',
+                transport=httpx.MockTransport(lambda request: httpx.Response(200, json={'results': []})),
+            )
+            await client.search({'query': 'q'})
+
+            failing = KnowledgeBaseClient(
+                base_url='https://knowledge.test',
+                transport=httpx.MockTransport(lambda request: httpx.Response(503)),
+            )
+            with self.assertRaises(Exception):
+                await failing.search({'query': 'q'})
+
+        self.assertEqual(records[0][0], 'knowledge.request.completed')
+        self.assertEqual(records[0][1]['provider'], 'knowledge_base')
+        self.assertEqual(records[0][1]['operation'], 'POST /api/retrieval/search')
+        self.assertNotIn('query', records[0][1])
+        self.assertEqual(records[1][0], 'knowledge.request.failed')
+        self.assertEqual(records[1][1]['status_code'], 503)
+
+    async def test_model_provider_records_stream_terminal_events_without_changing_errors(self):
+        records = []
+
+        def record(_logger, _level, event, fields):
+            records.append((event, fields))
+
+        with patch('app.services.model_provider.log_event', side_effect=record):
+            provider = ModelProvider(
+                CONFIG,
+                httpx.MockTransport(lambda request: httpx.Response(200, text='data: [DONE]\n\n')),
+            )
+            self.assertEqual([event async for event in provider.stream([], 'deepseek-chat', 'fast')], [])
+
+            failing = ModelProvider(
+                CONFIG,
+                httpx.MockTransport(lambda request: httpx.Response(503)),
+            )
+            with self.assertRaises(BusinessError):
+                _ = [event async for event in failing.stream([], 'deepseek-chat', 'fast')]
+
+        self.assertEqual(records[0][0], 'llm.request.completed')
+        self.assertEqual(records[0][1]['operation'], 'chat.completions.stream')
+        self.assertEqual(records[1][0], 'llm.request.failed')
+        self.assertEqual(records[1][1]['status_code'], 503)
+
+    async def test_web_search_records_provider_failure_and_fallback_completion(self):
+        records = []
+
+        def record(_logger, _level, event, fields):
+            records.append((event, fields))
+
+        def handler(request):
+            if request.url.host == 'api.tavily.com':
+                raise httpx.ReadTimeout('timeout', request=request)
+            return httpx.Response(200, json={'results': [{'title': 'Result', 'url': 'https://example.test'}]})
+
+        with patch.dict('os.environ', {'TAVILY_API_KEY': 'test', 'SEARXNG_BASE_URL': 'https://search.test'}), \
+             patch('app.services.web_search.log_event', side_effect=record):
+            items, _warnings = await web_search('q', transport=httpx.MockTransport(handler))
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual([event for event, _fields in records], [
+            'web_search.provider_failed',
+            'web_search.completed',
+        ])
+        self.assertEqual(records[0][1]['provider'], 'tavily')
+        self.assertEqual(records[1][1]['provider'], 'searxng')
 
 
 if __name__ == '__main__':

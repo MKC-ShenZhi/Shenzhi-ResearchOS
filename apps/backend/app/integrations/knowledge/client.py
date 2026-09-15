@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import os
+import logging
+from time import perf_counter
+from collections.abc import Callable
 from typing import Any, Mapping, cast
 
 import httpx
 
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
+from app.core.logging import log_event
 from app.integrations.knowledge.schemas import (
     UpstreamGraphResponse,
     UpstreamPaperResponse,
@@ -16,6 +20,7 @@ from app.integrations.knowledge.schemas import (
 
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
+logger = logging.getLogger(__name__)
 
 
 def _configured_timeout() -> float:
@@ -45,60 +50,94 @@ class KnowledgeBaseClient:
     async def search(self, payload: Mapping[str, Any]) -> UpstreamSearchResponse:
         """POST an already-adapted upstream search payload."""
         body = await self._request_json(
-            'POST', '/api/retrieval/search', json=dict(payload)
+            'POST',
+            '/api/retrieval/search',
+            json=dict(payload),
+            validate=lambda value: isinstance(value.get('results'), list),
         )
-        if not isinstance(body.get('results'), list):
-            raise KnowledgeIntegrationError.contract_violation()
         return cast(UpstreamSearchResponse, body)
 
     async def paper(self, paper_id: str) -> UpstreamPaperResponse:
         """GET an upstream paper detail using an opaque paper ID."""
         body = await self._request_json(
-            'GET', '/api/kg/paper', params={'paperId': paper_id}
+            'GET',
+            '/api/kg/paper',
+            params={'paperId': paper_id},
+            validate=lambda value: isinstance(value.get('paper_id'), str) and bool(value['paper_id'].strip()),
         )
-        if not isinstance(body.get('paper_id'), str) or not body['paper_id'].strip():
-            raise KnowledgeIntegrationError.contract_violation()
         return cast(UpstreamPaperResponse, body)
 
     async def graph(self, paper_id: str, depth: int = 1) -> UpstreamGraphResponse:
         """GET an upstream paper graph using an opaque paper ID."""
         body = await self._request_json(
-            'GET', '/api/kg/graph', params={'paperId': paper_id, 'depth': depth}
+            'GET',
+            '/api/kg/graph',
+            params={'paperId': paper_id, 'depth': depth},
+            validate=lambda value: (
+                isinstance(value.get('rootId'), str)
+                and bool(value['rootId'].strip())
+                and isinstance(value.get('nodes'), list)
+                and isinstance(value.get('lines'), list)
+            ),
         )
-        if not isinstance(body.get('rootId'), str) or not body['rootId'].strip():
-            raise KnowledgeIntegrationError.contract_violation()
-        if not isinstance(body.get('nodes'), list) or not isinstance(body.get('lines'), list):
-            raise KnowledgeIntegrationError.contract_violation()
         return cast(UpstreamGraphResponse, body)
 
-    async def _request_json(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        if not self.base_url:
-            raise KnowledgeIntegrationError.not_configured()
+    async def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        validate: Callable[[dict[str, Any]], bool] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        started_at = perf_counter()
+        response: httpx.Response | None = None
 
         try:
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
-                transport=self.transport,
-            ) as client:
-                response = await client.request(method, f'{self.base_url}{path}', **kwargs)
-        except httpx.TimeoutException as exc:
-            raise KnowledgeIntegrationError.timeout() from exc
-        except (httpx.ConnectError, httpx.NetworkError) as exc:
-            raise KnowledgeIntegrationError.connection_unavailable() from exc
-        except (httpx.InvalidURL, httpx.UnsupportedProtocol) as exc:
-            raise KnowledgeIntegrationError.invalid_configuration() from exc
-        except httpx.HTTPError as exc:
-            raise KnowledgeIntegrationError.request_failed() from exc
+            if not self.base_url:
+                raise KnowledgeIntegrationError.not_configured()
 
-        if response.status_code >= 400:
-            raise self._status_error(response.status_code)
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self.timeout,
+                    transport=self.transport,
+                ) as client:
+                    response = await client.request(method, f'{self.base_url}{path}', **kwargs)
+            except httpx.TimeoutException as exc:
+                raise KnowledgeIntegrationError.timeout() from exc
+            except (httpx.ConnectError, httpx.NetworkError) as exc:
+                raise KnowledgeIntegrationError.connection_unavailable() from exc
+            except (httpx.InvalidURL, httpx.UnsupportedProtocol) as exc:
+                raise KnowledgeIntegrationError.invalid_configuration() from exc
+            except httpx.HTTPError as exc:
+                raise KnowledgeIntegrationError.request_failed() from exc
 
-        try:
-            body = response.json()
-        except (TypeError, ValueError) as exc:
-            raise KnowledgeIntegrationError.contract_violation() from exc
-        if not isinstance(body, dict):
-            raise KnowledgeIntegrationError.contract_violation()
+            if response.status_code >= 400:
+                raise self._status_error(response.status_code)
+
+            try:
+                body = response.json()
+            except (TypeError, ValueError) as exc:
+                raise KnowledgeIntegrationError.contract_violation() from exc
+            if not isinstance(body, dict) or (validate is not None and not validate(body)):
+                raise KnowledgeIntegrationError.contract_violation()
+        except KnowledgeIntegrationError as error:
+            log_event(logger, logging.ERROR, 'knowledge.request.failed', {
+                'provider': 'knowledge_base',
+                'operation': f'{method} {path}',
+                'status_code': error.status_code,
+                'duration_ms': round((perf_counter() - started_at) * 1000),
+                'error_type': type(error).__name__,
+                'error_code': error.code,
+            })
+            raise
+
+        log_event(logger, logging.INFO, 'knowledge.request.completed', {
+            'provider': 'knowledge_base',
+            'operation': f'{method} {path}',
+            'status_code': response.status_code,
+            'duration_ms': round((perf_counter() - started_at) * 1000),
+        })
         return body
 
     @staticmethod

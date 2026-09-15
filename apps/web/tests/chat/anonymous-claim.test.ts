@@ -4,8 +4,11 @@ import test from "node:test";
 
 import { ApiError } from "../../clients/backend/http";
 import {
+  ANONYMOUS_CLAIM_MAX_ATTEMPTS,
   anonymousClaimAttemptUser,
   claimAnonymousSessions,
+  previewAnonymousSessions,
+  shouldRetryAnonymousClaim,
   shouldRefreshAfterAnonymousClaim,
 } from "../../features/chat/services/anonymous-claim";
 
@@ -47,6 +50,20 @@ test("claim client preserves backend failures and rejects malformed responses", 
   );
 });
 
+test("preview reads only a durable anonymous-session count", async () => {
+  const signal = new AbortController().signal;
+  const count = await previewAnonymousSessions(signal, async () => new Response(JSON.stringify({
+    code: 0, data: { count: 3 },
+  }), { status: 200 }));
+  assert.equal(count, 3);
+  await assert.rejects(
+    previewAnonymousSessions(signal, async () => new Response(JSON.stringify({
+      code: 0, data: { count: 1.5 },
+    }), { status: 200 })),
+    /无法检查匿名历史/,
+  );
+});
+
 test("coordinator attempts once per stable user and refreshes only after durable moves", () => {
   assert.equal(anonymousClaimAttemptUser(true, "user-1", null), null);
   assert.equal(anonymousClaimAttemptUser(false, undefined, null), null);
@@ -63,6 +80,18 @@ test("coordinator attempts once per stable user and refreshes only after durable
   assert.equal(shouldRefreshAfterAnonymousClaim({
     moved_count: 1, skipped_streaming_count: 0, durable: false,
   }), false);
+  assert.equal(shouldRetryAnonymousClaim({
+    moved_count: 0, skipped_streaming_count: 1, durable: true,
+  }, 1), true);
+  assert.equal(shouldRetryAnonymousClaim({
+    moved_count: 0, skipped_streaming_count: 0, durable: true,
+  }, 1), false);
+  assert.equal(shouldRetryAnonymousClaim({
+    moved_count: 0, skipped_streaming_count: 1, durable: false,
+  }, 1), false);
+  assert.equal(shouldRetryAnonymousClaim({
+    moved_count: 0, skipped_streaming_count: 1, durable: true,
+  }, ANONYMOUS_CLAIM_MAX_ATTEMPTS), false);
 
   const coordinator = readFileSync(
     "features/chat/components/anonymous-claim-coordinator.tsx",
@@ -70,5 +99,10 @@ test("coordinator attempts once per stable user and refreshes only after durable
   );
   assert.match(coordinator, /requestReset/);
   assert.match(coordinator, /bumpHistoryRefresh/);
+  assert.match(coordinator, /clearTimeout/);
+  assert.match(coordinator, /shouldRetryAnonymousClaim/);
+  assert.match(coordinator, /previewAnonymousSessions/);
+  assert.match(coordinator, /onClick=\{migrate\}/);
+  assert.match(coordinator, /暂不迁移/);
   assert.doesNotMatch(coordinator, /requestNewChat/);
 });

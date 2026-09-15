@@ -1,4 +1,9 @@
-import { optionalEnv, parseBooleanEnv } from "./env";
+import { optionalEnv, parseBooleanEnv, parsePositiveIntegerEnv } from "./env";
+
+export const ANONYMOUS_CHAT_TTL_SECONDS = parsePositiveIntegerEnv(
+  "CHAT_ANONYMOUS_TTL_SECONDS",
+  604800,
+);
 
 /**
  * FastAPI 业务后端根地址（仅服务端）。

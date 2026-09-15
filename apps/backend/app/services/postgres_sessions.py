@@ -208,7 +208,20 @@ class PostgresSessionRepository:
                 .where(ChatSessionRow.owner == owner)
                 .order_by(ChatSessionRow.favorite.desc(), ChatSessionRow.updated_at.desc())
             )
-        return [_session_from_row(row, []).public() for row in rows.all()]
+        sessions = [_session_from_row(row, []).public() for row in rows.all()]
+        await self.touch_owner(owner)
+        return sessions
+
+    async def touch_owner(self, owner: str) -> None:
+        """Renew the complete browser-local anonymous history after a successful read."""
+        if not owner.startswith('anon:'):
+            return
+        async with session_scope() as db:
+            await db.execute(
+                update(ChatSessionRow)
+                .where(ChatSessionRow.owner == owner)
+                .values(updated_at=func.now())
+            )
 
     async def update(self, session_id: str, owner: str, *, title: str | None = None,
                      favorite: bool | None = None) -> Session:
@@ -302,6 +315,32 @@ class PostgresSessionRepository:
             'skipped_streaming_count': int(skipped or 0),
             'durable': True,
         }
+
+    async def purge_expired_anonymous_sessions(self, cutoff: datetime) -> int:
+        """Remove only terminal, expired anonymous sessions; message rows cascade."""
+        streaming_exists = exists(
+            select(ChatMessageRow.id).where(
+                ChatMessageRow.session_id == ChatSessionRow.id,
+                ChatMessageRow.status == 'streaming',
+            )
+        )
+        async with session_scope() as db:
+            deleted = await db.scalars(
+                delete(ChatSessionRow)
+                .where(
+                    ChatSessionRow.owner.like('anon:%'),
+                    ChatSessionRow.updated_at < cutoff,
+                    ~streaming_exists,
+                )
+                .returning(ChatSessionRow.id)
+            )
+            session_ids = {str(session_id) for session_id in deleted.all()}
+        for message_id, message in list(self.messages.items()):
+            if message.session_id in session_ids:
+                if message.task and not message.task.done():
+                    message.task.cancel()
+                self._untrack(message_id)
+        return len(session_ids)
 
     def prune(self) -> None:
         cutoff = time.time() - self.ttl

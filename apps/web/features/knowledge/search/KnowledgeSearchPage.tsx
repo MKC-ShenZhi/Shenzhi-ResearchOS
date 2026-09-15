@@ -1,12 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/common/layout/app-shell";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { KnowledgeFilterPanel, type KnowledgeFilters } from "./components/filter-panel";
 import { KnowledgeResultsSection } from "./components/results-section";
 import { KnowledgeSearchHero } from "./components/search-hero";
+import {
+  KNOWLEDGE_SEARCH_PAGE_SIZE,
+  knowledgeSearchOffset,
+} from "./pagination";
 
 const EMPTY_FILTERS: KnowledgeFilters = {
   yearFrom: null,
@@ -23,17 +28,20 @@ const EMPTY_FILTERS: KnowledgeFilters = {
  * 业务链路：页面 → KnowledgeClient 接口 → Next.js BFF → FastAPI。
  * 页面只依赖 clients/knowledge 的契约类型与 Client 工厂。
  */
-export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: string }) {
+function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }) {
   const router = useRouter();
+  const returnTo = useCurrentInternalPath();
 
   const [query, setQuery] = useState(initialQuery);
   const [committedQuery, setCommittedQuery] = useState(initialQuery);
   const [filters, setFilters] = useState<KnowledgeFilters>(EMPTY_FILTERS);
+  const [page, setPage] = useState(1);
 
   /** 提交搜索：更新查询词并同步 URL */
   const submitSearch = (q: string) => {
     const text = q.trim();
     setCommittedQuery(text);
+    setPage(1);
     const next = new URLSearchParams();
     if (text) next.set("q", text);
     router.replace(`/knowledge/search?${next.toString()}`);
@@ -43,7 +51,8 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
     if (!committedQuery) return null;
     return {
       query: committedQuery,
-      topK: 20,
+      topK: KNOWLEDGE_SEARCH_PAGE_SIZE,
+      offset: knowledgeSearchOffset(page),
       yearFrom: filters.yearFrom,
       yearTo: filters.yearTo,
       venue: filters.venue,
@@ -51,7 +60,12 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
       keyword: filters.keyword,
       subject: filters.subject,
     };
-  }, [committedQuery, filters]);
+  }, [committedQuery, filters, page]);
+
+  const updateFilters = (nextFilters: KnowledgeFilters) => {
+    setFilters(nextFilters);
+    setPage(1);
+  };
 
   return (
     <AppShell>
@@ -67,7 +81,7 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
           <aside className="w-full shrink-0 lg:w-64">
             <KnowledgeFilterPanel
               filters={filters}
-              onChange={setFilters}
+              onChange={updateFilters}
               disabled={!committedQuery}
             />
           </aside>
@@ -75,7 +89,12 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
           {/* 结果区 */}
           <main className="min-w-0 flex-1">
             {searchParamsForQuery ? (
-              <KnowledgeResultsSection params={searchParamsForQuery} />
+              <KnowledgeResultsSection
+                params={searchParamsForQuery}
+                returnTo={returnTo}
+                page={page}
+                onPageChange={setPage}
+              />
             ) : (
               <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-line bg-card/40 px-6 text-center shadow-card">
                 <p className="text-sm font-medium text-ink-2">输入关键词开始检索论文</p>
@@ -88,5 +107,13 @@ export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: stri
         </div>
       </div>
     </AppShell>
+  );
+}
+
+export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: string }) {
+  return (
+    <Suspense fallback={<p className="p-8 text-sm text-muted">正在加载论文检索…</p>}>
+      <KnowledgeSearchContent initialQuery={initialQuery} />
+    </Suspense>
   );
 }

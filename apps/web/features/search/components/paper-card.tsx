@@ -5,6 +5,8 @@ import { motion } from "framer-motion";
 import { ArrowRight, Bookmark, Plus, ThumbsUp, TrendingUp, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { paperHref } from "@/lib/navigation/paper";
 import { useUserPreferences } from "@/stores/user-preferences";
 import type { FeedPaper } from "@/types";
 
@@ -20,6 +22,7 @@ export function PaperCard({
   index: number;
   layout?: "feed" | "explore";
 }) {
+  const returnTo = useCurrentInternalPath();
   const { likedPapers, bookmarkedPapers, toggleLike, toggleBookmark } =
     useUserPreferences();
   const liked = !!likedPapers[paper.id];
@@ -45,7 +48,7 @@ export function PaperCard({
           </div>
 
           {/* 标题 */}
-          <Link href={`/papers/${paper.id}`} className="group mt-2 block">
+          <Link href={paperHref(paper.id, { mode: "create", source: returnTo })} className="group mt-2 block">
             <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
               {paper.title}
             </h3>
@@ -58,7 +61,7 @@ export function PaperCard({
 
           {/* AI 解读入口 */}
           <Link
-            href={`/papers/${paper.id}`}
+            href={paperHref(paper.id, { mode: "create", source: returnTo })}
             className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
           >
             <Plus className="size-3.5" />
@@ -85,7 +88,7 @@ export function PaperCard({
                 }
               >
                 <ThumbsUp className="size-4" fill={liked ? "currentColor" : "none"} />
-                {paper.likes + (liked ? 1 : 0)}
+                {paper.likes !== undefined && paper.likes + (liked ? 1 : 0)}
               </button>
               <Button
                 variant="ghost"
@@ -97,7 +100,7 @@ export function PaperCard({
                 收藏
               </Button>
               {layout === "feed" && (
-                <Link href={`/papers/${paper.id}`}>
+                <Link href={paperHref(paper.id, { mode: "create", source: returnTo })}>
                   <Button size="sm" className="h-9 rounded-lg px-4 text-[13px]">
                     立即阅读
                     <ArrowRight className="size-3.5" />
@@ -110,10 +113,12 @@ export function PaperCard({
 
         {layout === "feed" && (
           <div className="relative hidden w-[200px] shrink-0 md:block">
-            <div className="absolute -top-2 right-2 z-10 flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs text-muted shadow-card">
-              <TrendingUp className="size-3 text-primary" />
-              引用 {paper.citations}
-            </div>
+            {paper.citations !== undefined && (
+              <div className="absolute -top-2 right-2 z-10 flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs text-muted shadow-card">
+                <TrendingUp className="size-3 text-primary" />
+                引用 {paper.citations}
+              </div>
+            )}
             <div className="flex h-full min-h-[128px] items-center justify-center rounded-xl bg-chip text-sm text-faint">
               {paper.thumb}
             </div>
