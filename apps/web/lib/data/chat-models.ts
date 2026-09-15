@@ -3,11 +3,11 @@ import type { ChatModelId, ChatModelOption } from "../../types/ai-search";
 /** 前端可选的大模型目录（与 GET /chat/config 对齐） */
 export const CHAT_MODEL_CATALOG: ChatModelOption[] = [
   {
-    value: "deepseek-chat",
-    label: "DeepSeek V3",
-    provider: "deepseek",
+    value: "qwen-plus",
+    label: "通义 Plus",
+    provider: "platform",
     enabled: true,
-    description: "平台默认，平衡速度与回答质量",
+    description: "阿里百炼默认对话模型",
   },
   {
     value: "deepseek-reasoner",
@@ -58,7 +58,7 @@ export const CHAT_MODEL_CATALOG: ChatModelOption[] = [
   },
 ];
 
-export const DEFAULT_CHAT_MODEL: ChatModelId = "deepseek-chat";
+export const DEFAULT_CHAT_MODEL: ChatModelId = "qwen-plus";
 
 export const CHAT_MODEL_IDS = CHAT_MODEL_CATALOG.map((m) => m.value);
 
