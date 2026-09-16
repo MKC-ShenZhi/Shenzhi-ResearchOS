@@ -55,6 +55,8 @@ class SequenceProvider:
 
 class Knowledge2ChatDegradationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        from app.core.database import dispose_engine
+        await dispose_engine()
         await repository.clear()
         SequenceProvider.answers = ["普通回答。"]
         SequenceProvider.calls = []
@@ -65,7 +67,7 @@ class Knowledge2ChatDegradationTests(unittest.IsolatedAsyncioTestCase):
         self.knowledge_patch.start()
 
     async def asyncTearDown(self):
-        await repository.clear()
+        await repository.close()
         self.knowledge_patch.stop()
         self.provider_patch.stop()
 

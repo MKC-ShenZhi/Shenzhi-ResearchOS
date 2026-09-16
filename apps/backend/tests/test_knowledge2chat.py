@@ -193,6 +193,8 @@ class KnowledgeContextTests(unittest.TestCase):
 
 class Knowledge2ChatTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        from app.core.database import dispose_engine
+        await dispose_engine()
         self.env = patch.dict("os.environ", {
             "DEEPSEEK_API_KEY": "test",
             "DEEPSEEK_MODEL": "deepseek-chat",

@@ -93,6 +93,7 @@ class PostgresSessionRepository:
                         duration_ms=message.duration_ms,
                         error=message.error,
                         settings=dict(message.settings),
+                        warnings=list(message.warnings),
                         completed_at=func.now(),
                     )
                 )
