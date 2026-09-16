@@ -201,7 +201,7 @@ URL 状态     useSearchParams  → 搜索关键词、筛选条件、?theme 调�
 
 ### 数据约定
 
-- `apps/web/lib/data/*.ts` 的内容逐字提取自 SVG 原型,属展示用 mock;接真实后端时替换为 `apps/web/clients/backend/` + FastAPI,组件接口保持不变。
+- 各 Feature 下的 `data*.ts` 内容逐字提取自 SVG 原型,属展示用 mock;接真实后端时替换为 `apps/web/clients/backend/` + FastAPI,组件接口保持不变。
 
 ---
 

@@ -19,7 +19,7 @@ import { patents } from "@/features/knowledge/data-patents";
 import { fundings } from "@/features/knowledge/data-funding";
 import { scholars } from "@/features/knowledge/data-scholars";
 import { institutions } from "@/features/knowledge/data-institutions";
-import { projects } from "@/lib/data/projects";
+import { projects } from "@/features/projects/data";
 import { uploadFile } from "@/clients/backend/chat";
 import type { ChatAttachment, ChatAttachmentKind } from "@/types/ai-search";
 

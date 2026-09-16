@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SITE } from "@/lib/constants";
-import { projects } from "@/lib/data/projects";
+import { projects } from "@/features/projects/data";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useSidebarStore } from "@/stores/sidebar";
 import { Logo } from "./logo";
