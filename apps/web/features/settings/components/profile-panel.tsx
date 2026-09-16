@@ -1,10 +1,11 @@
-import { Monitor, Moon, Sun, User } from "lucide-react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import type { ReactNode } from "react";
 import type { SettingsLocale } from "@/clients/settings";
 import type { ThemeMode } from "@/stores/theme";
 import { cn } from "@/lib/utils";
 import { settingsMessages } from "../i18n";
 import { PreferenceStatus } from "./preference-status";
+import { ProfileEditor } from "./profile/profile-editor";
 
 const themes: { mode: ThemeMode; zh: string; en: string; icon: typeof Sun }[] = [
   { mode: "light", zh: "日间", en: "Light", icon: Sun },
@@ -28,7 +29,7 @@ export function ProfilePanel({
   onThemeChange,
 }: {
   account: ReactNode;
-  user: { name?: string | null; email?: string | null; image?: string | null } | null;
+  user: { id: string; name?: string | null; email?: string | null; image?: string | null } | null;
   locale: SettingsLocale;
   themeMode: ThemeMode;
   loading: boolean;
@@ -41,20 +42,7 @@ export function ProfilePanel({
   return (
     <div className="space-y-8">
       <Section title={t.profileIntro}>
-        <div className="mt-3 flex flex-col gap-5 rounded-2xl bg-card p-6 shadow-card sm:flex-row sm:items-center">
-          {user?.image ? (
-            // eslint-disable-next-line @next/next/no-img-element -- Better Auth may provide an external avatar URL.
-            <img src={user.image} alt="" className="size-24 rounded-2xl object-cover" />
-          ) : (
-            <span className="flex size-24 shrink-0 items-center justify-center rounded-2xl bg-primary-soft">
-              <User className="size-10 text-primary" aria-hidden="true" />
-            </span>
-          )}
-          <div className="min-w-0">
-            {user ? <><p className="font-semibold text-ink">{user.name || user.email}</p><p className="mt-1 text-sm text-muted">{user.email}</p></> : <p className="text-sm text-muted">{t.signInProfile}</p>}
-            <p className="mt-3 text-xs leading-5 text-muted">{user ? t.profileEmpty : t.avatarNote}</p>
-          </div>
-        </div>
+        <ProfileEditor key={user?.id ?? "anonymous"} user={user} locale={locale} />
       </Section>
       <Section title={t.account}>{account}</Section>
       <Section title={t.language}>
