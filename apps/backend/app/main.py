@@ -72,3 +72,9 @@ async def unexpected_error(request: Request, error: Exception):
 @app.get('/health')
 def health() -> dict[str, str]:
     return {'status': 'ok'}
+
+
+@app.get('/api/v1/health')
+def versioned_health() -> dict[str, str]:
+    """Expose the health probe under the same prefix used by the Web BFF."""
+    return health()
