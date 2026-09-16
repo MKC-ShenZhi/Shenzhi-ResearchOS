@@ -1,5 +1,5 @@
 import type { PaperGraph } from "@/types";
-import { paperDetail } from "./paper-detail";
+import { paperDetail } from "./data-paper-detail";
 
 /** 公域知识图谱 —— RDT-1B 引用关系宇宙(节点标签 = 一作姓 + 年份) */
 export const publicGraph: PaperGraph = {

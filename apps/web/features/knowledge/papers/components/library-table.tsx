@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Search, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { libraryItems } from "@/lib/data/library";
+import { libraryItems } from "@/features/knowledge/data-library";
 import { cn } from "@/lib/utils";
 
 const PDF_TONES = {

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { FollowButton } from "@/features/scholars/components/follow-button";
 import { CitationChart } from "@/features/scholars/[id]/components/citation-chart";
 import { PublicationList } from "@/features/scholars/[id]/components/publication-list";
-import { scholarDetail, scholars } from "@/lib/data/scholars";
+import { scholarDetail, scholars } from "@/features/knowledge/data-scholars";
 import { cn } from "@/lib/utils";
 
 const LINK_ICONS = [Globe, Globe, Github, Mail];

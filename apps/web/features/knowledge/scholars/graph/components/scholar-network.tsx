@@ -10,7 +10,7 @@ import {
   Search,
   Users,
 } from "lucide-react";
-import { scholars } from "@/lib/data/scholars";
+import { scholars } from "@/features/knowledge/data-scholars";
 import { cn } from "@/lib/utils";
 
 const positions: Record<string, { x: number; y: number }> = {

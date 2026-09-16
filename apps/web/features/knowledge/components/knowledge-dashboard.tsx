@@ -18,11 +18,11 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { libraryFolders, libraryItems, libraryTags } from "@/lib/data/library";
-import { patents } from "@/lib/data/patents";
-import { fundings } from "@/lib/data/funding";
-import { scholars } from "@/lib/data/scholars";
-import { institutions } from "@/lib/data/institutions";
+import { libraryFolders, libraryItems, libraryTags } from "@/features/knowledge/data-library";
+import { patents } from "@/features/knowledge/data-patents";
+import { fundings } from "@/features/knowledge/data-funding";
+import { scholars } from "@/features/knowledge/data-scholars";
+import { institutions } from "@/features/knowledge/data-institutions";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { paperHref } from "@/lib/navigation/paper";
 import { cn } from "@/lib/utils";

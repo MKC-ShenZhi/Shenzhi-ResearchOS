@@ -1,4 +1,4 @@
-import { fundingStatuses } from "@/lib/data/funding";
+import { fundingStatuses } from "@/features/knowledge/data-funding";
 import { cn } from "@/lib/utils";
 
 const TAG_COLORS = [
