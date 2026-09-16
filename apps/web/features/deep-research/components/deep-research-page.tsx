@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { drReport } from "@/lib/data/deep-research";
+import { drReport } from "@/features/deep-research/data";
 import { DeepResearchHome } from "./deep-research-home";
 import { ResearchWorkbench } from "./research-workbench";
 

@@ -1,6 +1,6 @@
 import { Sparkles } from "lucide-react";
 import { withCitations } from "@/components/common/citations";
-import { drReport } from "@/lib/data/deep-research";
+import { drReport } from "@/features/deep-research/data";
 import { cn } from "@/lib/utils";
 import type { DRReportSection } from "@/types";
 import type { DRSectionState } from "./use-deep-research-run";
