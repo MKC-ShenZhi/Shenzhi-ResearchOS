@@ -1,5 +1,5 @@
 import { settingsMessages } from "../i18n";
-import type { SettingsLocale } from "@/clients/settings";
+import type { SettingsLocale } from "@/clients/backend/settings";
 
 export function PreferenceStatus({
   locale,

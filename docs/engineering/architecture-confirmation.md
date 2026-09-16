@@ -318,6 +318,26 @@ apps/web/clients/backend/{module}/  # 模块 Client，如 chat/、profile/
 - 通用 Backend Error
 - 请求路径、协议等基础设施
 
+依赖方向保持为：
+
+```text
+Feature Service
+   ↓
+clients/backend/{module}
+   ↓
+clients/backend
+   ↓
+Backend API
+```
+
+`clients/backend` 根目录是基础层，不得反向依赖 `chat`、`profile`、`settings`
+等具体模块。模块 Client 只负责请求、协议封装和错误转换；模型目录合并、降级策略、
+多个接口组合等业务编排进入 `features/{module}/services/`。
+
+`clients` 可以依赖 `lib` 中确属日志、Request ID、认证等框架或基础设施的能力；
+`lib` 不得反向依赖 `clients`。业务规则不得为了复用而继续堆入 `lib`，应优先留在
+对应 Feature 中，避免逐步形成 `lib ↔ clients` 双向依赖。
+
 当前后端调用应优先收敛至：
 
 ```text

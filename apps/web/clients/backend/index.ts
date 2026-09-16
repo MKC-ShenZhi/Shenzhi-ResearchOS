@@ -3,3 +3,4 @@ export * from "./http";
 export * from "./sse";
 export * from "./forward";
 export * from "./identity";
+export type { ApiEnvelope } from "./types";

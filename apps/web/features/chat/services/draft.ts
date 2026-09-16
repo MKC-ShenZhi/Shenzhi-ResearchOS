@@ -4,7 +4,7 @@ import type {
   ChatReplyMode,
   ComposerSubmitPayload,
 } from "../../../types/ai-search";
-import { DEFAULT_CHAT_MODEL } from "../../../lib/data/chat-models";
+import { DEFAULT_CHAT_MODEL } from "./model-catalog";
 
 const KEY = "shenzhi.chat.draft";
 

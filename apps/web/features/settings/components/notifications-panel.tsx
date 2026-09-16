@@ -1,5 +1,5 @@
 import { Bell, Newspaper, Sparkles, Users } from "lucide-react";
-import type { NotificationKey, NotificationPreferences, SettingsLocale } from "@/clients/settings";
+import type { NotificationKey, NotificationPreferences, SettingsLocale } from "@/clients/backend/settings";
 import { cn } from "@/lib/utils";
 import { PreferenceStatus } from "./preference-status";
 

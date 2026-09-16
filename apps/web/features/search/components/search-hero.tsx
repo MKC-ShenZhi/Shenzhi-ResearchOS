@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ComposerShell } from "@/features/chat/components/composer";
-import { getChatConfig } from "@/clients/backend/chat";
+import { getChatConfig } from "@/features/chat/services/chat-config";
 import { askQueryString, saveAskDraft } from "@/features/chat/services/draft";
 import type { ComposerEntryMode } from "@/types";
 import type { ComposerSubmitPayload, ChatConfig } from "@/types/ai-search";

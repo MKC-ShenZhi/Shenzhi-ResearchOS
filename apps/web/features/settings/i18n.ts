@@ -1,4 +1,4 @@
-import type { SettingsLocale } from "@/clients/settings";
+import type { SettingsLocale } from "@/clients/backend/settings";
 
 export const LOCALE_STORAGE_KEY = "shenzhi-settings-locale";
 

@@ -5,6 +5,7 @@ export type {
   NotificationKey,
   NotificationPreferences,
   SettingsLocale,
+  ThemeMode,
   UserSettings,
   UserSettingsPatch,
 } from "./types";
