@@ -8,7 +8,7 @@ const notifications = readFileSync("features/settings/components/notifications-p
 const bff = readFileSync("app/api/v1/[...path]/route.ts", "utf8");
 const profileEditor = readFileSync("features/settings/components/profile/profile-editor.tsx", "utf8");
 const profileHook = readFileSync("features/settings/hooks/use-user-profile.ts", "utf8");
-const profileClient = readFileSync("clients/backend/profile/client.ts", "utf8");
+const profileClient = readFileSync("clients/profile/index.ts", "utf8");
 const avatarOptions = readFileSync("features/settings/avatar-options.ts", "utf8");
 
 test("settings keeps all deep links and falls back invalid values to profile", () => {

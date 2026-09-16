@@ -20,7 +20,7 @@ import { fundings } from "@/lib/data/funding";
 import { scholars } from "@/lib/data/scholars";
 import { institutions } from "@/lib/data/institutions";
 import { projects } from "@/lib/data/projects";
-import { uploadFile } from "@/clients/backend/chat";
+import { uploadFile } from "@/clients/backend/uploads";
 import type { ChatAttachment, ChatAttachmentKind } from "@/types/ai-search";
 
 interface RefItem {
