@@ -1,4 +1,4 @@
-import { apiJson } from "./http";
+import { apiJson } from "../http";
 
 export interface UploadFileResult {
   file_id: string;

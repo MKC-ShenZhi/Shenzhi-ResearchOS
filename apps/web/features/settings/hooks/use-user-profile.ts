@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getUserProfile, patchUserProfile, type UserProfile, type UserProfilePatch } from "@/clients/profile";
+import { getUserProfile, patchUserProfile, type UserProfile, type UserProfilePatch } from "@/clients/backend/profile";
 import { useAuth } from "@/components/auth/auth-provider";
 
 export function useUserProfile() {

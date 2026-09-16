@@ -1,12 +1,12 @@
-import { apiJson, apiPath } from "./http";
-import { readSseStream, type SseEvent } from "./sse";
-import { CHAT_MODEL_CATALOG, chatModelLabel } from "../../lib/data/chat-models";
+import { apiJson, apiPath } from "../http";
+import { readSseStream, type SseEvent } from "../sse";
+import { CHAT_MODEL_CATALOG, chatModelLabel } from "../../../lib/data/chat-models";
 import type {
   CreateChatSessionRequest, CreateChatSessionResponse, SendChatMessageRequest,
   StreamDeltaEvent, StreamDoneEvent, StreamErrorEvent, StreamFollowupsEvent,
   StreamMetaEvent, StreamRefsEvent, ChatSessionSummary, ChatSessionDetail, ChatConfig,
   ChatModelOption, ModelProvider,
-} from "../../types/ai-search";
+} from "../../../types/ai-search";
 
 const BACKEND_ONLY_LABELS: Record<
   string,

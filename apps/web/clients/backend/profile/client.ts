@@ -1,15 +1,6 @@
 import { apiJson } from "@/clients/backend/http";
 import type { UserProfile, UserProfilePatch } from "./types";
 
-export type {
-  Achievement,
-  AvatarKey,
-  EducationExperience,
-  InstitutionExperience,
-  UserProfile,
-  UserProfilePatch,
-} from "./types";
-
 export function getUserProfile() {
   return apiJson<UserProfile>("/profile");
 }

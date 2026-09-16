@@ -10,7 +10,7 @@ app/agents/page.tsx 或 app/agents/ask/page.tsx（URL 兼容）
   → hooks/use-chat-session（UI 状态、取消、历史恢复、防止过期请求写入）
   → services/conversation（建会话/续问编排、历史数据适配）
   → services/local-history（仅后端不可用时的浏览器降级缓存，见下文）
-  → clients/backend/{chat,http,sse,uploads}
+  → clients/backend/{http,sse} + clients/backend/chat/{chat,uploads}
   → Next.js app/api/v1/[...path] → clients/backend/forward（通用单身份 BFF）
      或 app/api/chat/anonymous-claim（专用双身份 BFF）
   → FastAPI api/{chat,uploads}

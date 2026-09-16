@@ -1,4 +1,4 @@
-import type { AvatarKey } from "@/clients/profile";
+import type { AvatarKey } from "@/clients/backend/profile";
 
 export const AVATAR_OPTIONS: ReadonlyArray<{ key: AvatarKey; src: string }> = [
   { key: "avatar-01", src: "/images/avatars/default/avatar-01.webp" },
