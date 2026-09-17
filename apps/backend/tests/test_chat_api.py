@@ -45,6 +45,8 @@ class FakeKnowledge:
 
 class ChatApiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        from app.core.database import dispose_engine
+        await dispose_engine()
         self.env = patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'test', 'DEEPSEEK_MODEL': 'deepseek-chat', 'DASHSCOPE_API_KEY': '', 'BACKEND_BFF_SECRET': '', 'BACKEND_ALLOW_INSECURE_LOCAL_BFF': 'true'})
         self.env.start()
         await repository.clear()

@@ -105,7 +105,9 @@ class Acceptance2a(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detail['messages'][0]['status'], 'done')
         async with session_scope() as db:
             sessions = (await db.scalars(select(ChatSessionRow).where(ChatSessionRow.owner == OWNER_KEY))).all()
-            messages = (await db.scalars(select(ChatMessageRow))).all()
+            messages = (await db.scalars(
+                select(ChatMessageRow).where(ChatMessageRow.session_id == uuid.UUID(sid))
+            )).all()
         self.assertEqual(len(sessions), 1)
         self.assertEqual(sessions[0].owner, OWNER_KEY)
         self.assertEqual(len(messages), 1)
@@ -240,7 +242,9 @@ class EnvironmentChecks(unittest.TestCase):
         tables, version = asyncio.run(check())
         self.assertIn('chat_sessions', tables)
         self.assertIn('chat_messages', tables)
-        self.assertEqual(version, '002_anon_expiry_idx')
+        self.assertIn('user_settings', tables)
+        self.assertIn('user_profiles', tables)
+        self.assertEqual(version, '004_user_profiles')
 
 
 if __name__ == '__main__':

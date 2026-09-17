@@ -7,12 +7,9 @@ export function SettingsPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-[960px] px-8 py-10">
-        <h1 className="text-xl font-bold text-ink">设置</h1>
-        <div className="mt-6">
-          <Suspense>
-            <SettingsTabs />
-          </Suspense>
-        </div>
+        <Suspense>
+          <SettingsTabs />
+        </Suspense>
       </div>
     </AppShell>
   );

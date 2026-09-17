@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from app.api import chat, collections, history, knowledge, paper_resource, uploads
+from app.api import chat, collections, history, knowledge, paper_resource, profile, settings, uploads
 from app.core.logging import configure_logging, http_logging_middleware, log_exception, request_duration_ms
 from app.core.errors import BusinessError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE
 from app.core.responses import fail
@@ -29,6 +29,8 @@ for router in (
     history.router, 
     knowledge.router,
     paper_resource.router,
+    profile.router,
+    settings.router,
     uploads.router,
 ):
     app.include_router(router)
@@ -44,7 +46,7 @@ async def business_error(_request: Request, error: BusinessError):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(_request: Request, _error: RequestValidationError):
-    return fail(20001, '请求参数不合法，请检查问题长度、模型和附件数量', 422)
+    return fail(20001, '请求参数不合法，请检查字段格式与长度', 422)
 
 
 @app.exception_handler(Exception)
