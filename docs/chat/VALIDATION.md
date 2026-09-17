@@ -29,11 +29,11 @@ Auth 负向测试预期打印 `delivery failed`，坏 PDF 负向测试预期打�
 - Backend：PDF/TXT/Markdown、坏文件/不支持类型/大小限制、截断、附件归属；multipart 超过 1MiB 仍不使用磁盘 spool。
 - Backend：会话 CRUD/收藏/历史、owner 隔离、多轮、事件重放不重复生成、停止/续写/断连、容量限制、上下文截断告警。
 - BFF/Auth：生产默认要求内部 Secret；只有显式 loopback 本地模式可无 Secret；空 Better Auth Session 与鉴权异常分开处理。
-- API 边界：Chat 配置/会话/SSE 使用 `/api/v1/chat/*`，Search 仅保留 `/api/v1/search/explore`。
+- API 边界：Chat 配置/会话/SSE 使用 `/api/v1/chat/*`，论文搜索使用 `/api/v1/knowledge/search`。
 
 ## 浏览器与实际 HTTP 链路
 
-使用临时本地 OpenAI-compatible / retrieval / SearXNG fixture，经过真实 Web BFF、FastAPI、HTTP SSE 和浏览器 UI 验证；fixture 位于 `/tmp`，没有进入仓库或正式运行时代码。
+使用临时本地 OpenAI-compatible / Knowledge Base / SearXNG fixture，经过真实 Web BFF、FastAPI、HTTP SSE 和浏览器 UI 验证；fixture 位于 `/tmp`，没有进入仓库或正式运行时代码。
 
 已检查：
 

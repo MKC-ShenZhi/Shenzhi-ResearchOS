@@ -126,7 +126,7 @@ owner（匿名或登录）  1 ── N  Session（会话）  1 ── N  Message
        └─ 循环 yield message.events[cursor…]（heartbeat 保活）
 
   → generate（async Task，与 HTTP 请求并发）
-       ├─ await retrieval_search / web_search
+       ├─ await knowledge_service.search / web_search
        ├─ model_messages（从 session.messages 拼多轮上下文）
        ├─ async for provider.stream → message.emit(delta)（仅写内存）
        ├─ await provider.followups

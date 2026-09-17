@@ -9,5 +9,9 @@ export default async function Page({ params, searchParams }: {
 }) {
   const { paperId: routePaperId } = await params;
   const query = await searchParams;
-  redirect(paperHref(paperIdFromRouteParam(routePaperId), normalizeInternalReturnTo(query?.returnTo), true));
+  redirect(paperHref(paperIdFromRouteParam(routePaperId), {
+    mode: "preserve",
+    returnTo: normalizeInternalReturnTo(query?.returnTo),
+    graph: true,
+  }));
 }

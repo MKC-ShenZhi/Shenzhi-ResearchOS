@@ -207,12 +207,12 @@ function PaperDetailPanel({
         </div>
       )}
 
-      <Link href={paperHref(node.id, returnTo)} className="inline-flex text-sm text-primary hover:underline">阅读论文</Link>
+      <Link href={paperHref(node.id, { mode: "preserve", returnTo })} className="inline-flex text-sm text-primary hover:underline">阅读论文</Link>
 
       {/* 关系图谱入口 */}
       <div className="border-t border-line pt-3">
         <Link
-          href={paperHref(node.id, returnTo, true)}
+          href={paperHref(node.id, { mode: "preserve", returnTo, graph: true })}
           className="inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
         >
           在图中聚焦此论文

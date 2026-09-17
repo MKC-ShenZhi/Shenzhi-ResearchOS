@@ -5,13 +5,13 @@ import { streamChatMessage } from "../../clients/backend/chat";
 import { apiJson, ApiError } from "../../clients/backend/http";
 import { restoreTurns } from "../../features/chat/services/conversation";
 
-function responseFor(text: string) {
+function responseFor(text: string, headers: HeadersInit = {}) {
   const bytes = new TextEncoder().encode(text);
   return new Response(new ReadableStream({ start(controller) {
     // Split every UTF-8 character and every CRLF boundary.
     for (const byte of bytes) controller.enqueue(new Uint8Array([byte]));
     controller.close();
-  } }), { headers: { "Content-Type": "text/event-stream" } });
+  } }), { headers: { "Content-Type": "text/event-stream", ...headers } });
 }
 
 test("SSE parses CRLF, comments, multiline data and a final unterminated event", async (t) => {
@@ -30,20 +30,50 @@ test("SSE parses CRLF, comments, multiline data and a final unterminated event",
 test("product stream dispatches reasoning and detects a truncated connection", async (t) => {
   t.mock.method(globalThis, "fetch", async (url: string) => {
     assert.equal(url, "/api/v1/chat/messages/id/stream");
-    return responseFor('event: delta\ndata: {"reasoning":"分析","text":"正文"}\n\nevent: done\ndata: {"status":"done","duration_ms":20}\n\n');
+    return responseFor('event: delta\ndata: {"reasoning":"分析","text":"正文"}\n\nevent: done\ndata: {"status":"done","duration_ms":20}\n\n', { "X-Request-ID": "stream-request-1" });
   });
-  let reasoning = ""; let content = ""; let done = false;
-  await streamChatMessage("id", { onDelta: (delta) => { reasoning += delta.reasoning; content += delta.text; }, onDone: () => { done = true; } });
-  assert.deepEqual([reasoning, content, done], ["分析", "正文", true]);
+  let reasoning = ""; let content = ""; let done = false; let requestId = "";
+  await streamChatMessage("id", { onRequestId: (value) => { requestId = value ?? ""; }, onDelta: (delta) => { reasoning += delta.reasoning; content += delta.text; }, onDone: () => { done = true; } });
+  assert.deepEqual([reasoning, content, done, requestId], ["分析", "正文", true, "stream-request-1"]);
   t.mock.method(globalThis, "fetch", async () => responseFor('event: delta\ndata: {"text":"partial"}\n\n'));
   await assert.rejects(streamChatMessage("id", {}), /提前结束/);
+});
+
+test("knowledge warning and unverified grounding remain non-terminal metadata", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => responseFor([
+    'event: meta\ndata: {"phase":"generating","warnings":["本轮未能形成可验证的知识引用，以下回答未作为知识增强结果。"],"knowledge_grounding":"unverified"}\n\n',
+    'event: delta\ndata: {"reasoning":"分析"}\n\n',
+    'event: delta\ndata: {"text":"普通回答"}\n\n',
+    'event: done\ndata: {"status":"done","duration_ms":20,"knowledge_grounding":"unverified"}\n\n',
+  ].join("")));
+
+  const received = { warnings: [] as string[], grounding: "", reasoning: "", text: "", status: "" };
+  await streamChatMessage("id", {
+    onMeta: (meta) => {
+      received.warnings = meta.warnings ?? [];
+      received.grounding = meta.knowledge_grounding ?? "";
+    },
+    onDelta: (delta) => {
+      received.reasoning += delta.reasoning ?? "";
+      received.text += delta.text ?? "";
+    },
+    onDone: (done) => { received.status = done.status; },
+  });
+
+  assert.deepEqual(received, {
+    warnings: ["本轮未能形成可验证的知识引用，以下回答未作为知识增强结果。"],
+    grounding: "unverified",
+    reasoning: "分析",
+    text: "普通回答",
+    status: "done",
+  });
 });
 
 test("HTTP checks status even if the body claims success, and keeps backend error details", async (t) => {
   t.mock.method(globalThis, "fetch", async () => Response.json({ code: 0, data: {} }, { status: 500 }));
   await assert.rejects(apiJson("/test"), (error: unknown) => error instanceof ApiError && error.status === 500);
-  t.mock.method(globalThis, "fetch", async () => Response.json({ code: 20006, message: "附件已过期" }, { status: 404 }));
-  await assert.rejects(apiJson("/test"), /附件已过期/);
+  t.mock.method(globalThis, "fetch", async () => Response.json({ code: 20006, message: "附件已过期" }, { status: 404, headers: { "X-Request-ID": "api-error-1" } }));
+  await assert.rejects(apiJson("/test"), (error: unknown) => error instanceof ApiError && error.message === "附件已过期" && error.requestId === "api-error-1");
 });
 
 test("history adapter restores the exact server answer, references, reasoning and stop state", () => {

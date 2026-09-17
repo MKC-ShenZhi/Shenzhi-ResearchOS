@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { ArrowRight, Quote } from "lucide-react";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { paperHref } from "@/lib/navigation/paper";
 import type { GraphNode } from "@/types";
 
 /** 右栏 —— 选中节点论文的摘要卡(默认 origin) */
 export function NodeAbstractCard({ node }: { node: GraphNode }) {
+  const returnTo = useCurrentInternalPath();
+
   return (
     <article className="space-y-3">
       <h2 className="text-[15px] font-bold leading-snug text-ink">
@@ -24,7 +28,7 @@ export function NodeAbstractCard({ node }: { node: GraphNode }) {
       </p>
       {node.paperId && (
         <Link
-          href={`/papers/${encodeURIComponent(node.paperId)}`}
+          href={paperHref(node.paperId, { mode: "create", source: returnTo })}
           className="inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
         >
           查看论文详情

@@ -88,6 +88,7 @@ function ChatWorkspace({
   const [model, setModel] = useState(initialModel ?? DEFAULT_CHAT_MODEL);
   const [webSearch, setWebSearch] = useState(Boolean(initialWebSearch));
   const [entryMode, setEntryMode] = useState<ComposerEntryMode>("ai");
+  const [knowledgeEnabled, setKnowledgeEnabled] = useState(true);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [config, setConfig] = useState<ChatConfig>();
   const [showJump, setShowJump] = useState(false);
@@ -161,7 +162,7 @@ function ChatWorkspace({
     const web = initialWebSearch ?? draft.web_search;
     setMode(selectedMode);
     setWebSearch(web);
-    const capabilities = capabilitiesForEntryMode("ai");
+    const capabilities = capabilitiesForEntryMode("ai", knowledgeEnabled);
     onInitialQuestion();
     void send({
       question,
@@ -171,7 +172,7 @@ function ChatWorkspace({
       attachments: draft.attachments,
       capabilities,
     });
-  }, [config, initialMode, initialModel, initialWebSearch, onInitialQuestion, question, resolvedInitialSessionId, send]);
+  }, [config, initialMode, initialModel, initialWebSearch, knowledgeEnabled, onInitialQuestion, question, resolvedInitialSessionId, send]);
 
   useEffect(() => {
     if (nearBottom.current) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -186,6 +187,7 @@ function ChatWorkspace({
       setModel(sessionPreferences.model);
       setWebSearch(sessionPreferences.webSearch);
       setEntryMode(sessionPreferences.entryMode);
+      setKnowledgeEnabled(sessionPreferences.knowledgeEnabled);
     });
     return () => { live = false; };
   }, [sessionPreferences]);
@@ -222,6 +224,8 @@ function ChatWorkspace({
       onModelChange={setModel}
       webSearch={webSearch}
       onWebSearchChange={setWebSearch}
+      knowledgeEnabled={knowledgeEnabled}
+      onKnowledgeEnabledChange={setKnowledgeEnabled}
       attachments={attachments}
       onAttachmentsChange={setAttachments}
       entryMode={entryMode}

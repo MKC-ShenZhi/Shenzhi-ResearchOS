@@ -2,7 +2,7 @@ import copy
 import json
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 
@@ -18,6 +18,7 @@ from app.integrations.knowledge.adapter import (
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.services.knowledge import KnowledgeService, KnowledgeServiceError
+from app.services.paper_resource import PaperResourceService
 
 
 PAPER_ID = 'paper:17203_aaai:911ff38f19e8'
@@ -294,6 +295,61 @@ class KnowledgeContinuityTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response.results, [])
 
+    async def test_paginated_search_fetches_and_slices_the_requested_page(self):
+        many_results = []
+        for index in range(45):
+            item = copy.deepcopy(SEARCH_RESPONSE['results'][0])
+            item.update({
+                'paper_id': f'paper:{index + 1}',
+                'title': f'Paper {index + 1}',
+                'rank': index + 1,
+            })
+            many_results.append(item)
+
+        class ManyResultsClient(FixtureClient):
+            def __init__(self):
+                self.search_requests = []
+
+            async def search(self, request):
+                self.search_requests.append(request)
+                return {'results': many_results[:request['top_k']]}
+
+        client = ManyResultsClient()
+        adapter = KnowledgeAdapter(client)
+
+        first_page = await adapter.search(KnowledgeSearchRequest.model_validate({
+            'query': 'machine learning',
+            'topK': 20,
+            'offset': 0,
+        }))
+        self.assertEqual(client.search_requests[0]['top_k'], 21)
+        self.assertEqual(len(first_page.results), 20)
+        self.assertEqual(first_page.results[0].id, 'paper:1')
+        self.assertEqual(first_page.results[-1].id, 'paper:20')
+        self.assertTrue(first_page.has_more)
+
+        second_page = await adapter.search(KnowledgeSearchRequest.model_validate({
+            'query': 'machine learning',
+            'topK': 20,
+            'offset': 20,
+        }))
+        self.assertEqual(client.search_requests[1]['top_k'], 41)
+        self.assertEqual(len(second_page.results), 20)
+        self.assertEqual(second_page.results[0].id, 'paper:21')
+        self.assertEqual(second_page.results[-1].id, 'paper:40')
+        self.assertTrue(second_page.has_more)
+
+        third_page = await adapter.search(KnowledgeSearchRequest.model_validate({
+            'query': 'machine learning',
+            'topK': 20,
+            'offset': 40,
+        }))
+        self.assertEqual(client.search_requests[2]['top_k'], 61)
+        self.assertEqual(len(third_page.results), 5)
+        self.assertEqual(third_page.results[0].id, 'paper:41')
+        self.assertEqual(third_page.results[-1].id, 'paper:45')
+        self.assertFalse(third_page.has_more)
+
 
 class KnowledgeServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_service_delegates_domain_use_cases_to_adapter(self):
@@ -475,6 +531,7 @@ class KnowledgeApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(search_response.status_code, 200, search_response.text)
         search_data = search_response.json()['data']
         self.assertEqual(search_data['results'][0]['id'], PAPER_ID)
+        self.assertFalse(search_data['hasMore'])
         self.assertEqual(search_data['results'][0]['provenance']['externalId'], PAPER_ID)
         self.assertNotIn('paper_id', search_data['results'][0])
         self.assertNotIn('query_parse', search_data)
@@ -485,6 +542,7 @@ class KnowledgeApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detail_response.status_code, 200, detail_response.text)
         self.assertEqual(detail_response.json()['data']['id'], PAPER_ID)
         self.assertIsNone(detail_response.json()['data']['citationCount'])
+        self.assertNotIn('pdfResource', detail_response.json()['data'])
 
         graph_response = await self.client.get(
             '/api/v1/knowledge/graph', params={'paperId': PAPER_ID, 'depth': 1}
@@ -493,6 +551,31 @@ class KnowledgeApiTests(unittest.IsolatedAsyncioTestCase):
         graph_data = graph_response.json()['data']
         self.assertEqual(graph_data['rootId'], PAPER_ID)
         self.assertEqual(graph_data['edges'][0]['sourceId'], PAPER_ID)
+
+    async def test_paper_detail_returns_invalid_pdf_url_without_resource_preflight(self):
+        source_url = 'not-a-valid-pdf-url'
+        with (
+            patch.dict(DETAIL_RESPONSE, {'pdf_url': source_url}),
+            patch.object(
+                PaperResourceService,
+                'resolve_paper_resource',
+                new_callable=AsyncMock,
+            ) as resolve_resource,
+            patch.object(
+                PaperResourceService,
+                'open_paper_resource',
+                new_callable=AsyncMock,
+            ) as open_resource,
+        ):
+            response = await self.client.get(
+                '/api/v1/knowledge/paper', params={'paperId': PAPER_ID}
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['data']['pdfUrl'], source_url)
+        self.assertNotIn('pdfResource', response.json()['data'])
+        resolve_resource.assert_not_awaited()
+        open_resource.assert_not_awaited()
 
     async def test_api_chain_uses_configured_client_and_never_needs_public_network(self):
         requests = []

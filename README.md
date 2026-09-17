@@ -30,30 +30,76 @@ uv run uvicorn app.main:app --env-file .env --reload --port 8000
 
 Web 环境变量 `BUSINESS_BACKEND_URL=http://127.0.0.1:8000`（仅服务端）。项目介绍见 [docs/dev/项目介绍.md](docs/dev/项目介绍.md)，进度见 [docs/dev/开发日志.md](docs/dev/开发日志.md)。
 
+> 新人入门请先看 [ONBOARDING.md](ONBOARDING.md)。
+
 打开 http://localhost:3000 。URL 加 `?theme=dark` / `?theme=light` 可强制日/夜模式(用于调试与分享)。
 
 > **Turbopack 恢复说明**:本副本运行于 WSL2,dev/build 均使用 `--turbopack`(见 package.json)。Windows 侧曾因智能应用控制拦截 Turbopack 原生二进制而临时改用 `--webpack`,该问题仅存在于 Windows 环境,当前副本不受影响。
 
 ---
 
-## 部署(已上线 ✅)
+## 部署(Vercel,当前线上 ✅)
 
-**线上地址:http://47.238.241.77**(阿里云香港 ECS,免备案)
+> 本节面向系统平台与测试人员,配置与限制务必通读。改任何部署相关配置前请先同步本文档。
+
+### 架构总览
 
 ```
-git push origin main
-   │
-   ▼
-GitHub Actions:docker build → 推 GHCR(私有)→ Trivy 安全扫描 → SSH 到 ECS 部署
-   │
-   ▼
-ECS:/opt/shenzhi, docker compose(80 → web:3000),约 1~3 分钟自动上线
+浏览器
+  │  (仅访问同源 Next.js BFF /api/v1,不直接接触后端)
+  ▼
+shenzhi.vercel.app ──── Vercel 项目 shenzhi (apps/web, Next.js)
+  │  服务端携带 x-shenzhi-bff-secret 调用
+  ▼
+shenzhi-backend.vercel.app ──── Vercel 项目 shenzhi-backend (apps/backend, FastAPI Serverless)
+  │
+  ▼
+Vercel Postgres (Neon):Auth 表 + Chat 表共存于 neondb 库
 ```
 
-- **日常迭代 = `git push`**,无需其他操作;Actions 页面可看每次部署状态
-- 镜像:`ghcr.io/hakrin-dev/shenzhi-frontend`(私有,ECS 凭 GHCR_PAT 拉取)
-- `infra/docker/web.Dockerfile` 多阶段 + `output: 'standalone'`,镜像 ~150MB;构建在 CI 完成,ECS 只拉取运行
-- 完整运维文档(Secrets 配置、回滚、扩展后端/数据库):[infra/README.md](infra/README.md)
+| Vercel 项目 | 根目录 | 生产域名 | 说明 |
+|------|------|------|------|
+| `shenzhi` | `apps/web` | https://shenzhi.vercel.app | Next.js 前端 + BFF |
+| `shenzhi-backend` | `apps/backend` | https://shenzhi-backend.vercel.app | FastAPI,以单个 Python Serverless Function 运行(`apps/backend/api/index.py` 导出 ASGI app,`apps/backend/vercel.json` 将全部路径 rewrite 至该函数,`maxDuration=300`) |
+
+### 分支与部署映射(当前阶段)
+
+| Git 分支 | 部署级别 | 访问入口 |
+|------|------|------|
+| `dev` | **生产**(Production Branch 当前设为 `dev`,条件成熟后切回 `main`) | `shenzhi.vercel.app` / `shenzhi-backend.vercel.app` |
+| `feat/*` 等 | 预览(Preview) | `shenzhi-git-<分支名>-hakrin-devs-projects.vercel.app`(分支别名,随该分支最新部署移动) |
+| 任意单次部署 | 固定快照 | `shenzhi-<哈希>-hakrin-devs-projects.vercel.app`(不可变,用于定位历史版本) |
+
+- 部署触发:push 到 GitHub 自动构建;另为两个项目的 `dev` 分支配置了 **Deploy Hook**(URL 见各项目 Settings → Git → Deploy Hooks),供 CI 或外部系统 POST 触发。
+- 预览环境已关闭 Deployment Protection,预览 URL 无需登录 Vercel 即可访问。
+- 后端构建使用 Vercel 原生 uv 支持:依据 `apps/backend/uv.lock` 安装依赖、`.python-version` 选定 Python 3.12,**不要**另行添加 `requirements.txt`。
+
+### 环境变量规则(严格遵守)
+
+1. 变量清单与含义以 [apps/web/.env.example](apps/web/.env.example) 与 [apps/backend/.env.example](apps/backend/.env.example) 为准,真实值一律注入 Vercel(Settings → Environment Variables),**绝不入库**。
+2. 勾选规则:除 `BETTER_AUTH_URL`、`BUSINESS_BACKEND_URL` 按环境拆值(Production 与 Preview 各一条)外,**所有变量必须同时勾选 Production + Preview**,否则预览环境会出现“功能缺失型”故障(如邮件未配置、知识底座不可用)。
+3. 修改变量后**必须 Redeploy 才生效**;`NEXT_PUBLIC_` 前缀变量在构建期内联,仅重新部署前端项目。
+4. 数据库连接串给后端(`CHAT_DATABASE_URL`)时,Neon 原始串中的 `channel_binding=require&sslmode=require` 必须改写为 `?ssl=require`(asyncpg 不识别原参数,运行时会直接抛错)。
+5. `BACKEND_BFF_SECRET` 两端必须一致;`BACKEND_ALLOW_INSECURE_LOCAL_BFF` 仅限本机 loopback 联调,线上永不开启。
+
+### 限制与已知事项(测试必读)
+
+1. **Serverless 形态**:FastAPI 的 `lifespan` 在 Serverless 下不保证执行;其唯一副作用是中断中的流式消息不会被标记为 failed,不影响会话读写。函数单次执行上限 300s,后端模型调用超时 `AI_TIMEOUT_SEC=90`,流式长回答不会触顶;冷启动首请求略慢属正常。
+2. **会话与附件**:`CHAT_DATABASE_URL` 必须配置,缺失时会话退化为函数内存态,多实例下随机丢失(接口会返回 `ephemeral: true`,可作为测试探针:`GET /api/v1/chat/sessions` 带 `x-shenzhi-bff-secret` 与 `x-shenzhi-anonymous-id` 头)。上传附件的解析结果当前仍存内存,跨实例可能取不到,属已知限制。
+3. **知识底座可达性**:`KNOWLEDGE_BASE_API_URL` 必须是**公网可达**地址(Vercel 函数位于美国机房);国内服务需确认安全组未按来源 IP 拦截。上游不可用时接口显式报错(“知识底座暂不可用”),不会返回 mock 数据。
+4. **数据库分支陷阱**:已断开 `shenzhi` 项目与 Neon 集成的连接并改用手动 `DATABASE_URL`。**不要重新连接该集成**,其“预览分支”功能会向预览部署注入独立数据库分支(无迁移后的表),表现为 `relation "verification" does not exist`。
+5. **国内网络访问**:`*.vercel.app` 域名在国内存在 DNS 污染与阻断,测试人员需自备可访问外网的网络环境;`api.vercel.com`(CLI/管理接口)国内可直连。
+6. **邮件/OAuth 回调**:`AUTH_EMAIL_FROM` 必须在阿里云 DirectMail 完成验证;GitHub OAuth App 的回调地址须与当前访问域名匹配(生产 `https://shenzhi.vercel.app/api/auth/callback/github`)。
+
+### 回滚与故障处置
+
+- 回滚:对历史健康部署执行 `vercel promote <部署URL>`(需 Vercel CLI 登录),约 10 秒切换生产指向,零停机。
+- 后端健康探针:`GET https://shenzhi-backend.vercel.app/health` 返回 `{"status":"ok"}`。
+- 日志:Vercel 项目 → Logs(需账号权限),或 CLI `vercel logs <部署URL> [--follow]`。
+
+### ECS/Docker 备用链路
+
+`infra/` 保留阿里云 ECS + GHCR + Watchtower 的传统部署方案,当前不在使用;若 FastAPI 后续迁回国内长驻服务(解决知识底座连通性与 Serverless 限制),按 [infra/README.md](infra/README.md) 恢复。
 
 ---
 
@@ -99,7 +145,7 @@ Paper Graph 三项能力，不表述为完整知识底座已接入，也不在�
 | 动效 | Framer Motion(入场动画) | ✅ |
 | 图标 | Lucide React | ✅ |
 | 包管理 | pnpm 11 | ✅ |
-| 认证与数据 | Better Auth 1.6.28 + PostgreSQL (`pg`) | ✅ 代码已接入；生产配置待完成 |
+| 认证与数据 | Better Auth 1.6.28 + PostgreSQL (`pg`) | ✅ 已接入并上线(Vercel + Neon Postgres) |
 | 编辑器 / 可视化 / 测试 | TipTap、D3.js、Node.js `node:test`(认证/配置) | 🟡 业务数据层与浏览器测试仍待接入 |
 
 ## 目录结构(实际)

@@ -27,7 +27,7 @@ export function paperReferenceHref(reference: ChatReference, returnTo?: string |
   if (resourceTypeOf(reference) !== "paper") return null;
   const resourceId = resourceIdOf(reference);
   return resourceId
-    ? paperHref(resourceId, returnTo)
+    ? paperHref(resourceId, { mode: "create", source: returnTo })
     : null;
 }
 

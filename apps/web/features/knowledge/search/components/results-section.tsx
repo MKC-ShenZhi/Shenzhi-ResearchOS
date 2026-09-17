@@ -6,6 +6,7 @@ import { KnowledgeClientError } from "@/clients/knowledge";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { KnowledgeResultCard } from "./result-card";
 import { knowledgeQueryRetry } from "../../retry";
+import { KnowledgeSearchPagination } from "./search-pagination";
 import {
   KnowledgeSearchEmpty,
   KnowledgeSearchError,
@@ -20,9 +21,13 @@ async function fetchSearch(params: KnowledgeSearchParams) {
 export function KnowledgeResultsSection({
   params,
   returnTo,
+  page,
+  onPageChange,
 }: {
   params: KnowledgeSearchParams;
   returnTo: string;
+  page: number;
+  onPageChange: (page: number) => void;
 }) {
   const query = params.query.trim();
   const { data, isPending, isFetching, isError, error, refetch } = useQuery({
@@ -53,6 +58,7 @@ export function KnowledgeResultsSection({
   }
 
   const results = data?.results ?? [];
+  const hasMore = data?.hasMore ?? false;
 
   if (results.length === 0) {
     return <KnowledgeSearchEmpty query={query} />;
@@ -61,13 +67,19 @@ export function KnowledgeResultsSection({
   return (
     <div className="space-y-4">
       <p className="px-1 text-sm text-muted">
-        「{query}」的搜索结果 · <span className="font-semibold text-ink">{results.length}</span> 篇
+        「{query}」的搜索结果 · 第 {page} 页 · 本页
+        <span className="font-semibold text-ink"> {results.length}</span> 篇
       </p>
       <div className="space-y-4">
         {results.map((hit, index) => (
           <KnowledgeResultCard key={hit.id} hit={hit} index={index} returnTo={returnTo} />
         ))}
       </div>
+      <KnowledgeSearchPagination
+        page={page}
+        hasMore={hasMore}
+        onPageChange={onPageChange}
+      />
     </div>
   );
 }

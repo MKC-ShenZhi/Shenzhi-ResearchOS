@@ -1,4 +1,43 @@
-import { appendInternalReturnTo } from "./internal-return-to";
+import { appendInternalReturnTo, normalizeInternalReturnTo } from "./internal-return-to";
+
+type PaperHrefOptions = {
+  graph?: boolean;
+} & (
+  | { mode: "create"; source: string | null | undefined; returnTo?: never }
+  | { mode: "preserve"; returnTo: string | null | undefined; source?: never }
+  | { mode?: never; source?: never; returnTo?: never }
+);
+
+const PAPER_SCOPE_PATH = /^\/papers\/[^/]+(?:\/graph)?\/?$/;
+const LEGACY_PAPER_SCOPE_PATH = /^\/knowledge\/search\/[^/]+(?:\/graph)?\/?$/;
+
+/** Keep returnTo anchored outside Paper scope, even when given an already-nested legacy URL. */
+function paperReturnTo(options?: PaperHrefOptions): string | null {
+  let candidate = normalizeInternalReturnTo(
+    options?.mode === "create"
+      ? options.source
+      : options?.mode === "preserve"
+        ? options.returnTo
+        : null,
+  );
+  const visited = new Set<string>();
+
+  while (typeof candidate === "string" && !visited.has(candidate)) {
+    visited.add(candidate);
+
+    try {
+      const parsed = new URL(candidate, "https://shenzhi-internal.invalid");
+      if (!PAPER_SCOPE_PATH.test(parsed.pathname) && !LEGACY_PAPER_SCOPE_PATH.test(parsed.pathname)) {
+        return candidate;
+      }
+      candidate = normalizeInternalReturnTo(parsed.searchParams.get("returnTo"));
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
 
 /** Restore one URL path segment to the raw opaque ID used inside the application. */
 export function paperIdFromRouteParam(value: string): string {
@@ -10,8 +49,11 @@ export function paperIdFromRouteParam(value: string): string {
 }
 
 /** IDs are raw and opaque inside the app; encode them only when building a URL. */
-export function paperHref(id: string, returnTo?: string | null, graph = false): string {
-  return appendInternalReturnTo(`/papers/${encodeURIComponent(id)}${graph ? "/graph" : ""}`, returnTo);
+export function paperHref(id: string, options?: PaperHrefOptions): string {
+  return appendInternalReturnTo(
+    `/papers/${encodeURIComponent(id)}${options?.graph ? "/graph" : ""}`,
+    paperReturnTo(options),
+  );
 }
 
 export function paperExternalUrl(value: string | null): string | null {

@@ -25,6 +25,8 @@ class Message:
     changed: asyncio.Event = field(default_factory=asyncio.Event)
     subscribers: int = 0
     stop_requested: bool = False
+    stream_request_id: str | None = None
+    stop_request_id: str | None = None
 
     def emit(self, event: str, data: dict) -> None:
         self.events.append((event, data))

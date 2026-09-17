@@ -23,6 +23,8 @@ import { patents } from "@/lib/data/patents";
 import { fundings } from "@/lib/data/funding";
 import { scholars } from "@/lib/data/scholars";
 import { institutions } from "@/lib/data/institutions";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { paperHref } from "@/lib/navigation/paper";
 import { cn } from "@/lib/utils";
 
 type SearchType = "全部" | "论文" | "专利" | "基金" | "学者" | "机构";
@@ -130,6 +132,7 @@ function MiniNetwork({ institution = false }: { institution?: boolean }) {
 
 export function KnowledgeDashboard() {
   const router = useRouter();
+  const returnTo = useCurrentInternalPath();
   const [query, setQuery] = useState("");
   const [activeType, setActiveType] = useState<SearchType>("全部");
 
@@ -138,7 +141,7 @@ export function KnowledgeDashboard() {
       type: "论文" as const,
       title: item.title,
       meta: `${item.venue} · ${item.authors}`,
-      href: `/papers/${encodeURIComponent(item.id)}`,
+      href: paperHref(item.id, { mode: "create", source: returnTo }),
     })),
     ...patents.map((item) => ({
       type: "专利" as const,
@@ -164,7 +167,7 @@ export function KnowledgeDashboard() {
       meta: `${item.type} · ${item.location}`,
       href: "/knowledge/institutions",
     })),
-  ], []);
+  ], [returnTo]);
 
   const results = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -294,7 +297,7 @@ export function KnowledgeDashboard() {
               </div>
               <div className="mt-2 divide-y divide-line">
                 {libraryItems.map((item) => (
-                  <Link key={item.id} href={`/papers/${encodeURIComponent(item.id)}`} onClick={(event) => event.stopPropagation()} className="group/item flex items-start gap-3 py-3 first:pt-1">
+                  <Link key={item.id} href={paperHref(item.id, { mode: "create", source: returnTo })} onClick={(event) => event.stopPropagation()} className="group/item flex items-start gap-3 py-3 first:pt-1">
                     <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><FileText className="size-4" /></span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium text-ink group-hover/item:text-primary">{item.title}</span>

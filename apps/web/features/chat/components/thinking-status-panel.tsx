@@ -28,7 +28,7 @@ export function ThinkingStatusPanel({
   streaming?: boolean;
   knowledgeGrounding?: KnowledgeGroundingState;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const degraded = knowledgeGrounding === "unavailable" || knowledgeGrounding === "unverified";
   const effectiveReadCount = degraded ? undefined : readCount;
   const items = useMemo(() => {
@@ -60,6 +60,7 @@ export function ThinkingStatusPanel({
     <div className="overflow-hidden rounded-xl border border-line/60 bg-sidebar/60">
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left"
       >

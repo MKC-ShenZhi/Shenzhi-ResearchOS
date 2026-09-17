@@ -1,33 +1,39 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect } from "react";
-import { apiJson } from "@/clients/backend/http";
+import { useState } from "react";
 import { KnowledgeClientError } from "@/clients/knowledge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useKnowledgePaper } from "@/features/knowledge/paper/use-knowledge-paper";
 import { KnowledgePaperSkeleton } from "@/features/knowledge/paper/components/paper-skeleton";
 import { normalizeInternalReturnTo } from "@/lib/navigation/internal-return-to";
-import { PaperTopbar } from "./components/paper-topbar";
-import { PaperLeftSidebar } from "./components/paper-left-sidebar";
-import { PaperPdfViewer } from "./components/paper-pdf-viewer";
+import { PaperBackButton, PaperTopbar } from "./components/paper-topbar";
+import { PaperAbstractView } from "./components/paper-abstract-view";
+import { PaperPdfViewer, type ViewerState } from "./components/paper-pdf-viewer";
 import { PaperRightPanel } from "./components/right-panel";
+
+type PaperViewMode = "abstract" | "paper";
 
 export function PaperDetailPage({ paperId, returnTo }: { paperId: string; returnTo?: string | null }) {
   const { data: paper, isPending, isError, error, refetch } = useKnowledgePaper(paperId);
   const safeReturnTo = normalizeInternalReturnTo(returnTo);
+  const [viewMode, setViewMode] = useState<PaperViewMode>("abstract");
+  const [hasOpenedPaper, setHasOpenedPaper] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [viewerState, setViewerState] = useState<ViewerState>("loading");
 
-  useEffect(() => {
-    if (!paper) return;
-    void apiJson(`/papers/${encodeURIComponent(paper.id)}/view`, { method: "POST" }).catch(() => {
-      // Viewing a paper must remain available when history storage is unavailable.
-    });
-  }, [paper]);
+  const handleViewModeChange = (nextMode: string) => {
+    if (nextMode !== "abstract" && nextMode !== "paper") return;
+    setViewMode(nextMode);
+    if (nextMode === "paper") setHasOpenedPaper(true);
+  };
 
   return (
     <div className="flex min-h-dvh flex-col bg-background lg:h-dvh lg:overflow-hidden">
-      {paper ? <PaperTopbar paper={paper} returnTo={safeReturnTo} /> : (
+      {!paper && (
         <header className="border-b border-line bg-card px-5 py-4">
-          <Link href={safeReturnTo ?? "/knowledge/search"} className="text-sm text-primary">返回来源</Link>
+          <div className="text-sm text-primary">
+            <PaperBackButton returnTo={safeReturnTo} />
+          </div>
         </header>
       )}
       {isPending && <KnowledgePaperSkeleton />}
@@ -39,13 +45,57 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
         </div>
       )}
       {paper && (
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <PaperLeftSidebar key={`metadata-${paperId}`} paper={paper} />
-          <main className="min-w-0 flex-1 p-3 lg:overflow-y-auto lg:p-5">
-            <PaperPdfViewer key={paper.pdfUrl} pdfUrl={paper.pdfUrl} title={paper.title} />
-          </main>
-          <PaperRightPanel key={`assistant-${paperId}`} paper={paper} />
-        </div>
+        <Tabs
+          value={viewMode}
+          onValueChange={handleViewModeChange}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(26rem,42%)] lg:gap-3 lg:p-3">
+            <div className="flex min-h-0 min-w-0 flex-col lg:overflow-hidden">
+              <PaperTopbar
+                paper={paper}
+                returnTo={safeReturnTo}
+                viewMode={viewMode}
+                viewerState={!paper.pdfUrl ? "no_pdf" : viewerState}
+                zoom={zoom}
+                setZoom={setZoom}
+              >
+                <TabsList aria-label="论文内容" className="gap-0.5 rounded-lg bg-transparent p-0 sm:gap-1">
+                  <TabsTrigger value="abstract" className="px-1 py-1 text-xs sm:px-2.5">Abstract</TabsTrigger>
+                  <TabsTrigger value="paper" className="px-1 py-1 text-xs sm:px-2.5">Paper</TabsTrigger>
+                </TabsList>
+              </PaperTopbar>
+              <main className="min-h-0 min-w-0 flex-1 lg:overflow-hidden">
+                <div className="h-full min-h-0">
+                  {viewMode === "abstract" && (
+                    <div role="tabpanel" aria-label="Abstract" className="h-full overflow-y-auto">
+                      <PaperAbstractView key={`abstract-${paperId}`} paper={paper} />
+                    </div>
+                  )}
+                  {hasOpenedPaper && (
+                    <div
+                      role="tabpanel"
+                      aria-label="Paper"
+                      aria-hidden={viewMode !== "paper"}
+                      className={viewMode === "paper" ? "h-full" : "hidden"}
+                    >
+                      <PaperPdfViewer
+                        key={paperId}
+                        paperId={paperId}
+                        pdfUrl={paper.pdfUrl}
+                        title={paper.title}
+                        zoom={zoom}
+                        setZoom={setZoom}
+                        onViewerStateChange={setViewerState}
+                      />
+                    </div>
+                  )}
+                </div>
+              </main>
+            </div>
+            <PaperRightPanel key={`assistant-${paperId}`} paper={paper} />
+          </div>
+        </Tabs>
       )}
     </div>
   );

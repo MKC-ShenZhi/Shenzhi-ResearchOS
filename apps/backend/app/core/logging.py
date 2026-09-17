@@ -29,6 +29,8 @@ ALLOWED_LOG_FIELDS = frozenset({
     'upstream',
     'provider',
     'operation',
+    'session_id',
+    'message_id',
 })
 
 

@@ -88,12 +88,16 @@ class LoggingCoreTests(unittest.IsolatedAsyncioTestCase):
             {
                 'request_id': 'allowlist-test-1',
                 'route': '/health',
+                'session_id': 'session-1',
+                'message_id': 'message-1',
                 'authorization': 'must-not-be-logged',
             },
         )
         record = next(item for item in self.capture.records if item.get('event') == 'test.allowlist')
         self.assertEqual(record['request_id'], 'allowlist-test-1')
         self.assertEqual(record['route'], '/health')
+        self.assertEqual(record['session_id'], 'session-1')
+        self.assertEqual(record['message_id'], 'message-1')
         self.assertNotIn('authorization', record)
 
     async def test_unknown_exception_has_one_traceback_and_safe_response(self):

@@ -63,6 +63,14 @@ Graph `rootId/nodes/edges`，边使用 `sourceId/targetId/relation`。空字符�
 `code/message/retryable/requestId`。Search 请求只使用 `query/topK/yearFrom/yearTo/venue/author/keyword/subject`；
 上游的 snake_case 字段只在 Adapter 到 HTTP Client 的边界出现。
 
+`GET /api/v1/knowledge/paper` 只返回知识底座论文详情和 `pdfUrl`，不预先访问 PDF 源站。
+用户首次打开 Paper 视图时，站内 PDF.js 才通过受控的
+`GET /api/v1/paper-resource/pdf?paperId=...` 同源端点读取字节流，避免科研源站缺少
+CORS 响应头导致浏览器拒绝加载。端点只接受可信 `paperId`，不接受任意 URL；Backend
+在该端点内复用 `PaperResourceService` 与 Provider 完成校验和流式读取，不持久化或缓存 PDF。
+配置项为 `PAPER_RESOURCE_TIMEOUT`（秒）与
+`PAPER_MAX_SIZE_MB`（可获取资源大小上限）。
+
 当前仅支持 **单进程 / 单 worker**，Session 与解析后的附件为临时内存数据，重启清空。
 
 Python 环境与依赖统一使用 [uv](https://docs.astral.sh/uv/) 管理。新增依赖使用：

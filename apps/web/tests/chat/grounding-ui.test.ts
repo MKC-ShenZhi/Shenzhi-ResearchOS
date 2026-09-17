@@ -14,3 +14,14 @@ test("grounding UI distinguishes grounded, degraded, and ordinary answers", () =
   assert.match(grid, /检索资料/);
   assert.match(conversation, /knowledge_grounding/);
 });
+
+test("chat auxiliary panels stay collapsed until the user opens them", () => {
+  const statusPanel = readFileSync("features/chat/components/thinking-status-panel.tsx", "utf8");
+  const reasoningPanel = readFileSync("features/chat/components/reasoning-chain-panel.tsx", "utf8");
+
+  assert.match(statusPanel, /const \[open, setOpen\] = useState\(false\)/);
+  assert.match(reasoningPanel, /const \[open, setOpen\] = useState\(false\)/);
+  assert.doesNotMatch(reasoningPanel, /setOpen\(true\)/);
+  assert.match(statusPanel, /aria-expanded=\{open\}/);
+  assert.match(reasoningPanel, /aria-expanded=\{open\}/);
+});
