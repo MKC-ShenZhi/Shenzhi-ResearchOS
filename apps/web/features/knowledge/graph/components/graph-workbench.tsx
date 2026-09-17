@@ -20,6 +20,8 @@ import { GraphNodeDetail } from "./graph-node-detail";
 import { GraphRelatedPanel } from "./graph-related-panel";
 import {
   filterGraphByDirection,
+  limitGraphNodes,
+  MAX_VISIBLE_GRAPH_NODES,
   relatedPapers,
   type GraphDirectionFilter,
 } from "../lib/graph-utils";
@@ -35,6 +37,7 @@ import { knowledgeQueryRetry } from "../../retry";
 
 const LAYOUT_OPTIONS: GraphLayoutMode[] = ["radial", "treeHorizontal", "treeVertical", "force"];
 const DEPTH_OPTIONS: KnowledgeGraphDepth[] = [1, 2];
+const PER_LAYER_OPTIONS = [8, 12, 16, 20];
 
 /** 图谱工作台 —— 三栏：左关联论文 / 中图谱 / 右详情 */
 export function KnowledgeGraphWorkbench({ paperId, returnTo }: { paperId: string; returnTo?: string | null }) {
@@ -42,6 +45,7 @@ export function KnowledgeGraphWorkbench({ paperId, returnTo }: { paperId: string
   const [layoutMode, setLayoutMode] = useState<GraphLayoutMode>("radial");
   const [direction, setDirection] = useState<GraphDirectionFilter>("all");
   const [depth, setDepth] = useState<KnowledgeGraphDepth>(1);
+  const [nodesPerLayer, setNodesPerLayer] = useState(16);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -71,10 +75,10 @@ export function KnowledgeGraphWorkbench({ paperId, returnTo }: { paperId: string
   // 论文详情：仅选中 Paper 节点时获取；React Query 自动缓存
   const detailQuery = useKnowledgePaper(selectedPaperId);
 
-  const displayGraph = useMemo(
-    () => (fullGraph ? filterGraphByDirection(fullGraph, direction) : null),
-    [fullGraph, direction],
-  );
+  const displayGraph = useMemo(() => {
+    if (!fullGraph) return null;
+    return limitGraphNodes(filterGraphByDirection(fullGraph, direction), depth, nodesPerLayer);
+  }, [fullGraph, direction, depth, nodesPerLayer]);
   const positions = useMemo(
     () => (displayGraph ? computeLayout(layoutMode, displayGraph) : null),
     [displayGraph, layoutMode],
@@ -169,6 +173,19 @@ export function KnowledgeGraphWorkbench({ paperId, returnTo }: { paperId: string
             </button>
           ))}
         </div>
+
+        <label className="flex shrink-0 items-center gap-1 rounded-lg bg-chip p-0.5 pl-2 text-[10px] text-faint">
+          每层
+          <select
+            value={nodesPerLayer}
+            onChange={(event) => setNodesPerLayer(Number(event.target.value))}
+            aria-label="每层显示节点数"
+            className="h-7 rounded-md bg-card px-1.5 text-[11px] text-ink"
+          >
+            {PER_LAYER_OPTIONS.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <span className="px-1 text-[10px] text-faint">最多 {MAX_VISIBLE_GRAPH_NODES} 节点</span>
+        </label>
       </header>
 
       {/* 三栏主体 */}
@@ -187,7 +204,7 @@ export function KnowledgeGraphWorkbench({ paperId, returnTo }: { paperId: string
 
         <main className="order-1 min-h-[420px] min-w-0 flex-1 bg-panel/40 p-4 lg:order-2">
           <GraphCanvas
-            key={`${paperId}:${depth}:${layoutMode}:${direction}:${graphQuery.dataUpdatedAt}`}
+            key={`${paperId}:${depth}:${nodesPerLayer}:${layoutMode}:${direction}:${graphQuery.dataUpdatedAt}`}
             graph={displayGraph}
             positions={positions}
             selectedId={selectedNode.id}
