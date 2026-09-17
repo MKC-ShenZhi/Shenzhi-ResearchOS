@@ -15,9 +15,9 @@ from app.schemas.knowledge import (
     PaperSearchResult,
     Provenance,
 )
-from app.services import chat
-from app.services.knowledge import KnowledgeServiceError
-from app.services.sessions import repository
+from app.services.chat import service as chat
+from app.services.knowledge.service import KnowledgeServiceError
+from app.services.chat.repository import repository
 
 
 OWNER = {
@@ -43,7 +43,7 @@ def _events(text: str):
 def _context_api():
     """Turn a missing wished-for module into a deliberate RED assertion."""
     try:
-        from app.services.knowledge_context import (
+        from app.services.chat.grounding import (
             KnowledgeContextBuilder,
             format_reference_data,
             validate_citations,
@@ -178,7 +178,7 @@ class KnowledgeContextTests(unittest.TestCase):
 
     def test_valid_citation_ids_are_deduplicated(self):
         builder_cls, _, _ = _context_api()
-        from app.services.knowledge_context import citation_reference_ids
+        from app.services.chat.grounding import citation_reference_ids
 
         bundle = builder_cls().build(KnowledgeSearchResponse(results=[
             _paper("opaque-a", "Paper A", "Abstract A"),

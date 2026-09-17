@@ -7,7 +7,7 @@ from app.api import paper_resource as paper_resource_api
 from app.core.identity import require_bff
 from app.main import app
 from app.schemas.knowledge import PaperDetail, Provenance
-from app.services.paper_resource import PaperResourceService
+from app.services.paper_resource.service import PaperResourceService
 
 
 PAPER_ID = 'paper:test:123'

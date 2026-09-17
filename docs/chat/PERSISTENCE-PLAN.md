@@ -39,7 +39,7 @@ Next.js（features/chat → clients/backend）
    ↓
 BFF（/api/v1，注入 owner，不传 Cookie）
    ↓
-FastAPI（api/chat.py → services/chat.py）
+FastAPI（api/chat.py → services/chat/service.py）
    ↓
 SessionRepository ──┬── PostgreSQL（历史）
                     └── 进程内 dict（生成中：Task / events / SSE）
@@ -107,7 +107,7 @@ owner（匿名或登录）  1 ── N  Session（会话）  1 ── N  Message
 
 ## Chat 完整输入输出流（现状梳理）
 
-参与 Backend 改动前，先对齐端到端时序。代码入口见 `apps/backend/app/api/chat.py`、`services/chat.py`、`services/sessions.py`；前端见 `features/chat/hooks/use-chat-session.ts`。
+参与 Backend 改动前，先对齐端到端时序。代码入口见 `apps/backend/app/api/chat.py`、`services/chat/service.py`、`services/chat/repository.py`；前端见 `features/chat/hooks/use-chat-session.ts`。
 
 ### 首轮提问
 
@@ -182,8 +182,8 @@ POST 快速返回 id、SSE 懒启动 generate，是为让客户端尽早连流�
 
 | 层 | 做什么 |
 | --- | --- |
-| services/sessions.py | 双实现 Repository；保留现有 dataclass |
-| services/chat.py | 三处状态变更后 **await** persist_message（generate finally / stop / resume） |
+| services/chat/repository.py | 双实现 Repository；保留现有 dataclass |
+| services/chat/service.py | 三处状态变更后 **await** persist_message（generate finally / stop / resume） |
 | api/chat.py | ephemeral 字段跟随是否启用 PG |
 | main.py | 启动时执行 recover |
 
@@ -259,7 +259,7 @@ stopped / failed → streaming（resume，仅会话最后一条）
 
 1. Alembic 建表，引入 sqlalchemy、asyncpg、alembic。
 2. 实现 PostgresSessionRepository，与 Memory 实现跑契约测试。
-3. 将 prepare_message 改为 async；chat.py 三处 await persist；main.py lifespan await recover；ephemeral 跟随 is_durable。
+3. 将 prepare_message 改为 async；services/chat/service.py 三处 await persist；main.py lifespan await recover；ephemeral 跟随 is_durable。
 4. 本地配置 PostgreSQL，验证多轮对话后重启历史仍在。
 5. 现有 16 项 Backend 测试与 Web 测试零改动通过后合入 dev。
 

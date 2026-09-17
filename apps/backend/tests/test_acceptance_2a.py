@@ -14,8 +14,8 @@ from app.core.database import session_scope
 from app.main import app
 from app.models.chat import ChatMessageRow, ChatSessionRow
 from app.schemas.knowledge import KnowledgeSearchResponse
-from app.services import chat
-from app.services.sessions import repository
+from app.services.chat import service as chat
+from app.services.chat.repository import repository
 
 OWNER = {'x-shenzhi-anonymous-id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}
 OTHER = {'x-shenzhi-anonymous-id': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'}

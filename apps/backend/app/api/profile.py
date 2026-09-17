@@ -6,7 +6,7 @@ from app.core.errors import BusinessError
 from app.core.identity import request_identity
 from app.core.responses import ok
 from app.schemas.profile import UserProfilePatch
-from app.services.profile import ProfileService
+from app.services.user.profile import ProfileService
 
 router = APIRouter(prefix='/api/v1/profile', tags=['profile'])
 service = ProfileService()

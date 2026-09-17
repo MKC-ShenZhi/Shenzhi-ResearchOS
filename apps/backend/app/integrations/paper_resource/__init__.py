@@ -1,0 +1,1 @@
+"""External paper resource integrations."""

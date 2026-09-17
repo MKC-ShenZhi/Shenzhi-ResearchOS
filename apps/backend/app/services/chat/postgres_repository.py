@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import dispose_engine, get_session_factory, session_scope
 from app.core.errors import BusinessError
 from app.models.chat import ChatMessageRow, ChatSessionRow
-from app.services.session_entities import Message, Session
+from app.services.chat.entities import Message, Session
 
 TERMINAL = frozenset({'done', 'stopped', 'failed'})
 RECOVER_ERROR = 'backend restarted while generating'

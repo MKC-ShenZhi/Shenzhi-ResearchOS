@@ -27,7 +27,7 @@
 | `services/backend/{forward.ts,README.md}` | `clients/backend/` | BFF 边界与文档 |
 | `components/{layout,graph}` | `components/common/{layout,graph}` | 跨 Feature UI |
 | `lib/citations.tsx` | `components/common/citations.tsx` | 保留原静态引用；Chat 双向引用单独放 Feature |
-| 旧论文检索代理 | `apps/backend/app/services/knowledge.py` + `integrations/knowledge` | 统一由 Knowledge Capability 提供 |
+| 旧论文检索代理 | `apps/backend/app/services/knowledge/service.py` + `integrations/knowledge` | 统一由 Knowledge Capability 提供 |
 | `apps/backend/app/main.py` | `api/*`、`schemas/chat.py`、`core/*`、`services/*` | main 只保留应用、生命周期、全局错误、注册 |
 
 第一提交仅 `git mv`（54 文件、零行内容变化），第二提交单独修复 imports 和拆分后端入口。历史可按 `git log --follow` 查看。
@@ -46,11 +46,11 @@ B 路径相对旧仓库根目录；没有将 B 同名组件覆盖 dev。
 | 旧 Search client | `clients/knowledge` + Knowledge Search Feature | 统一论文搜索产品协议 |
 | `lib/ask/draft.ts`、`lib/ask/errors.ts` | Chat `services/{draft,errors}` | 草稿安全读写、匹配、成功后清理；错误保留 Backend 具体原因 |
 | `stores/composer.ts` | dev 受控 Composer + Chat hook | 不保留 A/B/C 数据总线；状态/草稿功能由统一链路承载 |
-| `app/api/ai/chat/route.ts` | FastAPI `services/model_provider.py` | DashScope/DeepSeek、真实 HTTP SSE、reasoning、取消、标准错误、模型/参数、追问 |
-| `lib/chat-prompt.ts` | FastAPI `services/chat.py` | 四种回答模式、服务端历史/附件/来源上下文 |
-| `lib/c-server/web-search-client.ts`、`app/api/web-search/route.ts` | FastAPI `services/web_search.py` | Tavily→SearXNG、超时、news/general、来源归一化与告警 |
-| `lib/c-server/parse-document.ts`、`app/api/uploads/route.ts` | FastAPI `services/{document_parser,upload_reader}.py`、`api/uploads.py` | PDF/TXT/Markdown、20MB、不落盘、30k/60k、截断 warning |
-| B `ChatSession/ChatMessage/Favorite` 概念 | FastAPI `services/sessions.py` + CRUD API | 临时会话仓库；不迁移 SQLite 数据、Prisma schema |
+| `app/api/ai/chat/route.ts` | FastAPI `integrations/llm/provider.py` | DashScope/DeepSeek、真实 HTTP SSE、reasoning、取消、标准错误、模型/参数、追问 |
+| `lib/chat-prompt.ts` | FastAPI `services/chat/service.py` | 四种回答模式、服务端历史/附件/来源上下文 |
+| `lib/c-server/web-search-client.ts`、`app/api/web-search/route.ts` | FastAPI `integrations/web_search/provider.py` | Tavily→SearXNG、超时、news/general、来源归一化与告警 |
+| `lib/c-server/parse-document.ts`、`app/api/uploads/route.ts` | FastAPI `services/uploads/parser.py`、`api/_support/upload_reader.py`、`api/uploads.py` | PDF/TXT/Markdown、20MB、不落盘、30k/60k、截断 warning |
+| B `ChatSession/ChatMessage/Favorite` 概念 | FastAPI `services/chat/repository.py` + CRUD API | 临时会话仓库；不迁移 SQLite 数据、Prisma schema |
 
 ## 没有迁入
 

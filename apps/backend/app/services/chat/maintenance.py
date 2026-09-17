@@ -5,7 +5,7 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 
-from app.services.sessions import repository
+from app.services.chat.repository import repository
 
 DEFAULT_ANONYMOUS_TTL_SECONDS = 604800
 logger = logging.getLogger(__name__)

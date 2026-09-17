@@ -10,9 +10,9 @@ from app.core.config import MAX_HISTORY_CHARS
 from app.core.errors import BusinessError
 from app.core.logging import log_event
 from app.core.time import utc_now
-from app.services.document_parser import attachment_context, format_paper_context
-from app.services.knowledge import KnowledgeService, KnowledgeServiceError
-from app.services.knowledge_context import (
+from app.services.chat.attachments import attachment_context, format_paper_context
+from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
+from app.services.chat.grounding import (
     EvidenceBundle,
     KnowledgeContextBuilder,
     KnowledgeContextItem,
@@ -21,10 +21,10 @@ from app.services.knowledge_context import (
     snapshots_for_bundle,
     validate_citations,
 )
-from app.services.model_provider import ModelProvider, resolve_model
-from app.services.knowledge_query import normalize_knowledge_query
-from app.services.sessions import Message, Session, repository
-from app.services.web_search import web_search
+from app.integrations.llm.provider import ModelProvider, resolve_model
+from app.services.chat.knowledge_query import normalize_knowledge_query
+from app.services.chat.repository import Message, Session, repository
+from app.integrations.web_search.provider import web_search
 from app.schemas.chat import ChatAttachment, capabilities_for_body
 from app.schemas.knowledge import KnowledgeSearchRequest
 

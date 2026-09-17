@@ -10,7 +10,7 @@ from app.schemas.profile import (
     InstitutionExperience,
     UserProfilePatch,
 )
-from app.services.profile import ProfileService
+from app.services.user.profile import ProfileService
 
 
 @unittest.skipUnless(os.getenv('CHAT_DATABASE_URL'), 'CHAT_DATABASE_URL not set')
