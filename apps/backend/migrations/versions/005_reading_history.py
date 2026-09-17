@@ -4,8 +4,8 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = '003_reading_history'
-down_revision: Union[str, Sequence[str], None] = '002_anon_expiry_idx'
+revision: str = '005_reading_history'
+down_revision: Union[str, Sequence[str], None] = '004_user_profiles'
 branch_labels = None
 depends_on = None
 
