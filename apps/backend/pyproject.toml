@@ -7,6 +7,8 @@ dependencies = [
     "asyncpg>=0.31.0",
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
+    # draw_chart 用（agent 基座的配图工具：从被引来源的数字渲柱/折线/饼图）
+    "matplotlib>=3.9",
     "pypdf>=5.0,<7",
     "python-multipart>=0.0.12",
     "sqlalchemy[asyncio]>=2.0",
