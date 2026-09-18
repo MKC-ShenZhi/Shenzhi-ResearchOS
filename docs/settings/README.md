@@ -23,3 +23,28 @@ Notification values currently record preference only. No delivery channel, inbox
 - Structured list items are validated by Pydantic; unknown fields, invalid years, overlong values, and non-allowlisted avatar keys are rejected.
 - Profile data lives in the FastAPI business database and is not an authentication source. Better Auth remains the sole owner of users, credentials, and sessions.
 - The settings UI clears profile state when the authenticated user changes. A failed save keeps the browser draft available for retry.
+
+## Account management (phase three)
+
+The **Account** block on `/settings?tab=profile` manages authentication data only. It does **not** add FastAPI routes or read Better Auth tables from the business backend.
+
+| Capability | Boundary | Notes |
+| --- | --- | --- |
+| Email display | Better Auth session | Read-only |
+| Display name | `authClient.updateUser` | Updates `user.name` |
+| Change password | `authClient.changePassword` | Revokes other sessions on success |
+| Set initial password (OAuth) | `/api/auth/password/send-otp` + `/api/auth/password/set` | Email OTP proves mailbox ownership |
+| Session list / revoke others | `listSessions` / `revokeOtherSessions` | Better Auth session store |
+| Delete account | `authClient.deleteUser` | Typed confirmation + re-auth if session expired |
+
+Implementation layout:
+
+- UI: `features/settings/components/account-section.tsx`, `account-sessions.tsx`
+- Orchestration: `features/settings/services/account-password.ts` (OTP set-password only)
+- Copy: `features/settings/i18n.ts` (`accountMessages`)
+
+Out of scope for this phase:
+
+- FastAPI account APIs or business-database credential storage
+- Avatar upload and scholar profile fields (phase two `user_profiles`)
+- Cascading deletion of `user_profiles`, `user_settings`, or chat history (document behaviour; not automated here)
