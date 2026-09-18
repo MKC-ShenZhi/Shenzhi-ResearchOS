@@ -1,6 +1,6 @@
 import { Monitor, Moon, Sun } from "lucide-react";
 import type { ReactNode } from "react";
-import type { SettingsLocale } from "@/clients/backend/settings";
+import type { SettingsLocale } from "@/clients/settings";
 import type { ThemeMode } from "@/stores/theme";
 import { cn } from "@/lib/utils";
 import { settingsMessages } from "../i18n";

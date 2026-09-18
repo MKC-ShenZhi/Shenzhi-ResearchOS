@@ -306,11 +306,10 @@ apps/web/clients/
 其中：
 
 ```text
-apps/web/clients/backend/           # 基类：HTTP / SSE / BFF / identity
-apps/web/clients/backend/{module}/  # 模块 Client，如 chat/、profile/
+apps/web/clients/backend/
 ```
 
-负责 ShenZhi Backend 的通用请求基础设施（`backend/` 根目录）：
+负责 ShenZhi Backend 的通用请求基础设施：
 
 - HTTP / SSE 请求
 - Header 与身份转发边界

@@ -8,8 +8,7 @@ const notifications = readFileSync("features/settings/components/notifications-p
 const bff = readFileSync("app/api/v1/[...path]/route.ts", "utf8");
 const profileEditor = readFileSync("features/settings/components/profile/profile-editor.tsx", "utf8");
 const profileHook = readFileSync("features/settings/hooks/use-user-profile.ts", "utf8");
-const profileClient = readFileSync("clients/backend/profile/client.ts", "utf8");
-const settingsClient = readFileSync("clients/backend/settings/index.ts", "utf8");
+const profileClient = readFileSync("clients/profile/index.ts", "utf8");
 const avatarOptions = readFileSync("features/settings/avatar-options.ts", "utf8");
 
 test("settings keeps all deep links and falls back invalid values to profile", () => {
@@ -28,11 +27,6 @@ test("profile and notifications no longer expose fabricated biography or notific
 test("settings reuses the generic authenticated BFF", () => {
   assert.match(bff, /forwardToBusinessBackend/);
   assert.doesNotMatch(tabs, /x-shenzhi-user-id/i);
-});
-
-test("settings and profile clients live under the backend module boundary", () => {
-  assert.match(settingsClient, /apiJson<UserSettings>\("\/settings"\)/);
-  assert.match(profileClient, /apiJson<UserProfile>\("\/profile"\)/);
 });
 
 test("profile uses five local avatars and the authenticated profile API", () => {

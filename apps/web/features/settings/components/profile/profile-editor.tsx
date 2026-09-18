@@ -3,8 +3,8 @@
 import Image from "next/image";
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Pencil, Plus, Save, Trash2, X } from "lucide-react";
-import type { UserProfile } from "@/clients/backend/profile";
-import type { SettingsLocale } from "@/clients/backend/settings";
+import type { UserProfile } from "@/clients/profile";
+import type { SettingsLocale } from "@/clients/settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";

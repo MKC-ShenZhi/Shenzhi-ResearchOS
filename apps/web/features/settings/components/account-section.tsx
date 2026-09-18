@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Trash2 } from "lucide-react";
-import type { SettingsLocale } from "@/clients/backend/settings";
+import type { SettingsLocale } from "@/clients/settings";
 import { authClient } from "@/components/auth/auth-client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getAuthErrorMessage, isAuthErrorCode, PASSWORD_POLICY_MESSAGE } from "@/components/auth/auth-errors";

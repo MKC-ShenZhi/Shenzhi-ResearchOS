@@ -8,7 +8,7 @@ import {
   type NotificationPreferences,
   type SettingsLocale,
   type UserSettingsPatch,
-} from "@/clients/backend/settings";
+} from "@/clients/settings";
 import { useThemeStore, type ThemeMode } from "@/stores/theme";
 import { readLocalLocale, storeLocalLocale } from "../i18n";
 

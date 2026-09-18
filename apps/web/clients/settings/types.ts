@@ -1,4 +1,5 @@
-export type ThemeMode = "light" | "dark" | "system";
+import type { ThemeMode } from "@/stores/theme";
+
 export type SettingsLocale = "zh-CN" | "en";
 export type NotificationKey =
   | "activity"

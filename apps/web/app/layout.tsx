@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import Script from "next/script";
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { ThemeStoreHydrator } from "@/components/common/theme-store-hydrator";
 import { QueryProvider } from "@/providers/query-provider";
 import "@/styles/globals.css";
 
@@ -18,11 +20,12 @@ const themeScript = `(function(){try{var p=new URLSearchParams(location.search).
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
-      <body>
+      <body suppressHydrationWarning>
+        <Script id="shenzhi-theme" strategy="beforeInteractive">
+          {themeScript}
+        </Script>
         <AuthProvider>
+          <ThemeStoreHydrator />
           <QueryProvider>{children}</QueryProvider>
         </AuthProvider>
       </body>
