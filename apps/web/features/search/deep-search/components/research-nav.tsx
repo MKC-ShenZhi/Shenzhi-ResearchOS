@@ -1,6 +1,6 @@
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { recentResearch } from "@/lib/data/agent";
+import { recentResearch } from "@/features/search/deep-search/data";
 import { cn } from "@/lib/utils";
 
 /** 近期研究栏 —— AI 研究助手页左侧 */

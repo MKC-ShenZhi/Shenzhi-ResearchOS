@@ -14,12 +14,12 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { popoverPosition, usePopoverPlacement } from "@/lib/use-popover-placement";
-import { feedPapers } from "@/lib/data/papers";
-import { patents } from "@/lib/data/patents";
-import { fundings } from "@/lib/data/funding";
-import { scholars } from "@/lib/data/scholars";
-import { institutions } from "@/lib/data/institutions";
-import { projects } from "@/lib/data/projects";
+import { feedPapers } from "@/features/knowledge/data-papers";
+import { patents } from "@/features/knowledge/data-patents";
+import { fundings } from "@/features/knowledge/data-funding";
+import { scholars } from "@/features/knowledge/data-scholars";
+import { institutions } from "@/features/knowledge/data-institutions";
+import { projects } from "@/features/projects/data";
 import { uploadFile } from "@/clients/backend/uploads";
 import type { ChatAttachment, ChatAttachmentKind } from "@/types/ai-search";
 

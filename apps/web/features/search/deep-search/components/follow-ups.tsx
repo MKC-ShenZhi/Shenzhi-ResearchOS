@@ -1,5 +1,5 @@
 import { ArrowRight } from "lucide-react";
-import { followUps } from "@/lib/data/agent";
+import { followUps } from "@/features/search/deep-search/data";
 
 /** 继续深入研究 —— 追问建议 chips */
 export function FollowUps() {

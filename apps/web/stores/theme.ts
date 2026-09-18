@@ -1,8 +1,9 @@
 "use client";
 
 import { create } from "zustand";
+import type { ThemeMode } from "@/clients/settings";
 
-export type ThemeMode = "light" | "dark" | "system";
+export type { ThemeMode } from "@/clients/settings";
 
 const STORAGE_KEY = "shenzhi-theme";
 

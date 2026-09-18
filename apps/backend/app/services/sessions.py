@@ -31,6 +31,7 @@ class SessionRepository(Protocol):
     async def touch(self, session_id: str) -> None: ...
     async def clear(self) -> None: ...
     async def purge_owner(self, owner: str) -> None: ...
+    async def purge_owner_runtime(self, owner: str, session_ids: set[str] | None = None) -> None: ...
     async def delete(self, session_id: str, owner: str) -> None: ...
     async def claim_anonymous_sessions(self, source_owner: str, target_owner: str) -> dict: ...
     async def purge_expired_anonymous_sessions(self, cutoff: datetime) -> int: ...
@@ -143,8 +144,21 @@ class MemorySessionRepository:
         self.uploads.clear()
 
     async def purge_owner(self, owner: str) -> None:
+        await self.purge_owner_runtime(owner)
+
+    async def purge_owner_runtime(self, owner: str, session_ids: set[str] | None = None) -> None:
+        """Cancel active work and remove process-local data for one owner."""
+        tasks = []
         for session in [item for item in self.sessions.values() if item.owner == owner]:
+            for message in session.messages:
+                if message.task and not message.task.done():
+                    tasks.append(message.task)
             self._delete(session.id, owner)
+        self.uploads = {
+            key: value for key, value in self.uploads.items() if value['owner'] != owner
+        }
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def delete(self, session_id: str, owner: str) -> None:
         self._delete(session_id, owner)

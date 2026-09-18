@@ -3,8 +3,6 @@ import asyncio
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any
-
 from sqlalchemy import delete, exists, func, select, update
 from sqlalchemy.orm import selectinload
 
@@ -267,15 +265,25 @@ class PostgresSessionRepository:
             rows = (await db.scalars(
                 select(ChatSessionRow.id).where(ChatSessionRow.owner == owner)
             )).all()
-        for session_id in rows:
-            sid = str(session_id)
-            for message_id, message in list(self.messages.items()):
-                if message.session_id == sid:
-                    if message.task and not message.task.done():
-                        message.task.cancel()
-                    self._untrack(message_id)
+        await self.purge_owner_runtime(owner, {str(session_id) for session_id in rows})
         async with session_scope() as db:
             await db.execute(delete(ChatSessionRow).where(ChatSessionRow.owner == owner))
+
+    async def purge_owner_runtime(self, owner: str, session_ids: set[str] | None = None) -> None:
+        """Clear this worker's active messages and uploads without touching the database."""
+        target_ids = session_ids or set()
+        tasks = []
+        for message_id, message in list(self.messages.items()):
+            if message.session_id in target_ids:
+                if message.task and not message.task.done():
+                    message.task.cancel()
+                    tasks.append(message.task)
+                self._untrack(message_id)
+        self.uploads = {
+            key: value for key, value in self.uploads.items() if value['owner'] != owner
+        }
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def delete(self, session_id: str, owner: str) -> None:
         session = await self.get(session_id, owner)

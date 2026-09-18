@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/common/layout/app-shell";
 import { GraphPageLayout } from "@/components/common/graph/graph-page-layout";
-import { privateGraph } from "@/lib/data/knowledge-graph";
+import { privateGraph } from "@/features/knowledge/data-knowledge-graph";
 
 /** 私域知识图谱 `/knowledge/graph` —— 我的发表 × 收藏论文 分层双色图 */
 export function KnowledgeGraphPage() {

@@ -7,6 +7,7 @@
 - `uploads.ts`：上传及状态，正文不返回浏览器。
 - `forward.ts` / `identity.ts`：仅 Next.js BFF 导入；Better Auth 身份注入、匿名/鉴权异常分界、去除 Cookie / 伪造身份头、取消上游连接。
 
-业务编排在 `features/chat/services`，UI 状态在 `features/chat/hooks`。
+业务编排在 `features/{module}/services`，UI 状态在 `features/{module}/hooks` / `components`。
+`clients` 仅可依赖 `lib` 中的框架或基础设施能力，不得依赖 Feature、组件或 Store。
 浏览器不得直连模型/搜索供应商。FastAPI 不读取 Better Auth 表，不创建第二套账号系统。
 详见 [docs/chat](../../../../docs/chat/README.md)。

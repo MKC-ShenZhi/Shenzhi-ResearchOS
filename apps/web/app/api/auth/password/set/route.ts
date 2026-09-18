@@ -13,6 +13,7 @@ import {
   PASSWORD_MIN_LENGTH,
   validatePasswordComposition,
 } from "@/lib/auth/policies/password";
+import { hasPasswordFromAccounts } from "@/lib/auth/password/status";
 import { OAUTH_CREDENTIAL_PROVIDER_ID } from "@/lib/auth/providers/oauth/credential";
 
 function errorResponse(message: string, code: string, status: number) {
@@ -65,6 +66,14 @@ export async function POST(request: NextRequest) {
 
   const ctx = await auth.$context;
   const identifier = setPasswordOtpIdentifier(user.id);
+  const accounts = await ctx.internalAdapter.findAccounts(user.id);
+  if (hasPasswordFromAccounts(accounts)) {
+    return errorResponse(
+      "当前账户已有密码，请使用修改密码功能",
+      "PASSWORD_ALREADY_SET",
+      409,
+    );
+  }
 
   // 1. 校验邮箱验证码（会话绑定本人邮箱，单次使用）。
   const existing =
@@ -105,7 +114,6 @@ export async function POST(request: NextRequest) {
 
   // 2. 写入真实密码，并清除占位符标记。
   const hash = await ctx.password.hash(newPassword);
-  const accounts = await ctx.internalAdapter.findAccounts(user.id);
   const credential = accounts.find(
     (account) => account.providerId === OAUTH_CREDENTIAL_PROVIDER_ID,
   );

@@ -1,5 +1,5 @@
 import { ApiError } from "../../../clients/backend/http";
-import type { ApiEnvelope } from "../../../types/ai-search";
+import type { ApiEnvelope } from "../../../clients/backend";
 
 export interface AnonymousClaimResult {
   moved_count: number;

@@ -1,5 +1,5 @@
 import { PenSquare } from "lucide-react";
-import { drPlan } from "@/lib/data/deep-research";
+import { drPlan } from "@/features/deep-research/data";
 import { cn } from "@/lib/utils";
 import type { DRSectionState } from "./use-deep-research-run";
 

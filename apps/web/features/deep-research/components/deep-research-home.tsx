@@ -7,7 +7,7 @@ import {
   drHistory,
   drScopeOptions,
   drSuggestions,
-} from "@/lib/data/deep-research";
+} from "@/features/deep-research/data";
 import { cn } from "@/lib/utils";
 
 /** Deep Research 入口态 —— Hero + 研究问题输入 + 建议主题 + 历史研究 */

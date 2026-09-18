@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { FundingPanel } from "./funding-panel";
 import { FundingTable } from "./funding-table";
 import { useDebounce } from "@/hooks/use-debounce";
-import { fundings } from "@/lib/data/funding";
+import { fundings } from "@/features/knowledge/data-funding";
 
 /** 基金库容器 —— 持有搜索/类别状态 */
 export function FundingBrowser() {

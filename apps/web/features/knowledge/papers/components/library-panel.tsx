@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Network, Square } from "lucide-react";
-import { libraryFolders, libraryTags } from "@/lib/data/library";
+import { libraryFolders, libraryTags } from "@/features/knowledge/data-library";
 import { cn } from "@/lib/utils";
 
 const TAG_COLORS = [

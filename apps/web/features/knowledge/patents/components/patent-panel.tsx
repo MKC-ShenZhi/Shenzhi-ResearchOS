@@ -1,4 +1,4 @@
-import { patentStatuses } from "@/lib/data/patents";
+import { patentStatuses } from "@/features/knowledge/data-patents";
 import { cn } from "@/lib/utils";
 
 const TAG_COLORS = [

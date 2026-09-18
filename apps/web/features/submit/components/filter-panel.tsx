@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronRight, Medal, Tag } from "lucide-react";
-import { DIRECTION_ROWS, LEVEL_CHIPS } from "@/lib/data/venues";
+import { DIRECTION_ROWS, LEVEL_CHIPS } from "@/features/submit/data";
 import { cn } from "@/lib/utils";
 
 interface FilterPanelProps {

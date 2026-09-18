@@ -77,7 +77,7 @@ AI 助手栏目下的三档产品阶梯,Deep Research 居中:
 
 ## 5. 数据模型
 
-`types/index.ts` 的 `DR*` 类型 + `lib/data/deep-research.ts` 的 mock 数据(扩散模型主题,与深度搜索页演示数据同语境):
+`types/index.ts` 的 `DR*` 类型 + `features/deep-research/data.ts` 的 mock 数据(扩散模型主题,与深度搜索页演示数据同语境):
 
 ```ts
 drPlan: DRPlanSection[]      // 4 节大纲 { id: s1-s4, title, query }
@@ -168,7 +168,7 @@ instant 模式只是初始值差异:`useState(() => instant ? TOTAL : 0)`,不启
 
 | 现在 | 将来 |
 |---|---|
-| `lib/data/deep-research.ts` 的静态数据 | API 返回的研究计划/报告结构(types 已就位) |
+| `features/deep-research/data.ts` 的静态数据 | API 返回的研究计划/报告结构(types 已就位) |
 | `useDeepResearchRun` 的 interval + offsetMs 过滤 | SSE/WebSocket 推送事件,直接替换 visibleEvents 的来源;`deriveSectionState` 等派生逻辑可原样保留 |
 | `?mode=instant` | 已完成会话的服务端快照 |
 | 历史卡片加载同一份示例 | 按会话 id 拉取 |
