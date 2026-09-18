@@ -16,7 +16,7 @@ export const feedPapers: FeedPaper[] = [
     tags: ["长上下文", "Transformer", "稀疏注意力"],
     likes: 428,
     citations: 354,
-    thumb: "论文摘要图",
+    thumbnailUrl: null,
   },
   {
     id: "sana-video-2",
@@ -32,7 +32,7 @@ export const feedPapers: FeedPaper[] = [
     tags: ["视频生成", "扩散模型", "线性注意力"],
     likes: 196,
     citations: 293,
-    thumb: "视频生成架构图",
+    thumbnailUrl: null,
   },
   {
     id: "arex",
@@ -47,6 +47,6 @@ export const feedPapers: FeedPaper[] = [
     tags: ["智能体", "递归学习"],
     likes: 112,
     citations: 218,
-    thumb: "智能体流程图",
+    thumbnailUrl: null,
   },
 ];

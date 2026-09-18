@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { paperHref } from "@/lib/navigation/paper";
 import { motion } from "framer-motion";
 import { ArrowRight, Network, Users } from "lucide-react";
+import type { KnowledgePaperHit } from "@/clients/knowledge";
+import { PaperThumbnail } from "@/components/common/paper-thumbnail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { KnowledgePaperHit } from "@/clients/knowledge";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
+import { paperHref } from "@/lib/navigation/paper";
+import { getPaperThumbnailUrl } from "@/lib/paper-thumbnail";
 
 const VENUE_VARIANT = ["violet", "amber", "green"] as const;
 
@@ -117,16 +119,11 @@ export function KnowledgeResultCard({
           </div>
         </div>
 
-        {/* 右侧排序 */}
-        <div className="hidden w-[104px] shrink-0 flex-col items-center justify-center rounded-xl bg-panel py-4 sm:flex">
-          {hit.rank !== null ? (
-            <span className="rounded-full bg-chip px-2 py-0.5 text-[10px] text-muted">
-              #{hit.rank}
-            </span>
-          ) : (
-            <p className="text-sm text-faint">—</p>
-          )}
-        </div>
+        <PaperThumbnail
+          src={getPaperThumbnailUrl(hit.id)}
+          title={hit.title}
+          className="hidden min-h-[128px] w-[168px] shrink-0 sm:block"
+        />
       </div>
     </motion.article>
   );

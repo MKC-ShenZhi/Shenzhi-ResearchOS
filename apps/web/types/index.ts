@@ -12,7 +12,8 @@ export interface FeedPaper {
   /** 仅在真实数据源提供时展示；发现页 Knowledge 搜索结果不伪造指标。 */
   likes?: number;
   citations?: number;
-  thumb: string;
+  /** 由数据适配层提供；为空时由展示组件使用统一 fallback。 */
+  thumbnailUrl?: string | null;
 }
 
 /** 投稿目标(会议/期刊) */
