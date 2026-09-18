@@ -64,6 +64,7 @@ export async function apiJson<T>(
 
   const res = await fetch(apiPath(path), { ...init, headers, signal: init.signal ?? AbortSignal.timeout(30000) });
   const requestId = res.headers.get("X-Request-ID");
+  if (res.status === 204) return undefined as T;
   let payload: unknown;
   try {
     payload = await res.json();

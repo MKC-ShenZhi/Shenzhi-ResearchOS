@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from app.api import chat, knowledge, paper_resource, profile, settings, uploads
+from app.api import chat, collections, history, knowledge, paper_resource, profile, settings, uploads
 from app.core.logging import configure_logging, http_logging_middleware, log_exception, request_duration_ms
 from app.core.errors import BusinessError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE
 from app.core.responses import fail
@@ -25,6 +25,8 @@ configure_logging()
 logger = logging.getLogger(__name__)
 for router in (
     chat.router,
+    collections.router,
+    history.router, 
     knowledge.router,
     paper_resource.router,
     profile.router,
