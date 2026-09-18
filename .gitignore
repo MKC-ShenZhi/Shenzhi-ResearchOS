@@ -15,6 +15,9 @@
 /build
 /apps/web/build
 
+# local paper thumbnails
+/data/paper-thumbnails/
+
 # misc
 .DS_Store
 Thumbs.db

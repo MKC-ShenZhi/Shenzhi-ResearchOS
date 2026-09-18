@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Bookmark, Plus, ThumbsUp, TrendingUp, Users } from "lucide-react";
+import { PaperThumbnail } from "@/components/common/paper-thumbnail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
@@ -119,9 +120,11 @@ export function PaperCard({
                 引用 {paper.citations}
               </div>
             )}
-            <div className="flex h-full min-h-[128px] items-center justify-center rounded-xl bg-chip text-sm text-faint">
-              {paper.thumb}
-            </div>
+            <PaperThumbnail
+              src={paper.thumbnailUrl}
+              title={paper.title}
+              className="h-full min-h-[128px]"
+            />
           </div>
         )}
       </div>
