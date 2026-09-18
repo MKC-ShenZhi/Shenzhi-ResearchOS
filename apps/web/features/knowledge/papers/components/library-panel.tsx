@@ -26,7 +26,10 @@ export function LibraryPanel({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => { void loadFolders(); }, [loadFolders]);
+  useEffect(() => {
+    // 未登录时后端返回 401，此处静默忽略即可；登录提示由内容区给出，避免 unhandledRejection。
+    loadFolders().catch(() => {});
+  }, [loadFolders]);
 
   function openCreate() { setName(""); setError(""); setDialog("create"); }
   function openRename(folderId: number, currentName: string) { setEditingId(folderId); setName(currentName); setError(""); setDialog("rename"); }

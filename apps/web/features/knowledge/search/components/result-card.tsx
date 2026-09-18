@@ -39,12 +39,12 @@ export function KnowledgeResultCard({
       className={`rounded-2xl bg-card p-6 shadow-card ${historyMode ? "cursor-pointer transition-colors hover:bg-card/80" : ""}`}
       onClick={(event) => {
         if (!historyMode || (event.target as HTMLElement).closest("a, button")) return;
-        window.location.href = paperHref(hit.id, returnTo);
+        window.location.href = paperHref(hit.id, { mode: "create", source: returnTo });
       }}
       onKeyDown={(event) => {
         if (historyMode && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
-          window.location.href = paperHref(hit.id, returnTo);
+          window.location.href = paperHref(hit.id, { mode: "create", source: returnTo });
         }
       }}
       role={historyMode ? "link" : undefined}

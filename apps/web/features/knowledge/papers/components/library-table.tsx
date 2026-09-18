@@ -50,10 +50,15 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
 
   async function removePaper(paperId: string) {
     if (!folderId) return;
-    await apiJson<unknown>(`/collections/folders/${folderId}/papers/${encodeURIComponent(paperId)}`, { method: "DELETE" });
-    await loadPage(page);
-    await loadFolders();
-    setMenu(null);
+    try {
+      await apiJson<unknown>(`/collections/folders/${folderId}/papers/${encodeURIComponent(paperId)}`, { method: "DELETE" });
+      await loadPage(page);
+      await loadFolders();
+      setMenu(null);
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 401) setUnauthenticated(true);
+      else setError(reason instanceof ApiError && reason.status === 403 ? "无权访问该文件夹" : "操作失败，请重试");
+    }
   }
 
   async function movePaper(paperId: string, targetFolderId: number) {
@@ -67,7 +72,8 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
       await loadFolders();
       setMenu(null);
     } catch (reason) {
-      setError(reason instanceof ApiError ? reason.message : "移动失败，请重试");
+      if (reason instanceof ApiError && reason.status === 401) setUnauthenticated(true);
+      else setError(reason instanceof ApiError ? reason.message : "移动失败，请重试");
     }
   }
 
@@ -90,7 +96,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
         <div className="mt-3 space-y-2">
           {items.map((item) => (
             <div key={item.paper_id} className="grid grid-cols-[minmax(0,1fr)_220px_100px_36px] items-center gap-4 rounded-xl px-5 py-3 transition-colors hover:bg-card">
-              <Link href={paperHref(item.paper_id, "/knowledge/papers")} className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-9 shrink-0 items-end justify-center rounded-md bg-primary-soft pb-1 text-[10px] font-bold text-primary">PDF</span><span className="min-w-0"><span className="block truncate text-[15px] font-semibold text-ink">{item.title}</span><span className="mt-0.5 block truncate text-xs text-faint">{item.venue ?? "暂无会议"} · {item.year ?? "—"}</span></span></Link>
+              <Link href={paperHref(item.paper_id, { mode: "create", source: "/knowledge/papers" })} className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-9 shrink-0 items-end justify-center rounded-md bg-primary-soft pb-1 text-[10px] font-bold text-primary">PDF</span><span className="min-w-0"><span className="block truncate text-[15px] font-semibold text-ink">{item.title}</span><span className="mt-0.5 block truncate text-xs text-faint">{item.venue ?? "暂无会议"} · {item.year ?? "—"}</span></span></Link>
               <p className="truncate text-[13px] text-muted">{item.authors.join(" · ") || "未知作者"}</p>
               <time className="text-[13px] text-muted">{new Date(item.added_at).toLocaleDateString("zh-CN")}</time>
               <span className="relative"><button type="button" onClick={() => setMenu(menu === item.paper_id ? null : item.paper_id)} aria-label="论文操作" className="rounded-md p-1 text-faint hover:bg-chip"><MoreHorizontal className="size-4" /></button>{menu === item.paper_id && <span className="absolute right-0 top-full z-20 w-36 rounded-lg border border-line bg-card p-1 text-xs shadow-card"><button type="button" onClick={() => void removePaper(item.paper_id)} className="block w-full rounded-md px-2 py-1.5 text-left text-danger hover:bg-danger-soft">删除</button><span className="mt-1 block border-t border-line pt-1"><span className="block px-2 py-1 text-faint">移至</span>{folders.filter((folder) => folder.id !== folderId).map((folder) => <button key={folder.id} type="button" onClick={() => void movePaper(item.paper_id, folder.id)} className="block w-full truncate rounded-md px-2 py-1.5 text-left text-ink-2 hover:bg-chip">{folder.name}</button>)}</span></span>}</span>
