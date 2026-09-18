@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "@/components/auth/auth-client";
 import { getAuthErrorMessage } from "@/components/auth/auth-errors";
-import type { SettingsLocale } from "@/clients/settings";
+import type { SettingsLocale } from "@/clients/backend/settings";
 import { Button } from "@/components/ui/button";
 import { accountMessages } from "../i18n";
 
