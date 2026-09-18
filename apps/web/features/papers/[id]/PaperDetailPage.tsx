@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { apiJson } from "@/clients/backend/http";
 import { KnowledgeClientError } from "@/clients/knowledge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
@@ -27,6 +28,15 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
     setViewMode(nextMode);
     if (nextMode === "paper") setHasOpenedPaper(true);
   };
+
+  const loadedPaperId = paper?.id ?? null;
+
+  useEffect(() => {
+    if (!loadedPaperId) return;
+    // 进入论文详情页（含“立即阅读”）即记录浏览行为。
+    // 仅登录用户会被后端写入，未登录返回 401，此处静默忽略，不影响阅读。
+    void apiJson(`/papers/${encodeURIComponent(loadedPaperId)}/view`, { method: "POST" }).catch(() => {});
+  }, [loadedPaperId]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-background lg:h-dvh lg:overflow-hidden">
