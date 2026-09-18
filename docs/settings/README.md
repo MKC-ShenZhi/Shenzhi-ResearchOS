@@ -35,7 +35,8 @@ The **Account** block on `/settings?tab=profile` manages authentication data onl
 | Change password | `authClient.changePassword` | Revokes other sessions on success |
 | Set initial password (OAuth) | `/api/auth/password/send-otp` + `/api/auth/password/set` | Email OTP proves mailbox ownership |
 | Session list / revoke others | `listSessions` / `revokeOtherSessions` | Better Auth session store |
-| Delete account | `authClient.deleteUser` | Typed confirmation + re-auth if session expired |
+| Change email | `authClient.changeEmail` | Better Auth verifies the current mailbox first, then the replacement mailbox; unavailable email delivery is reported before the request |
+| Delete account | `/api/auth/account-deletion` | Trusted server orchestration: delete all current FastAPI business data first, then call Better Auth to delete the authentication account; retries are idempotent |
 
 Implementation layout:
 
@@ -47,4 +48,11 @@ Out of scope for this phase:
 
 - FastAPI account APIs or business-database credential storage
 - Avatar upload and scholar profile fields (phase two `user_profiles`)
-- Cascading deletion of `user_profiles`, `user_settings`, or chat history (document behaviour; not automated here)
+- Retaining any user profile, preference, or Chat history after an approved account deletion
+
+## Dependency and route boundaries
+
+- `clients/backend/*` is the browser client boundary for FastAPI business APIs such as settings and profile. It does not own authentication and must not import Feature/UI code.
+- `lib/auth/*` is server-side Better Auth configuration, security policy, and email infrastructure. It does not import `clients`; Feature components may depend on both boundaries, but the boundaries never depend on each other.
+- `/api/auth/[...all]` remains the sole Better Auth HTTP handler for its official endpoints. `/api/auth/password/*` is deliberately narrower: Better Auth's initial `setPassword` endpoint is server-only, while the product needs an authenticated mailbox-OTP proof and OAuth placeholder-credential handling. The browser calls `features/settings/services/account-password.ts`; that service holds no secret and cannot access the Adapter.
+- Account deletion is the one cross-database orchestration: the browser calls `/api/auth/account-deletion`, which derives identity from its Better Auth session, marks the internal FastAPI cleanup request, deletes `user_profiles`, `user_settings`, and `user:*` Chat sessions/messages in one `CHAT_DATABASE_URL` transaction, then deletes Better Auth authentication data. A cleanup retry returning zero deleted rows is successful and can complete a previously failed final Auth deletion.

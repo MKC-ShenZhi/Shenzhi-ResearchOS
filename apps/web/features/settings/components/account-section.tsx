@@ -11,11 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { accountMessages } from "../i18n";
 import { sendSetPasswordOtp, setPasswordWithOtp } from "../services/account-password";
+import { deleteCurrentAccount } from "../services/account-deletion";
 import { AccountSessions } from "./account-sessions";
 
 export function AccountSection({ locale }: { locale: SettingsLocale }) {
   const t = accountMessages[locale];
-  const { session, isPending, refetchSession, deleteAccount, openLogin } = useAuth();
+  const { session, isPending, refetchSession, openLogin } = useAuth();
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -116,11 +117,8 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
     setBusy(false);
   };
 
-  const requestEmailChange = async (event: FormEvent) => {
-    event.preventDefault();
+  const submitEmailChange = async (userId: string, normalizedEmail: string) => {
     resetFeedback();
-    const normalizedEmail = newEmail.trim().toLowerCase();
-    if (!normalizedEmail) return setError(t.newEmail);
     setBusy(true);
     const result = await authClient.changeEmail({
       newEmail: normalizedEmail,
@@ -128,12 +126,28 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
     });
     if (activeUserIdRef.current !== userId) return;
     if (result.error) {
+      if (
+        isAuthErrorCode(result.error, "SENSITIVE_SESSION_REQUIRED") ||
+        isAuthErrorCode(result.error, "UNAUTHORIZED")
+      ) {
+        openLogin({
+          notice: t.reauthNotice,
+          onSuccess: () => submitEmailChange(userId, normalizedEmail),
+        });
+      }
       setError(getAuthErrorMessage(result.error, "邮箱变更请求失败", "change-email"));
     } else {
       setNewEmail("");
       setMessage(t.emailChangeRequested);
     }
     setBusy(false);
+  };
+
+  const requestEmailChange = async (event: FormEvent) => {
+    event.preventDefault();
+    const normalizedEmail = newEmail.trim().toLowerCase();
+    if (!normalizedEmail) return setError(t.newEmail);
+    await submitEmailChange(userId, normalizedEmail);
   };
 
   const sendOtp = async () => {
@@ -153,14 +167,14 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
   const removeAccount = async () => {
     resetFeedback();
     setBusy(true);
-    const result = await deleteAccount({});
+    const result = await deleteCurrentAccount();
     if (activeUserIdRef.current !== userId) return;
-    if (result.error) {
-      if (isAuthErrorCode(result.error, "SESSION_EXPIRED") || isAuthErrorCode(result.error, "UNAUTHORIZED")) {
+    if (!result.ok) {
+      if (result.status === 401 || result.status === 409) {
         setConfirmDelete(false);
         openLogin({ notice: t.reauthNotice, onSuccess: removeAccount });
       } else {
-        setError(getAuthErrorMessage(result.error, "账号注销失败，请稍后重试", "delete-user"));
+        setError(result.message);
       }
     }
     setBusy(false);
