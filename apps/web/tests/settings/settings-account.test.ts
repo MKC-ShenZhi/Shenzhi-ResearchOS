@@ -43,9 +43,12 @@ test("settings passes locale into the account section", () => {
 
 test("account deletion uses the server-side business-cleanup orchestrator", () => {
   const deletionService = readFileSync("features/settings/services/account-deletion.ts", "utf8");
+  const authServer = readFileSync("lib/auth/server.ts", "utf8");
   assert.match(accountSection, /deleteCurrentAccount/);
   assert.match(deletionService, /\/api\/auth\/account-deletion/);
   assert.doesNotMatch(deletionService, /userId|user_id/);
+  assert.match(authServer, /deleteVerificationByIdentifier\(/);
+  assert.match(authServer, /setPasswordOtpIdentifier\(user\.id\)/);
 });
 
 test("email changes stay on Better Auth's confirmation and verification flow", () => {
@@ -68,6 +71,10 @@ test("sensitive account actions reauthenticate and reject an identity switch", (
 test("sessions panel uses Better Auth session APIs", () => {
   assert.match(accountSessions, /authClient\.listSessions/);
   assert.match(accountSessions, /authClient\.revokeOtherSessions/);
+  assert.match(accountSessions, /SESSION_NOT_FRESH/);
+  assert.match(accountSessions, /openLogin\(/);
+  assert.match(accountSessions, /latest\.data\?\.user\.id !== currentUserId/);
+  assert.doesNotMatch(readFileSync("lib/auth/server.ts", "utf8"), /freshAge:\s*0/);
 });
 
 test("account state and sessions are scoped to the active authentication identity", () => {
@@ -76,5 +83,6 @@ test("account state and sessions are scoped to the active authentication identit
   assert.match(accountSection, /\[session\?\.user\.id\]/);
   assert.match(accountSection, /activeUserIdRef\.current !== userId/);
   assert.match(settingsTabs, /<AccountSection key=\{session\?\.user\.id \?\? "anonymous"\}/);
-  assert.match(accountSection, /<AccountSessions key=\{session\.session\.token\}/);
+  assert.match(accountSection, /currentUserId=\{userId\}/);
+  assert.match(accountSection, /<AccountSessions/);
 });

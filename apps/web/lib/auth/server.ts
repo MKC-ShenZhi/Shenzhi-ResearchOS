@@ -32,6 +32,7 @@ import {
   PASSWORD_MIN_LENGTH,
   validatePasswordComposition,
 } from "@/lib/auth/policies/password";
+import { setPasswordOtpIdentifier } from "@/lib/auth/password/otp";
 import { postgresPool } from "@/lib/infrastructure/postgres";
 import {
   createAuthEmailProvider,
@@ -221,6 +222,16 @@ export const auth = betterAuth({
             password: hash,
             scope: OAUTH_PLACEHOLDER_SCOPE,
           });
+        },
+      },
+      delete: {
+        before: async (user, context) => {
+          if (!context) return;
+          // Better Auth verification rows have no user foreign key, so the
+          // ShenZhi user-bound initial-password challenge cannot DB-cascade.
+          await context.context.internalAdapter.deleteVerificationByIdentifier(
+            setPasswordOtpIdentifier(user.id),
+          );
         },
       },
     },

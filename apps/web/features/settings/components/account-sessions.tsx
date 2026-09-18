@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "@/components/auth/auth-client";
-import { getAuthErrorMessage } from "@/components/auth/auth-errors";
+import { useAuth } from "@/components/auth/auth-provider";
+import {
+  getAuthErrorMessage,
+  isAuthErrorCode,
+} from "@/components/auth/auth-errors";
 import type { SettingsLocale } from "@/clients/backend/settings";
 import { Button } from "@/components/ui/button";
 import { accountMessages } from "../i18n";
@@ -11,12 +15,15 @@ type ListedSession = NonNullable<Awaited<ReturnType<typeof authClient.listSessio
 
 export function AccountSessions({
   currentToken,
+  currentUserId,
   locale,
 }: {
   currentToken: string;
+  currentUserId: string;
   locale: SettingsLocale;
 }) {
   const t = accountMessages[locale];
+  const { openLogin } = useAuth();
   const [sessions, setSessions] = useState<ListedSession[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,12 +33,41 @@ export function AccountSessions({
     setBusy(true);
     const result = await authClient.listSessions();
     if (result.error) {
-      setError(getAuthErrorMessage(result.error, "无法加载登录会话", "session"));
+      if (isAuthErrorCode(result.error, "SESSION_NOT_FRESH")) {
+        setError(t.sessionsReauthRequired);
+        openLogin({
+          notice: t.sessionsReauthNotice,
+          onSuccess: async () => {
+            const latest = await authClient.getSession();
+            if (latest.data?.user.id !== currentUserId) {
+              setError(t.reauthAccountMismatch);
+              return;
+            }
+
+            const retry = await authClient.listSessions();
+            if (retry.error) {
+              setError(
+                getAuthErrorMessage(
+                  retry.error,
+                  "无法加载登录会话",
+                  "session",
+                ),
+              );
+              return;
+            }
+            setSessions(retry.data ?? []);
+            setError(null);
+          },
+        });
+      } else {
+        setError(getAuthErrorMessage(result.error, "无法加载登录会话", "session"));
+      }
     } else {
       setSessions(result.data ?? []);
+      setError(null);
     }
     setBusy(false);
-  }, []);
+  }, [currentUserId, openLogin, t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(); }, 0);

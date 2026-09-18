@@ -287,7 +287,12 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
       {message && <p role="status" className="text-xs text-muted">{message}</p>}
 
-      <AccountSessions key={session.session.token} currentToken={session.session.token} locale={locale} />
+      <AccountSessions
+        key={session.session.token}
+        currentToken={session.session.token}
+        currentUserId={userId}
+        locale={locale}
+      />
 
       <div className="border-t border-line pt-5">
         <div className="flex items-center justify-between gap-4">
