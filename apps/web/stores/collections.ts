@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { apiJson } from "@/clients/backend/http";
+import { apiJson, ApiError } from "@/clients/backend/http";
 
 export interface CollectionFolder {
   id: number;
@@ -22,6 +22,16 @@ interface CollectionState {
   updatePaperFolders: (paperId: string, folderIds: number[]) => Promise<void>;
 }
 
+/**
+ * 未登录时的默认文件夹占位：仅用于前端展示与提示，不来自后端。
+ * 使用负数 id，保证未登录时不会命中任何真实文件夹。
+ */
+const UNAUTHENTICATED_FOLDERS: CollectionFolder[] = [
+  { id: -1, name: "想读", is_default: true, paper_count: 0 },
+  { id: -2, name: "在读", is_default: true, paper_count: 0 },
+  { id: -3, name: "已读", is_default: true, paper_count: 0 },
+];
+
 export const useCollections = create<CollectionState>((set, get) => ({
   folders: [],
   paperFolders: {},
@@ -31,6 +41,14 @@ export const useCollections = create<CollectionState>((set, get) => ({
     try {
       const response = await apiJson<{ folders: CollectionFolder[] }>("/collections/folders");
       set({ folders: response.folders });
+    } catch (error) {
+      // 未登录：固定展示三个默认文件夹占位，使展示与上次登录状态无关；
+      // 点击文件夹后由内容区给出“请先登录”提示。
+      if (error instanceof ApiError && error.status === 401) {
+        set({ folders: UNAUTHENTICATED_FOLDERS });
+        return;
+      }
+      throw error;
     } finally {
       set({ loading: false });
     }

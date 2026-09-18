@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { History, LoaderCircle, Square } from "lucide-react";
 import { ApiError } from "@/clients/backend/http";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCollections } from "@/stores/collections";
@@ -25,11 +26,14 @@ export function LibraryPanel({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const { session } = useAuth();
+  const sessionUserId = session?.user?.id ?? null;
 
   useEffect(() => {
-    // 未登录时后端返回 401，此处静默忽略即可；登录提示由内容区给出，避免 unhandledRejection。
+    // 未登录时后端返回 401，store 会回退为三个默认文件夹占位；
+    // 依赖会话变化，避免退出登录后仍沿用上一次登录的文件夹列表。
     loadFolders().catch(() => {});
-  }, [loadFolders]);
+  }, [loadFolders, sessionUserId]);
 
   function openCreate() { setName(""); setError(""); setDialog("create"); }
   function openRename(folderId: number, currentName: string) { setEditingId(folderId); setName(currentName); setError(""); setDialog("rename"); }
