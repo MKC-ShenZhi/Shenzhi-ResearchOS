@@ -127,7 +127,7 @@ test("paper cards delegate image fallback behavior to the shared thumbnail", () 
   assert.match(PAPER_CARD_SOURCE, /<PaperThumbnail/);
   assert.match(PAPER_CARD_SOURCE, /src=\{paper\.thumbnailUrl\}/);
   assert.doesNotMatch(PAPER_CARD_SOURCE, /paper\.thumb\b/);
-  assert.match(MVP_SERVICE_SOURCE, /thumbnailUrl:\s*null/);
+  assert.match(MVP_SERVICE_SOURCE, /thumbnailUrl:\s*getPaperThumbnailUrl\(hit\.id\)/);
   assert.doesNotMatch(MVP_SERVICE_SOURCE, /\bthumb:/);
 });
 

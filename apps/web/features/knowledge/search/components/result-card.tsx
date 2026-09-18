@@ -8,6 +8,7 @@ import { PaperThumbnail } from "@/components/common/paper-thumbnail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { paperHref } from "@/lib/navigation/paper";
+import { getPaperThumbnailUrl } from "@/lib/paper-thumbnail";
 
 const VENUE_VARIANT = ["violet", "amber", "green"] as const;
 
@@ -97,7 +98,7 @@ export function KnowledgeResultCard({
         </div>
 
         <PaperThumbnail
-          src={null}
+          src={getPaperThumbnailUrl(hit.id)}
           title={hit.title}
           className="hidden min-h-[128px] w-[168px] shrink-0 sm:block"
         />

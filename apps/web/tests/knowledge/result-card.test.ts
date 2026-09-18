@@ -15,8 +15,9 @@ test("Knowledge result card does not convert score into a percentage", () => {
 
 test("Knowledge result card uses the shared fallback thumbnail instead of visible rank", () => {
   assert.match(RESULT_CARD_SOURCE, /import \{ PaperThumbnail \}/);
+  assert.match(RESULT_CARD_SOURCE, /import \{ getPaperThumbnailUrl \}/);
   assert.match(RESULT_CARD_SOURCE, /<PaperThumbnail/);
-  assert.match(RESULT_CARD_SOURCE, /src=\{null\}/);
+  assert.match(RESULT_CARD_SOURCE, /src=\{getPaperThumbnailUrl\(hit\.id\)\}/);
   assert.doesNotMatch(RESULT_CARD_SOURCE, /hit\.rank/);
 });
 

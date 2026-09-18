@@ -5,6 +5,7 @@ import {
   type KnowledgeClient,
   type KnowledgePaperHit,
 } from "../../../clients/knowledge";
+import { getPaperThumbnailUrl } from "../../../lib/paper-thumbnail";
 import type { FeedPaper } from "../../../types";
 
 /**
@@ -78,7 +79,7 @@ export function mapKnowledgePaperHitToFeedPaper(hit: KnowledgePaperHit): FeedPap
     abstract: hit.abstract?.trim() || "暂无摘要",
     aiLink: "AI 深度解读",
     tags,
-    thumbnailUrl: null,
+    thumbnailUrl: getPaperThumbnailUrl(hit.id),
   };
 }
 
