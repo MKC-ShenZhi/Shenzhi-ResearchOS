@@ -6,10 +6,8 @@
 from __future__ import annotations
 
 import json
-import re
 
 import httpx
-import lxml.html
 from pydantic import BaseModel
 
 from app.core.errors import BusinessError
@@ -21,7 +19,7 @@ from app.services.agent.tools import Tool, ToolOutput, tool
 
 MAX_BYTES = 6_000_000
 MAX_TEXT_CHARS = 120_000
-TIMEOUT_S = 135.0
+TIMEOUT_S = 60.0
 _UA = {'user-agent': 'ShenZhiResearchOS/1.0 (+research assistant)'}
 
 
@@ -34,7 +32,7 @@ def fetch_url_tool(*, transport: httpx.BaseTransport | None = None) -> Tool:
 
     @tool(name='fetch_url',
           description='抓取一个公开网页并返回其正文文本（已去掉脚本/样式/导航）。',
-          params=FetchUrlArgs, timeout_s=180.0,
+          params=FetchUrlArgs, timeout_s=90.0,
           snippet='抓取单个网页并返回正文文本')
     async def fetch_url(args: FetchUrlArgs) -> str | ToolOutput:
         max_chars = max(500, min(args.max_chars or MAX_TEXT_CHARS, MAX_TEXT_CHARS))

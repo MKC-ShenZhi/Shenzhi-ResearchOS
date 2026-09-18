@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Union
 
 from app.core.errors import BusinessError
 
@@ -29,7 +29,7 @@ class StopReason(str, Enum):
 #（chat 的 Message.events + Last-Event-ID 是现成先例），基座不内建。
 RUN_START = 'run_start'
 TURN_START = 'turn_start'
-MESSAGE = 'message'  # run 中注入的 steer/follow_up 消息（pi message_start/end 的单事件对应）
+MESSAGE = 'message'  # run 中注入的 steer / system 消息（pi message_start/end 的单事件对应）
 DELTA = 'delta'
 TOOL_CALL = 'tool_call'
 TOOL_END = 'tool_end'
@@ -62,10 +62,6 @@ class ToolResult:
     # 指令性内容（如技能说明）：随 ToolResultMessage 落账后豁免上下文截断。
     # 通用属性——任何工具（或 policy 钩子）都能声明，不与具体工具绑定。
     pinned: bool = False
-    # 工具自报"这条能力当前不可用"（如知识库不提供引用关系）：不是查询错误、重试无意义。
-    # 用途：① 模型知道该换渠道，而不是在空结果上打转；② 策略据此让步
-    # （能力不在场不是模型的错）。空元组 = 能力正常。
-    unavailable: tuple[str, ...] = ()
 
 
 @dataclass
@@ -93,86 +89,31 @@ class ToolResultMessage:
     pinned: bool = False  # 指令性内容（如 read_skill 结果）豁免上下文截断
 
 
-from typing import Union
 AgentMessage = Union[UserMessage, AssistantMessage, ToolResultMessage]
 
 
 # ---- 运行控制契约（pi 把全部契约集中在 types.ts；此处同构） ----
 
 
-@dataclass(frozen=True)
-class StopContext:
-    """should_stop_after_turn / prepare_next_turn 钩子的上下文（pi ShouldStopAfterTurnContext）。"""
-    message: AssistantMessage              # 本轮 assistant 消息
-    tool_results: tuple[ToolResultMessage, ...]
-    stop_reason: StopReason
-    turn: int
-    executed_tools: int
-    prompt_tokens: int
-    completion_tokens: int
-
-
-@dataclass(frozen=True)
-class NextTurn:
-    """prepare_next_turn 的返回（pi AgentLoopTurnUpdate：替换下一轮的 model/温度）。"""
-    model: str | None = None
-    temperature: float | None = None
-
-
-@dataclass(frozen=True)
-class FollowUpContext:
-    """get_follow_up_messages 的上下文（pi getFollowUpMessages 位点：agent 本要停止时）。
-
-    只读的运行事实——策略层据此判断"该不该就此收工"，循环本身不认识任何业务规则。
-    interventions 是本 run 已注入过的次数，供策略自限流（避免无限续跑）。
-    """
-    messages: tuple[AgentMessage, ...]
-    stop_reason: StopReason
-    final_text: str
-    turn: int
-    executed_tools: int
-    tool_calls: dict[str, int]        # 工具名 → 成功/失败总调用次数
-    available_tools: frozenset[str]   # 本 run 实际挂载的工具（策略只该要求真实存在的能力）
-    loaded_skills: frozenset[str]
-    read_files: tuple[str, ...]
-    modified_files: tuple[str, ...]
-    interventions: int
-    remaining_s: float | None = None   # 距 run deadline 的剩余秒数（None = 无 deadline）
-    # 工具名 → 失败次数：策略据此把"反复失败"的渠道与"做到了"区分开（试过 ≠ 做到了）。
-    tool_errors: dict[str, int] = field(default_factory=dict)
-    # 本 run 自报"能力不可用"的工具名（工具结果里的 unavailable 声明）：
-    # 能力不在场不是模型的错，策略据此让步。
-    unavailable_tools: frozenset[str] = frozenset()
-
-
 class RunChannel:
-    """运行中消息注入通道（pi steer/followUp 队列的线程安全 Python 版）。
+    """运行中插话通道（pi steer 队列的线程安全 Python 版）。
 
-    - steer：下一个模型请求前注入（工具批不会被跳过）——"运行中插话"；
-    - follow_up：run 本会自然停止时若无新输入则结束，有则作为新输入继续——"排队追问"。
+    steer：下一个模型请求前注入（工具批不会被跳过）——"运行中插话"。
     线程安全靠 asyncio 单线程事件循环保证；跨线程调用方请用 loop.call_soon_threadsafe。
     """
 
     def __init__(self) -> None:
         self._steer: list[UserMessage] = []
-        self._follow_up: list[UserMessage] = []
 
     def steer(self, text: str) -> None:
         self._steer.append(UserMessage(text))
-
-    def follow_up(self, text: str) -> None:
-        self._follow_up.append(UserMessage(text))
 
     def drain_steering(self) -> list[UserMessage]:
         drained, self._steer = self._steer, []
         return drained
 
-    def drain_follow_ups(self) -> list[UserMessage]:
-        drained, self._follow_up = self._follow_up, []
-        return drained
-
     def has_pending(self) -> bool:
-        return bool(self._steer or self._follow_up)
+        return bool(self._steer)
 
 
 @dataclass(frozen=True)
@@ -196,11 +137,6 @@ class RunResult:
     truncated: bool = False
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    cache_read_tokens: int = 0   # pi Usage.cacheRead：命中提示缓存的输入 token
-    reasoning_tokens: int = 0    # pi Usage.reasoning：思维链消耗（不回传，不计入上下文预算）
-    # 可观测性：全部类型化字段，不做 dict 双表示
-    tool_calls: dict[str, int] = field(default_factory=dict)   # 工具名 → 调用次数
-    tool_errors: dict[str, int] = field(default_factory=dict)  # 工具名 → 错误次数
 
     @property
     def status(self) -> str:

@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import re
 import shutil
 import subprocess
 
-import unicodedata
 import uuid
 from pathlib import Path
 
@@ -288,7 +288,7 @@ class Workspace:
 
 def _child_env() -> dict[str, str]:
     """子进程环境：继承当前环境（PATH 必需），不在其中注入任何密钥类变量。"""
-    return {key: value for key, value in __import__('os').environ.items()}
+    return dict(os.environ)
 
 
 def build_workspace_tools(workspace: Workspace) -> list[Tool]:
@@ -319,6 +319,7 @@ def build_workspace_tools(workspace: Workspace) -> list[Tool]:
           description='读取工作区内的文本文件。大文件自动截断并提示用 offset 继续读取。',
           params=ReadArgs,
           snippet='读取工作区文本文件（大文件截断，用 offset 续读）',
+          delivery=True,  # 交付类：收尾窗口仍可用（续写交付物前核对内容）
           prompt_guidelines=('查看文件内容用 read_file，不要用 run_command 的 cat/type/sed（pi 同款准则）',))
     async def read_file(args: ReadArgs) -> str:
         return workspace.read(args.path, args.offset, args.limit)
@@ -326,6 +327,7 @@ def build_workspace_tools(workspace: Workspace) -> list[Tool]:
     @tool(name='write_file',
           description='在工作区内写文件（不存在则创建，自动创建父目录）。',
           params=WriteArgs,
+          delivery=True,  # 交付类：收尾窗口仍可用——撞墙后靠它把已有证据写成报告
           snippet='创建或整文件重写',
           prompt_guidelines=(
               'write_file 仅用于新文件或完整重写；局部修改用 edit_file',
@@ -339,6 +341,7 @@ def build_workspace_tools(workspace: Workspace) -> list[Tool]:
           description='精确文本替换编辑工作区内文件。每处 old_text 必须在文件中唯一匹配；'
                       '一次调用可提交多处互不重叠的替换。',
           params=EditArgs,
+          delivery=True,  # 交付类：收尾窗口仍可用（分段续写交付物）
           snippet='精确文本替换编辑（一次调用可含多处不重叠替换）',
           prompt_guidelines=(
               'edit_file 用于精确修改：old_text 必须与文件内容精确匹配',

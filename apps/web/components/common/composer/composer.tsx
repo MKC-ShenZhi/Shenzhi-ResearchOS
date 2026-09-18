@@ -138,6 +138,7 @@ function PlusMenu({
   skills,
   selectedSkills,
   onToggleSkill,
+  showWebSearch = true,
 }: {
   webSearch: boolean;
   onWebSearchChange: (v: boolean) => void;
@@ -145,6 +146,8 @@ function PlusMenu({
   skills?: ComposerSkill[];
   selectedSkills?: string[];
   onToggleSkill?: (name: string) => void;
+  /** false = 不渲染「联网搜索」开关（该页取证工具常驻，开关无语义）。 */
+  showWebSearch?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useCloseOnOutside(open, () => setOpen(false));
@@ -217,27 +220,29 @@ function PlusMenu({
               </div>
             )}
           </RightSubmenuRow>
-          <button
-            type="button"
-            onClick={() => onWebSearchChange(!webSearch)}
-            className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 text-sm transition-colors hover:bg-chip"
-          >
-            <Globe className="size-4 text-muted" strokeWidth={1.8} />
-            <span className="flex-1 text-left text-ink-2">联网搜索</span>
-            <span
-              className={cn(
-                "relative h-5 w-9 shrink-0 rounded-full transition-colors",
-                webSearch ? "bg-agent" : "bg-line",
-              )}
+          {showWebSearch && (
+            <button
+              type="button"
+              onClick={() => onWebSearchChange(!webSearch)}
+              className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 text-sm transition-colors hover:bg-chip"
             >
+              <Globe className="size-4 text-muted" strokeWidth={1.8} />
+              <span className="flex-1 text-left text-ink-2">联网搜索</span>
               <span
                 className={cn(
-                  "absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform",
-                  webSearch ? "left-4" : "left-0.5",
+                  "relative h-5 w-9 shrink-0 rounded-full transition-colors",
+                  webSearch ? "bg-agent" : "bg-line",
                 )}
-              />
-            </span>
-          </button>
+              >
+                <span
+                  className={cn(
+                    "absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform",
+                    webSearch ? "left-4" : "left-0.5",
+                  )}
+                />
+              </span>
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -267,6 +272,8 @@ export function ComposerShell({
   skills,
   onWorkspaceFolder,
   modeSwitch = true,
+  hideStyleRow = false,
+  webSearchSwitch = true,
   selectedSkills,
   onRemoveSkill,
   onSelectSkill,
@@ -296,6 +303,10 @@ export function ComposerShell({
   onWorkspaceFolder?: (files: WorkspaceFile[]) => void;
   /** 是否展示「简单/智能搜索」切换；纯对话页传 false。 */
   modeSwitch?: boolean;
+  /** 隐藏选择器里的「风格」行：agent 页只用 快速/深度 两档（深度=报告 deep，快速=fast）。 */
+  hideStyleRow?: boolean;
+  /** 是否展示「联网搜索」开关（在 + 菜单内）；不需要联网能力的页面传 false。 */
+  webSearchSwitch?: boolean;
   /** 已选中技能（chips 高亮挂在输入框上方；name 悬浮出简短说明）。 */
   selectedSkills?: ComposerSkill[];
   onRemoveSkill?: (name: string) => void;
@@ -432,6 +443,7 @@ export function ComposerShell({
       <div className="mt-1.5 flex items-center gap-1.5">
         {modeSwitch && <SearchModeSwitch mode={entryMode} onChange={setEntryMode} />}
         <PlusMenu webSearch={webSearch} onWebSearchChange={setWebSearch} skills={skills}
+          showWebSearch={webSearchSwitch}
           selectedSkills={selectedSkills?.map((skill) => skill.name)}
           onToggleSkill={onSelectSkill || onRemoveSkill ? (name) => {
             const skill = selectedSkills?.find((item) => item.name === name);
@@ -457,6 +469,7 @@ export function ComposerShell({
               onReplyModeChange={setReplyMode}
               depthMode={depthMode}
               onDepthModeChange={setDepthMode}
+              hideStyleRow={hideStyleRow}
               options={config.models}
               quota={config.quota}
               anchorRef={controlRef}

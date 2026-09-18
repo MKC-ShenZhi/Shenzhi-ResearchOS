@@ -23,9 +23,6 @@ from app.services.agent import AgentRuntime, AgentEvent, default_store
 from app.services.agent.fetch_url import fetch_url_tool
 from app.services.agent.policies import compose_agent_system, run_deadline_s
 from app.services.agent.read_paper import read_paper_tool
-from app.services.agent.prompt_templates import (
-    format_template_invocation, prompt_templates,
-)
 from app.services.agent.types import RunChannel
 from app.services.agent.skills import sync_loaded_skill_scripts
 from app.services.agent.tools import Tool
@@ -36,7 +33,7 @@ from app.services.knowledge import KnowledgeService
 BANNER = """
 \033[1mShenzhiAi\033[0m · 深知科研终端智能体（Agent 基座薄 CLI）
 技能：{skills} | 工具：{tools} | 模型：{model} | 工作区：{workspace}
-命令：/exit 退出 · /new 新会话 · /skills 列技能 · /tools 列工具 · /cwd 显示工作区 · /tpl 列模板
+命令：/exit 退出 · /new 新会话 · /skills 列技能 · /tools 列工具 · /cwd 显示工作区
 运行中输入以 '!' 开头的行 = 插话（下一个工具轮前注入）
 """
 
@@ -73,7 +70,6 @@ class ShenzhiAi:
             max_turns=120, deadline_s=run_deadline_s('deep'),  # 科研终端：用 deep 预算（人工在场，长跑正常）
             ask_user=True)  # 终端里 agent 可以反问：问题打印出来，用户下一条输入即回答
         self.history: list = []
-        self.templates = {t.name: t for t in prompt_templates()}
         self.channel: RunChannel | None = None
 
     async def chat(self) -> None:
@@ -105,22 +101,6 @@ class ShenzhiAi:
             if prompt == '/cwd':
                 print(f'  {self.workspace.root}' if self.workspace else '  （未挂载工作区）')
                 continue
-            if prompt == '/tpl':
-                if not self.templates:
-                    print('  （prompts/ 目录下无模板；创建 .md 文件即可成为模板）')
-                for name, tpl in sorted(self.templates.items()):
-                    usage = f' {tpl.argument_hint}' if tpl.argument_hint else ''
-                    print(f'  {name}{usage}: {tpl.description[:60]}')
-                continue
-            if prompt.startswith('/tpl '):
-                # /tpl <名称> [参数...]：模板 + 位置参数 → prompt（pi prompt templates）
-                parts = prompt[5:].split()
-                if not parts or parts[0] not in self.templates:
-                    print(red('未知模板；/tpl 查看列表'))
-                    continue
-                prompt = format_template_invocation(self.templates[parts[0]], parts[1:])
-                if not prompt.strip():
-                    continue
             await self.turn(prompt)
 
     async def turn(self, prompt: str) -> None:

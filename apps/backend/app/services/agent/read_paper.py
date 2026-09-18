@@ -17,7 +17,7 @@ from __future__ import annotations
 import io
 import re
 from typing import Any
-from urllib.parse import quote, urljoin
+from urllib.parse import quote
 
 import httpx
 import lxml.html
@@ -30,9 +30,11 @@ from app.services.agent.netguard import (
 from app.services.agent.tools import Tool, ToolOutput, tool
 
 MAX_PDF_BYTES = 90_000_000
-MAX_TEXT_CHARS = 180_000
+# 单次全文返回上限。**刻意不用 ×3**：单条结果越大，越容易撞上下文预算
+# （实测每篇 18 万字符 × 几篇就直接溢出），需要更多时让模型翻页重取。
+MAX_TEXT_CHARS = 60_000
 MAX_HTML_BYTES = 6_000_000
-REQUEST_TIMEOUT_S = 135.0
+REQUEST_TIMEOUT_S = 60.0
 _UA = {'user-agent': 'ShenZhiResearchOS/1.0 (+research assistant)'}
 _STRIP_TAGS = ('script', 'style', 'noscript', 'nav', 'footer', 'header', 'form', 'svg')
 
@@ -141,7 +143,7 @@ def read_paper_tool(*, knowledge: Any = None, transport: httpx.BaseTransport | N
     @tool(name='read_paper',
           description='读取一个 URL 或论文的 PDF 全文，返回带页号的文本；无 PDF 可达时'
                       '退回抓取该页正文（此时 pdf=false）。',
-          params=ReadPaperArgs, timeout_s=270.0,
+          params=ReadPaperArgs, timeout_s=120.0,
           snippet='读 PDF 全文（带页号）或退回网页正文')
     async def read_paper(args: ReadPaperArgs) -> str | ToolOutput:
         import json

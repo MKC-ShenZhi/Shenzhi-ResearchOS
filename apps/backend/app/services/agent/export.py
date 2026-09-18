@@ -8,6 +8,7 @@ from __future__ import annotations
 import html
 import json
 from collections.abc import Sequence
+from datetime import datetime
 
 from app.services.agent.types import (
     AgentMessage, ToolResultMessage, UserMessage, message_from_dict,
@@ -55,7 +56,7 @@ def export_html(title: str, messages: Sequence[dict]) -> str:
                                    if isinstance(item, dict) and item.get('kind') != 'tool']
     parts = [_HTML_HEAD,
              f'<header><h1>{html.escape(title or "ShenzhiAi 会话")}</h1>'
-             f'<p>深知科研智能体导出 · {len(decoded)} 条消息 · {html.escape(__import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M"))}</p></header>']
+             f'<p>深知科研智能体导出 · {len(decoded)} 条消息 · {datetime.now().strftime("%Y-%m-%d %H:%M")}</p></header>']
     budget = _MAX_HTML_CHARS
     for message in decoded:
         if budget <= 0:

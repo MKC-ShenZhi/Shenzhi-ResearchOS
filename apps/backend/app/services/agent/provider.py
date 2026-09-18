@@ -75,15 +75,11 @@ class ModelRequest:
 class Usage:
     """一次请求的用量（pi ai/types.ts Usage 的字段子集）。
 
-    cache_read/reasoning 来自 OpenAI 兼容响应的 *_tokens_details；
-    total_tokens 缺省时按 input+output 兜底。pi 还算 cost（依赖内置模型价目表），
-    我们没有价目表就不编造数字——需要成本时由业务层按自己的价目折算。
+    只保留被消费的 input/output 两项；cache_read / reasoning / cost 等上游
+    附加字段没有下游读者，就不解析进契约——需要时由业务层自己读原始响应。
     """
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    cache_read_tokens: int = 0
-    reasoning_tokens: int = 0
-    total_tokens: int = 0
 
 
 @dataclass(frozen=True)
@@ -121,25 +117,9 @@ class ModelProvider(Protocol):
 
 
 def _parse_usage(raw: dict) -> Usage:
-    """pi openai-completions.ts:1507-1548 parseChunkUsage 的字段口径。
-
-    cache_read 依次取 prompt_tokens_details.cached_tokens / prompt_cache_hit_tokens /
-    顶层 cached_tokens（各家兼容层字段名不统一）；reasoning 取
-    completion_tokens_details.reasoning_tokens；total 缺省时按 input+output 兜底。
-    """
-    prompt = _as_int(raw.get('prompt_tokens'))
-    completion = _as_int(raw.get('completion_tokens'))
-    prompt_details = raw.get('prompt_tokens_details')
-    completion_details = raw.get('completion_tokens_details')
-    prompt_details = prompt_details if isinstance(prompt_details, dict) else {}
-    completion_details = completion_details if isinstance(completion_details, dict) else {}
-    cache_read = _as_int(prompt_details.get('cached_tokens')
-                         or raw.get('prompt_cache_hit_tokens') or raw.get('cached_tokens'))
-    reasoning = _as_int(completion_details.get('reasoning_tokens'))
-    total = _as_int(raw.get('total_tokens')) or (prompt + completion)
-    return Usage(prompt_tokens=prompt, completion_tokens=completion,
-                 cache_read_tokens=cache_read,
-                 reasoning_tokens=reasoning, total_tokens=total)
+    """pi openai-completions.ts:1507-1548 parseChunkUsage 的字段口径（只取消费的两项）。"""
+    return Usage(prompt_tokens=_as_int(raw.get('prompt_tokens')),
+                 completion_tokens=_as_int(raw.get('completion_tokens')))
 
 
 def _as_int(value: Any) -> int:

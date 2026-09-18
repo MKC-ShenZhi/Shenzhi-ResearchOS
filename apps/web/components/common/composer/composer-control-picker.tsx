@@ -69,6 +69,7 @@ export function ComposerControlPicker({
   onReplyModeChange,
   depthMode,
   onDepthModeChange,
+  hideStyleRow = false,
   options,
   quota,
   anchorRef,
@@ -81,6 +82,8 @@ export function ComposerControlPicker({
   onReplyModeChange: (v: ChatReplyMode) => void;
   depthMode: "fast" | "deep";
   onDepthModeChange: (v: "fast" | "deep") => void;
+  /** 隐藏「风格」行（idea/doubt 等）：只要 快速/深度 两档的页面传 true。 */
+  hideStyleRow?: boolean;
   options: ChatModelOption[];
   quota: ChatConfig["quota"];
   anchorRef: RefObject<HTMLDivElement | null>;
@@ -179,10 +182,12 @@ export function ComposerControlPicker({
                 </div>
               </div>
 
-              <StyleSubmenuRow
-                value={styleLabel(replyMode)}
-                onPick={pickStyle}
-              />
+              {!hideStyleRow && (
+                <StyleSubmenuRow
+                  value={styleLabel(replyMode)}
+                  onPick={pickStyle}
+                />
+              )}
 
               <button
                 type="button"

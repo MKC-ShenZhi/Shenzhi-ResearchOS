@@ -11,7 +11,6 @@
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -26,7 +25,7 @@ from pydantic import BaseModel
 
 from app.core.errors import BusinessError
 from app.services.agent.tools import AfterToolCall, Tool, tool
-from app.services.agent.types import FollowUpContext, ToolCall, ToolResult
+from app.services.agent.types import ToolCall, ToolResult
 
 logger = logging.getLogger('app.agent')
 
@@ -158,11 +157,9 @@ class SkillStore:
                 continue
             # 白名单模式精确点名顶层目录；默认模式递归发现（scripts/、references/ 天然跳过）
             candidates = ([d for d in sorted(root.path.iterdir())
-                           if d.is_dir() and (d / 'SKILL.md').is_file()]
+                           if d.is_dir() and d.name in root.only and (d / 'SKILL.md').is_file()]
                           if root.only else sorted(_skill_directories(root.path)))
             for directory in candidates:
-                if root.only and directory.name not in root.only:
-                    continue
                 try:
                     loaded = _load_skill(directory, root.executable)
                 except ValueError as exc:
@@ -181,11 +178,9 @@ class SkillStore:
     def names(self) -> list[str]:
         return sorted(self._skills)
 
-    def listing_prompt(self, exclude: Sequence[str] = ()) -> str:
+    def listing_prompt(self) -> str:
         """L1 清单，pi formatSkillsForSystemPrompt 逐字移植（路径解析指令改为 read_skill 机制）。"""
-        excluded = set(exclude)
-        visible = [s for s in self._skills.values()
-                   if not s.disable_model_invocation and s.name not in excluded]
+        visible = [s for s in self._skills.values() if not s.disable_model_invocation]
         if not visible:
             return ''
         lines = [
@@ -255,18 +250,13 @@ class SkillStore:
         return skill
 
 
-def _parse_read_skill_args(call: ToolCall) -> tuple[str | None, str | None, bool]:
-    """从 read_skill 的参数中提取 (name, file, complete)；缺字段交由 dispatch 正常报错。
-
-    complete=True 是"我已按该技能走完流程"的显式声明——harness 只记录它，
-    不据此判定或打回：流程是否走完由模型自己负责。
-    """
+def _parse_read_skill_args(call: ToolCall) -> tuple[str | None, str | None]:
+    """从 read_skill 的参数中提取 (name, file)；缺字段交由 dispatch 正常报错。"""
     data = call.arguments
     name = data.get('name')
     file = data.get('file')
     return (name if isinstance(name, str) else None,
-            file if isinstance(file, str) else None,
-            data.get('complete') is True)
+            file if isinstance(file, str) else None)
 
 
 class SkillPolicy:
@@ -299,13 +289,10 @@ class SkillPolicy:
         return None
 
     def settle(self, call: ToolCall, result: ToolResult, state) -> ToolResult:
-        """执行后结算：完成声明回执；装载内容标 pinned 并计入预算（只记账，不拒绝）。"""
+        """执行后结算：装载内容标 pinned 并计入预算（只记账，不拒绝）。"""
         if call.name != READ_SKILL or result.is_error:
             return result
-        name, file, complete = _parse_read_skill_args(call)
-        if complete and name is not None and file is None:
-            return ToolResult(call.call_id, call.name,
-                              f'已记录：你声明技能 {name} 的流程已走完。')
+        name, file = _parse_read_skill_args(call)
         state.pinned_chars += len(result.content)
         if name is not None and file is None:
             state.loaded_skills.add(name)
@@ -346,7 +333,7 @@ def sync_loaded_skill_scripts(store: 'SkillStore', workspace_root: Path) -> Afte
     async def hook(call: ToolCall, _args: Any, result: ToolResult) -> ToolResult | None:
         if call.name != READ_SKILL or result.is_error:
             return None
-        name, file, _complete = _parse_read_skill_args(call)
+        name, file = _parse_read_skill_args(call)
         if name is None or file is not None:
             return None
         if sync_skill_scripts(store, workspace_root, [name]):
@@ -357,19 +344,15 @@ def sync_loaded_skill_scripts(store: 'SkillStore', workspace_root: Path) -> Afte
 
 
 def read_skill_tool(store: SkillStore) -> Tool:
-    """内置 read_skill 工具，runtime 在技能存在时注册（L2/L3 渐进披露 + 完成声明）。"""
+    """内置 read_skill 工具，runtime 在技能存在时注册（L2/L3 渐进披露）。"""
 
     class ReadSkillArgs(BaseModel):
         name: str
         file: str | None = None
-        # 显式声明"我已按该技能走完流程"：只作为模型自己的收口声明被记录并回执，
-        # harness 不据此判定任何东西。声明前先自查技能正文的要求。
-        complete: bool = False
 
     @tool(name=READ_SKILL,
           description='装载系统提示 available_skills 清单中某个技能的完整说明；'
-                      'file 省略返回 SKILL.md 正文，file="references/xxx.md" 读取该技能的参考文件。'
-                      'complete=true 表示你已按该技能的流程走完并交付（仅作声明记录）。',
+                      'file 省略返回 SKILL.md 正文，file="references/xxx.md" 读取该技能的参考文件。',
           params=ReadSkillArgs,
           snippet='装载 available_skills 清单中某技能的完整说明（或其 references/ 参考文件）')
     async def read_skill(args: ReadSkillArgs) -> str:

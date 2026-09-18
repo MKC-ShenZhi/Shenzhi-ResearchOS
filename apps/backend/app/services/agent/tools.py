@@ -25,13 +25,11 @@ TOOL_NAME = re.compile(r'^[a-z][a-z0-9_]{1,63}$')
 @dataclass(frozen=True)
 class ToolOutput:
     """工具返回值：content 进模型上下文；terminal 非 None 则直出为最终制品；
-    added_tool_names 声明本次结果起可用的 latent 工具（pi addedToolNames）；
-    unavailable 声明"本条能力当前不可用"（非查询错误，闸门据此让步）。"""
+    added_tool_names 声明本次结果起可用的 latent 工具（pi addedToolNames）。"""
 
     content: str = ''
     terminal: Any = None
     added_tool_names: tuple[str, ...] = ()
-    unavailable: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -47,14 +45,17 @@ class ToolSpec:
     prompt_guidelines: tuple[str, ...] = ()
     # pi AgentTool.executionMode：'sequential'=该工具必须独占执行（批次中出现则整批顺序）。
     execution_mode: str | None = None
+    # 交付类工具：预算/时间撞墙后的交付窗口内仍然可用（把已有证据写成交付物）。
+    # 取证类工具在窗口内被收起，否则模型会一遍遍重复被拒的调用，已收集的证据永远交不出去。
+    delivery: bool = False
 
 
 def _spec(name: str, description: str, params: type[BaseModel] | None, timeout_s: float,
           snippet: str = '', prompt_guidelines: tuple[str, ...] = (),
-          execution_mode: str | None = None) -> ToolSpec:
+          execution_mode: str | None = None, delivery: bool = False) -> ToolSpec:
     schema = params.model_json_schema() if params is not None else {'type': 'object', 'properties': {}}
     return ToolSpec(name, description, schema, timeout_s, params, snippet, prompt_guidelines,
-                    execution_mode)
+                    execution_mode, delivery)
 
 
 class Tool(Protocol):
@@ -70,9 +71,9 @@ class FunctionTool:
     def __init__(self, name: str, description: str, func: Callable,
                  params: type[BaseModel] | None = None, *, timeout_s: float = 180.0,
                  snippet: str = '', prompt_guidelines: tuple[str, ...] = (),
-                 execution_mode: str | None = None):
+                 execution_mode: str | None = None, delivery: bool = False):
         self.spec = _spec(name, description, params, timeout_s, snippet, prompt_guidelines,
-                          execution_mode)
+                          execution_mode, delivery)
         self._func = func
 
     async def execute(self, call: ToolCall, args: Any) -> str | ToolOutput:
@@ -86,13 +87,13 @@ class FunctionTool:
 
 def tool(*, name: str, description: str, params: type[BaseModel] | None = None,
          timeout_s: float = 180.0, snippet: str = '', prompt_guidelines: tuple[str, ...] = (),
-         execution_mode: str | None = None) -> Callable[[Callable], FunctionTool]:
+         execution_mode: str | None = None, delivery: bool = False) -> Callable[[Callable], FunctionTool]:
     """装饰器：把 async 函数定义为基座 Tool；snippet/prompt_guidelines 进系统提示。"""
 
     def register(func: Callable) -> FunctionTool:
         return FunctionTool(name, description, func, params, timeout_s=timeout_s,
                             snippet=snippet, prompt_guidelines=prompt_guidelines,
-                            execution_mode=execution_mode)
+                            execution_mode=execution_mode, delivery=delivery)
 
     return register
 
@@ -206,8 +207,7 @@ class ToolRegistry:
             return ToolResult(call.call_id, call.name, f'工具执行失败: {exc}', is_error=True)
         if isinstance(output, ToolOutput):
             result = ToolResult(call.call_id, call.name, output.content,
-                                terminal=output.terminal, added_tool_names=output.added_tool_names,
-                                unavailable=output.unavailable)
+                                terminal=output.terminal, added_tool_names=output.added_tool_names)
         else:
             result = ToolResult(call.call_id, call.name, str(output))
         if after is not None:

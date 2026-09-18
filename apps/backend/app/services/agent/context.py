@@ -15,6 +15,9 @@ from app.core.errors import BusinessError
 from app.services.agent.types import AgentMessage, AssistantMessage, ToolResultMessage, UserMessage
 
 TOOL_RESULT_MARK = '\n…[工具结果已截断]'
+# 当前轮组内工具结果累计超额时，较早的结果退化成"只剩开头"的形态
+TURN_TOOL_HEAD_CHARS = 400
+TURN_TOOL_TRIM_MARK = '\n…[该结果因本轮上下文预算已让位，需要时请重新调用工具获取]'
 OUTPUT_RESERVE_CHARS = 12_000
 _SURROGATE = re.compile('[\ud800-\udfff]')
 
@@ -92,15 +95,23 @@ def groups(messages: Sequence[AgentMessage]) -> list[list[AgentMessage]]:
 
 
 def assemble(system: str, messages: Sequence[AgentMessage], *,
-             max_chars: int = 180_000, max_tool_result_chars: int = 24_000,
+             max_chars: int = 180_000, max_tool_result_chars: int = 8_000,
+             max_turn_tool_chars: int | None = None,
              tools_wire_chars: int = 0) -> tuple[list[dict], bool]:
-    """返回 (wire, truncated)。当前轮组永不丢弃；pinned 消息（read_skill 等指令性
+    """返回 (wire, truncated)。当前轮组永不整体丢弃；pinned 消息（read_skill 等指令性
     内容）既免单项截断也不随轮组丢弃；不可截断部分超限抛 context_overflow。
 
     预算闭合：system + 工具定义 + pinned 总量 + 当前输入 + 输出预留
     必须放得下，放不下时显式失败（带各分项占用）而不是等上游 400。
     floor 对 pinned 只计一次：当前轮组内的 pinned 计入当前输入，历史轮组
     的计入 pinned 总量，二者不重叠。
+
+    两条针对"一轮内调很多次工具"的约束（实测一次综述跑了 20+ 次检索，每次都返回
+    ~24k 字符，直接把预算撑爆）：
+    1. `max_turn_tool_chars` 限制**当前轮组内所有工具结果的累计**字符——超了就只保留
+       最近的，把更早的截断到只剩开头并标注，迫使模型按需重取而不是让旧结果占死预算；
+    2. 若仍放不下，对当前轮组内**非 pinned** 的工具结果逐级压缩（8k→2k→仅摘要行），
+       直到闭合；只有连这样都放不下才报错。
     """
     capped: list[AgentMessage] = []
     truncated = False
@@ -116,11 +127,27 @@ def assemble(system: str, messages: Sequence[AgentMessage], *,
 
     all_groups = groups(capped)
     current = all_groups[-1] if all_groups else []
+    # 当前轮组内的工具结果累计上限：从最早的一条开始放弃，保留最近的结果
+    if max_turn_tool_chars:
+        capped, trimmed = _cap_turn_tool_results(capped, all_groups, max_turn_tool_chars)
+        if trimmed:
+            truncated = True
+            all_groups = groups(capped)
+            current = all_groups[-1] if all_groups else []
     # floor 对 pinned 只计一次：当前轮组的 pinned 已含在 _chars(current) 内，
     # 这里只累计历史轮组的 pinned（其永不随轮组丢弃，必须全额预留）。
     pinned_total = sum(len(m.content) for group in all_groups[:-1] for m in group
                        if isinstance(m, ToolResultMessage) and m.pinned)
     floor = len(system) + tools_wire_chars + pinned_total + OUTPUT_RESERVE_CHARS + _chars(current)
+    if all_groups and floor > max_chars:
+        # 仍放不下：压缩当前轮组内非 pinned 的工具结果（逐级降级），直到闭合。
+        capped, squeezed = _squeeze_current_group(capped, all_groups, max_chars, system,
+                                                 tools_wire_chars, pinned_total)
+        if squeezed:
+            truncated = True
+            all_groups = groups(capped)
+            current = all_groups[-1] if all_groups else []
+            floor = len(system) + tools_wire_chars + pinned_total + OUTPUT_RESERVE_CHARS + _chars(current)
     if all_groups and floor > max_chars:
         raise BusinessError(
             20009,
@@ -144,3 +171,63 @@ def assemble(system: str, messages: Sequence[AgentMessage], *,
         used += size
     trimmed = [message for group in kept for message in group]
     return to_wire(system, trimmed), truncated
+
+
+def _cap_turn_tool_results(messages: list[AgentMessage], all_groups: Sequence[Sequence[AgentMessage]],
+                           cap: int) -> tuple[list[AgentMessage], bool]:
+    """当前轮组内工具结果累计超 `cap` 时，从最早的开始只保留开头。
+
+    按对象身份标记要截断的消息（ToolResultMessage 是 frozen dataclass，不能原地改），
+    返回重建后的列表与是否发生过截断。
+    """
+    current_ids = {id(m) for m in all_groups[-1]}
+    tool_indexes = [i for i, m in enumerate(messages)
+                    if id(m) in current_ids and isinstance(m, ToolResultMessage) and not m.pinned]
+    total = sum(len(messages[i].content) for i in tool_indexes)
+    if total <= cap:
+        return messages, False
+    drop: set[int] = set()
+    for index in tool_indexes:                      # 从最早开始放弃
+        if total <= cap:
+            break
+        total -= len(messages[index].content)
+        drop.add(index)
+    rebuilt: list[AgentMessage] = []
+    for index, message in enumerate(messages):
+        if index not in drop:
+            rebuilt.append(message)
+            continue
+        assert isinstance(message, ToolResultMessage)
+        head = message.content[:TURN_TOOL_HEAD_CHARS]
+        rebuilt.append(ToolResultMessage(
+            message.call_id, message.name, head + TURN_TOOL_TRIM_MARK, message.is_error))
+    return rebuilt, True
+
+
+def _squeeze_current_group(messages: list[AgentMessage], all_groups: Sequence[Sequence[AgentMessage]],
+                           max_chars: int, system: str, tools_wire_chars: int,
+                           pinned_total: int) -> tuple[list[AgentMessage], bool]:
+    """逐级压缩当前轮组内非 pinned 的工具结果，直到 floor 闭合。"""
+    for limit in (2_000, 500, 120):
+        current_ids = {id(m) for m in all_groups[-1]}
+        changed = False
+        rebuilt: list[AgentMessage] = []
+        for message in messages:
+            if (id(message) in current_ids and isinstance(message, ToolResultMessage)
+                    and not message.pinned and len(message.content) > limit):
+                rebuilt.append(ToolResultMessage(
+                    message.call_id, message.name,
+                    message.content[:limit] + TURN_TOOL_TRIM_MARK, message.is_error))
+                changed = True
+            else:
+                rebuilt.append(message)
+        if not changed:
+            continue
+        # groups() 只按轮次切分；重建后的最后一段仍是同一轮，用它重算 floor
+        grouped = groups(rebuilt)
+        floor = (len(system) + tools_wire_chars + pinned_total + OUTPUT_RESERVE_CHARS
+                 + _chars(grouped[-1] if grouped else []))
+        if floor <= max_chars:
+            return rebuilt, True
+        messages = rebuilt
+    return messages, False

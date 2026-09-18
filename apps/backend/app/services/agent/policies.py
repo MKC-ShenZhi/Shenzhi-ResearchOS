@@ -45,10 +45,27 @@ def compose_agent_system(specs: Sequence[ToolSpec], *, extra_sections: Sequence[
     return '\n\n'.join(sections)
 
 
-# run 的时间预算（秒），按模式给。与 model_provider.TEMPERATURE 同为"按模式的业务策略"。
-RUN_DEADLINE_S = {'fast': 2700.0, 'deep': 5400.0, 'idea': 2700.0, 'doubt': 2700.0}
+# run 的时间预算（秒）与工具调用次数（次），按模式给。与 model_provider.TEMPERATURE
+# 同为"按模式的业务策略"。
+#
+# 数字对齐 SZDR（前代研究产品）的实测形态：15 分钟 run 上限（RESEARCH_TIMEOUT_MS=900_000）
+# + 120 次工具调用，一种 run shape、深度由模型经技能自决。此前的"延迟优先"收窄（60s/200s、
+# 24/60 次）实测装不下一次像样的检索综述：13 次 paper_search ×5s 加模型轮次就耗尽 deep 的
+# 200s，八阶段流程必然撞墙。撞墙治理已由收尾模式/交付窗口兜底（超时也交付已收集的证据），
+# 故回到 SZDR 的量级；deadline 是上限不是目标，快问题照样快回。
+RUN_DEADLINE_S = {'fast': 900.0, 'deep': 900.0, 'idea': 900.0, 'doubt': 900.0}
+# 工具调用预算：让 run 有明确的收尾压力，也是"边际产出"的硬信号——用完就交付，
+# 缺口按停止条件里的"预算终止 ≠ 查全"如实申报。预算/时间用到 83% 即注入交付指令
+# （runtime.DELIVERY_NUDGE_AT，源自 SZDR 的 BUDGET_VISIBILITY_AT）：要求模型立即开始
+# 写交付物，而不是等预算用尽后才由收尾模式补救。
+TOOL_CALL_BUDGET = {'fast': 120, 'deep': 120, 'idea': 120, 'doubt': 120}
 
 
 def run_deadline_s(mode: str) -> float:
     """模式的 run 时间预算（service 与 CLI 共用，避免两处各写一个数）。"""
     return RUN_DEADLINE_S.get(mode, RUN_DEADLINE_S['fast'])
+
+
+def tool_call_budget(mode: str) -> int:
+    """模式的工具调用预算（service 与 CLI 共用）。"""
+    return TOOL_CALL_BUDGET.get(mode, TOOL_CALL_BUDGET['fast'])

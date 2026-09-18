@@ -12,7 +12,7 @@ from __future__ import annotations
 import ipaddress
 import re
 import socket
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 import httpx
 

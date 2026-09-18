@@ -3,7 +3,7 @@
 // ShenzhiAi 对话页（ChatGPT 式排版）：
 // 左：全局侧边栏（AppShell）+ 会话历史面板（localStorage，pi 式管理）
 // 中：用户右气泡 / 回答左通栏（头像 + 思考折叠 + 过程卡）/ 运行中插话右气泡
-// 空状态：品牌欢迎屏 + 模板快捷卡（后端 prompts/*.md，/tpl 语法服务端展开）
+// 空状态：品牌欢迎屏 + 快捷卡（QUICK_STARTS，本地常量）
 // 下：居中悬浮 Composer；运行中发送 = 插话（steer，不打断当前工具批）
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -13,10 +13,10 @@ import { BookOpenText, Compass, Download, FileDown, FileSearch, FileText, Loader
 import {
   createWorkspace, exportAgentSession, fetchAgentConfig, steerAgentRun, streamAgentRun, uploadWorkspaceFile,
   type AgentConfig, type AgentQuestion, type AgentQuestionOption, type AgentRunResult,
-  type AgentTemplateInfo,
 } from "@/clients/backend/agent";
 import { apiPath } from "@/clients/backend/http";
 import { ReportView } from "./report/report-view";
+import { ReportDialog } from "./report-dialog";
 import { Timeline } from "./timeline-view";
 import {
   applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, restoreEntries,
@@ -92,7 +92,7 @@ function QuestionCard({ question, onAnswer, busy }: {
 /** 引用回复：选中历史回答片段 → 新消息自动附原文锚点（ChatGPT reply-to-message 同类交互）。 */
 interface QuoteDraft { text: string }
 
-interface SteerNote { text: string; kind: "steer" | "follow_up" }
+interface SteerNote { text: string; kind: "steer" | "follow_up" | "system" }
 
 interface Turn {
   role: "user" | "assistant";
@@ -108,6 +108,20 @@ interface Turn {
   warnings?: string[];
   error?: string;
   stopped?: boolean;
+  /** 终态原因（timeout / cancelled / max_turns…）：同一句"已停止"说不清是到点了还是你停的。 */
+  stopReason?: string;
+}
+
+/** 终态原因 → 人话（stop_reason 是后端枚举：StopReason）。 */
+function stopLabel(reason?: string): string {
+  switch (reason) {
+    case "timeout": return "（到达本轮时间上限，已完成的内容如上）";
+    case "cancelled": return "（已手动停止）";
+    case "max_turns": return "（达到最大轮数限制）";
+    case "length": return "（输出达到长度上限，内容可能不完整）";
+    case "error": return "（运行出错，见上方提示）";
+    default: return "（本轮已停止）";
+  }
 }
 
 /** 会话存储里的过程条目（与 session-store 的 process 形状一致）。 */
@@ -141,18 +155,17 @@ function fromStoredTurn(turn: StoredTurn): StreamState {
 }
 
 const FALLBACK_CONFIG: AgentConfig = {
-  models: [], default_model: "default", skills: [], templates: [],
+  models: [], default_model: "default", skills: [],
   upload: { max_size_mb: 20, max_files: 5, accept: [".pdf", ".txt", ".md", ".markdown"] },
 };
 
 const TEMPLATE_ICONS = [FileSearch, BookOpenText, Compass, Sparkles];
 
-/** 模板卡之外的两个固定快捷入口（模板卡来自后端 prompts/）。
- *  webSearch: true 的卡片点击时自动打开联网开关——prompt 依赖联网工具，不开则模型无法执行。 */
-const QUICK_STARTS: Array<{ title: string; description: string; prompt: string; webSearch?: boolean }> = [
+/** 固定快捷入口卡（取证工具常驻，无需任何开关）。 */
+const QUICK_STARTS: Array<{ title: string; description: string; prompt: string }> = [
   { title: "知识库检索", description: "在论文库里找文献、看引用关系", prompt: "帮我在知识库里检索近年的「长上下文」相关论文，并梳理引用脉络。" },
   { title: "联网快问", description: "实时信息、新闻与文档查询",
-    prompt: "用联网搜索告诉我本周 AI 领域有什么值得关注的新进展。", webSearch: true },
+    prompt: "用联网搜索告诉我本周 AI 领域有什么值得关注的新进展。" },
 ];
 
 let nextId = 1;
@@ -201,6 +214,32 @@ function AssistantAvatar() {
 
 // 运行中的实时观感由 Timeline 承接（对应条目带 spinner），不再单独渲染活动卡。
 
+/** 报告摘要卡：对话里只给标题与开头几行，全文在弹层里看（避免几十页 markdown 铺满对话）。 */
+function ReportSummary({ text, sources, onOpen }: {
+  text: string;
+  sources?: Source[];
+  onOpen: () => void;
+}) {
+  const firstHeading = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "研究报告";
+  const plain = text.replace(/^#+\s+.*$/gm, "").replace(/[*_`>|[\]()]/g, "").replace(/\s+/g, " ").trim();
+  return <div className="mt-3 rounded-2xl border border-line bg-card p-4 shadow-card">
+    <div className="flex items-start gap-2">
+      <FileText className="mt-0.5 size-4 shrink-0 text-agent" strokeWidth={2} aria-hidden />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[14px] font-semibold text-ink">{firstHeading}</div>
+        <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-muted">{plain.slice(0, 200)}…</p>
+        <div className="mt-1 text-[11px] text-faint">
+          {text.length.toLocaleString()} 字{sources?.length ? ` · ${sources.length} 条来源` : ""}
+        </div>
+      </div>
+      <button type="button" onClick={onOpen}
+        className="shrink-0 cursor-pointer rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-primary/90">
+        查看报告
+      </button>
+    </div>
+  </div>;
+}
+
 export function ShenzhiAiPage() {
   const [agentConfig, setAgentConfig] = useState<AgentConfig>(FALLBACK_CONFIG);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -211,13 +250,16 @@ export function ShenzhiAiPage() {
   const [uploading, setUploading] = useState(false);
   const [workspace, setWorkspace] = useState<{ id: string; name: string; files: number } | null>(null);
   const [model, setModel] = useState("default");
-  const [mode, setMode] = useState<"fast" | "deep" | "idea" | "doubt">("deep");  // 默认深度：预算与温度都更高
-  const [webSearch, setWebSearch] = useState(false);
+  // 默认 fast。预算对齐 SZDR 的实测形态（15 分钟 / 120 次工具调用，见后端 policies.py）：
+  // deadline 是上限不是目标，快问题照样快回；mode 只是资源倾向，不是方法论档位。
+  const [mode, setMode] = useState<"fast" | "deep" | "idea" | "doubt">("fast");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<ComposerSkill[]>([]);
   const [sessionId, setSessionId] = useState(() => newSessionId());
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [quote, setQuote] = useState<QuoteDraft | null>(null);   // 引用回复草稿
+  /** 正在弹层里查看的报告（null = 关闭）。 */
+  const [openReport, setOpenReport] = useState<{ text: string; sources?: Source[] } | null>(null);
   const [exporting, setExporting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const runIdRef = useRef<string | null>(null);
@@ -255,6 +297,7 @@ export function ShenzhiAiPage() {
       steers: turn.steers.length ? turn.steers : undefined,
       report: turn.report, sources: turn.sources, question: turn.question,
       warnings: turn.warnings, error: turn.error, stopped: turn.stopped,
+      stopReason: turn.stopReason,
     }));
     saveSession(sessionId, title, stored, usageRef.current ?? undefined);
     setSessions(listSessions());
@@ -272,6 +315,7 @@ export function ShenzhiAiPage() {
       steers: turn.steers ?? [],
       report: turn.report, sources: turn.sources, question: turn.question,
       warnings: turn.warnings, error: turn.error, stopped: turn.stopped,
+      stopReason: turn.stopReason,
     })));
     nextId += session.turns.length + 1;
     setRunError(null);
@@ -342,9 +386,9 @@ export function ShenzhiAiPage() {
     if (prompt.startsWith("/research ")) {
       // /research <题目> 模板：强制挂载深度研究技能
       const topic = prompt.slice("/research ".length).trim();
-      prompt = `对「${topic}」执行 scholar-deep-research 八阶段研究流程，交付带引用的研究报告。`;
-      if (!selectedSkills.some((skill) => skill.name === "scholar-deep-research")) {
-        const skill = agentConfig.skills.find((item) => item.name === "scholar-deep-research");
+      prompt = `对「${topic}」执行 deep-research 技能的深度研究流程，交付带引用的研究报告。`;
+      if (!selectedSkills.some((skill) => skill.name === "deep-research")) {
+        const skill = agentConfig.skills.find((item) => item.name === "deep-research");
         if (skill) setSelectedSkills((previous) => [...previous, skill]);
       }
     }
@@ -370,7 +414,7 @@ export function ShenzhiAiPage() {
       await streamAgentRun({
         prompt, history,
         model: model === "default" ? undefined : model,
-        mode, web_search: webSearch,
+        mode,
         attachments, workspace_id: workspace?.id,
         skills: selectedSkills.map((skill) => skill.name),
         session_id: sessionId,
@@ -417,6 +461,10 @@ export function ShenzhiAiPage() {
             question: result.question ?? undefined,
             error: result.status === "failed" ? result.error?.message ?? "运行失败" : undefined,
             stopped: result.status === "stopped" || result.status === "timeout",
+            stopReason: result.stop_reason,
+            // 超时/停止时，模型在被打断前写出的正文此前被整段丢掉（界面只剩"已停止"）：
+            // content 为空就补上 final_text（有流式正文时不重复）。
+            content: turn.content || result.final_text || "",
           };
           });
         },
@@ -432,7 +480,7 @@ export function ShenzhiAiPage() {
       abortRef.current = null;
       runIdRef.current = null;
     }
-  }, [input, running, turns, model, mode, webSearch, attachments, workspace, selectedSkills, agentConfig, patchAssistant]);
+  }, [input, running, turns, model, mode, attachments, workspace, selectedSkills, agentConfig, patchAssistant]);
 
   /** 运行中发送 = 插话（steer）：不打断当前工具批，下一个模型请求前注入。 */
   const steer = useCallback(async () => {
@@ -447,9 +495,8 @@ export function ShenzhiAiPage() {
     }
   }, [input, running]);
 
-  const applyQuickStart = useCallback((prompt: string, needWebSearch = false) => {
+  const applyQuickStart = useCallback((prompt: string) => {
     setInput(prompt);
-    if (needWebSearch) setWebSearch(true);
   }, []);
 
   /** 引用回复：mouseup 后若在回答区（data-quote-source）内有选区，展示引用条。 */
@@ -516,15 +563,6 @@ export function ShenzhiAiPage() {
     upload: agentConfig.upload,
   } as ChatConfig;
 
-  const templateCards: Array<{ title: string; description: string; prompt: string; hint?: string; webSearch?: boolean }> = [
-    ...(agentConfig.templates ?? []).map((template: AgentTemplateInfo) => ({
-      title: template.name,
-      description: template.description,
-      prompt: `/tpl ${template.name} `,
-      hint: template.argument_hint,
-    })),
-    ...QUICK_STARTS,
-  ].slice(0, 4);
 
   return <AppShell>
     <div className="flex h-[calc(100vh-3.5rem)] lg:h-screen">
@@ -602,19 +640,16 @@ export function ShenzhiAiPage() {
                 <div className="mb-1 text-3xl font-semibold tracking-tight text-ink">ShenzhiAi</div>
                 <p className="mb-10 text-sm text-muted">深知科研智能体 —— 检索、精读、综述与报告，一个入口</p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {templateCards.map((card, index) => {
+                  {QUICK_STARTS.map((card, index) => {
                     const Icon = TEMPLATE_ICONS[index % TEMPLATE_ICONS.length];
                     return <button key={card.title} type="button"
-                      onClick={() => applyQuickStart(card.prompt, card.webSearch === true)}
+                      onClick={() => applyQuickStart(card.prompt)}
                       className="group flex cursor-pointer items-start gap-3 rounded-2xl border border-line bg-card p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-pop">
                       <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary transition-colors group-hover:bg-primary group-hover:text-white" aria-hidden>
                         <Icon className="size-4.5" strokeWidth={1.8} />
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-sm font-medium text-ink">
-                          {card.title}
-                          {card.hint ? <span className="ml-2 font-mono text-[11px] font-normal text-faint">{card.hint}</span> : null}
-                        </span>
+                        <span className="block text-sm font-medium text-ink">{card.title}</span>
                         <span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-muted">{card.description}</span>
                       </span>
                     </button>;
@@ -634,7 +669,8 @@ export function ShenzhiAiPage() {
                   {turn.steers.map((note, noteIndex) => (
                     <div key={noteIndex} className="mb-3 flex items-center justify-end gap-1.5">
                       <span className="rounded-full bg-agent-soft px-2 py-0.5 text-[10px] font-medium text-agent">
-                        {note.kind === "steer" ? "⚡ 插话" : "→ 追问"}
+                        {note.kind === "steer" ? "⚡ 插话"
+                        : note.kind === "system" ? "⚙ 系统提示" : "→ 追问"}
                       </span>
                       <div className="max-w-[70%] rounded-2xl rounded-br-md border border-agent/30 bg-agent-soft px-3.5 py-2 text-[14px] leading-6 text-ink">
                         {note.text}
@@ -652,20 +688,28 @@ export function ShenzhiAiPage() {
                       {/* 只有标点的正文不渲染：模型常在工具轮之间吐孤立的 "."。 */}
                       {turn.content && isMeaningful(turn.content) && <Md text={turn.content} />}
                       {turn.report && (
-                        // 报告不套卡片、不套两栏：普通 markdown 渲染、占满宽度。
-                        // showToc=false —— 侧边目录会把正文挤窄（用户反馈"比例不合理"）。
-                        <ReportView text={turn.report} sources={turn.sources} showToc={false} />
+                        // 报告只在按钮里看全文：正文内联渲染会把几十页 markdown 铺满对话。
+                        <ReportSummary
+                          text={turn.report}
+                          sources={turn.sources}
+                          onOpen={() => setOpenReport({ text: turn.report!, sources: turn.sources })}
+                        />
                       )}
                       {turn.question ? (
+                        // 只有"正在跑"时才禁用：此前写成 `running || index !== turns.length - 1`，
+                        // 而问题到达时 run 已结束、它那一轮又不是最后一轮，于是按钮被永久锁死
+                        // （能看到问题但点不动）。
                         <QuestionCard
                           question={turn.question}
-                          busy={running || index !== turns.length - 1}
+                          busy={running}
                           onAnswer={(text) => answerQuestion(text)}
                         />
                       ) : null}
                       {turn.sources && !turn.report && <Sources sources={turn.sources} />}
                       {turn.error && <div className="mt-1 text-sm text-red-600 dark:text-red-400">{turn.error}</div>}
-                      {turn.stopped && <div className="mt-1 text-xs text-muted">（本轮已停止）</div>}
+                      {turn.stopped && (
+                        <div className="mt-1 text-xs text-muted">{stopLabel(turn.stopReason)}</div>
+                      )}
                     </div>
                   </div>)}
                 </div>)}
@@ -709,7 +753,7 @@ export function ShenzhiAiPage() {
               value={input}
               onChange={setInput}
               onSend={() => { if (running) { void steer(); } else { void send(); } }}
-              placeholder={running ? "运行中插话 · 回车注入下一轮…" : "询问任何问题，或 /tpl 调用模板"}
+              placeholder={running ? "运行中插话 · 回车注入下一轮…" : "询问任何问题"}
               modeSwitch={false}
               model={model}
               onModelChange={setModel}
@@ -717,8 +761,7 @@ export function ShenzhiAiPage() {
               onReplyModeChange={(value) => {
                 if (value === "fast" || value === "deep" || value === "idea" || value === "doubt") setMode(value);
               }}
-              webSearch={webSearch}
-              onWebSearchChange={setWebSearch}
+              webSearchSwitch={false}
               attachments={attachments}
               onAttachmentsChange={setAttachments}
               onWorkspaceFolder={(files) => void handleWorkspaceFolder(files)}
@@ -727,6 +770,7 @@ export function ShenzhiAiPage() {
               onSelectSkill={(name) => toggleSkill(name)}
               config={chatConfig}
               busy={uploading}
+              hideStyleRow
               onStop={() => abortRef.current?.abort()}
               skills={agentConfig.skills}
             />
@@ -736,5 +780,11 @@ export function ShenzhiAiPage() {
         </div>
       </div>
     </div>
+    <ReportDialog
+      open={openReport !== null}
+      onClose={() => setOpenReport(null)}
+      text={openReport?.text ?? ""}
+      sources={openReport?.sources}
+    />
   </AppShell>;
 }

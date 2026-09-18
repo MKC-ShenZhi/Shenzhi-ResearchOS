@@ -22,26 +22,13 @@ class AgentRunBody(BaseModel):
     prompt: str = Field(min_length=1, max_length=10_000)
     history: list[dict] = Field(default_factory=list, max_length=200)
     model: str | None = None
-    mode: Literal['fast', 'deep', 'idea', 'doubt'] = 'deep'  # 默认走深度预算（更长 deadline + 更高温度）
-    web_search: bool = False
+    # 默认 fast。预算对齐 SZDR 的实测形态（900 秒 / 120 次工具调用，见 policies.py）：
+    # deadline 是上限不是目标，快问题照样快回；mode 只影响温度等资源倾向。
+    mode: Literal['fast', 'deep', 'idea', 'doubt'] = 'fast'
     attachments: list[dict] = Field(default_factory=list, max_length=MAX_FILES)
     workspace_id: str | None = None
     skills: list[str] = Field(default_factory=list, max_length=10)  # 用户显式选中：本轮强制启用
     session_id: str | None = None  # 会话即工作区：选中深度研究技能时自动挂载
-
-
-# 前端展示用中文短描述（仅展示层翻译；SKILL.md 原文保持官方内容，自动装载语义不变）
-SKILL_DESCRIPTION_ZH = {
-    'doc-coauthoring': '结构化文档共写工作流：提案、技术规范、决策文档。',
-    'internal-comms': '内部沟通写作：状态报告、周报、FAQ、事故通报。',
-    'discernment-nudge': '表达辨别力提示：避免迎合式回答。',
-    'pdf': 'PDF 处理：表单填写、文本提取、合并拆分。',
-    'docx': 'Word 文档创建与编辑（修订、批注）。',
-    'xlsx': 'Excel 表格创建与编辑（公式、图表、多表）。',
-    'pptx': 'PowerPoint 演示文稿生成（版式、图表、母版）。',
-    'skill-creator': '创建与改进技能本身：结构规范、测试评估、描述优化。',
-    'systematic-review-checklist': '系统综述方法学检查清单：PRISMA 全流程自检。',
-}
 
 
 class SteerBody(BaseModel):
@@ -50,11 +37,10 @@ class SteerBody(BaseModel):
 
 @router.get('/config')
 def config(_credential: None = Depends(require_bff)):
-    """运行配置：可选模型、技能与提示词模板清单、附件限制（结构与 chat/config 对齐）。"""
+    """运行配置：可选模型、技能清单、附件限制（结构与 chat/config 对齐）。"""
     settings = model_config()
     store = agent_service.default_store()
-    skills = [{'name': skill.name,
-               'description': SKILL_DESCRIPTION_ZH.get(skill.name, skill.description)}
+    skills = [{'name': skill.name, 'description': skill.description}
               for name in store.names()
               for skill in [store.get(name)]
               if skill and not skill.disable_model_invocation]
@@ -64,7 +50,6 @@ def config(_credential: None = Depends(require_bff)):
                    for item in settings.models],
         'default_model': settings.model,
         'skills': skills,
-        'templates': agent_service.load_templates(),
         'upload': {'max_size_mb': 20, 'max_files': MAX_FILES, 'accept': UPLOAD_ACCEPT},
     })
 
@@ -73,16 +58,16 @@ def config(_credential: None = Depends(require_bff)):
 async def run(body: AgentRunBody, owner: str = Depends(request_owner)):
     runtime = agent_service.build_run_runtime(
         owner=owner, model=body.model, mode=body.mode,
-        web_search_on=body.web_search, workspace_id=body.workspace_id,
+        workspace_id=body.workspace_id,
         forced_skills=body.skills, session_id=body.session_id)
     history = agent_service.decode_history(body.history)
     attachments, warnings = agent_service.resolve_attachments(body.attachments, owner)
     meta = {'warnings': warnings} if warnings else None
-    prompt = agent_service.expand_template_prompt(body.prompt)  # "/tpl 名称 参数" → 模板正文
 
     async def generate():
-        async for name, data in agent_service.run_events(runtime, prompt + attachments,
-                                                         history, meta=meta):
+        async for name, data in agent_service.run_events(runtime, body.prompt + attachments,
+                                                         history, meta=meta, owner=owner,
+                                                         session_id=body.session_id):
             yield f'event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'
 
     return StreamingResponse(generate(), media_type='text/event-stream',

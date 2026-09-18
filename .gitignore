@@ -49,6 +49,9 @@ __pycache__/
 *.py[cod]
 .venv/
 
+# agent 运行时会话工作区（用户研究数据与产物；运行时生成，不入库）
+/apps/backend/workspace/
+
 # vercel
 .vercel
 

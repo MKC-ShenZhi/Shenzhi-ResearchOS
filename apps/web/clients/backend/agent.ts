@@ -27,6 +27,8 @@ export interface AgentQuestion {
 export interface AgentRunResult {
   /** awaiting_input = 本轮以提问结束，等用户回答后作为下一条消息继续。 */
   status: "done" | "stopped" | "failed" | "timeout" | "awaiting_input";
+  /** 终态原始原因（stop/cancelled/timeout/max_turns/error…）：界面据此区分"到点了"与"你停的"。 */
+  stop_reason?: string;
   final_text: string;
   output?: { kind?: string; report?: string; sources?: AgentSource[] } | null;
   /** 等待回答时的问题（后端已提到顶层，无需解析 output 判别联合）。 */
@@ -50,17 +52,10 @@ export interface AgentActivity {
 
 export interface AgentSkillInfo { name: string; description: string }
 
-export interface AgentTemplateInfo {
-  name: string;
-  description: string;
-  argument_hint?: string;
-}
-
 export interface AgentConfig {
   models: Array<{ value: string; label: string; enabled: boolean }>;
   default_model: string;
   skills: AgentSkillInfo[];
-  templates?: AgentTemplateInfo[];
   upload: { max_size_mb: number; max_files: number; accept: string[] };
 }
 
@@ -109,7 +104,7 @@ export function uploadWorkspaceFile(workspaceId: string, file: File, relativePat
 
 export async function streamAgentRun(
   body: { prompt: string; history?: Array<Record<string, unknown>>; model?: string;
-          mode?: "fast" | "deep" | "idea" | "doubt"; web_search?: boolean;
+          mode?: "fast" | "deep" | "idea" | "doubt";
           attachments?: unknown[]; workspace_id?: string; skills?: string[];
           session_id?: string },
   handlers: {
@@ -118,7 +113,7 @@ export async function streamAgentRun(
     onToolCall: (activity: AgentActivity, turn: number) => void;
     onToolEnd: (toolCallId: string, isError: boolean, durationMs: number, summary: string) => void;
     onRunStart?: (runId: string) => void;
-    onMessage?: (text: string, kind: "steer" | "follow_up") => void;
+    onMessage?: (text: string, kind: "steer" | "follow_up" | "system") => void;
     onCompaction?: (data: { before_chars: number; after_chars: number }) => void;
     onResult: (result: AgentRunResult) => void;
   },
@@ -140,7 +135,8 @@ export async function streamAgentRun(
           handlers.onMeta(data);
           break;
         case "message":
-          handlers.onMessage?.(data.text ?? "", data.kind === "follow_up" ? "follow_up" : "steer");
+          handlers.onMessage?.(data.text ?? "",
+            data.kind === "follow_up" || data.kind === "system" ? data.kind : "steer");
           break;
         case "compaction":
           handlers.onCompaction?.(data);

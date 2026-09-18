@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from app.core.errors import BusinessError
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
-from app.services.agent.tools import Tool, ToolOutput, tool
+from app.services.agent.tools import Tool, tool
 from app.services.knowledge import KnowledgeService, KnowledgeServiceError
 from app.services.knowledge_query import normalize_knowledge_query
 from app.schemas.knowledge import KnowledgeSearchRequest
@@ -174,8 +174,6 @@ def knowledge_tools(service: KnowledgeService | None = None) -> list[Tool]:
             payload['note'] = ('该知识库当前不提供引用关系（CITES）：backward/forward 必然为空，'
                                '这不是查询错误，重试无意义。改用 paper_search 检索该文的后续、'
                                '批评与应用工作；topics 可用于改写检索词。')
-            return ToolOutput(content=json.dumps(payload, ensure_ascii=False),
-                              unavailable=('citations',))
         return json.dumps(payload, ensure_ascii=False)
 
     return [paper_search, paper_detail, citation_graph]

@@ -19,12 +19,9 @@ from app.services.agent.chart_tools import chart_tool, image_search_tool
 from app.services.agent.fetch_url import fetch_url_tool
 from app.services.agent.knowledge_tools import knowledge_tools
 from app.services.agent.policies import (
-    IDENTITY, RUN_DEADLINE_S, compose_agent_system, run_deadline_s,
+    compose_agent_system, run_deadline_s, tool_call_budget,
 )
 from app.services.agent.read_paper import read_paper_tool
-from app.services.agent.prompt_templates import (
-    find_template, format_template_invocation, prompt_templates,
-)
 from app.services.agent.types import RUN_START, RunChannel
 from app.services.agent.skills import SkillStore, sync_loaded_skill_scripts
 from app.services.agent.tools import Tool, ToolSpec, tool
@@ -40,12 +37,12 @@ from app.services.sessions import repository
 from app.services.web_search import web_search
 
 # API 层的调用面（app/api/agent.py 经 service.* 使用）；其余 workspace 符号本模块自用。
-# 策略常量与 compose_agent_system 自 policies.py 转出（既有调用方无需改 import）。
+# compose_agent_system 自 policies.py 转出（既有调用方无需改 import）。
 __all__ = [
     'build_run_runtime', 'create_workspace', 'decode_history', 'default_store',
-    'expand_template_prompt', 'load_templates', 'read_session_file', 'resolve_attachments',
+    'read_session_file', 'resolve_attachments',
     'run_deadline_s', 'run_events', 'steer_run', 'write_workspace_file',
-    'RUN_DEADLINE_S', 'compose_agent_system',
+    'compose_agent_system',
 ]
 
 PROJECT_CONTEXT_FILES = ('AGENTS.md', 'CLAUDE.md')  # pi contextFiles/AGENTS.md 机制
@@ -120,7 +117,7 @@ def _web_search_tool() -> Tool:
 
 
 def build_run_runtime(*, owner: str, model: str | None = None, mode: str = 'fast',
-                      web_search_on: bool = False, workspace_id: str | None = None,
+                      workspace_id: str | None = None,
                       forced_skills: Sequence[str] = (),
                       session_id: str | None = None) -> AgentRuntime:
     """按单次请求组装 runtime：模型/温度 + 可选联网工具 + 可选 Web 工作区 + 强制技能。
@@ -129,8 +126,16 @@ def build_run_runtime(*, owner: str, model: str | None = None, mode: str = 'fast
     （此前三段各自整段重写，组合请求会互相吞掉）。技能工具从唯一的 store 装载
     （此前 store 仅在 session 分支创建，forced_skills 单独出现会 NameError）。
     """
+    # 预算类参数不用 ×3：上下文预算放大只会把失败点推后并让压缩更晚触发
+    # （实测 360k 预算下 20+ 次检索直接溢出）。×3 保留在超时与轮次这类"等得起"的参数上。
+    #
+    # 但"等得起"也有代价：deadline 90 分钟 + max_tool_calls 无限 = 模型没有收尾压力，
+    # 实测一次综述跑 20 分钟以上（read_paper 单次数十秒 × 十几次）。这里给工具调用设预算，
+    # 让模型在预算耗尽前必须收敛并交付，而不是无限深挖。
     overrides: dict[str, Any] = {'temperature': TEMPERATURE.get(mode), 'max_turns': 360,
-                                 'deadline_s': run_deadline_s(mode), 'max_context_chars': 360_000,
+                                 'deadline_s': run_deadline_s(mode), 'max_context_chars': 180_000,
+                                 'max_tool_calls': tool_call_budget(mode),
+                                 'tool_budget': tool_call_budget(mode),  # 同一个数进系统提示
                                  'compaction': True}
     if model:
         overrides['model'] = model
@@ -205,33 +210,55 @@ def steer_run(run_id: str, text: str) -> bool:
     return True
 
 
-def load_templates() -> list[dict]:
-    """提示词模板清单（prompts/*.md；目录与缓存归 prompt_templates.py）。"""
-    return [{'name': template.name, 'description': template.description,
-             'argument_hint': template.argument_hint}
-            for template in prompt_templates()]
+def _latest_report_path(owner: str, session_id: str, result: Any) -> str | None:
+    """找出本次 run 写出的报告文件路径。
 
-
-def expand_template_prompt(prompt: str) -> str:
-    """"/tpl <名称> <参数…>" 展开为模板正文（CLI 同语法）；其余原样返回。"""
-    if not prompt.startswith('/tpl '):
-        return prompt
-    parts = prompt[len('/tpl '):].strip().split()
-    if not parts:
-        return prompt
-    template = find_template(parts[0])
-    if template is None:
-        return prompt
-    expanded = format_template_invocation(template, parts[1:])
-    return expanded if expanded.strip() else prompt
+    优先取工具调用记录里**最后一次 write_file / edit_file 的目标**——那是模型自己认定的交付物；
+    没有记录时退回扫描会话工作区里最大的 markdown 文件（报告通常是最大的那个）。
+    """
+    from app.services.agent.types import AssistantMessage
+    candidate = ''
+    for message in getattr(result, 'messages', ()) or ():
+        if not isinstance(message, AssistantMessage):
+            continue
+        for call in message.tool_calls:
+            if call.name not in ('write_file', 'edit_file'):
+                continue
+            path = ''
+            if isinstance(call.arguments, dict):
+                path = str(call.arguments.get('path') or '')
+                if not path:
+                    edits = call.arguments.get('edits')
+                    if isinstance(edits, list) and edits and isinstance(edits[0], dict):
+                        path = str(edits[0].get('path') or '')
+            if path.lower().endswith(('.md', '.markdown')):
+                candidate = path
+    if candidate:
+        return candidate
+    try:
+        root = ensure_session_workspace(owner, session_id)
+    except (OSError, BusinessError):
+        return None
+    best, best_size = None, 0
+    for path in root.rglob('*.md'):
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        if size > best_size:
+            best, best_size = path.relative_to(root).as_posix(), size
+    return best
 
 
 async def run_events(runtime: AgentRuntime, prompt: str, history: Sequence[AgentMessage] = (),
-                     meta: dict | None = None) -> AsyncIterator[tuple[str, dict]]:
+                     meta: dict | None = None, *, owner: str | None = None,
+                     session_id: str | None = None) -> AsyncIterator[tuple[str, dict]]:
     """把 runtime.run 桥接为 (事件名, data) 流；先发 meta（如附件告警），末尾发 result。
 
     消费方断开时（生成器被关闭）取消运行任务并跳过 result——客户端已不在。
     运行期间持有 RunChannel 并按 run_id 注册，供 steer_run 插话。
+    owner/session_id 由调用方显式传入（此前直接引用不存在的名字，报告回填一走到就 NameError）：
+    报告全文读回需要它们，而它们在 run 时不可从 runtime 反查。
     """
     queue: asyncio.Queue = asyncio.Queue()
     box: dict[str, RunResult] = {}
@@ -268,8 +295,22 @@ async def run_events(runtime: AgentRuntime, prompt: str, history: Sequence[Agent
         except asyncio.CancelledError:
             pass
     result = box.get('result') or RunResult(stop_reason=StopReason.CANCELLED)
+    # 报告制品的回填（B 方案）：技能要求报告落盘成工作区文件，而模型回复里只给摘要与路径，
+    # 于是对话里没有全文、前端渲染器拿不到东西。这里在 run 结束后把**最新写出的 markdown
+    # 报告**读回，作为 output.report 交给前端——侧边目录、图片、引用 chip 才有内容可渲染。
+    if session_id and not (result.output or {}).get('report'):
+        report_path = _latest_report_path(owner, session_id, result)
+        if report_path:
+            try:
+                text, _ = read_session_file(owner, session_id, report_path)
+                result.output = {**(result.output or {}), 'kind': 'report',
+                                 'report': text.decode('utf-8', 'replace'),
+                                 'report_path': report_path}
+            except (OSError, BusinessError):
+                pass    # 读不回就照常交付，报告内容仍在工作区文件里
     yield ('result', {
         'status': result.status,
+        'stop_reason': result.stop_reason.value,  # 前端据此区分"到点了"与"你停的"
         'final_text': result.final_text,
         'output': result.output,
         # 等待用户回答时把问题提到顶层：调用方不必理解 output 的判别联合就能渲染选项

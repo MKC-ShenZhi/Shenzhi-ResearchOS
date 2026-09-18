@@ -24,8 +24,8 @@ export interface StoredTurn {
   process?: Array<{ kind: "reasoning"; text: string } | { kind: "tool"; tool: StoredActivity }>;
   /** 旧字段：工具轮之间的过渡叙述。新写入仍保留，读取时并进相邻思考片段。 */
   narrations?: string[];
-  /** 运行中的插话（steer）与排队追问（follow_up），按发生顺序 */
-  steers?: Array<{ text: string; kind: "steer" | "follow_up" }>;
+  /** 运行中的插话（steer）、系统提示（system）与旧格式的排队追问（follow_up），按发生顺序 */
+  steers?: Array<{ text: string; kind: "steer" | "follow_up" | "system" }>;
   report?: string;
   sources?: Array<{ title?: string; url?: string }>;
   /** agent 反问的问题（status=awaiting_input）：持久化后历史会话仍能渲染选项 */
@@ -33,6 +33,8 @@ export interface StoredTurn {
   warnings?: string[];
   error?: string;
   stopped?: boolean;
+  /** 终止原因（timeout / cancelled / max_turns …）：历史会话重开后仍能说明"为什么停"。 */
+  stopReason?: string;
 }
 
 export interface AgentUsage { prompt: number; completion: number; runs: number }

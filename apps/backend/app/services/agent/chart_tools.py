@@ -232,8 +232,7 @@ def image_search_tool(*, workspace_root: Path | None, session_id: str | None = N
                     'note': '当前图片检索渠道没有返回任何可用图片（Exa /search 只抽文本内容，'
                             '不提供图片链接）。改用 draw_chart 用来源里的数字自行渲图，'
                             '或不要配图。',
-                }, ensure_ascii=False),
-                unavailable=('image_search',))
+                }, ensure_ascii=False))
         return _json.dumps({
             'provider': 'Exa',
             'query': args.query,
