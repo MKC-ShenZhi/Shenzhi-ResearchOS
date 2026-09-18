@@ -59,6 +59,11 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
   const hasPassword = Boolean((session.user as { hasPassword?: boolean }).hasPassword);
   const resetFeedback = () => { setMessage(null); setError(null); };
 
+  const stillAuthenticatedAs = async (expectedUserId: string) => {
+    const latest = await authClient.getSession();
+    return latest.data?.user.id === expectedUserId;
+  };
+
   const updateName = async (event: FormEvent) => {
     event.preventDefault();
     resetFeedback();
@@ -120,6 +125,10 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
   const submitEmailChange = async (userId: string, normalizedEmail: string) => {
     resetFeedback();
     setBusy(true);
+    if (!(await stillAuthenticatedAs(userId))) {
+      setBusy(false);
+      return setError(t.reauthAccountMismatch);
+    }
     const result = await authClient.changeEmail({
       newEmail: normalizedEmail,
       callbackURL: "/settings?tab=profile",
@@ -147,7 +156,10 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
     event.preventDefault();
     const normalizedEmail = newEmail.trim().toLowerCase();
     if (!normalizedEmail) return setError(t.newEmail);
-    await submitEmailChange(userId, normalizedEmail);
+    openLogin({
+      notice: t.reauthEmailNotice,
+      onSuccess: () => submitEmailChange(userId, normalizedEmail),
+    });
   };
 
   const sendOtp = async () => {
@@ -167,6 +179,10 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
   const removeAccount = async () => {
     resetFeedback();
     setBusy(true);
+    if (!(await stillAuthenticatedAs(userId))) {
+      setBusy(false);
+      return setError(t.reauthAccountMismatch);
+    }
     const result = await deleteCurrentAccount();
     if (activeUserIdRef.current !== userId) return;
     if (!result.ok) {
@@ -304,7 +320,10 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
               <Button
                 variant="danger"
                 disabled={busy || deleteConfirmation !== t.deleteConfirmPhrase}
-                onClick={() => void removeAccount()}
+                onClick={() => {
+                  setConfirmDelete(false);
+                  openLogin({ notice: t.reauthNotice, onSuccess: removeAccount });
+                }}
               >
                 {t.deleteConfirm}
               </Button>

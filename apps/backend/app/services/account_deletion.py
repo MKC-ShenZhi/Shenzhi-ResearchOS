@@ -2,12 +2,13 @@
 
 from dataclasses import dataclass
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.core.database import session_scope
 from app.models.chat import ChatSessionRow
 from app.models.profile import UserProfileRow
 from app.models.settings import UserSettingsRow
+from app.services.sessions import repository
 
 
 @dataclass(frozen=True)
@@ -26,7 +27,20 @@ class AccountDeletionService:
     """
 
     async def delete_all_for_user(self, user_id: str) -> BusinessDataDeletionResult:
+        owner = f'user:{user_id}'
         async with session_scope() as db:
+            session_ids = {
+                str(session_id)
+                for session_id in (
+                    await db.scalars(
+                        select(ChatSessionRow.id)
+                        .where(ChatSessionRow.owner == owner)
+                    )
+                ).all()
+            }
+            # Stop current-worker generators before deleting their durable rows.
+            # A multi-worker deployment still needs distributed cancellation.
+            await repository.purge_owner_runtime(owner, session_ids)
             profiles = await db.execute(
                 delete(UserProfileRow)
                 .where(UserProfileRow.user_id == user_id)
@@ -39,7 +53,7 @@ class AccountDeletionService:
             )
             sessions = await db.execute(
                 delete(ChatSessionRow)
-                .where(ChatSessionRow.owner == f'user:{user_id}')
+                .where(ChatSessionRow.owner == owner)
                 .returning(ChatSessionRow.id)
             )
 

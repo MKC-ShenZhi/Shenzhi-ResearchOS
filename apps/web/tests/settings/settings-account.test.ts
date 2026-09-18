@@ -55,6 +55,14 @@ test("email changes stay on Better Auth's confirmation and verification flow", (
   assert.match(accountSection, /callbackURL: "\/settings\?tab=profile"/);
   assert.match(accountSection, /SENSITIVE_SESSION_REQUIRED/);
   assert.match(accountSection, /onSuccess: \(\) => submitEmailChange/);
+  assert.match(accountSection, /notice: t\.reauthEmailNotice/);
+});
+
+test("sensitive account actions reauthenticate and reject an identity switch", () => {
+  assert.match(accountSection, /authClient\.getSession\(\)/);
+  assert.match(accountSection, /latest\.data\?\.user\.id === expectedUserId/);
+  assert.match(accountSection, /reauthAccountMismatch/);
+  assert.match(accountSection, /openLogin\(\{ notice: t\.reauthNotice, onSuccess: removeAccount \}\)/);
 });
 
 test("sessions panel uses Better Auth session APIs", () => {

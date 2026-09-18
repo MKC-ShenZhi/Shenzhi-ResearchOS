@@ -92,6 +92,8 @@ export const accountMessages = {
     deleteConfirm: "确认注销",
     cancel: "取消",
     reauthNotice: "为保障账户安全，请重新登录后继续注销账号",
+    reauthEmailNotice: "为保障账户安全，请重新登录后继续更换邮箱",
+    reauthAccountMismatch: "重新登录的账户与原账户不一致，操作已取消。",
   },
   en: {
     loading: "Loading account…",
@@ -139,6 +141,8 @@ export const accountMessages = {
     deleteConfirm: "Confirm delete",
     cancel: "Cancel",
     reauthNotice: "For your security, sign in again to continue deleting your account.",
+    reauthEmailNotice: "For your security, sign in again to continue changing your email.",
+    reauthAccountMismatch: "The signed-in account changed, so the operation was cancelled.",
   },
 } as const;
 
