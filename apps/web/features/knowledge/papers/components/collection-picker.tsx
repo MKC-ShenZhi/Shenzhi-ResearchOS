@@ -6,7 +6,7 @@ import { ApiError } from "@/clients/backend/http";
 import { Button } from "@/components/ui/button";
 import { useCollections } from "@/stores/collections";
 
-export function CollectionPicker({ paperId, className = "" }: { paperId: string; className?: string }) {
+export function CollectionPicker({ paperId, className = "", iconOnly = false }: { paperId: string; className?: string; iconOnly?: boolean }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
   const [name, setName] = useState("");
@@ -66,10 +66,12 @@ export function CollectionPicker({ paperId, className = "" }: { paperId: string;
         type="button"
         onClick={() => { setOpen((value) => !value); setMessage(""); }}
         aria-expanded={open}
-        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] transition-colors ${active ? "text-primary" : "text-muted hover:bg-chip"}`}
+        aria-label={iconOnly ? "收藏" : undefined}
+        title={iconOnly ? "收藏" : undefined}
+        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg text-[13px] transition-colors ${iconOnly ? "size-8 shrink-0 justify-center" : "px-2 py-1.5"} ${active ? "text-primary" : "text-muted hover:bg-chip"}`}
       >
         <Bookmark className="size-4" fill={active ? "currentColor" : "none"} />
-        收藏
+        {!iconOnly && "收藏"}
       </button>
       {open && (
         <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-line bg-card p-3 shadow-card">

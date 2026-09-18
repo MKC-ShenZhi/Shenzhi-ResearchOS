@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { KnowledgeClientError } from "@/clients/knowledge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
 import { useKnowledgePaper } from "@/features/knowledge/paper/use-knowledge-paper";
 import { KnowledgePaperSkeleton } from "@/features/knowledge/paper/components/paper-skeleton";
 import { normalizeInternalReturnTo } from "@/lib/navigation/internal-return-to";
@@ -60,20 +61,23 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
                 zoom={zoom}
                 setZoom={setZoom}
               >
-                <TabsList aria-label="论文内容" className="h-10 shrink-0 gap-0.5 rounded-full bg-chip p-1">
-                  <TabsTrigger
-                    value="abstract"
-                    className="h-8 rounded-full px-3.5 text-base font-medium text-muted hover:bg-primary-soft hover:text-primary data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm sm:px-4"
-                  >
-                    Abstract
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="paper"
-                    className="h-8 rounded-full px-3.5 text-base font-medium text-muted hover:bg-primary-soft hover:text-primary data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm sm:px-4"
-                  >
-                    Paper
-                  </TabsTrigger>
-                </TabsList>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <CollectionPicker paperId={paper.id} iconOnly />
+                  <TabsList aria-label="论文内容" className="h-10 shrink-0 gap-0.5 rounded-full bg-chip p-1">
+                    <TabsTrigger
+                      value="abstract"
+                      className="h-8 rounded-full px-3.5 text-base font-medium text-muted hover:bg-primary-soft hover:text-primary data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm sm:px-4"
+                    >
+                      Abstract
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="paper"
+                      className="h-8 rounded-full px-3.5 text-base font-medium text-muted hover:bg-primary-soft hover:text-primary data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm sm:px-4"
+                    >
+                      Paper
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
               </PaperTopbar>
               <main className="min-h-0 min-w-0 flex-1 lg:overflow-hidden">
                 <div className="h-full min-h-0">

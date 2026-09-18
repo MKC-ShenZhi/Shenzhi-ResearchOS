@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Bookmark, Plus, ThumbsUp, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, Plus, ThumbsUp, TrendingUp, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { paperHref } from "@/lib/navigation/paper";
 import { useUserPreferences } from "@/stores/user-preferences";
@@ -23,10 +24,8 @@ export function PaperCard({
   layout?: "feed" | "explore";
 }) {
   const returnTo = useCurrentInternalPath();
-  const { likedPapers, bookmarkedPapers, toggleLike, toggleBookmark } =
-    useUserPreferences();
+  const { likedPapers, toggleLike } = useUserPreferences();
   const liked = !!likedPapers[paper.id];
-  const bookmarked = !!bookmarkedPapers[paper.id];
 
   return (
     <motion.article
@@ -90,15 +89,7 @@ export function PaperCard({
                 <ThumbsUp className="size-4" fill={liked ? "currentColor" : "none"} />
                 {paper.likes !== undefined && paper.likes + (liked ? 1 : 0)}
               </button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => toggleBookmark(paper.id)}
-                className={bookmarked ? "text-primary" : undefined}
-              >
-                <Bookmark className="size-4" fill={bookmarked ? "currentColor" : "none"} />
-                收藏
-              </Button>
+              <CollectionPicker paperId={paper.id} />
               {layout === "feed" && (
                 <Link href={paperHref(paper.id, { mode: "create", source: returnTo })}>
                   <Button size="sm" className="h-9 rounded-lg px-4 text-[13px]">
