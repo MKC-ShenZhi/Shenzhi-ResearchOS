@@ -78,7 +78,7 @@ export function mapKnowledgePaperHitToFeedPaper(hit: KnowledgePaperHit): FeedPap
     abstract: hit.abstract?.trim() || "暂无摘要",
     aiLink: "AI 深度解读",
     tags,
-    thumb: tags[0] ?? "论文摘要",
+    thumbnailUrl: null,
   };
 }
 

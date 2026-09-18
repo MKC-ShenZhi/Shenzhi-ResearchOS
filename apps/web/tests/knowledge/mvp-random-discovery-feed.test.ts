@@ -52,6 +52,8 @@ test("discovery mapper preserves opaque ids and never invents engagement metrics
   assert.deepEqual(paper.tags, ["subject", "second", "third"]);
   assert.equal("likes" in paper, false);
   assert.equal("citations" in paper, false);
+  assert.equal(paper.thumbnailUrl, null);
+  assert.equal("thumb" in paper, false);
 });
 
 test("frontier discovery performs one broad search, filters recent years and returns real ids", async () => {
@@ -118,6 +120,15 @@ test("discovery UI caches by tab and never uses mock feed placeholders", () => {
 
 test("all paper card detail entries build a route from the same opaque real id", () => {
   assert.equal(PAPER_CARD_SOURCE.match(/paperHref\(paper\.id, \{ mode: "create", source: returnTo \}\)/g)?.length, 3);
+});
+
+test("paper cards delegate image fallback behavior to the shared thumbnail", () => {
+  assert.match(PAPER_CARD_SOURCE, /import \{ PaperThumbnail \}/);
+  assert.match(PAPER_CARD_SOURCE, /<PaperThumbnail/);
+  assert.match(PAPER_CARD_SOURCE, /src=\{paper\.thumbnailUrl\}/);
+  assert.doesNotMatch(PAPER_CARD_SOURCE, /paper\.thumb\b/);
+  assert.match(MVP_SERVICE_SOURCE, /thumbnailUrl:\s*null/);
+  assert.doesNotMatch(MVP_SERVICE_SOURCE, /\bthumb:/);
 });
 
 test("the temporary service is removable and never performs per-paper detail requests", () => {
