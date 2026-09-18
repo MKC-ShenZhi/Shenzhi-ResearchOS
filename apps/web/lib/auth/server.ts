@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
+import type { User } from "better-auth";
 
 import {
   authConfig,
@@ -59,6 +60,25 @@ const { requireEmailVerification } = emailVerificationSettings;
 const emailCallbacks = createBetterAuthEmailCallbacks(
   createAuthEmailProvider(),
 );
+const sendChangeEmailConfirmation = async (
+  data: {
+    user: User;
+    newEmail: string;
+    url: string;
+    token: string;
+  },
+  request?: Request,
+) => {
+  await emailCallbacks.sendVerificationEmail(
+    {
+      user: data.user,
+      newEmail: data.newEmail,
+      url: data.url,
+      token: data.token,
+    },
+    request,
+  );
+};
 
 export const auth = betterAuth({
   ...betterAuthConfig,
@@ -172,6 +192,12 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
   },
   user: {
+    changeEmail: {
+      enabled: true,
+      // Verified accounts must approve the request from their current mailbox
+      // before Better Auth sends the verification link to the replacement one.
+      sendChangeEmailConfirmation,
+    },
     deleteUser: {
       enabled: true,
     },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Trash2 } from "lucide-react";
 import type { SettingsLocale } from "@/clients/backend/settings";
 import { authClient } from "@/components/auth/auth-client";
@@ -17,6 +17,7 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
   const t = accountMessages[locale];
   const { session, isPending, refetchSession, deleteAccount, openLogin } = useAuth();
   const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [newEmail, setNewEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -27,6 +28,12 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const activeUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeUserIdRef.current = session?.user.id ?? null;
+    return () => { activeUserIdRef.current = null; };
+  }, [session?.user.id]);
 
   useEffect(() => {
     if (otpCooldown <= 0) return;
@@ -47,6 +54,7 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
   }
 
   const name = nameDraft ?? session.user.name ?? "";
+  const userId = session.user.id;
   const hasPassword = Boolean((session.user as { hasPassword?: boolean }).hasPassword);
   const resetFeedback = () => { setMessage(null); setError(null); };
 
@@ -56,6 +64,7 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
     if (!name.trim()) return setError(t.nicknameRequired);
     setBusy(true);
     const result = await authClient.updateUser({ name: name.trim() });
+    if (activeUserIdRef.current !== userId) return;
     if (result.error) {
       setError(getAuthErrorMessage(result.error, "昵称更新失败", "profile"));
     } else {
@@ -80,6 +89,7 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
         newPassword,
         revokeOtherSessions: true,
       });
+      if (activeUserIdRef.current !== userId) return;
       if (result.error) {
         setError(getAuthErrorMessage(result.error, "密码修改失败，请检查当前密码", "change-password"));
       } else {
@@ -91,6 +101,7 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
         return setError(t.otpRequired);
       }
       const result = await setPasswordWithOtp(otp, newPassword);
+      if (activeUserIdRef.current !== userId) return;
       if (!result.ok) {
         setError(result.message === "set_password_failed" ? t.setPasswordFailed : result.message);
       } else {
@@ -105,10 +116,31 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
     setBusy(false);
   };
 
+  const requestEmailChange = async (event: FormEvent) => {
+    event.preventDefault();
+    resetFeedback();
+    const normalizedEmail = newEmail.trim().toLowerCase();
+    if (!normalizedEmail) return setError(t.newEmail);
+    setBusy(true);
+    const result = await authClient.changeEmail({
+      newEmail: normalizedEmail,
+      callbackURL: "/settings?tab=profile",
+    });
+    if (activeUserIdRef.current !== userId) return;
+    if (result.error) {
+      setError(getAuthErrorMessage(result.error, "邮箱变更请求失败", "change-email"));
+    } else {
+      setNewEmail("");
+      setMessage(t.emailChangeRequested);
+    }
+    setBusy(false);
+  };
+
   const sendOtp = async () => {
     resetFeedback();
     setBusy(true);
     const result = await sendSetPasswordOtp();
+    if (activeUserIdRef.current !== userId) return;
     if (!result.ok) {
       setError(result.message === "send_otp_failed" ? t.sendOtpFailed : result.message);
     } else {
@@ -122,6 +154,7 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
     resetFeedback();
     setBusy(true);
     const result = await deleteAccount({});
+    if (activeUserIdRef.current !== userId) return;
     if (result.error) {
       if (isAuthErrorCode(result.error, "SESSION_EXPIRED") || isAuthErrorCode(result.error, "UNAUTHORIZED")) {
         setConfirmDelete(false);
@@ -151,6 +184,20 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
           </label>
         </div>
         <Button type="submit" variant="outline" disabled={busy}>{t.saveNickname}</Button>
+      </form>
+
+      <form onSubmit={requestEmailChange} className="space-y-3 border-t border-line pt-5">
+        <label className="space-y-1.5 text-[13px] text-ink-2">
+          {t.newEmail}
+          <Input
+            type="email"
+            autoComplete="email"
+            value={newEmail}
+            onChange={(event) => setNewEmail(event.target.value)}
+          />
+        </label>
+        <p className="text-xs text-muted">{t.emailChangeHint}</p>
+        <Button type="submit" variant="outline" disabled={busy}>{t.requestEmailChange}</Button>
       </form>
 
       <form onSubmit={updatePassword} className="space-y-4 border-t border-line pt-5">
@@ -210,7 +257,7 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
       {message && <p role="status" className="text-xs text-muted">{message}</p>}
 
-      <AccountSessions currentToken={session.session.token} locale={locale} />
+      <AccountSessions key={session.session.token} currentToken={session.session.token} locale={locale} />
 
       <div className="border-t border-line pt-5">
         <div className="flex items-center justify-between gap-4">

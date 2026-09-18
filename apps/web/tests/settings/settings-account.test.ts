@@ -10,6 +10,7 @@ const i18n = readFileSync("features/settings/i18n.ts", "utf8");
 
 test("account section stays on Better Auth and does not call FastAPI clients", () => {
   assert.match(accountSection, /authClient\.updateUser/);
+  assert.match(accountSection, /authClient\.changeEmail/);
   assert.match(accountSection, /authClient\.changePassword/);
   assert.match(accountSection, /deleteAccount\(/);
   assert.doesNotMatch(accountSection, /apiJson|api\/v1\/(profile|settings)/);
@@ -37,10 +38,26 @@ test("account UI supports bilingual delete confirmation", () => {
 });
 
 test("settings passes locale into the account section", () => {
-  assert.match(settingsTabs, /<AccountSection locale=\{settings\.locale\} \/>/);
+  assert.match(settingsTabs, /<AccountSection key=\{session\?\.user\.id \?\? "anonymous"\} locale=\{settings\.locale\} \/>/);
+});
+
+test("email changes stay on Better Auth's confirmation and verification flow", () => {
+  const authServer = readFileSync("lib/auth/server.ts", "utf8");
+  assert.match(authServer, /changeEmail:\s*\{\s*enabled: true,/);
+  assert.match(authServer, /sendChangeEmailConfirmation,/);
+  assert.match(accountSection, /callbackURL: "\/settings\?tab=profile"/);
 });
 
 test("sessions panel uses Better Auth session APIs", () => {
   assert.match(accountSessions, /authClient\.listSessions/);
   assert.match(accountSessions, /authClient\.revokeOtherSessions/);
+});
+
+test("account state and sessions are scoped to the active authentication identity", () => {
+  assert.match(settingsTabs, /<SettingsTabsForIdentity key=\{session\?\.user\.id \?\? "anonymous"\} \/>/);
+  assert.match(accountSection, /activeUserIdRef/);
+  assert.match(accountSection, /\[session\?\.user\.id\]/);
+  assert.match(accountSection, /activeUserIdRef\.current !== userId/);
+  assert.match(settingsTabs, /<AccountSection key=\{session\?\.user\.id \?\? "anonymous"\}/);
+  assert.match(accountSection, /<AccountSessions key=\{session\.session\.token\}/);
 });
