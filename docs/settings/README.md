@@ -31,12 +31,12 @@ The **Account** block on `/settings?tab=profile` manages authentication data onl
 | Capability | Boundary | Notes |
 | --- | --- | --- |
 | Email display | Better Auth session | Read-only |
-| Display name | `authClient.updateUser` | Updates `user.name` |
+| Display name | `authClient.updateUser` | Shared browser/server policy trims the value, rejects blank names, and caps names at 80 characters |
 | Change password | `authClient.changePassword` | Revokes other sessions on success |
 | Set initial password (OAuth) | `/api/auth/password/send-otp` + `/api/auth/password/set` | Email OTP proves mailbox ownership |
-| Session list / revoke others | `listSessions` / `revokeOtherSessions` | Better Auth session store |
+| Session list / revoke others | `listSessions` / `revokeOtherSessions` | Better Auth session store; stale sensitive sessions reauthenticate and verify that the user did not switch accounts before retrying |
 | Change email | `authClient.changeEmail` | Better Auth verifies the current mailbox first, then the replacement mailbox; unavailable email delivery is reported before the request |
-| Delete account | `/api/auth/account-deletion` | Trusted server orchestration: delete all current FastAPI business data first, then call Better Auth to delete the authentication account; retries are idempotent |
+| Delete account | `/api/auth/account-deletion` | Trusted server orchestration: delete all current FastAPI business data first, then call Better Auth to delete the authentication account; retries are idempotent and successful deletion refreshes the browser session immediately |
 
 Implementation layout:
 
@@ -57,3 +57,6 @@ Out of scope for this phase:
 - `/api/auth/[...all]` remains the sole Better Auth HTTP handler for its official endpoints. `/api/auth/password/*` is deliberately narrower: Better Auth's initial `setPassword` endpoint is server-only, while the product needs an authenticated mailbox-OTP proof and OAuth placeholder-credential handling. The browser calls `features/settings/services/account-password.ts`; that service holds no secret and cannot access the Adapter.
 - Account deletion is the one cross-database orchestration: the browser calls `/api/auth/account-deletion`, which derives identity from its Better Auth session, marks the internal FastAPI cleanup request, deletes `user_profiles`, `user_settings`, and `user:*` Chat sessions/messages in one `CHAT_DATABASE_URL` transaction, then deletes Better Auth authentication data. A cleanup retry returning zero deleted rows is successful and can complete a previously failed final Auth deletion.
 - Better Auth database hooks remove the user-bound `set-password-otp:<userId>` verification before deleting the user. The `verification` table has no user foreign key, so this ShenZhi-owned challenge cannot rely on the `user` cascade used by `account` and `session`.
+- Account actions keep independent pending and feedback state. Deletion failures retain the response request ID so operators can correlate the UI error with server logs.
+
+Known production boundary: Chat generation cancellation currently reaches only the Backend worker handling the deletion request. A multi-worker deployment still needs distributed cancellation. Account deletion is synchronous and idempotent, but it does not yet use a durable deletion-job table or background retry/alert workflow.

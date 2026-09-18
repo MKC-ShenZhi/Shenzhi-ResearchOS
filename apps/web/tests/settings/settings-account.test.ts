@@ -6,6 +6,7 @@ const accountSection = readFileSync("features/settings/components/account-sectio
 const accountSessions = readFileSync("features/settings/components/account-sessions.tsx", "utf8");
 const accountPassword = readFileSync("features/settings/services/account-password.ts", "utf8");
 const settingsTabs = readFileSync("features/settings/components/settings-tabs.tsx", "utf8");
+const userSettingsHook = readFileSync("features/settings/hooks/use-user-settings.ts", "utf8");
 const i18n = readFileSync("features/settings/i18n.ts", "utf8");
 
 test("account section stays on Better Auth and does not call FastAPI clients", () => {
@@ -44,11 +45,34 @@ test("settings passes locale into the account section", () => {
 test("account deletion uses the server-side business-cleanup orchestrator", () => {
   const deletionService = readFileSync("features/settings/services/account-deletion.ts", "utf8");
   const authServer = readFileSync("lib/auth/server.ts", "utf8");
+  const authProvider = readFileSync("components/auth/auth-provider.tsx", "utf8");
   assert.match(accountSection, /deleteCurrentAccount/);
   assert.match(deletionService, /\/api\/auth\/account-deletion/);
   assert.doesNotMatch(deletionService, /userId|user_id/);
   assert.match(authServer, /deleteVerificationByIdentifier\(/);
   assert.match(authServer, /setPasswordOtpIdentifier\(user\.id\)/);
+  assert.match(accountSection, /completeExternalAccountDeletion\(\)/);
+  assert.match(authProvider, /expectedSessionEndRef\.current = true/);
+  assert.match(deletionService, /const REQUEST_ID_HEADER = "X-Request-Id"/);
+  assert.match(deletionService, /response\.headers\.get\(REQUEST_ID_HEADER\)/);
+});
+
+test("account operations keep independent pending and feedback state", () => {
+  assert.match(accountSection, /nameBusy/);
+  assert.match(accountSection, /emailBusy/);
+  assert.match(accountSection, /passwordBusy/);
+  assert.match(accountSection, /deleteBusy/);
+  assert.doesNotMatch(accountSection, /const \[busy, setBusy\]/);
+  assert.doesNotMatch(accountSection, /const \[message, setMessage\]/);
+  assert.doesNotMatch(accountSection, /const \[error, setError\]/);
+});
+
+test("display-name policy is shared by the settings UI and Better Auth server", () => {
+  const authServer = readFileSync("lib/auth/server.ts", "utf8");
+  assert.match(accountSection, /validateDisplayName\(name\)/);
+  assert.match(authServer, /validateDisplayName\(user\.name\)/);
+  assert.match(authServer, /context\?\.path !== "\/update-user"/);
+  assert.match(authServer, /throw new APIError\("BAD_REQUEST"/);
 });
 
 test("email changes stay on Better Auth's confirmation and verification flow", () => {
@@ -74,6 +98,7 @@ test("sessions panel uses Better Auth session APIs", () => {
   assert.match(accountSessions, /SESSION_NOT_FRESH/);
   assert.match(accountSessions, /openLogin\(/);
   assert.match(accountSessions, /latest\.data\?\.user\.id !== currentUserId/);
+  assert.match(accountSessions, /await revokeOthers\(\)/);
   assert.doesNotMatch(readFileSync("lib/auth/server.ts", "utf8"), /freshAge:\s*0/);
 });
 
@@ -85,4 +110,6 @@ test("account state and sessions are scoped to the active authentication identit
   assert.match(settingsTabs, /<AccountSection key=\{session\?\.user\.id \?\? "anonymous"\}/);
   assert.match(accountSection, /currentUserId=\{userId\}/);
   assert.match(accountSection, /<AccountSessions/);
+  assert.match(userSettingsHook, /activeUserIdRef\.current !== operationUserId/);
+  assert.match(userSettingsHook, /activeUserIdRef\.current = null/);
 });

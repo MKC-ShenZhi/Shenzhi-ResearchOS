@@ -31,42 +31,48 @@ export function AccountSessions({
 
   const load = useCallback(async () => {
     setBusy(true);
-    const result = await authClient.listSessions();
-    if (result.error) {
-      if (isAuthErrorCode(result.error, "SESSION_NOT_FRESH")) {
-        setError(t.sessionsReauthRequired);
-        openLogin({
-          notice: t.sessionsReauthNotice,
-          onSuccess: async () => {
-            const latest = await authClient.getSession();
-            if (latest.data?.user.id !== currentUserId) {
-              setError(t.reauthAccountMismatch);
-              return;
-            }
+    try {
+      const result = await authClient.listSessions();
+      if (result.error) {
+        if (isAuthErrorCode(result.error, "SESSION_NOT_FRESH")) {
+          setError(t.sessionsReauthRequired);
+          openLogin({
+            notice: t.sessionsReauthNotice,
+            onSuccess: async () => {
+              setBusy(true);
+              try {
+                const latest = await authClient.getSession();
+                if (latest.data?.user.id !== currentUserId) {
+                  setError(t.reauthAccountMismatch);
+                  return;
+                }
 
-            const retry = await authClient.listSessions();
-            if (retry.error) {
-              setError(
-                getAuthErrorMessage(
-                  retry.error,
-                  "无法加载登录会话",
-                  "session",
-                ),
-              );
-              return;
-            }
-            setSessions(retry.data ?? []);
-            setError(null);
-          },
-        });
+                const retry = await authClient.listSessions();
+                if (retry.error) {
+                  setError(getAuthErrorMessage(retry.error, t.sessionsLoadFailed, "session"));
+                  return;
+                }
+                setSessions(retry.data ?? []);
+                setError(null);
+              } catch {
+                setError(t.sessionsLoadFailed);
+              } finally {
+                setBusy(false);
+              }
+            },
+          });
+        } else {
+          setError(getAuthErrorMessage(result.error, t.sessionsLoadFailed, "session"));
+        }
       } else {
-        setError(getAuthErrorMessage(result.error, "无法加载登录会话", "session"));
+        setSessions(result.data ?? []);
+        setError(null);
       }
-    } else {
-      setSessions(result.data ?? []);
-      setError(null);
+    } catch {
+      setError(t.sessionsLoadFailed);
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }, [currentUserId, openLogin, t]);
 
   useEffect(() => {
@@ -74,16 +80,43 @@ export function AccountSessions({
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const revokeOthers = async () => {
+  async function revokeOthers(): Promise<void> {
     setBusy(true);
-    const result = await authClient.revokeOtherSessions();
-    if (result.error) {
-      setError(getAuthErrorMessage(result.error, "无法退出其他会话", "session"));
-    } else {
-      await load();
+    try {
+      const result = await authClient.revokeOtherSessions();
+      if (result.error) {
+        if (isAuthErrorCode(result.error, "SESSION_NOT_FRESH")) {
+          setError(t.sessionsReauthRequired);
+          openLogin({
+            notice: t.sessionsReauthNotice,
+            onSuccess: async () => {
+              setBusy(true);
+              try {
+                const latest = await authClient.getSession();
+                if (latest.data?.user.id !== currentUserId) {
+                  setError(t.reauthAccountMismatch);
+                  return;
+                }
+                await revokeOthers();
+              } catch {
+                setError(t.sessionsRevokeFailed);
+              } finally {
+                setBusy(false);
+              }
+            },
+          });
+        } else {
+          setError(getAuthErrorMessage(result.error, t.sessionsRevokeFailed, "session"));
+        }
+      } else {
+        await load();
+      }
+    } catch {
+      setError(t.sessionsRevokeFailed);
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
-  };
+  }
 
   return (
     <div className="border-t border-line pt-5">

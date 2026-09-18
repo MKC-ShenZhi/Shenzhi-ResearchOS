@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   getUserSettings,
@@ -21,6 +21,8 @@ const DEFAULT_NOTIFICATIONS: NotificationPreferences = {
 
 export function useUserSettings() {
   const { session, isPending } = useAuth();
+  const userId = session?.user.id ?? null;
+  const activeUserIdRef = useRef<string | null>(userId);
   const themeMode = useThemeStore((state) => state.mode);
   const setThemeMode = useThemeStore((state) => state.setMode);
   // Match the server render first; hydrate the browser preference in the deferred effect below.
@@ -36,10 +38,17 @@ export function useUserSettings() {
   }, []);
 
   useEffect(() => {
+    activeUserIdRef.current = userId;
+    return () => {
+      activeUserIdRef.current = null;
+    };
+  }, [userId]);
+
+  useEffect(() => {
     if (isPending) return;
     let cancelled = false;
     const load = async () => {
-      if (!session?.user.id) {
+      if (!userId) {
         if (!cancelled) setLoading(false);
         return;
       }
@@ -62,50 +71,53 @@ export function useUserSettings() {
     return () => {
       cancelled = true;
     };
-  }, [isPending, session?.user.id, setThemeMode]);
+  }, [isPending, setThemeMode, userId]);
 
   const persist = useCallback(
     async (patch: UserSettingsPatch) => {
-      if (!session?.user.id) {
+      const operationUserId = userId;
+      if (!operationUserId) {
         setNotice("local");
         setError(null);
         return true;
       }
       try {
         await patchUserSettings(patch);
+        if (activeUserIdRef.current !== operationUserId) return true;
         setNotice("saved");
         setError(null);
         return true;
       } catch {
+        if (activeUserIdRef.current !== operationUserId) return true;
         setNotice(null);
         setError("save");
         return false;
       }
     },
-    [session?.user.id],
+    [userId],
   );
 
   const setLocale = useCallback(async (next: SettingsLocale) => {
     const previous = locale;
     setLocaleState(next);
     storeLocalLocale(next);
-    if (!(await persist({ locale: next })) && session?.user.id) {
+    if (!(await persist({ locale: next })) && userId) {
       setLocaleState(previous);
       storeLocalLocale(previous);
     }
-  }, [locale, persist, session?.user.id]);
+  }, [locale, persist, userId]);
 
   const setTheme = useCallback(async (next: ThemeMode) => {
     const previous = themeMode;
     setThemeMode(next);
-    if (!(await persist({ theme_mode: next })) && session?.user.id) setThemeMode(previous);
-  }, [persist, session?.user.id, setThemeMode, themeMode]);
+    if (!(await persist({ theme_mode: next })) && userId) setThemeMode(previous);
+  }, [persist, setThemeMode, themeMode, userId]);
 
   const setNotificationPreferences = useCallback(async (next: NotificationPreferences) => {
     const previous = notifications;
     setNotifications(next);
-    if (!(await persist({ notifications: next })) && session?.user.id) setNotifications(previous);
-  }, [notifications, persist, session?.user.id]);
+    if (!(await persist({ notifications: next })) && userId) setNotifications(previous);
+  }, [notifications, persist, userId]);
 
   return {
     locale,
@@ -114,7 +126,7 @@ export function useUserSettings() {
     loading,
     notice,
     error,
-    isAuthenticated: Boolean(session?.user.id),
+    isAuthenticated: Boolean(userId),
     setLocale,
     setTheme,
     setNotifications: setNotificationPreferences,

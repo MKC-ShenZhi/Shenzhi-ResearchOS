@@ -33,6 +33,7 @@ interface AuthContextValue {
   deleteAccount: (
     options: DeleteAccountOptions,
   ) => Promise<DeleteAccountResult>;
+  completeExternalAccountDeletion: () => Promise<void>;
 }
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
@@ -132,6 +133,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [refetchSession],
   );
 
+  const completeExternalAccountDeletion = React.useCallback(async () => {
+    expectedSessionEndRef.current = true;
+    try {
+      await refetchSession();
+    } catch (error) {
+      expectedSessionEndRef.current = false;
+      throw error;
+    }
+  }, [refetchSession]);
+
   React.useEffect(() => {
     if (isPending) return;
 
@@ -201,9 +212,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       requireAuth,
       signOut,
       deleteAccount,
+      completeExternalAccountDeletion,
     }),
     [
       closeLogin,
+      completeExternalAccountDeletion,
       deleteAccount,
       isPending,
       openLogin,

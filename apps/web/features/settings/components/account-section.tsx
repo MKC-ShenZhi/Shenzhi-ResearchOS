@@ -7,6 +7,7 @@ import { authClient } from "@/components/auth/auth-client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getAuthErrorMessage, isAuthErrorCode, PASSWORD_POLICY_MESSAGE } from "@/components/auth/auth-errors";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, validatePasswordPolicy } from "@/lib/auth/policies/password";
+import { DISPLAY_NAME_MAX_LENGTH, validateDisplayName } from "@/lib/auth/policies/display-name";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { accountMessages } from "../i18n";
@@ -16,7 +17,7 @@ import { AccountSessions } from "./account-sessions";
 
 export function AccountSection({ locale }: { locale: SettingsLocale }) {
   const t = accountMessages[locale];
-  const { session, isPending, refetchSession, openLogin } = useAuth();
+  const { session, isPending, refetchSession, openLogin, completeExternalAccountDeletion } = useAuth();
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -24,9 +25,18 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [otpCooldown, setOtpCooldown] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [nameBusy, setNameBusy] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [nameMessage, setNameMessage] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [emailMessage, setEmailMessage] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteRequestId, setDeleteRequestId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const activeUserIdRef = useRef<string | null>(null);
@@ -57,8 +67,6 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
   const name = nameDraft ?? session.user.name ?? "";
   const userId = session.user.id;
   const hasPassword = Boolean((session.user as { hasPassword?: boolean }).hasPassword);
-  const resetFeedback = () => { setMessage(null); setError(null); };
-
   const stillAuthenticatedAs = async (expectedUserId: string) => {
     const latest = await authClient.getSession();
     return latest.data?.user.id === expectedUserId;
@@ -66,96 +74,116 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
 
   const updateName = async (event: FormEvent) => {
     event.preventDefault();
-    resetFeedback();
-    if (!name.trim()) return setError(t.nicknameRequired);
-    setBusy(true);
-    const result = await authClient.updateUser({ name: name.trim() });
-    if (activeUserIdRef.current !== userId) return;
-    if (result.error) {
-      setError(getAuthErrorMessage(result.error, "昵称更新失败", "profile"));
-    } else {
-      setNameDraft(name.trim());
-      await refetchSession();
-      setMessage(t.nicknameUpdated);
+    setNameMessage(null);
+    setNameError(null);
+    const validation = validateDisplayName(name);
+    if (!validation.valid) {
+      return setNameError(validation.code === "DISPLAY_NAME_TOO_LONG" ? t.nicknameTooLong : t.nicknameRequired);
     }
-    setBusy(false);
+    setNameBusy(true);
+    try {
+      const result = await authClient.updateUser({ name: validation.normalized });
+      if (activeUserIdRef.current !== userId) return;
+      if (result.error) {
+        setNameError(getAuthErrorMessage(result.error, "昵称更新失败", "profile"));
+      } else {
+        setNameDraft(validation.normalized);
+        await refetchSession();
+        setNameMessage(t.nicknameUpdated);
+      }
+    } catch {
+      if (activeUserIdRef.current === userId) setNameError(t.nicknameSaveFailed);
+    } finally {
+      if (activeUserIdRef.current === userId) setNameBusy(false);
+    }
   };
 
   const updatePassword = async (event: FormEvent) => {
     event.preventDefault();
-    resetFeedback();
-    if (hasPassword && !currentPassword) return setError(t.currentPasswordRequired);
-    if (!validatePasswordPolicy(newPassword).valid) return setError(PASSWORD_POLICY_MESSAGE);
-    if (hasPassword && newPassword === currentPassword) return setError(t.samePassword);
-    if (newPassword !== confirmPassword) return setError(t.passwordMismatch);
-    setBusy(true);
-    if (hasPassword) {
-      const result = await authClient.changePassword({
-        currentPassword,
-        newPassword,
-        revokeOtherSessions: true,
-      });
-      if (activeUserIdRef.current !== userId) return;
-      if (result.error) {
-        setError(getAuthErrorMessage(result.error, "密码修改失败，请检查当前密码", "change-password"));
+    setPasswordMessage(null);
+    setPasswordError(null);
+    if (hasPassword && !currentPassword) return setPasswordError(t.currentPasswordRequired);
+    if (!validatePasswordPolicy(newPassword).valid) return setPasswordError(PASSWORD_POLICY_MESSAGE);
+    if (hasPassword && newPassword === currentPassword) return setPasswordError(t.samePassword);
+    if (newPassword !== confirmPassword) return setPasswordError(t.passwordMismatch);
+    if (!hasPassword && !/^\d{6}$/.test(otp)) return setPasswordError(t.otpRequired);
+    setPasswordBusy(true);
+    try {
+      if (hasPassword) {
+        const result = await authClient.changePassword({
+          currentPassword,
+          newPassword,
+          revokeOtherSessions: true,
+        });
+        if (activeUserIdRef.current !== userId) return;
+        if (result.error) {
+          setPasswordError(getAuthErrorMessage(result.error, "密码修改失败，请检查当前密码", "change-password"));
+        } else {
+          setPasswordMessage(t.passwordChanged);
+        }
       } else {
-        setMessage(t.passwordChanged);
+        const result = await setPasswordWithOtp(otp, newPassword);
+        if (activeUserIdRef.current !== userId) return;
+        if (!result.ok) {
+          setPasswordError(result.message === "set_password_failed" ? t.setPasswordFailed : result.message);
+        } else {
+          setPasswordMessage(t.passwordSet);
+          await refetchSession();
+        }
       }
-    } else {
-      if (!/^\d{6}$/.test(otp)) {
-        setBusy(false);
-        return setError(t.otpRequired);
-      }
-      const result = await setPasswordWithOtp(otp, newPassword);
       if (activeUserIdRef.current !== userId) return;
-      if (!result.ok) {
-        setError(result.message === "set_password_failed" ? t.setPasswordFailed : result.message);
-      } else {
-        setMessage(t.passwordSet);
-        await refetchSession();
-      }
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setOtp("");
+    } catch {
+      if (activeUserIdRef.current === userId) setPasswordError(t.passwordActionFailed);
+    } finally {
+      if (activeUserIdRef.current === userId) setPasswordBusy(false);
     }
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setOtp("");
-    setBusy(false);
   };
 
   const submitEmailChange = async (userId: string, normalizedEmail: string) => {
-    resetFeedback();
-    setBusy(true);
-    if (!(await stillAuthenticatedAs(userId))) {
-      setBusy(false);
-      return setError(t.reauthAccountMismatch);
-    }
-    const result = await authClient.changeEmail({
-      newEmail: normalizedEmail,
-      callbackURL: "/settings?tab=profile",
-    });
-    if (activeUserIdRef.current !== userId) return;
-    if (result.error) {
-      if (
-        isAuthErrorCode(result.error, "SENSITIVE_SESSION_REQUIRED") ||
-        isAuthErrorCode(result.error, "UNAUTHORIZED")
-      ) {
-        openLogin({
-          notice: t.reauthNotice,
-          onSuccess: () => submitEmailChange(userId, normalizedEmail),
-        });
+    setEmailMessage(null);
+    setEmailError(null);
+    setEmailBusy(true);
+    try {
+      if (!(await stillAuthenticatedAs(userId))) {
+        return setEmailError(t.reauthAccountMismatch);
       }
-      setError(getAuthErrorMessage(result.error, "邮箱变更请求失败", "change-email"));
-    } else {
-      setNewEmail("");
-      setMessage(t.emailChangeRequested);
+      const result = await authClient.changeEmail({
+        newEmail: normalizedEmail,
+        callbackURL: "/settings?tab=profile",
+      });
+      if (activeUserIdRef.current !== userId) return;
+      if (result.error) {
+        if (
+          isAuthErrorCode(result.error, "SENSITIVE_SESSION_REQUIRED") ||
+          isAuthErrorCode(result.error, "UNAUTHORIZED")
+        ) {
+          openLogin({
+            notice: t.reauthNotice,
+            onSuccess: () => submitEmailChange(userId, normalizedEmail),
+          });
+        }
+        setEmailError(getAuthErrorMessage(result.error, "邮箱变更请求失败", "change-email"));
+      } else {
+        setNewEmail("");
+        setEmailMessage(t.emailChangeRequested);
+      }
+    } catch {
+      if (activeUserIdRef.current === userId) setEmailError(t.emailChangeFailed);
+    } finally {
+      if (activeUserIdRef.current === userId) setEmailBusy(false);
     }
-    setBusy(false);
   };
 
   const requestEmailChange = async (event: FormEvent) => {
     event.preventDefault();
+    setEmailMessage(null);
+    setEmailError(null);
     const normalizedEmail = newEmail.trim().toLowerCase();
-    if (!normalizedEmail) return setError(t.newEmail);
+    if (!normalizedEmail) return setEmailError(t.newEmail);
     openLogin({
       notice: t.reauthEmailNotice,
       onSuccess: () => submitEmailChange(userId, normalizedEmail),
@@ -163,37 +191,46 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
   };
 
   const sendOtp = async () => {
-    resetFeedback();
-    setBusy(true);
+    setPasswordMessage(null);
+    setPasswordError(null);
+    setPasswordBusy(true);
     const result = await sendSetPasswordOtp();
     if (activeUserIdRef.current !== userId) return;
     if (!result.ok) {
-      setError(result.message === "send_otp_failed" ? t.sendOtpFailed : result.message);
+      setPasswordError(result.message === "send_otp_failed" ? t.sendOtpFailed : result.message);
     } else {
       setOtpCooldown(60);
-      setMessage(t.otpSent);
+      setPasswordMessage(t.otpSent);
     }
-    setBusy(false);
+    setPasswordBusy(false);
   };
 
   const removeAccount = async () => {
-    resetFeedback();
-    setBusy(true);
-    if (!(await stillAuthenticatedAs(userId))) {
-      setBusy(false);
-      return setError(t.reauthAccountMismatch);
-    }
-    const result = await deleteCurrentAccount();
-    if (activeUserIdRef.current !== userId) return;
-    if (!result.ok) {
-      if (result.status === 401 || result.status === 409) {
-        setConfirmDelete(false);
-        openLogin({ notice: t.reauthNotice, onSuccess: removeAccount });
-      } else {
-        setError(result.message);
+    setDeleteError(null);
+    setDeleteRequestId(null);
+    setDeleteBusy(true);
+    try {
+      if (!(await stillAuthenticatedAs(userId))) {
+        return setDeleteError(t.reauthAccountMismatch);
       }
+      const result = await deleteCurrentAccount();
+      if (activeUserIdRef.current !== userId) return;
+      if (!result.ok) {
+        if (result.status === 401 || result.status === 409) {
+          setConfirmDelete(false);
+          openLogin({ notice: t.reauthNotice, onSuccess: removeAccount });
+        } else {
+          setDeleteError(result.message);
+          setDeleteRequestId(result.requestId ?? null);
+        }
+      } else {
+        await completeExternalAccountDeletion();
+      }
+    } catch {
+      if (activeUserIdRef.current === userId) setDeleteError(t.deleteSyncFailed);
+    } finally {
+      if (activeUserIdRef.current === userId) setDeleteBusy(false);
     }
-    setBusy(false);
   };
 
   return (
@@ -209,11 +246,13 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
             <Input
               value={name}
               onChange={(event) => setNameDraft(event.target.value)}
-              maxLength={80}
+              maxLength={DISPLAY_NAME_MAX_LENGTH}
             />
           </label>
         </div>
-        <Button type="submit" variant="outline" disabled={busy}>{t.saveNickname}</Button>
+        <Button type="submit" variant="outline" disabled={nameBusy}>{t.saveNickname}</Button>
+        {nameError && <p role="alert" className="text-xs text-danger">{nameError}</p>}
+        {nameMessage && <p role="status" className="text-xs text-muted">{nameMessage}</p>}
       </form>
 
       <form onSubmit={requestEmailChange} className="space-y-3 border-t border-line pt-5">
@@ -227,7 +266,9 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
           />
         </label>
         <p className="text-xs text-muted">{t.emailChangeHint}</p>
-        <Button type="submit" variant="outline" disabled={busy}>{t.requestEmailChange}</Button>
+        <Button type="submit" variant="outline" disabled={emailBusy}>{t.requestEmailChange}</Button>
+        {emailError && <p role="alert" className="text-xs text-danger">{emailError}</p>}
+        {emailMessage && <p role="status" className="text-xs text-muted">{emailMessage}</p>}
       </form>
 
       <form onSubmit={updatePassword} className="space-y-4 border-t border-line pt-5">
@@ -252,7 +293,7 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
             <Button
               type="button"
               variant="outline"
-              disabled={busy || otpCooldown > 0}
+              disabled={passwordBusy || otpCooldown > 0}
               onClick={() => void sendOtp()}
             >
               {otpCooldown > 0 ? t.resendOtp(otpCooldown) : t.sendOtp}
@@ -279,13 +320,12 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
             onChange={(event) => setConfirmPassword(event.target.value)}
           />
         </div>
-        <Button type="submit" variant="outline" disabled={busy}>
+        <Button type="submit" variant="outline" disabled={passwordBusy}>
           {hasPassword ? t.changePassword : t.setPassword}
         </Button>
+        {passwordError && <p role="alert" className="text-xs text-danger">{passwordError}</p>}
+        {passwordMessage && <p role="status" className="text-xs text-muted">{passwordMessage}</p>}
       </form>
-
-      {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-      {message && <p role="status" className="text-xs text-muted">{message}</p>}
 
       <AccountSessions
         key={session.session.token}
@@ -300,7 +340,13 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
             <p className="text-[13px] font-medium text-danger">{t.deleteTitle}</p>
             <p className="mt-1 text-xs text-muted">{t.deleteHint}</p>
           </div>
-          <Button type="button" variant="outline" className="text-danger" onClick={() => setConfirmDelete(true)}>
+          <Button
+            type="button"
+            variant="outline"
+            className="text-danger"
+            disabled={deleteBusy}
+            onClick={() => setConfirmDelete(true)}
+          >
             <Trash2 aria-hidden="true" />
             {t.deleteButton}
           </Button>
@@ -324,7 +370,7 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
               </Button>
               <Button
                 variant="danger"
-                disabled={busy || deleteConfirmation !== t.deleteConfirmPhrase}
+                disabled={deleteBusy || deleteConfirmation !== t.deleteConfirmPhrase}
                 onClick={() => {
                   setConfirmDelete(false);
                   openLogin({ notice: t.reauthNotice, onSuccess: removeAccount });
@@ -335,6 +381,8 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
             </div>
           </div>
         )}
+        {deleteError && <p role="alert" className="mt-3 text-xs text-danger">{deleteError}</p>}
+        {deleteRequestId && <p className="mt-1 text-xs text-muted">{t.requestId(deleteRequestId)}</p>}
       </div>
     </div>
   );

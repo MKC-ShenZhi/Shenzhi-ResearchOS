@@ -10,11 +10,16 @@ async function readJsonMessage(response: Response): Promise<string | undefined> 
 }
 
 export async function sendSetPasswordOtp(): Promise<AccountPasswordResult> {
-  const response = await fetch("/api/auth/password/send-otp", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/auth/password/send-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+  } catch {
+    return { ok: false, message: "send_otp_failed" };
+  }
   if (!response.ok) {
     return { ok: false, message: (await readJsonMessage(response)) ?? "send_otp_failed" };
   }
@@ -25,11 +30,16 @@ export async function setPasswordWithOtp(
   otp: string,
   newPassword: string,
 ): Promise<AccountPasswordResult> {
-  const response = await fetch("/api/auth/password/set", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ otp, newPassword }),
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/auth/password/set", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ otp, newPassword }),
+    });
+  } catch {
+    return { ok: false, message: "set_password_failed" };
+  }
   if (!response.ok) {
     return { ok: false, message: (await readJsonMessage(response)) ?? "set_password_failed" };
   }
