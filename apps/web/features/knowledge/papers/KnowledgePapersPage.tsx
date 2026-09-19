@@ -29,7 +29,7 @@ export function KnowledgePapersPage() {
     <AppShell>
       <div className="flex min-h-[calc(100vh-3.5rem)] items-stretch lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden">
         <LibraryPanel historyActive={historyActive} selectedFolderId={selectedFolderId} onFolderClick={selectFolder} onHistoryClick={() => setHistoryActive(true)} />
-        {historyActive ? <ReadingHistory /> : <LibraryTable folderId={selectedFolderId} />}
+        {historyActive ? <ReadingHistory /> : <LibraryTable key={selectedFolderId ?? "empty"} folderId={selectedFolderId} />}
       </div>
     </AppShell>
   );
