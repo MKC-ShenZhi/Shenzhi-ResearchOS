@@ -9,6 +9,7 @@ from app.schemas.knowledge import (
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
     PaperDetail,
+    PaperSummary,
     PaperGraph,
 )
 
@@ -58,6 +59,12 @@ class KnowledgeService:
     async def get_paper(self, paper_id: str) -> PaperDetail:
         try:
             return await self.adapter.paper(paper_id)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def batch_get_papers(self, paper_ids: list[str]) -> list[PaperSummary]:
+        try:
+            return await self.adapter.batch_papers(paper_ids)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 

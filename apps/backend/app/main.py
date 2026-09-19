@@ -27,6 +27,7 @@ for router in (
     chat.router,
     collections.router,
     history.router, 
+    knowledge.papers_router,
     knowledge.router,
     paper_resource.router,
     profile.router,
