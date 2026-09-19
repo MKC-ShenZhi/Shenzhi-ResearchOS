@@ -10,11 +10,11 @@ import { useChatSession } from "../hooks/use-chat-session";
 import { chatInputFromComposer, capabilitiesForEntryMode } from "../services/conversation";
 import { readAskDraft } from "../services/draft";
 import { chatIdentityScope, type ChatIdentityScope } from "../services/identity-scope";
-import { getChatConfig } from "@/clients/backend/chat";
+import { getChatConfig } from "../services/chat-config";
 import { askSessionUrl, normalizeAskSessionId } from "../services/session-url";
 import type { ChatAttachment, ChatModelId, ChatReplyMode, ComposerSubmitPayload, ChatConfig } from "@/types/ai-search";
 import type { ComposerEntryMode } from "@/types";
-import { DEFAULT_CHAT_MODEL } from "@/lib/data/chat-models";
+import { DEFAULT_CHAT_MODEL } from "../services/model-catalog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { AnonymousClaimCoordinator } from "./anonymous-claim-coordinator";
 

@@ -1,4 +1,4 @@
-import type { ChatModelId, ChatModelOption } from "../../types/ai-search";
+import type { ChatModelId, ChatModelOption } from "../../../clients/backend/chat";
 
 /** 前端可选的大模型目录（与 GET /chat/config 对齐） */
 export const CHAT_MODEL_CATALOG: ChatModelOption[] = [

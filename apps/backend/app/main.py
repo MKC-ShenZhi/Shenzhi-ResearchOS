@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from app.api import chat, knowledge, paper_resource, profile, settings, uploads
+from app.api import account_deletion, chat, knowledge, paper_resource, profile, settings, uploads
 from app.core.logging import configure_logging, http_logging_middleware, log_exception, request_duration_ms
 from app.core.errors import BusinessError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE
 from app.core.responses import fail
@@ -24,6 +24,7 @@ app = FastAPI(title='ShenZhi AI API', version='1.0.0', lifespan=lifespan)
 configure_logging()
 logger = logging.getLogger(__name__)
 for router in (
+    account_deletion.router,
     chat.router,
     knowledge.router,
     paper_resource.router,
@@ -72,3 +73,9 @@ async def unexpected_error(request: Request, error: Exception):
 @app.get('/health')
 def health() -> dict[str, str]:
     return {'status': 'ok'}
+
+
+@app.get('/api/v1/health')
+def versioned_health() -> dict[str, str]:
+    """Expose the health probe under the same prefix used by the Web BFF."""
+    return health()

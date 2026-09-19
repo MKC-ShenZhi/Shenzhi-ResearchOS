@@ -1,4 +1,4 @@
-import type { ApiEnvelope } from "../../types/ai-search";
+import type { ApiEnvelope } from "./types";
 
 /** 浏览器一律打同源 `/api/v1`，由 Next 微后端转发到 FastAPI（BUSINESS_BACKEND_URL） */
 export const API_PREFIX = "/api/v1";

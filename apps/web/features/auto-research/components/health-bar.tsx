@@ -1,7 +1,7 @@
 "use client";
 
 import { Heart, HeartPulse } from "lucide-react";
-import type { HealthState } from "@/lib/data/research-run";
+import type { HealthState } from "@/features/auto-research/research-run";
 import { cn } from "@/lib/utils";
 
 /** 健康度底栏 —— Deli 值守机制的可视化仪表 */

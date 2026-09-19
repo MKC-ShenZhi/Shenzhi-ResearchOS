@@ -7,6 +7,9 @@ const EMAIL_DELIVERY_PATHS = new Set([
   "/email-otp/request-password-reset",
   "/forget-password/email-otp",
   "/email-otp/request-email-change",
+  // Better Auth's built-in change-email flow sends a confirmation to the
+  // current mailbox and a verification link to the replacement mailbox.
+  "/change-email",
   REGISTRATION_EMAIL_SEND_OTP_PATH,
 ]);
 

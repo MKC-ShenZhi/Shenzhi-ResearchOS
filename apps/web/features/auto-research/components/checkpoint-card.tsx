@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { ShieldAlert, User, Zap } from "lucide-react";
-import type { Checkpoint, CheckpointOption } from "@/lib/data/research-run";
+import type { Checkpoint, CheckpointOption } from "@/features/auto-research/research-run";
 import { cn } from "@/lib/utils";
 
 interface CheckpointCardProps {
