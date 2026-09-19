@@ -63,7 +63,7 @@ export function ReadingHistory() {
   });
 
   return (
-    <section className="min-w-0 flex-1 p-8">
+    <section className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-8 lg:h-full lg:min-h-0">
       <div>
         <h1 className="text-xl font-bold text-ink">浏览历史</h1>
         <p className="mt-1 text-xs text-faint">按最近浏览时间排列</p>

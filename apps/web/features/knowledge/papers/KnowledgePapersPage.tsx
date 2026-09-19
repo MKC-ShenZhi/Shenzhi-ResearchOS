@@ -27,7 +27,7 @@ export function KnowledgePapersPage() {
 
   return (
     <AppShell>
-      <div className="flex min-h-[calc(100vh)] items-stretch">
+      <div className="flex min-h-[calc(100vh-3.5rem)] items-stretch lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden">
         <LibraryPanel historyActive={historyActive} selectedFolderId={selectedFolderId} onFolderClick={selectFolder} onHistoryClick={() => setHistoryActive(true)} />
         {historyActive ? <ReadingHistory /> : <LibraryTable folderId={selectedFolderId} />}
       </div>

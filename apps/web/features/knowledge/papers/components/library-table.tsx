@@ -81,7 +81,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
   const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / 20));
 
   return (
-    <section className="min-w-0 flex-1 p-8">
+    <section className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-8 lg:h-full lg:min-h-0">
       <div className="flex items-center justify-between">
         <div><h1 className="text-xl font-bold text-ink">论文库</h1><p className="mt-1 text-xs text-faint">当前文件夹 · {data?.total ?? 0} 篇论文</p></div>
         <Button className="rounded-xl"><Upload className="size-4" />上传私有论文</Button>

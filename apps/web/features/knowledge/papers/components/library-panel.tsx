@@ -61,7 +61,7 @@ export function LibraryPanel({
   }
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col self-stretch border-r border-line bg-card p-5">
+    <aside className="flex w-60 min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r border-line bg-card p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-[15px] font-bold text-ink">我的文献库</h2>
       </div>
@@ -76,7 +76,7 @@ export function LibraryPanel({
       </button>
 
       <p className="mt-2 px-1 text-xs text-faint">文件夹</p>
-      <ul className="mt-1.5 space-y-0.5">
+      <ul className="mt-1.5 min-h-0 flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden pr-1">
         {loading && <li className="flex items-center justify-center py-4 text-xs text-faint"><LoaderCircle className="size-4 animate-spin" /></li>}
         {!loading && folders.length === 0 && <li className="px-2 py-4 text-center text-xs text-faint">暂无文件夹</li>}
         {folders.map((folder) => (
