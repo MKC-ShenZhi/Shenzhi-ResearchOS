@@ -3,10 +3,13 @@
 import os
 import unittest
 import uuid
+from sqlalchemy import select
 
 from app.core.database import session_scope
 from app.models.chat import ChatMessageRow, ChatSessionRow
+from app.models.collections import CollectionFolderRow, CollectionItemRow, CollectionUserStateRow
 from app.models.profile import UserProfileRow
+from app.models.reading_history import ReadingHistoryRow
 from app.models.settings import UserSettingsRow
 from app.services.account_deletion import AccountDeletionService
 
@@ -27,6 +30,10 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 UserProfileRow(user_id=other_user, avatar_key='avatar-01'),
                 UserSettingsRow(user_id=target_user),
                 UserSettingsRow(user_id=other_user),
+                CollectionUserStateRow(user_id=target_user),
+                CollectionUserStateRow(user_id=other_user),
+                ReadingHistoryRow(user_id=target_user, paper_id='paper-a'),
+                ReadingHistoryRow(user_id=other_user, paper_id='paper-b'),
                 ChatSessionRow(id=target_session_id, owner=f'user:{target_user}', title='delete', settings={}),
                 ChatSessionRow(id=other_session_id, owner=f'user:{other_user}', title='keep', settings={}),
                 ChatMessageRow(
@@ -40,6 +47,17 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
                     message_refs=[], followups=[], duration_ms=0,
                 ),
             ])
+            target_folder = CollectionFolderRow(user_id=target_user, name='target')
+            other_folder = CollectionFolderRow(user_id=other_user, name='other')
+            db.add_all([target_folder, other_folder])
+            await db.flush()
+            db.add_all([
+                CollectionItemRow(folder_id=target_folder.id, paper_id='paper-a'),
+                CollectionItemRow(folder_id=other_folder.id, paper_id='paper-b'),
+            ])
+
+        target_folder_id = target_folder.id
+        other_folder_id = other_folder.id
 
         try:
             result = await AccountDeletionService().delete_all_for_user(target_user)
@@ -50,6 +68,13 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(await db.get(UserSettingsRow, target_user))
                 self.assertIsNone(await db.get(ChatSessionRow, target_session_id))
                 self.assertIsNone(await db.get(ChatMessageRow, target_message_id))
+                self.assertIsNone(await db.get(CollectionUserStateRow, target_user))
+                self.assertIsNone(await db.get(CollectionFolderRow, target_folder_id))
+                self.assertEqual(len((await db.scalars(select(CollectionItemRow).where(CollectionItemRow.folder_id == target_folder_id))).all()), 0)
+                self.assertIsNotNone(await db.get(CollectionUserStateRow, other_user))
+                self.assertIsNotNone(await db.get(CollectionFolderRow, other_folder_id))
+                self.assertEqual(len((await db.scalars(select(ReadingHistoryRow).where(ReadingHistoryRow.user_id == target_user))).all()), 0)
+                self.assertEqual(len((await db.scalars(select(ReadingHistoryRow).where(ReadingHistoryRow.user_id == other_user))).all()), 1)
                 self.assertIsNotNone(await db.get(UserProfileRow, other_user))
                 self.assertIsNotNone(await db.get(UserSettingsRow, other_user))
                 self.assertIsNotNone(await db.get(ChatSessionRow, other_session_id))
@@ -68,10 +93,14 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
                     (UserProfileRow, other_user),
                     (UserSettingsRow, target_user),
                     (UserSettingsRow, other_user),
+                    (CollectionUserStateRow, other_user),
+                    (CollectionFolderRow, other_folder_id),
                 ):
                     row = await db.get(model, key)
                     if row is not None:
                         await db.delete(row)
+                for row in (await db.scalars(select(ReadingHistoryRow).where(ReadingHistoryRow.user_id == other_user))).all():
+                    await db.delete(row)
 
 
 if __name__ == '__main__':

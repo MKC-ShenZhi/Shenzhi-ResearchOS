@@ -6,7 +6,9 @@ from sqlalchemy import delete, select
 
 from app.core.database import session_scope
 from app.models.chat import ChatSessionRow
+from app.models.collections import CollectionFolderRow, CollectionItemRow, CollectionUserStateRow
 from app.models.profile import UserProfileRow
+from app.models.reading_history import ReadingHistoryRow
 from app.models.settings import UserSettingsRow
 from app.services.sessions import repository
 
@@ -41,6 +43,11 @@ class AccountDeletionService:
             # Stop current-worker generators before deleting their durable rows.
             # A multi-worker deployment still needs distributed cancellation.
             await repository.purge_owner_runtime(owner, session_ids)
+            folder_ids = select(CollectionFolderRow.id).where(CollectionFolderRow.user_id == user_id)
+            await db.execute(delete(CollectionItemRow).where(CollectionItemRow.folder_id.in_(folder_ids)))
+            await db.execute(delete(CollectionFolderRow).where(CollectionFolderRow.user_id == user_id))
+            await db.execute(delete(CollectionUserStateRow).where(CollectionUserStateRow.user_id == user_id))
+            await db.execute(delete(ReadingHistoryRow).where(ReadingHistoryRow.user_id == user_id))
             profiles = await db.execute(
                 delete(UserProfileRow)
                 .where(UserProfileRow.user_id == user_id)

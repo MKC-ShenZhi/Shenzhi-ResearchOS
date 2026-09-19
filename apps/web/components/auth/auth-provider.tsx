@@ -6,6 +6,7 @@ import {
   authClient,
 } from "@/components/auth/auth-client";
 import { LoginModal } from "@/components/auth/login-modal";
+import { useCollections } from "@/stores/collections";
 
 const SESSION_INVALID_NOTICE = "登录状态已失效，请重新登录";
 const MAX_TIMEOUT_MS = 2_147_483_647;
@@ -50,6 +51,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const previousSessionRef = React.useRef<AuthSession | null>(null);
   const sessionInitializedRef = React.useRef(false);
   const expectedSessionEndRef = React.useRef(false);
+  const syncCollectionsIdentity = useCollections((state) => state.syncIdentity);
+
+  React.useEffect(() => {
+    if (!isPending) syncCollectionsIdentity(session?.user?.id ?? null);
+  }, [isPending, session?.user?.id, syncCollectionsIdentity]);
 
   const closeLogin = React.useCallback(() => {
     loginSuccessRef.current = null;
