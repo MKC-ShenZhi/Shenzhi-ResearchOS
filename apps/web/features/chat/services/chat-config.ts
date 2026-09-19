@@ -3,7 +3,7 @@ import type {
   ChatConfig,
   ChatModelOption,
   ModelProvider,
-} from "../../../clients/backend/chat";
+} from "../../../clients/backend/chat/types";
 import { CHAT_MODEL_CATALOG, chatModelLabel } from "./model-catalog";
 
 const BACKEND_ONLY_LABELS: Record<

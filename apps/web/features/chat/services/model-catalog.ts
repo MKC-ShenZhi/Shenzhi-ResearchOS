@@ -1,4 +1,4 @@
-import type { ChatModelId, ChatModelOption } from "../../../clients/backend/chat";
+import type { ChatModelId, ChatModelOption } from "../../../clients/backend/chat/types";
 
 /** 前端可选的大模型目录（与 GET /chat/config 对齐） */
 export const CHAT_MODEL_CATALOG: ChatModelOption[] = [
