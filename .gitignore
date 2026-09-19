@@ -52,6 +52,9 @@ __pycache__/
 *.py[cod]
 .venv/
 
+# Agent session workspaces and generated artifacts
+/apps/backend/workspace/
+
 # vercel
 .vercel
 
