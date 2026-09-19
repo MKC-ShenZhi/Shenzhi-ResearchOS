@@ -1,6 +1,6 @@
-# Agent 基座（第二阶段迁移）
+# Agent 产品（第三阶段迁移）
 
-本目录描述 `integration/20260919` 当前已接入的 Backend Agent 基础设施。代码来自 `feat/SZDR` 的选择性迁移；本阶段没有接入 Deep Research Skill、Agent 产品前端或 legacy retrieval。
+本目录描述 `integration/20260919` 当前已接入的 Agent 产品。Backend Agent 基座及 Web 产品来自 `feat/SZDR` 的选择性迁移；Deep Research Skill 与 legacy retrieval 尚未迁入。
 
 ## 结构与调用边界
 
@@ -20,7 +20,11 @@ Skill 默认从 `apps/backend/skills/` 发现第一方 Skill，并可从 `skills
 
 ## 当前边界
 
-- `apps/backend/skills/deep-research/`、业务 prompt 和 Web Agent 产品代码尚未迁入。模板加载机制已迁入，但当前没有预置业务模板。
+- `/agents` 是 Agent 主入口：`ShenzhiAiPage` 经 `clients/backend/agent.ts` 向 `/api/v1/agent/run` 发起 POST SSE，由 `AgentRuntime` 完成模型与工具循环。页面处理增量正文与 reasoning、工具调用和结果、插话、反问、压缩、警告及终态，并提供工作区上传、报告展示和导出。
+- Agent 会话阶段性保存在浏览器 `localStorage`（`shenzhi-agent-sessions`），包含轮次、过程、工具、插话、报告、来源、反问、用量和分叉信息。旧 Chat 仍使用 Backend/PostgreSQL 会话，但已退出 `/agents` 主入口；Agent durable Backend session 留待后续实现。
+- `apps/backend/skills/deep-research/` 与业务 prompt 尚未迁入。当前 `/agent/config` 可以返回 `skills: []`，普通 Agent 请求仍可使用基础工具。模板加载机制已迁入，但当前没有预置业务模板。
+- legacy retrieval 未迁入；论文工具仍通过 `KnowledgeService → integrations/knowledge`。
 - 工作区文件使用本地文件系统；在无共享持久存储的多实例或 Serverless 环境中，跨实例读取和长期保留没有保证。运行中插话通道也只在当前进程有效。
-- Agent Runtime 的单次运行不自动写入 Chat 会话数据库；调用方负责保存 history 和处理 SSE 结果。
+- 当前 Stop 使用浏览器流连接取消；Backend 尚无独立的 server-side cancel API。
+- **P0 before public production:** `run_command` 需要宿主机 shell / env sandbox 与隔离。本阶段保留现有 netguard、路径禁闭及命令检查，不放宽安全边界。
 - 不调用真实付费模型的验证可用 `uv run python -m unittest -q tests.test_agent tests.test_agent_api tests.test_agent_memory tests.test_agent_workspace tests.test_edit_fuzzy tests.test_agent_skills`。

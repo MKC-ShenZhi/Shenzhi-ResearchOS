@@ -1,5 +1,5 @@
-import { ChatPage } from "@/features/chat/ChatPage";
+import { ShenzhiAiPage } from "@/features/agent-chat/shenzhi-ai-page";
 
 export default function Page() {
-  return <ChatPage />;
+  return <ShenzhiAiPage />;
 }

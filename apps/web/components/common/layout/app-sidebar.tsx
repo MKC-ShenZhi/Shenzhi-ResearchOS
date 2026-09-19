@@ -487,7 +487,7 @@ export function AppSidebar() {
           subNav={AGENT_SUB_NAV}
           collapsed={collapsed}
         />
-        <SidebarChatHistory collapsed={collapsed} />
+        {pathname !== "/agents" && <SidebarChatHistory collapsed={collapsed} />}
         <ExpandableNav
           href="/knowledge"
           label="知识库"
