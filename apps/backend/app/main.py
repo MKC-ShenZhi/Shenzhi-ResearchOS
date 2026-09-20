@@ -27,6 +27,7 @@ for router in (
     account_deletion.router,
     agent.router,
     chat.router,
+    knowledge.papers_router,
     collections.router,
     history.router,
     knowledge.router,

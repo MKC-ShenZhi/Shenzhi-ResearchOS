@@ -109,17 +109,13 @@ class CollectionService:
                 .offset((page - 1) * page_size).limit(page_size)
             )).scalars())
             total = await session.scalar(select(func.count(CollectionItemRow.id)).where(CollectionItemRow.folder_id == folder_id))
-        items = []
-        for row in rows:
-            try:
-                paper = await self.knowledge.get_paper(row.paper_id)
-            except Exception as error:
-                if getattr(error, 'status_code', None) == 404 or getattr(getattr(error, 'error', None), 'code', None) == 'NOT_FOUND':
-                    continue
-                raise
-            items.append(CollectionPaperItem.model_validate({
-                **paper.model_dump(), 'paper_id': row.paper_id, 'added_at': row.created_at,
-            }))
+        summaries = await self.knowledge.batch_get_papers([row.paper_id for row in rows])
+        summaries_by_id = {paper.id: paper for paper in summaries}
+        items = [CollectionPaperItem.model_validate({
+            **summaries_by_id[row.paper_id].model_dump(),
+            'paper_id': row.paper_id,
+            'added_at': row.created_at,
+        }) for row in rows if row.paper_id in summaries_by_id]
         return CollectionPaperListResponse(items=items, total=total or 0, page=page, page_size=page_size)
 
     async def paper_folders(self, user_id: str, paper_id: str) -> list[int]:
