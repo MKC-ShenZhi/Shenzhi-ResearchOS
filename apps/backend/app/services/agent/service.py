@@ -30,11 +30,11 @@ from app.services.agent.workspace import (
     Workspace, build_workspace_tools, create_workspace, ensure_session_workspace,
     mount_workspace, mount_workspace_into, read_session_file, write_workspace_file,
 )
-from app.services.document_parser import attachment_context
-from app.services.knowledge import KnowledgeService
-from app.services.model_provider import TEMPERATURE
-from app.services.sessions import repository
-from app.services.web_search import web_search
+from app.services.chat.attachments import attachment_context
+from app.services.knowledge.service import KnowledgeService
+from app.integrations.llm.provider import TEMPERATURE
+from app.services.chat.repository import repository
+from app.integrations.web_search.provider import web_search
 
 # API 层的调用面（app/api/agent.py 经 service.* 使用）；其余 workspace 符号本模块自用。
 # compose_agent_system 自 policies.py 转出（既有调用方无需改 import）。

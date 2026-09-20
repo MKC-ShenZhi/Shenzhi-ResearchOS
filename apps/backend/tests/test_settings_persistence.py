@@ -3,7 +3,7 @@ import unittest
 from uuid import uuid4
 
 from app.core.database import dispose_engine
-from app.services.settings import SettingsService
+from app.services.user.settings import SettingsService
 from app.schemas.settings import NotificationPreferences, UserSettingsPatch
 
 

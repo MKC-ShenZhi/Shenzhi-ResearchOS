@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from app.services.paper_resource.providers.base import (
+from app.integrations.paper_resource.base import (
     PDFProvider,
     ProviderFetch,
     ProviderValidation,
 )
-from app.services.paper_resource.providers.http import HTTPProvider
+from app.integrations.paper_resource.http import HTTPProvider
 
 
 class OpenReviewProvider(PDFProvider):

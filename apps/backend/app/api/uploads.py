@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, Request
 from starlette.concurrency import run_in_threadpool
 from app.core.identity import request_owner
 from app.core.responses import ok
-from app.services.document_parser import parse_document
-from app.services.sessions import repository
-from app.services.upload_reader import read_upload
+from app.services.uploads.parser import parse_document
+from app.services.chat.repository import repository
+from app.api._support.upload_reader import read_upload
 
 router = APIRouter(prefix='/api/v1/uploads', tags=['uploads'])
 

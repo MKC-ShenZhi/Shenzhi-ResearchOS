@@ -6,7 +6,7 @@ from app.core.errors import BusinessError
 from app.core.identity import request_identity
 from app.core.responses import ok
 from app.schemas.settings import UserSettingsPatch
-from app.services.settings import SettingsService
+from app.services.user.settings import SettingsService
 
 router = APIRouter(prefix='/api/v1/settings', tags=['settings'])
 service = SettingsService()

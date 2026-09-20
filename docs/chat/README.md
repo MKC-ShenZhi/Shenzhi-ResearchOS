@@ -14,12 +14,13 @@ app/agents/page.tsx 或 app/agents/ask/page.tsx（URL 兼容）
   → Next.js app/api/v1/[...path] → clients/backend/forward（通用单身份 BFF）
      或 app/api/chat/anonymous-claim（专用双身份 BFF）
   → FastAPI api/{chat,uploads}
-  → services/chat
-      ├─ model_provider（OpenAI-compatible HTTP）
-      ├─ knowledge_context（Knowledge2Chat runtime Evidence / prompt / citation）
-      ├─ web_search（Tavily → SearXNG）
-      ├─ document_parser / upload_reader
-      └─ sessions（Memory / PostgreSQL Repository）
+  → services/chat/service.py
+      ├─ chat/grounding.py（Knowledge2Chat runtime Evidence / prompt / citation）
+      ├─ chat/attachments.py（Chat 附件上下文）
+      ├─ chat/{repository,postgres_repository}.py（Memory / PostgreSQL Repository）
+      ├─ services/uploads/parser.py（原始附件解析）
+      └─ integrations/{llm,web_search}/provider.py（模型与联网搜索）
+  → api/_support/upload_reader.py（HTTP multipart 读取）
 ```
 
 - 页面只组合 Feature；Chat 专用 UI 在 `features/chat/components`。
@@ -84,8 +85,8 @@ abstract 为空时，本轮在模型调用前失败，前端可重试，不能�
 
 智能搜索开启时，`services/chat` 只对 Knowledge 检索 query 做少量确定性的问答壳归一化
 （不调用 LLM、不翻译、不改写原始消息），然后调用现有
-`services/knowledge → integrations/knowledge` Capability。SearchResponse 经
-`knowledge_context.KnowledgeContextBuilder` 过滤无 abstract 的结果、按现有返回顺序
+`services/knowledge/service.py → integrations/knowledge` Capability。SearchResponse 经
+`chat/grounding.py` 的 `KnowledgeContextBuilder` 过滤无 abstract 的结果、按现有返回顺序
 选取 Top-K，并生成稳定的 `referenceId`。原始论文 title、abstract 和必要 metadata
 只在运行时格式化为 `<reference_data>`，随本轮模型输入发送；用户原始问题本身不拼接
 该块。Chat 问题仍保存 1–2000 字原文；Knowledge 检索的 query 上限为 500 字，超过时
@@ -167,7 +168,7 @@ Web 仅配置 `BUSINESS_BACKEND_URL` 和 `BACKEND_BFF_SECRET`。模型/搜索 Ke
 - BFF 清除浏览器伪造的用户/内部凭据头，再注入经 Better Auth 验证的用户 ID。匿名请求使用 HttpOnly、SameSite=Lax 随机会话 cookie，不按 IP 共用数据。
 - 所有会话/消息/上传操作校验 owner。登录后仅通过上述专用端点认领同一浏览器的已完成匿名会话；不同用户或不同匿名浏览器之间仍严格隔离，过期附件需要重传。
 - Backend 不读取 Better Auth 数据库，不引入 B 的 ORM/用户系统。
-- `CHAT_ANONYMOUS_TTL_SECONDS` 默认为 `604800`（7 天），Web 匿名 Cookie 与 PostgreSQL 匿名 session 必须使用同一配置。只有匿名 Chat BFF 请求得到成功上游响应后 Cookie 才滚动续期；匿名历史列表成功读取时，会同时刷新该浏览器所有匿名 session 的 `updated_at`，使数据保留期与 Cookie 使用期一致；用户 session 不会续期匿名 Cookie。过期清理由显式维护命令执行：`cd apps/backend && uv run --locked python -m app.services.anonymous_cleanup`。它只删除 `owner LIKE 'anon:%' AND updated_at < cutoff` 且不存在 streaming message 的 session，数据库通过外键级联删除 message；不在普通请求中删数据。命令输出删除数，生产环境应先观察日志/删除数后由 cron/Job 调用。
+- `CHAT_ANONYMOUS_TTL_SECONDS` 默认为 `604800`（7 天），Web 匿名 Cookie 与 PostgreSQL 匿名 session 必须使用同一配置。只有匿名 Chat BFF 请求得到成功上游响应后 Cookie 才滚动续期；匿名历史列表成功读取时，会同时刷新该浏览器所有匿名 session 的 `updated_at`，使数据保留期与 Cookie 使用期一致；用户 session 不会续期匿名 Cookie。过期清理由显式维护命令执行：`cd apps/backend && uv run --locked python -m app.services.chat.maintenance`。它只删除 `owner LIKE 'anon:%' AND updated_at < cutoff` 且不存在 streaming message 的 session，数据库通过外键级联删除 message；不在普通请求中删数据。命令输出删除数，生产环境应先观察日志/删除数后由 cron/Job 调用。
 - 未配置 `BACKEND_BFF_SECRET` 时 Web 与 Backend 均默认拒绝。仅 loopback 本地开发可在两端显式设置 `BACKEND_ALLOW_INSECURE_LOCAL_BFF=true`；非 loopback 部署必须设置同一高熵 Secret，并只允许 BFF 访问 FastAPI。现有 infra/CI 不自动部署新后端。
 - Better Auth 正常返回空 Session 时 BFF 按匿名会话转发；Better Auth 调用抛错时 BFF 返回 503，不会静默降级为匿名用户。
 

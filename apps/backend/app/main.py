@@ -10,7 +10,7 @@ from app.core.request_context import (
     REQUEST_ID_HEADER,
     get_request_id,
 )
-from app.services.sessions import repository
+from app.services.chat.repository import repository
 
 
 @asynccontextmanager

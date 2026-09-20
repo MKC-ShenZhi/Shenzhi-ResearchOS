@@ -10,7 +10,7 @@ from app.models.collections import CollectionFolderRow, CollectionItemRow, Colle
 from app.models.profile import UserProfileRow
 from app.models.reading_history import ReadingHistoryRow
 from app.models.settings import UserSettingsRow
-from app.services.sessions import repository
+from app.services.chat.repository import repository
 
 
 @dataclass(frozen=True)

@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from app.core.identity import require_bff
 from app.core.request_context import get_request_id, new_request_id
 from app.schemas.knowledge import KnowledgeError
-from app.services.knowledge import KnowledgeService, KnowledgeServiceError
+from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 from app.services.paper_resource import PaperResourceService
 from app.services.paper_resource.service import PaperResourceFetch
 

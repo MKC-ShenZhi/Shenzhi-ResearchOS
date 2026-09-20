@@ -17,7 +17,7 @@ from app.integrations.knowledge.adapter import (
 )
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
-from app.services.knowledge import KnowledgeService, KnowledgeServiceError
+from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 from app.services.paper_resource import PaperResourceService
 
 

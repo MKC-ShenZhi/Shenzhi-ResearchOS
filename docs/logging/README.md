@@ -309,12 +309,12 @@ V1 不上 `trace_id`、`error_id`。需要「一轮多请求」时先查 `messag
 
 ### P2 文件（Core 合入后再开）
 
-仅在现有出口旁路一行：`integrations/knowledge`、`model_provider.py`、`web_search.py`。  
+仅在现有出口旁路一行：`integrations/knowledge`、`integrations/llm/provider.py`、`integrations/web_search/provider.py`。
 Knowledge 错误体里的 `requestId` 改为读 ContextVar，不再自己生成。
 
 ### P3 文件
 
-`apps/backend/app/services/chat.py` 终态各一条事件。  
+`apps/backend/app/services/chat/service.py` 终态各一条事件。
 可选：`clients/backend/http.ts` / `sse.ts` 只读响应头，不改业务编排。  
 不改 `use-chat-session` 状态机。
 

@@ -7,7 +7,7 @@ from app.schemas.collections import (
     FolderCreateRequest, FolderUpdateRequest, MoveCollectionItemRequest,
     PaperCollectionUpdateRequest,
 )
-from app.services.collections import CollectionService
+from app.services.library.collections import CollectionService
 
 
 router = APIRouter(prefix='/api/v1', tags=['collections'])
