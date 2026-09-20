@@ -243,6 +243,32 @@ class FixtureClient:
         return GRAPH_RESPONSE
 
 
+class BatchFixtureClient:
+    def __init__(self):
+        self.paper_calls = []
+
+    async def paper(self, paper_id):
+        self.paper_calls.append(paper_id)
+        if paper_id == 'missing':
+            raise KnowledgeIntegrationError.not_found()
+        return {
+            **DETAIL_RESPONSE,
+            'paper_id': paper_id,
+            'title': f'Title {paper_id}',
+        }
+
+
+class KnowledgeBatchTests(unittest.IsolatedAsyncioTestCase):
+    async def test_batch_papers_ignores_missing_ids_and_preserves_requested_order(self):
+        client = BatchFixtureClient()
+        service = KnowledgeService(KnowledgeAdapter(client))
+
+        papers = await service.batch_get_papers(['paper-3', 'missing', 'paper-1'])
+
+        self.assertEqual([paper.id for paper in papers], ['paper-3', 'paper-1'])
+        self.assertEqual(client.paper_calls, ['paper-3', 'missing', 'paper-1'])
+
+
 class KnowledgeContinuityTests(unittest.IsolatedAsyncioTestCase):
     async def test_search_detail_graph_keep_canonical_id(self):
         client = FixtureClient()
@@ -551,6 +577,19 @@ class KnowledgeApiTests(unittest.IsolatedAsyncioTestCase):
         graph_data = graph_response.json()['data']
         self.assertEqual(graph_data['rootId'], PAPER_ID)
         self.assertEqual(graph_data['edges'][0]['sourceId'], PAPER_ID)
+
+    async def test_batch_papers_api_returns_summaries(self):
+        response = await self.client.post(
+            '/api/v1/papers/batch',
+            json={'paper_ids': [PAPER_ID]},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        paper = response.json()['data']['papers'][0]
+        self.assertEqual(paper['id'], PAPER_ID)
+        self.assertEqual(paper['title'], DETAIL_RESPONSE['title'])
+        self.assertIn('abstract', paper)
+        self.assertNotIn('pdfUrl', paper)
+        self.assertNotIn('citationCount', paper)
 
     async def test_paper_detail_returns_invalid_pdf_url_without_resource_preflight(self):
         source_url = 'not-a-valid-pdf-url'

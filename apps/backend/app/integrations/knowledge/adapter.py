@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import asyncio
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -17,6 +18,7 @@ from app.schemas.knowledge import (
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
     PaperDetail,
+    PaperSummary,
     PaperGraph,
     PaperSearchResult,
     Provenance,
@@ -232,6 +234,18 @@ def map_paper_detail(
     ))
 
 
+def paper_summary(detail: PaperDetail) -> PaperSummary:
+    return PaperSummary(
+        id=detail.id,
+        title=detail.title,
+        abstract=detail.abstract,
+        authors=detail.authors,
+        year=detail.year,
+        venue=detail.venue,
+        provenance=detail.provenance,
+    )
+
+
 def _graph_node(
     item: dict[str, Any], *, retrieved_at: datetime | None = None
 ) -> GraphNode:
@@ -349,6 +363,25 @@ class KnowledgeAdapter:
         if detail.id != paper_id:
             raise KnowledgeIntegrationError.contract_violation()
         return detail
+
+    async def batch_papers(self, paper_ids: list[str]) -> list[PaperSummary]:
+        """Fetch summaries concurrently while keeping batch policy at this boundary."""
+        if not paper_ids:
+            return []
+        results = await asyncio.gather(
+            *(self.paper(paper_id) for paper_id in paper_ids),
+            return_exceptions=True,
+        )
+        summaries: list[PaperSummary] = []
+        for result in results:
+            if isinstance(result, KnowledgeIntegrationError):
+                if result.code == 'NOT_FOUND':
+                    continue
+                raise result
+            if isinstance(result, Exception):
+                raise result
+            summaries.append(paper_summary(result))
+        return summaries
 
     async def graph(self, paper_id: str, *, depth: int = 1) -> PaperGraph:
         body = await self.client.graph(paper_id, depth)

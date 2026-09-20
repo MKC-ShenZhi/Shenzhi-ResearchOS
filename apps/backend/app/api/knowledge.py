@@ -14,10 +14,11 @@ from app.core.logging import log_exception
 from app.core.request_context import get_request_id
 from app.core.responses import ok
 from app.schemas.knowledge import KnowledgeError, KnowledgeSearchRequest
-from app.services.knowledge import KnowledgeService, KnowledgeServiceError
+from app.services.knowledge import KnowledgeService, KnowledgeServiceError,PaperBatchRequest
 
 
 router = APIRouter(prefix='/api/v1/knowledge', tags=['knowledge'])
+papers_router = APIRouter(prefix='/api/v1', tags=['papers'])
 service = KnowledgeService()
 logger = logging.getLogger(__name__)
 
@@ -143,3 +144,21 @@ async def graph(
     except Exception as error:
         return unknown_error(request, error)
     return ok(response.model_dump(mode='json', by_alias=True))
+
+@papers_router.post('/papers/batch')
+async def batch_papers(
+    request: Request,
+    _credential: None = Depends(require_bff),
+):
+    try:
+        body = PaperBatchRequest.model_validate(await request.json())
+    except (ValidationError, ValueError, UnicodeDecodeError):
+        return invalid_argument(request, '论文 ID 列表不合法')
+
+    try:
+        papers = await service.batch_get_papers(body.paper_ids)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok({'papers': [paper.model_dump(mode='json', by_alias=True) for paper in papers]})

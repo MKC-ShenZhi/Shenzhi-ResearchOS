@@ -160,6 +160,38 @@ class PaperDetail(KnowledgeModel):
     provenance: Provenance
 
 
+class PaperSummary(KnowledgeModel):
+    """Small paper representation for list views."""
+
+    id: str
+    title: str
+    abstract: str | None = None
+    authors: list[str] = Field(default_factory=list)
+    year: int | None = None
+    venue: str | None = None
+    provenance: Provenance
+
+
+class PaperBatchRequest(KnowledgeModel):
+    paper_ids: list[str] = Field(min_length=1, max_length=100)
+
+    @field_validator('paper_ids')
+    @classmethod
+    def normalize_paper_ids(cls, value: list[str]) -> list[str]:
+        normalized = []
+        for paper_id in value:
+            if not isinstance(paper_id, str) or not paper_id.strip():
+                raise ValueError('paper_ids must contain non-empty strings')
+            paper_id = paper_id.strip()
+            if paper_id not in normalized:
+                normalized.append(paper_id)
+        return normalized
+
+
+class PaperBatchResponse(KnowledgeModel):
+    papers: list[PaperSummary] = Field(default_factory=list)
+
+
 class GraphNode(KnowledgeModel):
     id: str
     kind: str

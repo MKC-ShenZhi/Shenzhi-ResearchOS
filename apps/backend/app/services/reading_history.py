@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.core.database import session_scope
 from app.models.reading_history import ReadingHistoryRow
 from app.schemas.history import ReadingHistoryItem, ReadingHistoryResponse
-from app.services.knowledge import KnowledgeService, KnowledgeServiceError
+from app.services.knowledge import KnowledgeService
 
 
 class ReadingHistoryService:
@@ -35,14 +35,13 @@ class ReadingHistoryService:
                 .order_by(ReadingHistoryRow.last_viewed_at.desc(), ReadingHistoryRow.id.desc())
             ))
 
+        papers = await self.knowledge.batch_get_papers([row.paper_id for row in rows])
+        papers_by_id = {paper.id: paper for paper in papers}
         enriched: list[ReadingHistoryItem] = []
         for row in rows:
-            try:
-                paper = await self.knowledge.get_paper(row.paper_id)
-            except KnowledgeServiceError as error:
-                if error.status_code == 404 or error.error.code == 'NOT_FOUND':
-                    continue
-                raise
+            paper = papers_by_id.get(row.paper_id)
+            if paper is None:
+                continue
             haystack = ' '.join([
                 paper.title,
                 *paper.authors,
