@@ -13,6 +13,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<CollectionPaperListResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(folderId !== null);
   const [error, setError] = useState("");
   const [unauthenticated, setUnauthenticated] = useState(false);
   const [menu, setMenu] = useState<string | null>(null);
@@ -32,19 +33,22 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
     if (folderId === null) return;
     let cancelled = false;
     void apiJson<CollectionPaperListResponse>(`/collections/folders/${folderId}/papers?page=1&page_size=20`)
-      .then((response) => { if (!cancelled) { setError(""); setUnauthenticated(false); setData(response); setPage(1); } })
-      .catch((reason) => { if (!cancelled) handleLoadError(reason); });
+      .then((response) => { if (!cancelled) { setError(""); setUnauthenticated(false); setData(response); setPage(1); setIsLoading(false); } })
+      .catch((reason) => { if (!cancelled) { handleLoadError(reason); setIsLoading(false); } });
     return () => { cancelled = true; };
   }, [folderId]);
 
   async function loadPage(nextPage: number) {
     if (!folderId) return;
     setError("");
+    setIsLoading(true);
     try {
       setData(await apiJson<CollectionPaperListResponse>(`/collections/folders/${folderId}/papers?page=${nextPage}&page_size=20`));
       setPage(nextPage);
     } catch (reason) {
       handleLoadError(reason);
+    } finally {
+      setIsLoading(false);  
     }
   }
 
@@ -91,7 +95,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
         <span className="text-xs text-faint">找到 {items.length} 篇</span>
       </div>
       {error && <div className="mt-5 rounded-xl bg-danger-soft p-4 text-sm text-danger">{error}<button type="button" onClick={() => void loadPage(page)} className="ml-3 underline">重试</button></div>}
-      {unauthenticated ? <div className="mt-8 rounded-2xl bg-card p-12 text-center text-sm text-muted shadow-card">该功能需要登录后使用，请先登录</div> : !folderId ? <div className="mt-8 rounded-2xl bg-card p-12 text-center text-sm text-faint shadow-card">暂无文件夹</div> : !error && data && data.items.length === 0 ? <div className="mt-8 rounded-2xl bg-card p-12 text-center text-sm text-faint shadow-card">这个文件夹还是空的，快去收藏论文吧</div> : !error && <>
+      {unauthenticated ? <div className="mt-8 rounded-2xl bg-card p-12 text-center text-sm text-muted shadow-card">该功能需要登录后使用，请先登录</div> : !folderId ? <div className="mt-8 rounded-2xl bg-card p-12 text-center text-sm text-faint shadow-card">暂无文件夹</div> : isLoading ? <div className="mt-8 rounded-2xl bg-card p-12 text-center text-sm text-muted shadow-card">加载中...</div> : error ? null : data && data.items.length === 0 ? <div className="mt-8 rounded-2xl bg-card p-12 text-center text-sm text-faint shadow-card">这个文件夹还是空的，快去收藏论文吧</div> : !error && <>
         <div className="mt-4 grid grid-cols-[minmax(0,1fr)_220px_100px_36px] items-center gap-4 rounded-xl bg-card px-5 py-3 text-xs text-faint shadow-card"><span>论文</span><span>作者</span><span>添加时间</span><span /></div>
         <div className="mt-3 space-y-2">
           {items.map((item) => (
