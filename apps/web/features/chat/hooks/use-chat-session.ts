@@ -403,6 +403,8 @@ export function useChatSession({
     const streamingMessageId = streamingTurn?.messageId;
     if (!busyRef.current && !pendingCreate.current && !currentMessageId.current && !streamingTurn) return;
 
+    // Kept as `let` for the existing Chat lifecycle source contract.
+    // eslint-disable-next-line prefer-const
     let messageId = currentMessageId.current ?? streamingMessageId;
     const activeGeneration = activeGenerationRef.current;
     const generation = activeGeneration ?? { isCurrent: () => false };

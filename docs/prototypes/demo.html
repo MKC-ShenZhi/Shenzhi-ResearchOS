@@ -369,7 +369,7 @@ html.dark .ref-card.rec{border-color:#5a4a1a; background:#26200f}
 
 <script>
 /* =====================================================================
- * 数据 —— 与 frontend_v1/lib/data/*.ts 一致
+ * 数据 —— 与各 Feature data*.ts 一致
  * ===================================================================== */
 const FEED_PAPERS = [
   { id:"ultralong-1m", date:"2026-07-25", venue:"ICML 2026 · Oral", tone:"violet",
@@ -526,7 +526,7 @@ const AGENT = {
   followUps:["RDT-1B 与 Octo 的性能差异?","动作分块的最佳长度是多少?","DROID 数据集如何申请?","工业部署的延迟瓶颈在哪?","扩散策略与 VLA 模型融合趋势"],
 };
 
-/* ===== 知识图谱数据 —— 与 lib/data/knowledge-graph.ts 一致 ===== */
+/* ===== 知识图谱数据 —— 与 features/knowledge/data-knowledge-graph.ts 一致 ===== */
 const PUBLIC_GRAPH = {
   origin:{ id:"liu-2024", ll:["Liu","2024"], w:1, year:2024, title:PAPER.title,
     authors:"Songming Liu, Lingxuan Wu, Bangguo Li, et al.", venue:"arXiv", cite:"引用 312", abs:PAPER.abstract, paperId:"rdt-1b" },

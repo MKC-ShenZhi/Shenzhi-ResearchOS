@@ -23,7 +23,7 @@ export function PaperBackButton({ returnTo }: { returnTo?: string | null }) {
       className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-sm text-muted transition-colors hover:bg-chip hover:text-ink-2"
     >
       <ArrowLeft className="size-[18px]" />
-      返回
+      <span className="hidden sm:inline">返回</span>
     </button>
   );
 }

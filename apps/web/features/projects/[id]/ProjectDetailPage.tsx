@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/common/layout/app-shell";
 import { Button } from "@/components/ui/button";
-import { getProject, type MilestoneStatus } from "@/lib/data/projects";
+import { getProject, type MilestoneStatus } from "@/features/projects/data";
 
 const STATUS_STYLE: Record<MilestoneStatus, { label: string; className: string }> = {
   done: { label: "已完成", className: "bg-primary-soft text-primary" },
@@ -29,7 +29,7 @@ function MilestoneIcon({ status }: { status: MilestoneStatus }) {
 
 /**
  * 科研项目详情页 `/projects/[id]` —— 演示态项目管理页
- * 项目由用户建立;样例「深知」数据取自仓库 README(lib/data/projects.ts)
+ * 项目由用户建立;样例「深知」数据取自仓库 README(features/projects/data.ts)
  */
 export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const project = getProject(projectId);

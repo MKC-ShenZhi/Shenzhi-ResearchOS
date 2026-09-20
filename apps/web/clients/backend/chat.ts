@@ -1,71 +1,13 @@
 import { apiJson, apiPath } from "./http";
 import { readSseStream, type SseEvent } from "./sse";
-import { CHAT_MODEL_CATALOG, chatModelLabel } from "../../lib/data/chat-models";
 import type {
   CreateChatSessionRequest, CreateChatSessionResponse, SendChatMessageRequest,
   StreamDeltaEvent, StreamDoneEvent, StreamErrorEvent, StreamFollowupsEvent,
   StreamMetaEvent, StreamRefsEvent, ChatSessionSummary, ChatSessionDetail, ChatConfig,
-  ChatModelOption, ModelProvider,
 } from "../../types/ai-search";
 
-const BACKEND_ONLY_LABELS: Record<
-  string,
-  Pick<ChatModelOption, "label" | "provider" | "description">
-> = {
-  "qwen-plus": { label: "通义 Plus", provider: "platform", description: "百炼默认对话模型" },
-  "qwen-max": { label: "通义 Max", provider: "platform", description: "更强推理与长文本" },
-  "qwen-turbo": { label: "通义 Turbo", provider: "platform", description: "低延迟快速回复" },
-  "deepseek-v3": { label: "DeepSeek V3", provider: "deepseek", description: "百炼接入的对话模型" },
-  "deepseek-r1": { label: "DeepSeek R1", provider: "deepseek", description: "百炼接入的推理模型" },
-};
-
-/** 后端 enabled 模型 + 完整产品目录（未开通项显示需订阅） */
-export function mergeChatModelCatalog(backendModels: ChatModelOption[]): ChatModelOption[] {
-  const enabledIds = new Set(
-    backendModels.filter((m) => m.enabled).map((m) => m.value),
-  );
-  const catalogIds = new Set(CHAT_MODEL_CATALOG.map((m) => m.value));
-  const enabledBackendOnly = backendModels
-    .filter((m) => m.enabled && !catalogIds.has(m.value))
-    .map((m) => {
-      const meta = BACKEND_ONLY_LABELS[m.value];
-      return {
-        value: m.value,
-        label: meta?.label ?? m.label ?? chatModelLabel(m.value),
-        provider: (meta?.provider ?? m.provider ?? "platform") as ModelProvider,
-        enabled: true,
-        description: meta?.description ?? m.description,
-      } satisfies ChatModelOption;
-    });
-
-  const catalog = CHAT_MODEL_CATALOG.map((item) => ({
-    ...item,
-    enabled: enabledIds.has(item.value),
-    reason: enabledIds.has(item.value) ? undefined : item.reason ?? "not_subscribed",
-  }));
-
-  return [...enabledBackendOnly, ...catalog];
-}
-
-export const FALLBACK_CHAT_CONFIG: ChatConfig = {
-  models: CHAT_MODEL_CATALOG.map((model) => ({ ...model, enabled: false })),
-  quota_enforced: false,
-  modes: ["fast", "deep", "idea", "doubt"],
-  quota: { used: 0, limit: 20, deep_used: 0, deep_limit: 5 },
-  upload: {
-    max_size_mb: 20,
-    max_files: 5,
-    accept: [".pdf", ".md", ".markdown", ".txt"],
-  },
-};
-
-export async function getChatConfig(): Promise<ChatConfig> {
-  try {
-    const data = await apiJson<ChatConfig>("/chat/config");
-    return { ...data, models: mergeChatModelCatalog(data.models) };
-  } catch {
-    return FALLBACK_CHAT_CONFIG;
-  }
+export function fetchChatConfig(): Promise<ChatConfig> {
+  return apiJson<ChatConfig>("/chat/config");
 }
 
 export function createChatSession(

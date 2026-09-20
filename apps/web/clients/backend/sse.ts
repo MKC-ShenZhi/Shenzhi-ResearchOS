@@ -6,6 +6,7 @@ export interface SseEvent { id?: string; event: string; data: string }
 export async function readSseStream(
   url: string,
   options: {
+    body?: unknown;
     signal?: AbortSignal;
     lastEventId?: string;
     onEvent: (event: SseEvent) => void;
@@ -13,8 +14,15 @@ export async function readSseStream(
   },
 ): Promise<void> {
   const headers = requestHeaders({ Accept: "text/event-stream" });
+  if (options.body !== undefined) headers.set("Content-Type", "application/json");
   if (options.lastEventId) headers.set("Last-Event-ID", options.lastEventId);
-  const res = await fetch(url, { headers, signal: options.signal, cache: "no-store" });
+  const res = await fetch(url, {
+    method: options.body === undefined ? "GET" : "POST",
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
+    cache: "no-store",
+  });
   const requestId = res.headers.get("X-Request-ID");
   options.onRequestId?.(requestId);
   if (!res.ok || !res.body) throw new ApiError(20004, `SSE 连接失败 (${res.status})`, res.status, { requestId });

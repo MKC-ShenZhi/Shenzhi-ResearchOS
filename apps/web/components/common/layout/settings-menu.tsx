@@ -59,6 +59,7 @@ export function SettingsMenu({ collapsed }: { collapsed: boolean }) {
       {collapsed ? (
         <Link
           href="/settings"
+          scroll={false}
           title="设置"
           aria-label="设置"
           onClick={() => {
@@ -72,6 +73,7 @@ export function SettingsMenu({ collapsed }: { collapsed: boolean }) {
       ) : (
         <Link
           href="/settings"
+          scroll={false}
           title="设置"
           onClick={collapseIfSameSection}
           className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-ink-2 transition-colors hover:bg-card"
@@ -88,6 +90,7 @@ export function SettingsMenu({ collapsed }: { collapsed: boolean }) {
             <Link
               key={item.label}
               href={item.href}
+              scroll={false}
               onClick={collapseIfSameSection}
               className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-2 transition-colors hover:bg-chip"
             >

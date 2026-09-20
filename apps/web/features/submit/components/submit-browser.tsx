@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { FilterPanel } from "./filter-panel";
 import { VenueCard } from "./venue-card";
-import { venues } from "@/lib/data/venues";
+import { venues } from "@/features/submit/data";
 import { cn } from "@/lib/utils";
 
 const TABS = ["截止日期", "Rebuttal", "录用通知", "最终定稿", "会议时间"];

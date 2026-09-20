@@ -6,6 +6,7 @@ import {
   authClient,
 } from "@/components/auth/auth-client";
 import { LoginModal } from "@/components/auth/login-modal";
+import { useCollections } from "@/stores/collections";
 
 const SESSION_INVALID_NOTICE = "登录状态已失效，请重新登录";
 const MAX_TIMEOUT_MS = 2_147_483_647;
@@ -33,6 +34,7 @@ interface AuthContextValue {
   deleteAccount: (
     options: DeleteAccountOptions,
   ) => Promise<DeleteAccountResult>;
+  completeExternalAccountDeletion: () => Promise<void>;
 }
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
@@ -49,6 +51,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const previousSessionRef = React.useRef<AuthSession | null>(null);
   const sessionInitializedRef = React.useRef(false);
   const expectedSessionEndRef = React.useRef(false);
+  const syncCollectionsIdentity = useCollections((state) => state.syncIdentity);
+
+  React.useEffect(() => {
+    if (!isPending) syncCollectionsIdentity(session?.user?.id ?? null);
+  }, [isPending, session?.user?.id, syncCollectionsIdentity]);
 
   const closeLogin = React.useCallback(() => {
     loginSuccessRef.current = null;
@@ -132,6 +139,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [refetchSession],
   );
 
+  const completeExternalAccountDeletion = React.useCallback(async () => {
+    expectedSessionEndRef.current = true;
+    try {
+      await refetchSession();
+    } catch (error) {
+      expectedSessionEndRef.current = false;
+      throw error;
+    }
+  }, [refetchSession]);
+
   React.useEffect(() => {
     if (isPending) return;
 
@@ -201,9 +218,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       requireAuth,
       signOut,
       deleteAccount,
+      completeExternalAccountDeletion,
     }),
     [
       closeLogin,
+      completeExternalAccountDeletion,
       deleteAccount,
       isPending,
       openLogin,

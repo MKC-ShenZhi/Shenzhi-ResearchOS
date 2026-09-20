@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { PatentPanel } from "./patent-panel";
 import { PatentTable, type PatentSort } from "./patent-table";
 import { useDebounce } from "@/hooks/use-debounce";
-import { patents } from "@/lib/data/patents";
+import { patents } from "@/features/knowledge/data-patents";
 
 /** 专利库容器 —— 持有搜索/领域/排序状态,领域筛选与搜索可叠加 */
 export function PatentsBrowser() {

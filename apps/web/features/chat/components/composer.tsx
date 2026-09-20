@@ -12,8 +12,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { popoverPosition, usePopoverPlacement } from "@/lib/use-popover-placement";
-import { DEFAULT_CHAT_MODEL } from "@/lib/data/chat-models";
-import { FALLBACK_CHAT_CONFIG } from "@/clients/backend/chat";
+import { FALLBACK_CHAT_CONFIG } from "../services/chat-config";
+import { DEFAULT_CHAT_MODEL } from "../services/model-catalog";
 import { AttachmentMenu } from "./attachment-menu";
 import { ComposerControlPicker } from "./composer-control-picker";
 import { questionSchema } from "@/lib/validations";

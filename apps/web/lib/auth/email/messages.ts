@@ -44,10 +44,21 @@ function formatExpiration(seconds: number): string {
 export function buildVerificationEmailMessage(input: {
   user: AuthEmailUser;
   url: string;
+  newEmail?: string;
 }): AuthEmailMessage {
   const displayName = input.user.name.trim() || "用户";
   const escapedName = escapeHtml(displayName);
   const escapedUrl = escapeHtml(input.url);
+
+  if (input.newEmail) {
+    const escapedNewEmail = escapeHtml(input.newEmail);
+    return {
+      to: input.user.email,
+      subject: "确认更换你的深知邮箱",
+      text: `你好，${displayName}：\n\n有人请求将你的深知账户邮箱更换为：${input.newEmail}\n请打开以下链接确认；如果不是你本人操作，请忽略此邮件：\n${input.url}`,
+      html: `<p>你好，${escapedName}：</p><p>有人请求将你的深知账户邮箱更换为：<strong>${escapedNewEmail}</strong></p><p>请打开以下链接确认；如果不是你本人操作，请忽略此邮件。</p><p><a href="${escapedUrl}">确认更换邮箱</a></p>`,
+    };
+  }
 
   return {
     to: input.user.email,

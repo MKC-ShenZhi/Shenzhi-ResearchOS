@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SITE } from "@/lib/constants";
-import { projects } from "@/lib/data/projects";
+import { projects } from "@/features/projects/data";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useSidebarStore } from "@/stores/sidebar";
 import { Logo } from "./logo";
@@ -76,6 +76,8 @@ const HISTORY_NAV: NavItem[] = [
   { href: "/deliveries", label: "投递", icon: Send, disabled: true },
 ];
 
+const subscribeHydration = () => () => {};
+
 /** 路径所属主标题栏目(取首段):/knowledge/papers → /knowledge,/ → / */
 function sectionOf(path: string): string {
   const seg = path.split("/")[1];
@@ -127,6 +129,7 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
     return (
       <Link
         href={item.href}
+        scroll={false}
         title={item.label}
         aria-label={item.label}
         aria-current={active ? "page" : undefined}
@@ -148,6 +151,7 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   return (
     <Link
       href={item.href}
+      scroll={false}
       title={collapsed ? item.label : undefined}
       aria-current={active ? "page" : undefined}
       onClick={collapseIfSameSection}
@@ -206,13 +210,13 @@ function ExpandableNav({
     if (!open) {
       // 副标题折叠:展开副标题并跳转
       setExpanded(href, true);
-      if (pathname !== dest) router.push(dest);
+      if (pathname !== dest) router.push(dest, { scroll: false });
     } else if (routeActive) {
       // 副标题展开且处于同一主标题下:折叠侧边栏
       setCollapsed(true);
     } else if (pathname !== dest) {
       // 副标题展开但处于其他栏目:仅跳转
-      router.push(dest);
+      router.push(dest, { scroll: false });
     }
   };
 
@@ -228,7 +232,7 @@ function ExpandableNav({
             setExpanded(href, true);
           } else {
             // 先跳转,保持图标栏
-            router.push(dest);
+            router.push(dest, { scroll: false });
           }
         }}
         className={cn(
@@ -282,6 +286,7 @@ function ExpandableNav({
               <Link
                 key={sub.href}
                 href={sub.href}
+                scroll={false}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex h-9 items-center rounded-lg px-3 text-sm transition-colors",
@@ -377,16 +382,18 @@ function LogoutPopup({
 export function AppSidebar() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
+  const setNavScrollTop = useSidebarStore((s) => s.setNavScrollTop);
+  const pathname = usePathname();
+  const navRef = React.useRef<HTMLElement>(null);
+  const navScrollTopRef = React.useRef(useSidebarStore.getState().navScrollTop);
+  const ignoreScrollUntilRef = React.useRef(0);
   const {
     session,
     isPending: sessionPending,
     openLogin,
     signOut,
   } = useAuth();
-  const [sessionReady, setSessionReady] = React.useState(false);
-  React.useEffect(() => {
-    setSessionReady(true);
-  }, []);
+  const sessionReady = React.useSyncExternalStore(subscribeHydration, () => true, () => false);
   // Cookie session is visible on the client before hydration; keep the first
   // paint identical to SSR (logged-out chrome) to avoid a hard-refresh mismatch.
   const userName = !sessionReady || sessionPending
@@ -397,6 +404,40 @@ export function AppSidebar() {
     setLogoutOpen(false);
     openLogin({ notice: "已退出登录，你可以重新登录或注册" });
   };
+
+  React.useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const handleScroll = () => {
+      if (performance.now() < ignoreScrollUntilRef.current) return;
+      navScrollTopRef.current = nav.scrollTop;
+      setNavScrollTop(nav.scrollTop);
+    };
+    nav.addEventListener("scroll", handleScroll, { passive: true });
+    return () => nav.removeEventListener("scroll", handleScroll);
+  }, [setNavScrollTop]);
+
+  React.useLayoutEffect(() => {
+    const restorePosition = () => {
+      const nav = navRef.current;
+      if (nav && nav.scrollTop !== navScrollTopRef.current) {
+        nav.scrollTop = navScrollTopRef.current;
+      }
+    };
+
+    ignoreScrollUntilRef.current = performance.now() + 400;
+    restorePosition();
+    const frames = [
+      requestAnimationFrame(restorePosition),
+      requestAnimationFrame(() => requestAnimationFrame(restorePosition)),
+    ];
+    const timeout = window.setTimeout(restorePosition, 200);
+    return () => {
+      frames.forEach((frame) => cancelAnimationFrame(frame));
+      window.clearTimeout(timeout);
+    };
+  }, [pathname]);
 
   return (
     <aside
@@ -427,7 +468,10 @@ export function AppSidebar() {
         </button>
       </div>
 
-      <nav className="scrollbar-subtle mt-4 flex flex-1 flex-col gap-0.5 overflow-y-auto">
+      <nav
+        ref={navRef}
+        className="scrollbar-subtle mt-4 flex flex-1 flex-col gap-0.5 overflow-y-auto"
+      >
         {!collapsed && (
           <p className="shrink-0 px-3 pb-1.5 pt-2 text-[11px] font-medium tracking-wide text-faint">
             研究
@@ -443,7 +487,7 @@ export function AppSidebar() {
           subNav={AGENT_SUB_NAV}
           collapsed={collapsed}
         />
-        <SidebarChatHistory collapsed={collapsed} />
+        {pathname !== "/agents" && <SidebarChatHistory collapsed={collapsed} />}
         <ExpandableNav
           href="/knowledge"
           label="知识库"

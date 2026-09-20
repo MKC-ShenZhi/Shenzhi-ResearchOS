@@ -6,7 +6,7 @@ import { Network, Search } from "lucide-react";
 import { ScholarCard } from "./scholar-card";
 import { DirectionFilter } from "./direction-filter";
 import { useDebounce } from "@/hooks/use-debounce";
-import { scholars } from "@/lib/data/scholars";
+import { scholars } from "@/features/knowledge/data-scholars";
 import { cn } from "@/lib/utils";
 
 const SORTS = [

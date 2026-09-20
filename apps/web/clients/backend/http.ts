@@ -1,4 +1,4 @@
-import type { ApiEnvelope } from "../../types/ai-search";
+import type { ApiEnvelope } from "./types";
 
 /** 浏览器一律打同源 `/api/v1`，由 Next 微后端转发到 FastAPI（BUSINESS_BACKEND_URL） */
 export const API_PREFIX = "/api/v1";
@@ -64,6 +64,7 @@ export async function apiJson<T>(
 
   const res = await fetch(apiPath(path), { ...init, headers, signal: init.signal ?? AbortSignal.timeout(30000) });
   const requestId = res.headers.get("X-Request-ID");
+  if (res.status === 204) return undefined as T;
   let payload: unknown;
   try {
     payload = await res.json();

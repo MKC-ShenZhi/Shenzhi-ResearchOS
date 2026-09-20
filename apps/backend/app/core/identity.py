@@ -56,6 +56,14 @@ def request_identity(request: Request) -> RequestIdentity:
         raise BusinessError(10001, '请通过 Web 入口访问会话', 401) from None
 
 
+def require_user(request: Request) -> RequestIdentity:
+    """Require an authenticated Better Auth identity for user-owned data."""
+    identity = request_identity(request)
+    if identity.kind != 'user':
+        raise BusinessError(10001, '请登录后使用此功能', 401)
+    return identity
+
+
 def request_owner(request: Request) -> str:
     """Chat compatibility adapter; other modules may depend on request_identity directly."""
     identity = request_identity(request)
