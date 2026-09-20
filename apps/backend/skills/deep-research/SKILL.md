@@ -23,7 +23,7 @@ description: 论文深度研究总控（含检索、分层批读、全文精读�
 - `paper_search`：论文知识库检索（混合检索：精确 + 模糊 + 语义）。`limit` 最高 **100**——深度综述可请求大池子，不要靠小池子猜全貌。返回 `sparse`（本次返回少于所请求数量，需结合查询判断覆盖）。可按年份区间 / venue / keyword 过滤。
 - `paper_detail`：按 paper_id 核对元数据、补摘要、取 doi / pdf_url。检索行作者通常为空；要核实作者就调详情。
 - `citation_graph`：引用邻域，按 `backward`（它引的）/ `forward`（引它的）/ `topics` 分组。`citations_available:false` 表示该次结果没有 CITES 边——**对同一种子反复重试无意义**，改用 `paper_search` 追后续与批评工作。
-- `web_search`：开放网络检索（Tavily）。非学术事实起手就找它。
+- `web_search`：开放网络检索。非学术事实起手就找它；搜索渠道由工具处理，不依赖特定服务商。
 - `read_paper`：读 PDF 全文，返回带 `--- p.N ---` 页标记的文本；该页无 PDF 可达时退回网页正文（此时 `pdf:false`，属页面级证据）。
 - `fetch_url`：抓单个网页正文（去脚本/样式/导航）。
 - `draw_chart` / `image_search`：仅在当前工具清单中可见且确实需要配图时使用；二者都依赖已挂载的工作区。数字必须来自被引来源，图片渠道返回 `unavailable` 时不反复重试。
