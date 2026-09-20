@@ -1,6 +1,8 @@
-# Agent 产品（第三阶段迁移）
+# Agent Framework 与产品接入
 
-本目录描述 `integration/20260919` 当前已接入的 Agent 产品。Backend Agent 基座及 Web 产品来自 `feat/SZDR` 的选择性迁移；Deep Research Skill 与 legacy retrieval 尚未迁入。
+**Agent Framework migration completed.** `integration/20260919` 已完成从 `feat/SZDR` 到 ShenZhi 主工程的 Agent Runtime、消息与事件类型、Provider、Tool、Context / Compaction、Memory / Checkpoint、Skill framework、Workspace、基础 policy、prompt/template infrastructure、export、安全与网络辅助模块迁移，并接入 FastAPI Agent API 和 Web `/agents` 产品入口。这些能力现为 ShenZhi 可继续开发的正式基座。
+
+**Deep Research Skill not yet integrated.** 当前没有具体业务 Skill；这不影响 Skill framework 或普通 Agent 运行。`feat/SZDR` 的 Deep Research Skill、业务 prompt 与 legacy retrieval 不属于本次框架迁移内容。论文工具继续使用 Agent Tool → `KnowledgeService` → `integrations/knowledge`。
 
 ## 结构与调用边界
 
@@ -18,11 +20,11 @@ Skill 默认从 `apps/backend/skills/` 发现第一方 Skill，并可从 `skills
 
 模型使用现有 DashScope / DeepSeek 配置和 `AI_TIMEOUT_SEC`。新增的可选环境变量见 `apps/backend/.env.example`：`SKILLS_VENDOR`、`AGENT_DISABLE_THINKING`、`EXA_API_KEY`。`pyproject.toml` 只增加基座实际使用的 PyYAML、lxml、matplotlib 和 CLI 使用的 python-dotenv；Pillow 由 matplotlib 的锁定依赖提供。工作区默认位于 `apps/backend/workspace/`，作为运行时数据被 Git 忽略。
 
-## 当前边界
+## 已完成的产品接入与后续边界
 
 - `/agents` 是 Agent 主入口：`ShenzhiAiPage` 经 `clients/backend/agent.ts` 向 `/api/v1/agent/run` 发起 POST SSE，由 `AgentRuntime` 完成模型与工具循环。页面处理增量正文与 reasoning、工具调用和结果、插话、反问、压缩、警告及终态，并提供工作区上传、报告展示和导出。
 - Agent 会话阶段性保存在浏览器 `localStorage`（`shenzhi-agent-sessions`），包含轮次、过程、工具、插话、报告、来源、反问、用量和分叉信息。旧 Chat 仍使用 Backend/PostgreSQL 会话，但已退出 `/agents` 主入口；Agent durable Backend session 留待后续实现。
-- `apps/backend/skills/deep-research/` 与业务 prompt 尚未迁入。当前 `/agent/config` 可以返回 `skills: []`，普通 Agent 请求仍可使用基础工具。模板加载机制已迁入，但当前没有预置业务模板。
+- `apps/backend/skills/deep-research/` 与业务 prompt 尚未接入。当前 `/agent/config` 返回 `skills: []`，普通 Agent 请求仍可使用基础工具。模板加载机制已迁入，但当前没有预置业务模板。
 - legacy retrieval 未迁入；论文工具仍通过 `KnowledgeService → integrations/knowledge`。
 - 工作区文件使用本地文件系统；在无共享持久存储的多实例或 Serverless 环境中，跨实例读取和长期保留没有保证。运行中插话通道也只在当前进程有效。
 - 当前 Stop 使用浏览器流连接取消；Backend 尚无独立的 server-side cancel API。
