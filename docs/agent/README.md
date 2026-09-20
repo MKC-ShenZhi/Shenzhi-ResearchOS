@@ -8,7 +8,7 @@
 
 `apps/backend/app/services/agent/` 保留现有 Runtime 实现：`runtime.py` 执行模型与工具循环，`types.py` 定义消息、事件和运行结果，`provider.py` 提供 OpenAI 兼容流式模型调用，`tools.py` 负责注册、参数校验和执行。`context.py`、`compaction.py`、`memory.py` 管理上下文和 checkpoint；`skills.py` 管理 Skill 发现、读取和工具加载；`prompt_templates.py` 提供独立的模板加载和参数展开机制。`workspace.py`、`ask_user.py`、`netguard.py`、`json_repair.py`、`export.py` 是配套能力。
 
-`service.py` 是应用组合根，按请求组装 Runtime，并通过适配工具复用现有 `KnowledgeService`、`web_search`、`document_parser` 和 Chat 附件仓库。论文检索工具调用路径为 Agent Tool → `KnowledgeService` → `integrations/knowledge`；没有旧 `/search/explore` 或 `services/retrieval.py` 链路。`read_paper` 与 `fetch_url` 随 Runtime 注册，图表和图片工具在有工作区时注册；外部搜索未配置时由工具返回明确错误。没有业务 Skill、工作区或可选搜索服务时，Runtime 仍可初始化。
+`service.py` 是应用组合根，按请求组装 Runtime，并通过适配工具复用现有 `KnowledgeService`、`integrations/web_search/provider.py`、`services/chat/attachments.py` 和 Chat 附件仓库。论文检索工具调用路径为 Agent Tool → `KnowledgeService` → `integrations/knowledge`；没有旧 `/search/explore` 或 `services/retrieval.py` 链路。`read_paper` 与 `fetch_url` 随 Runtime 注册，图表和图片工具在有工作区时注册；外部搜索未配置时由工具返回明确错误。没有业务 Skill、工作区或可选搜索服务时，Runtime 仍可初始化。
 
 ## HTTP 接入
 

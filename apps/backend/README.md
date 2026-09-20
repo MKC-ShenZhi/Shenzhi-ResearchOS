@@ -41,7 +41,14 @@ Knowledge Base 是外部 Research Capability。FastAPI 后端统一通过
 `app/integrations/knowledge/` 接入，调用链固定为：
 
 ```text
-FastAPI API → app/services/knowledge.py → app/integrations/knowledge → 上游知识底座科研组 API
+FastAPI API → app/services/knowledge/service.py → app/integrations/knowledge → 上游知识底座科研组 API
+```
+
+Chat 调用链：
+
+```text
+api/chat.py → services/chat/service.py → services/chat/{repository,attachments,grounding,...}
+→ integrations/{llm,web_search} → 外部 Provider
 ```
 
 当前只承诺三条 ShenZhi-owned Capability API：

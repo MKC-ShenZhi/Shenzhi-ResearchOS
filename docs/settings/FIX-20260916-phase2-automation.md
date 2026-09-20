@@ -119,7 +119,7 @@ Backend 报错：`ConnectionRefusedError: [WinError 1225] 远程计算机拒绝�
 
 ### 4.1 产品代码（需合入）
 
-**`apps/backend/app/services/postgres_sessions.py`**
+**`apps/backend/app/services/chat/postgres_repository.py`**
 
 - 在 `persist_message` 的非 streaming 终态分支中，持久化 `message.warnings`。
 - **影响：** 启用 PG 后，Chat 流式过程中追加的 warnings（含知识库引用校验提示）在消息完成后可从数据库正确读回；阶段二 Profile 不直接依赖此字段，但 PG 模式下 Knowledge 集成测试与 Chat 行为一致。

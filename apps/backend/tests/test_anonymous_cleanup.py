@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
-from app.services import anonymous_cleanup
+from app.services.chat import maintenance as anonymous_cleanup
 
 
 class AnonymousCleanupTests(unittest.IsolatedAsyncioTestCase):

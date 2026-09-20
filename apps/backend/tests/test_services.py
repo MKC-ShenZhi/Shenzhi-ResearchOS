@@ -10,10 +10,11 @@ from app.core.config import ModelConfig
 from app.core.errors import BusinessError
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.schemas.chat import ChatAttachment
-from app.services.document_parser import parse_document, attachment_context
-from app.services.model_provider import ModelProvider, completion_payload, resolve_model
-from app.services.sessions import MemorySessionRepository
-from app.services.web_search import web_search
+from app.services.uploads.parser import parse_document
+from app.services.chat.attachments import attachment_context
+from app.integrations.llm.provider import ModelProvider, completion_payload, resolve_model
+from app.services.chat.repository import MemorySessionRepository
+from app.integrations.web_search.provider import web_search
 
 CONFIG = ModelConfig('test-key', 'https://model.test/v1', 'deepseek-chat', ('deepseek-chat', 'deepseek-reasoner'), 'deepseek')
 
@@ -158,7 +159,7 @@ class P2ObservabilityTests(unittest.IsolatedAsyncioTestCase):
         def record(_logger, _level, event, fields):
             records.append((event, fields))
 
-        with patch('app.services.model_provider.log_event', side_effect=record):
+        with patch('app.integrations.llm.provider.log_event', side_effect=record):
             provider = ModelProvider(
                 CONFIG,
                 httpx.MockTransport(lambda request: httpx.Response(200, text='data: [DONE]\n\n')),
@@ -189,7 +190,7 @@ class P2ObservabilityTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200, json={'results': [{'title': 'Result', 'url': 'https://example.test'}]})
 
         with patch.dict('os.environ', {'TAVILY_API_KEY': 'test', 'SEARXNG_BASE_URL': 'https://search.test'}), \
-             patch('app.services.web_search.log_event', side_effect=record):
+             patch('app.integrations.web_search.provider.log_event', side_effect=record):
             items, _warnings = await web_search('q', transport=httpx.MockTransport(handler))
 
         self.assertEqual(len(items), 1)

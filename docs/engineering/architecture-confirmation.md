@@ -70,11 +70,14 @@ shenzhi/
 │   │
 │   └── backend/                 # FastAPI 核心业务后端
 │       ├── app/
-│       │   ├── api/             # API 路由与请求边界
+│       │   ├── api/             # API 路由与请求边界；_support/ 放 HTTP transport helper
 │       │   ├── schemas/         # 输入输出 Schema
-│       │   ├── services/        # 核心业务逻辑
+│       │   ├── services/        # 按 chat、knowledge、uploads、user、library 等领域组织业务逻辑
 │       │   ├── integrations/    # 外部服务与科研能力接入边界
-│       │   │   └── knowledge/   # Knowledge Base Research Capability
+│       │   │   ├── knowledge/   # Knowledge Base Research Capability
+│       │   │   ├── llm/         # 外部模型 Provider
+│       │   │   ├── web_search/  # 外部搜索 Provider
+│       │   │   └── paper_resource/ # 外部 PDF 资源 Provider
 │       │   ├── core/            # 配置、身份、错误等基础能力
 │       │   └── main.py          # FastAPI 应用入口
 │       ├── tests/

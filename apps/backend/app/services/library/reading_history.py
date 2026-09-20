@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.core.database import session_scope
 from app.models.reading_history import ReadingHistoryRow
 from app.schemas.history import ReadingHistoryItem, ReadingHistoryResponse
-from app.services.knowledge import KnowledgeService, KnowledgeServiceError
+from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 
 
 class ReadingHistoryService:

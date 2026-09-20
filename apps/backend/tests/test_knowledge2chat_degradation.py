@@ -6,9 +6,9 @@ from unittest.mock import patch
 
 from app.schemas.chat import CreateSessionBody
 from app.schemas.knowledge import KnowledgeError, KnowledgeSearchResponse, PaperSearchResult, Provenance
-from app.services import chat
-from app.services.knowledge import KnowledgeServiceError
-from app.services.sessions import repository
+from app.services.chat import service as chat
+from app.services.knowledge.service import KnowledgeServiceError
+from app.services.chat.repository import repository
 
 
 OWNER_KEY = "anon:00000000-0000-4000-8000-000000000101"

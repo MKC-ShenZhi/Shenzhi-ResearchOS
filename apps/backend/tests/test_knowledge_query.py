@@ -2,7 +2,7 @@
 
 import unittest
 
-from app.services.knowledge_query import normalize_knowledge_query
+from app.services.chat.knowledge_query import normalize_knowledge_query
 
 
 class KnowledgeQueryNormalizerTests(unittest.TestCase):

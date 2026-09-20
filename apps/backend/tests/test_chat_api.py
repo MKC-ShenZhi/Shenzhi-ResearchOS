@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from app.main import app
 from app.schemas.knowledge import KnowledgeSearchResponse, PaperSearchResult, Provenance
-from app.services import chat
-from app.services.sessions import repository
+from app.services.chat import service as chat
+from app.services.chat.repository import repository
 
 OWNER = {'x-shenzhi-anonymous-id': '00000000-0000-4000-8000-000000000001'}
 OTHER = {'x-shenzhi-anonymous-id': '00000000-0000-4000-8000-000000000002'}

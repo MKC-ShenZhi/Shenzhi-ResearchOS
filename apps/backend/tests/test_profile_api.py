@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.schemas.profile import UserProfileResponse
-from app.services.profile import AVATAR_KEYS, default_avatar_key
+from app.services.user.profile import AVATAR_KEYS, default_avatar_key
 
 
 def profile_response() -> UserProfileResponse:

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.account_deletion import BusinessDataDeletionResult
+from app.services.user.account_deletion import BusinessDataDeletionResult
 
 
 class AccountDeletionApiTests(unittest.TestCase):

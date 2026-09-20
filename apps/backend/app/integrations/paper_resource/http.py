@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 
 import httpx
 
-from app.services.paper_resource.providers.base import (
+from app.integrations.paper_resource.base import (
     PDFProvider,
     ProviderFetch,
     ProviderValidation,

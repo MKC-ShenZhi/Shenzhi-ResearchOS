@@ -10,8 +10,8 @@ from sqlalchemy import select
 from app.core.errors import BusinessError
 from app.core.database import session_scope
 from app.models.chat import ChatMessageRow, ChatSessionRow
-from app.services.postgres_sessions import PostgresSessionRepository
-from app.services.sessions import MemorySessionRepository
+from app.services.chat.postgres_repository import PostgresSessionRepository
+from app.services.chat.repository import MemorySessionRepository
 
 
 @unittest.skipUnless(os.getenv('CHAT_DATABASE_URL'), 'CHAT_DATABASE_URL not set')

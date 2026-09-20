@@ -13,7 +13,7 @@ Next.js /api/v1/*（BFF）
   ↓ server-side forwarding + Better Auth/BFF credential
 FastAPI /api/v1/knowledge/*
   ↓
-services/knowledge.py
+services/knowledge/service.py
   ↓
 integrations/knowledge（client / schemas / adapter / exceptions）
   ↓
@@ -43,8 +43,9 @@ External Knowledge Base
 |---|---|
 | `apps/backend/app/api/knowledge.py` | `/api/v1/knowledge/*` HTTP 边界、鉴权和错误状态 |
 | `apps/backend/app/api/paper_resource.py` | 仅按可信 `paperId` 提供同源 PDF Range 字节流 |
-| `apps/backend/app/services/knowledge.py` | Knowledge 业务服务边界 |
-| `apps/backend/app/services/paper_resource/` | PDF Provider 选择、OpenReview URL 适配及 HTTP 轻量校验 |
+| `apps/backend/app/services/knowledge/service.py` | Knowledge 业务服务边界 |
+| `apps/backend/app/services/paper_resource/service.py` | PDF Provider 选择与资源用例编排 |
+| `apps/backend/app/integrations/paper_resource/` | OpenReview URL 适配及外部 HTTP 校验与读取 |
 | `apps/backend/app/schemas/paper_resource.py` | 浏览器可消费的 PDF 资源状态契约 |
 | `apps/backend/app/integrations/knowledge/client.py` | 外部 HTTP、timeout 和外部异常映射 |
 | `apps/backend/app/integrations/knowledge/schemas.py` | 外部 Knowledge Base transport schema |

@@ -8,14 +8,14 @@ import httpx
 
 from app.core.config import paper_resource_config
 from app.schemas.paper_resource import PaperResource
-from app.services.paper_resource.providers.base import (
+from app.integrations.paper_resource.base import (
     PDFProvider,
     ProviderFetch,
     ProviderValidation,
     normalize_public_http_url,
 )
-from app.services.paper_resource.providers.http import HTTPProvider
-from app.services.paper_resource.providers.openreview import OpenReviewProvider
+from app.integrations.paper_resource.http import HTTPProvider
+from app.integrations.paper_resource.openreview import OpenReviewProvider
 
 
 class PaperResourceService:

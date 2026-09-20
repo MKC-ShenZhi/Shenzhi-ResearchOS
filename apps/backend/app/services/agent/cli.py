@@ -28,7 +28,7 @@ from app.services.agent.skills import sync_loaded_skill_scripts
 from app.services.agent.tools import Tool
 from app.services.agent.types import DELTA, MESSAGE, TOOL_CALL, TOOL_END
 from app.services.agent.workspace import Workspace, build_workspace_tools
-from app.services.knowledge import KnowledgeService
+from app.services.knowledge.service import KnowledgeService
 
 BANNER = """
 \033[1mShenzhiAi\033[0m · 深知科研终端智能体（Agent 基座薄 CLI）

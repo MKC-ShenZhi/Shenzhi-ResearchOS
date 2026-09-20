@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request
 from app.core.errors import BusinessError
 from app.core.identity import request_identity
 from app.core.responses import ok
-from app.services.account_deletion import AccountDeletionService
+from app.services.user.account_deletion import AccountDeletionService
 
 router = APIRouter(prefix='/api/v1/account-deletion', tags=['account-deletion'])
 service = AccountDeletionService()
