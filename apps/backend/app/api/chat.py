@@ -6,8 +6,8 @@ from app.core.identity import MigrationIdentity, migration_identity, request_own
 from app.core.request_context import get_request_id
 from app.core.responses import ok
 from app.schemas.chat import AnonymousClaimResult, CreateSessionBody, FollowupBody, UpdateSessionBody
-from app.services.chat import prepare_message, stop_message, stream_events
-from app.services.sessions import repository
+from app.services.chat.service import prepare_message, stop_message, stream_events
+from app.services.chat.repository import repository
 
 router = APIRouter(prefix='/api/v1/chat', tags=['chat'])
 

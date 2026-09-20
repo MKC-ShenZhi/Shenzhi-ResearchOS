@@ -15,7 +15,7 @@ from app.schemas.collections import (
     CollectionPaperListResponse,
     FolderListResponse,
 )
-from app.services.knowledge import KnowledgeService
+from app.services.knowledge.service import KnowledgeService
 
 DEFAULT_FOLDERS = ('想读', '在读', '已读')
 

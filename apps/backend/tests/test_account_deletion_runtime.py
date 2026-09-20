@@ -3,7 +3,7 @@
 import asyncio
 import unittest
 
-from app.services.sessions import MemorySessionRepository
+from app.services.chat.repository import MemorySessionRepository
 
 
 class AccountDeletionRuntimeTests(unittest.IsolatedAsyncioTestCase):

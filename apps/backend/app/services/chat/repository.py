@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Protocol
 
 from app.core.errors import BusinessError
-from app.services.session_entities import Message, Session
+from app.services.chat.entities import Message, Session
 
 __all__ = ['Message', 'Session', 'SessionRepository', 'MemorySessionRepository',
            'build_repository', 'repository']
@@ -208,7 +208,7 @@ class MemorySessionRepository:
 
 def build_repository() -> SessionRepository:
     if os.getenv('CHAT_DATABASE_URL', '').strip():
-        from app.services.postgres_sessions import PostgresSessionRepository
+        from app.services.chat.postgres_repository import PostgresSessionRepository
         return PostgresSessionRepository()
     return MemorySessionRepository()
 

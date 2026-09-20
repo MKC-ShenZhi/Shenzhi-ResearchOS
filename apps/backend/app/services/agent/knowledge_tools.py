@@ -26,8 +26,8 @@ from pydantic import BaseModel
 from app.core.errors import BusinessError
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.services.agent.tools import Tool, tool
-from app.services.knowledge import KnowledgeService, KnowledgeServiceError
-from app.services.knowledge_query import normalize_knowledge_query
+from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
+from app.services.chat.knowledge_query import normalize_knowledge_query
 from app.schemas.knowledge import KnowledgeSearchRequest
 
 ABSTRACT_CHARS = 800

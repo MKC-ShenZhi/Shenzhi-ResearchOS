@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.identity import RequestIdentity, require_user
 from app.core.responses import ok
-from app.services.reading_history import ReadingHistoryService
+from app.services.library.reading_history import ReadingHistoryService
 
 
 router = APIRouter(tags=['history'])

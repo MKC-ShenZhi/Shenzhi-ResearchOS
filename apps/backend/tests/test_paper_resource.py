@@ -4,7 +4,7 @@ from unittest.mock import patch
 import httpx
 
 from app.core.config import paper_resource_config
-from app.services.paper_resource.providers.base import PDFProvider, ProviderValidation
+from app.integrations.paper_resource.base import PDFProvider, ProviderValidation
 from app.services.paper_resource.service import PaperResourceService
 
 

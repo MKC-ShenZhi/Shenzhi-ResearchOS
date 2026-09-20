@@ -11,7 +11,7 @@ from app.models.collections import CollectionFolderRow, CollectionItemRow, Colle
 from app.models.profile import UserProfileRow
 from app.models.reading_history import ReadingHistoryRow
 from app.models.settings import UserSettingsRow
-from app.services.account_deletion import AccountDeletionService
+from app.services.user.account_deletion import AccountDeletionService
 
 
 @unittest.skipUnless(os.getenv('CHAT_DATABASE_URL'), 'CHAT_DATABASE_URL not set')
