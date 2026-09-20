@@ -14,7 +14,8 @@ from app.core.logging import log_exception
 from app.core.request_context import get_request_id
 from app.core.responses import ok
 from app.schemas.knowledge import KnowledgeError, KnowledgeSearchRequest
-from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError,PaperBatchRequest
+from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
+from app.schemas.knowledge import PaperBatchRequest
 
 
 router = APIRouter(prefix='/api/v1/knowledge', tags=['knowledge'])
