@@ -1,11 +1,10 @@
 import { AppShell } from "@/components/common/layout/app-shell";
 import { RelatedPaperSearch } from "@/features/knowledge/components/related-paper-search";
 
-/** 项目、专利与基金当前按上游真实 funding query 能力统一检索关联论文。 */
-export function FundingPage() {
+export function TopicsPage() {
   return (
     <AppShell>
-      <RelatedPaperSearch kind="funding" />
+      <RelatedPaperSearch kind="subject" />
     </AppShell>
   );
 }
