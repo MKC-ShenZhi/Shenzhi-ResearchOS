@@ -7,6 +7,9 @@ import type {
   KnowledgeGraph,
   KnowledgeGraphDepth,
   KnowledgePaperDetail,
+  KnowledgeScholarDetail,
+  KnowledgeScholarSearchParams,
+  KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
 } from "./types";
@@ -90,6 +93,55 @@ export class BffKnowledgeClient implements KnowledgeClient {
     try {
       return await apiJson<KnowledgePaperDetail>(
         `/knowledge/paper?paperId=${encodeURIComponent(paperId)}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchScholars(
+    params: KnowledgeScholarSearchParams,
+  ): Promise<KnowledgeScholarSearchResponse> {
+    const query = new URLSearchParams({
+      q: params.query,
+      limit: String(params.limit ?? 20),
+      offset: String(params.offset ?? 0),
+    });
+    try {
+      return await apiJson<KnowledgeScholarSearchResponse>(
+        `/knowledge/scholars/search?${query.toString()}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async scholar(scholarId: string): Promise<KnowledgeScholarDetail> {
+    try {
+      return await apiJson<KnowledgeScholarDetail>(
+        `/knowledge/scholars/${encodeURIComponent(scholarId)}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchBySubject(subject: string, topK = 10): Promise<KnowledgeSearchResponse> {
+    const query = new URLSearchParams({ subject, topK: String(topK) });
+    try {
+      return await apiJson<KnowledgeSearchResponse>(
+        `/knowledge/subjects/search?${query.toString()}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchByFunding(funding: string, topK = 10): Promise<KnowledgeSearchResponse> {
+    const query = new URLSearchParams({ funding, topK: String(topK) });
+    try {
+      return await apiJson<KnowledgeSearchResponse>(
+        `/knowledge/funding/search?${query.toString()}`,
       );
     } catch (error) {
       throw toKnowledgeError(error);

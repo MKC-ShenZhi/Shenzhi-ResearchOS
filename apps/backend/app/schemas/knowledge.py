@@ -132,6 +132,83 @@ class KnowledgeSearchResponse(KnowledgeModel):
     has_more: bool = Field(default=False, serialization_alias='hasMore')
 
 
+class ScholarSearchRequest(KnowledgeModel):
+    query: str = Field(min_length=1, max_length=200)
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+    @field_validator('query')
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError('query must not be blank')
+        return value
+
+
+class RelatedPaperSearchRequest(KnowledgeModel):
+    query: str = Field(min_length=1, max_length=500)
+    top_k: int = Field(
+        default=10,
+        ge=1,
+        le=20,
+        validation_alias=AliasChoices('topK', 'top_k'),
+        serialization_alias='topK',
+    )
+
+    @field_validator('query')
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError('query must not be blank')
+        return value
+
+
+class ScholarSummary(KnowledgeModel):
+    id: str
+    name: str
+    paper_count: int = Field(
+        ge=0,
+        validation_alias=AliasChoices('paperCount', 'paper_count'),
+        serialization_alias='paperCount',
+    )
+    provenance: Provenance
+
+
+class ScholarSearchResponse(KnowledgeModel):
+    results: list[ScholarSummary] = Field(default_factory=list)
+
+
+class ScholarReference(KnowledgeModel):
+    id: str
+    name: str
+
+
+class ScholarPaper(KnowledgeModel):
+    id: str
+    title: str
+    year: int | None = None
+
+
+class ScholarDetail(KnowledgeModel):
+    id: str
+    name: str
+    paper_count: int = Field(
+        ge=0,
+        validation_alias=AliasChoices('paperCount', 'paper_count'),
+        serialization_alias='paperCount',
+    )
+    years: list[int] = Field(default_factory=list)
+    conferences: list[str] = Field(default_factory=list)
+    topics: list[str] = Field(default_factory=list)
+    funding: list[str] = Field(default_factory=list)
+    institutions: list[str] = Field(default_factory=list)
+    coauthors: list[ScholarReference] = Field(default_factory=list)
+    papers: list[ScholarPaper] = Field(default_factory=list)
+    provenance: Provenance
+
+
 class PaperDetail(KnowledgeModel):
     id: str
     title: str

@@ -13,7 +13,12 @@ from app.core.identity import require_bff
 from app.core.logging import log_exception
 from app.core.request_context import get_request_id
 from app.core.responses import ok
-from app.schemas.knowledge import KnowledgeError, KnowledgeSearchRequest
+from app.schemas.knowledge import (
+    KnowledgeError,
+    KnowledgeSearchRequest,
+    RelatedPaperSearchRequest,
+    ScholarSearchRequest,
+)
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 from app.schemas.knowledge import PaperBatchRequest
 
@@ -90,6 +95,103 @@ async def search(
 
     try:
         response = await service.search(search_request)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/scholars/search')
+async def search_scholars(
+    request: Request,
+    q: str | None = Query(default=None),
+    limit: str = Query(default='20'),
+    offset: str = Query(default='0'),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        search_request = ScholarSearchRequest.model_validate({
+            'query': q,
+            'limit': int(limit),
+            'offset': int(offset),
+        })
+    except (ValidationError, TypeError, ValueError):
+        return invalid_argument(request, '学者检索参数不合法')
+
+    try:
+        response = await service.search_scholars(search_request)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/scholars/{scholar_id}')
+async def scholar(
+    scholar_id: str,
+    request: Request,
+    _credential: None = Depends(require_bff),
+):
+    if not scholar_id.strip():
+        return invalid_argument(request, 'scholarId 不能为空')
+    try:
+        response = await service.get_scholar(scholar_id)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+def _related_search_request(
+    value: str | None, top_k: str
+) -> RelatedPaperSearchRequest | None:
+    try:
+        return RelatedPaperSearchRequest.model_validate({
+            'query': value,
+            'topK': int(top_k),
+        })
+    except (ValidationError, TypeError, ValueError):
+        return None
+
+
+@router.get('/subjects/search')
+async def search_by_subject(
+    request: Request,
+    subject: str | None = Query(default=None),
+    top_k: str = Query(default='10', alias='topK'),
+    _credential: None = Depends(require_bff),
+):
+    search_request = _related_search_request(subject, top_k)
+    if search_request is None:
+        return invalid_argument(request, '主题检索参数不合法')
+    try:
+        response = await service.search_by_subject(
+            search_request.query, top_k=search_request.top_k
+        )
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/funding/search')
+async def search_by_funding(
+    request: Request,
+    funding: str | None = Query(default=None),
+    top_k: str = Query(default='10', alias='topK'),
+    _credential: None = Depends(require_bff),
+):
+    search_request = _related_search_request(funding, top_k)
+    if search_request is None:
+        return invalid_argument(request, '项目、专利或基金检索参数不合法')
+    try:
+        response = await service.search_by_funding(
+            search_request.query, top_k=search_request.top_k
+        )
     except KnowledgeServiceError as error:
         return _error_payload(error, request)
     except Exception as error:

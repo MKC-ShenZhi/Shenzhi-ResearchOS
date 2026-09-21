@@ -35,6 +35,44 @@ export interface KnowledgeSearchResponse {
   hasMore?: boolean;
 }
 
+export interface KnowledgeScholarSearchParams {
+  query: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface KnowledgeScholarSummary {
+  id: string;
+  name: string;
+  paperCount: number;
+  provenance: unknown;
+}
+
+export interface KnowledgeScholarSearchResponse {
+  results: KnowledgeScholarSummary[];
+}
+
+export interface KnowledgeScholarReference {
+  id: string;
+  name: string;
+}
+
+export interface KnowledgeScholarPaper {
+  id: string;
+  title: string;
+  year: number | null;
+}
+
+export interface KnowledgeScholarDetail extends KnowledgeScholarSummary {
+  years: number[];
+  conferences: string[];
+  topics: string[];
+  funding: string[];
+  institutions: string[];
+  coauthors: KnowledgeScholarReference[];
+  papers: KnowledgeScholarPaper[];
+}
+
 /** 搜索结果单条（论文） */
 export interface KnowledgePaperHit {
   id: string;

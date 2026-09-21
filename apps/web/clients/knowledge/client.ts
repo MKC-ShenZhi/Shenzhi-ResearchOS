@@ -6,6 +6,9 @@ import type {
   KnowledgeGraphDepth,
   KnowledgeGraph,
   KnowledgePaperDetail,
+  KnowledgeScholarDetail,
+  KnowledgeScholarSearchParams,
+  KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
 } from "./types";
@@ -22,6 +25,14 @@ export interface KnowledgeClient {
   search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse>;
   /** 论文详情；id 作为 opaque string 使用 */
   paper(paperId: string): Promise<KnowledgePaperDetail>;
+  /** 按姓名搜索学者；无匹配返回空 results */
+  searchScholars(params: KnowledgeScholarSearchParams): Promise<KnowledgeScholarSearchResponse>;
+  /** 学者详情；id 作为 opaque string 使用 */
+  scholar(scholarId: string): Promise<KnowledgeScholarDetail>;
+  /** 按研究主题获取关联论文 */
+  searchBySubject(subject: string, topK?: number): Promise<KnowledgeSearchResponse>;
+  /** 按项目、专利或基金文本获取关联论文 */
+  searchByFunding(funding: string, topK?: number): Promise<KnowledgeSearchResponse>;
   /** 论文关系图谱；默认 depth=1 */
   graph(paperId: string, depth?: KnowledgeGraphDepth): Promise<KnowledgeGraph>;
 }

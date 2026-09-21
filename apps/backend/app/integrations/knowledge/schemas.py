@@ -41,6 +41,41 @@ class UpstreamSearchResponse(TypedDict):
     query_rewrite: NotRequired[dict[str, Any]]
 
 
+class UpstreamScholarSearchResult(TypedDict):
+    scholar_id: str
+    name: str
+    paper_count: int | str
+
+
+class UpstreamScholarSearchResponse(TypedDict):
+    results: list[UpstreamScholarSearchResult]
+    query: NotRequired[str]
+
+
+class UpstreamScholarReference(TypedDict):
+    scholar_id: str
+    name: str
+
+
+class UpstreamScholarPaper(TypedDict):
+    paper_id: str
+    title: str
+    year: NotRequired[int | str | None]
+
+
+class UpstreamScholarResponse(TypedDict):
+    scholar_id: str
+    name: str
+    paper_count: int | str
+    years: NotRequired[list[int | str] | None]
+    conferences: NotRequired[list[str] | None]
+    topics: NotRequired[list[str] | None]
+    funding: NotRequired[list[str] | None]
+    institutions: NotRequired[list[str] | None]
+    coauthors: NotRequired[list[UpstreamScholarReference] | None]
+    papers: NotRequired[list[UpstreamScholarPaper] | None]
+
+
 class UpstreamPaperResponse(TypedDict):
     paper_id: str
     title: str

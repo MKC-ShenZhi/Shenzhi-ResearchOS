@@ -22,6 +22,12 @@ from app.schemas.knowledge import (
     PaperGraph,
     PaperSearchResult,
     Provenance,
+    ScholarDetail,
+    ScholarPaper,
+    ScholarReference,
+    ScholarSearchRequest,
+    ScholarSearchResponse,
+    ScholarSummary,
 )
 
 
@@ -98,6 +104,27 @@ def _optional_int(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise KnowledgeIntegrationError.contract_violation()
     return value
+
+
+def _required_int(item: dict[str, Any], key: str) -> int:
+    value = _optional_int(item.get(key))
+    if value is None:
+        raise KnowledgeIntegrationError.contract_violation()
+    return value
+
+
+def _int_list(value: Any) -> list[int]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise KnowledgeIntegrationError.contract_violation()
+    result: list[int] = []
+    for item in value:
+        parsed = _optional_int(item)
+        if parsed is None:
+            raise KnowledgeIntegrationError.contract_violation()
+        result.append(parsed)
+    return result
 
 
 def _optional_number(value: Any) -> float | None:
@@ -200,6 +227,68 @@ def map_search_result(
         score=_optional_number(item.get('score')),
         rank=_optional_int(item.get('rank')),
         provenance=_provenance(paper_id, retrieved_at),
+    ))
+
+
+def map_scholar_summary(
+    item: dict[str, Any], *, retrieved_at: datetime | None = None
+) -> ScholarSummary:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    scholar_id = _required_string(item, 'scholar_id')
+    return _contract_model(lambda: ScholarSummary(
+        id=scholar_id,
+        name=_required_string(item, 'name'),
+        paper_count=_required_int(item, 'paper_count'),
+        provenance=_provenance(scholar_id, retrieved_at),
+    ))
+
+
+def _scholar_reference(item: dict[str, Any]) -> ScholarReference:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    return _contract_model(lambda: ScholarReference(
+        id=_required_string(item, 'scholar_id'),
+        name=_required_string(item, 'name'),
+    ))
+
+
+def _scholar_paper(item: dict[str, Any]) -> ScholarPaper:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    return _contract_model(lambda: ScholarPaper(
+        id=_required_string(item, 'paper_id'),
+        title=_required_string(item, 'title'),
+        year=_optional_int(item.get('year')),
+    ))
+
+
+def _object_list(value: Any, mapper: Callable[[dict[str, Any]], Any]) -> list[Any]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise KnowledgeIntegrationError.contract_violation()
+    return [mapper(item) for item in value]
+
+
+def map_scholar_detail(
+    item: dict[str, Any], *, retrieved_at: datetime | None = None
+) -> ScholarDetail:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    scholar_id = _required_string(item, 'scholar_id')
+    return _contract_model(lambda: ScholarDetail(
+        id=scholar_id,
+        name=_required_string(item, 'name'),
+        paper_count=_required_int(item, 'paper_count'),
+        years=_int_list(item.get('years')),
+        conferences=_string_list(item.get('conferences')),
+        topics=_string_list(item.get('topics')),
+        funding=_string_list(item.get('funding')),
+        institutions=_string_list(item.get('institutions')),
+        coauthors=_object_list(item.get('coauthors'), _scholar_reference),
+        papers=_object_list(item.get('papers'), _scholar_paper),
+        provenance=_provenance(scholar_id, retrieved_at),
     ))
 
 
@@ -327,7 +416,7 @@ def map_graph(
 
 
 class KnowledgeAdapter:
-    """Translate the three upstream calls into the ShenZhi domain contract."""
+    """Translate upstream Knowledge calls into the ShenZhi domain contract."""
 
     def __init__(self, client: Any | None = None):
         self.client = client or KnowledgeBaseClient()
@@ -356,6 +445,49 @@ class KnowledgeAdapter:
             results=mapped[request.offset:page_end],
             has_more=len(mapped) > page_end,
         )
+
+    async def search_scholars(
+        self, request: ScholarSearchRequest
+    ) -> ScholarSearchResponse:
+        body = await self.client.search_scholars(
+            request.query, limit=request.limit, offset=request.offset
+        )
+        results = body.get('results') if isinstance(body, dict) else None
+        if not isinstance(results, list):
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        return ScholarSearchResponse(results=[
+            map_scholar_summary(item, retrieved_at=retrieved_at) for item in results
+        ])
+
+    async def scholar(self, scholar_id: str) -> ScholarDetail:
+        body = await self.client.scholar(scholar_id)
+        detail = map_scholar_detail(body, retrieved_at=datetime.now(timezone.utc))
+        if detail.id != scholar_id:
+            raise KnowledgeIntegrationError.contract_violation()
+        return detail
+
+    async def search_by_subject(
+        self, subject: str, *, top_k: int = 10
+    ) -> KnowledgeSearchResponse:
+        body = await self.client.search_by_subject(subject, top_k=top_k)
+        return self._map_related_papers(body)
+
+    async def search_by_funding(
+        self, funding: str, *, top_k: int = 10
+    ) -> KnowledgeSearchResponse:
+        body = await self.client.search_by_funding(funding, top_k=top_k)
+        return self._map_related_papers(body)
+
+    @staticmethod
+    def _map_related_papers(body: Any) -> KnowledgeSearchResponse:
+        results = body.get('results') if isinstance(body, dict) else None
+        if not isinstance(results, list):
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        return KnowledgeSearchResponse(results=[
+            map_search_result(item, retrieved_at=retrieved_at) for item in results
+        ])
 
     async def paper(self, paper_id: str) -> PaperDetail:
         body = await self.client.paper(paper_id)

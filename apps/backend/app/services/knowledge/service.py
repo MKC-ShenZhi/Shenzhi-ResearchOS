@@ -11,6 +11,9 @@ from app.schemas.knowledge import (
     PaperDetail,
     PaperSummary,
     PaperGraph,
+    ScholarDetail,
+    ScholarSearchRequest,
+    ScholarSearchResponse,
 )
 
 
@@ -53,6 +56,36 @@ class KnowledgeService:
     async def search(self, request: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
         try:
             return await self.adapter.search(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_scholars(
+        self, request: ScholarSearchRequest
+    ) -> ScholarSearchResponse:
+        try:
+            return await self.adapter.search_scholars(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def get_scholar(self, scholar_id: str) -> ScholarDetail:
+        try:
+            return await self.adapter.scholar(scholar_id)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_by_subject(
+        self, subject: str, *, top_k: int = 10
+    ) -> KnowledgeSearchResponse:
+        try:
+            return await self.adapter.search_by_subject(subject, top_k=top_k)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_by_funding(
+        self, funding: str, *, top_k: int = 10
+    ) -> KnowledgeSearchResponse:
+        try:
+            return await self.adapter.search_by_funding(funding, top_k=top_k)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 

@@ -10,9 +10,30 @@ import type {
   KnowledgeGraph,
   KnowledgePaperDetail,
   KnowledgePaperHit,
+  KnowledgeScholarDetail,
+  KnowledgeScholarSearchParams,
+  KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
 } from "./types";
+
+const MOCK_SCHOLAR: KnowledgeScholarDetail = {
+  id: "author:mock:geoffrey-hinton",
+  name: "Geoffrey Hinton",
+  paperCount: 2,
+  years: [2021, 2022],
+  conferences: ["NeurIPS 2021", "NeurIPS 2022"],
+  topics: ["neural networks", "interpretable machine learning"],
+  funding: [],
+  institutions: [],
+  coauthors: [],
+  papers: MOCK_PAPERS.slice(0, 2).map((paper) => ({
+    id: paper.id,
+    title: paper.title,
+    year: paper.year,
+  })),
+  provenance: { source: "mock" },
+};
 
 /** Mock 可模拟的行为状态 */
 export type MockScenario =
@@ -115,6 +136,51 @@ export class MockKnowledgeClient implements KnowledgeClient {
     const detail = mockPaperDetail(paperId);
     if (!detail) throw KnowledgeClientError.notFound();
     return detail;
+  }
+
+  async searchScholars(
+    params: KnowledgeScholarSearchParams,
+  ): Promise<KnowledgeScholarSearchResponse> {
+    await this.wait();
+    const scenario = this.throwIfNeeded(params.query);
+    if (scenario === "zero_results") return { results: [] };
+    const query = params.query.trim().toLowerCase();
+    if (query && !MOCK_SCHOLAR.name.toLowerCase().includes(query)) return { results: [] };
+    return { results: [MOCK_SCHOLAR] };
+  }
+
+  async scholar(scholarId: string): Promise<KnowledgeScholarDetail> {
+    await this.wait();
+    if (this.scenario === "timeout") throw KnowledgeClientError.timeout();
+    if (this.scenario === "upstream_unavailable") throw KnowledgeClientError.unavailable();
+    if (scholarId !== MOCK_SCHOLAR.id) throw KnowledgeClientError.notFound("未找到对应学者");
+    return MOCK_SCHOLAR;
+  }
+
+  async searchBySubject(subject: string, topK = 10): Promise<KnowledgeSearchResponse> {
+    return this.search({
+      query: subject,
+      topK,
+      yearFrom: null,
+      yearTo: null,
+      venue: [],
+      author: [],
+      keyword: [],
+      subject: [],
+    });
+  }
+
+  async searchByFunding(funding: string, topK = 10): Promise<KnowledgeSearchResponse> {
+    return this.search({
+      query: funding,
+      topK,
+      yearFrom: null,
+      yearTo: null,
+      venue: [],
+      author: [],
+      keyword: [],
+      subject: [],
+    });
   }
 
   async graph(paperId: string): Promise<KnowledgeGraph> {
