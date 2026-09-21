@@ -2,7 +2,6 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppShell } from "@/components/common/layout/app-shell";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { KnowledgeFilterPanel, type KnowledgeFilters } from "./components/filter-panel";
@@ -68,7 +67,6 @@ function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }
   };
 
   return (
-    <AppShell>
       <div className="mx-auto max-w-[1120px] px-6 py-8 lg:px-8">
         <KnowledgeSearchHero
           initialQuery={query}
@@ -106,7 +104,6 @@ function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }
           </main>
         </div>
       </div>
-    </AppShell>
   );
 }
 

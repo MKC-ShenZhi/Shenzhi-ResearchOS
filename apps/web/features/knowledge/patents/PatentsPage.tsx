@@ -1,4 +1,3 @@
-import { AppShell } from "@/components/common/layout/app-shell";
 import { PatentsBrowser } from "@/features/knowledge/patents/components/patents-browser";
 
 /**
@@ -7,10 +6,8 @@ import { PatentsBrowser } from "@/features/knowledge/patents/components/patents-
  */
 export function PatentsPage() {
   return (
-    <AppShell>
-      <div className="flex min-h-[calc(100vh)] items-stretch">
-        <PatentsBrowser />
-      </div>
-    </AppShell>
+    <div className="flex min-h-[calc(100vh)] items-stretch">
+      <PatentsBrowser />
+    </div>
   );
 }

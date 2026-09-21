@@ -1,4 +1,3 @@
-import { AppShell } from "@/components/common/layout/app-shell";
 import { InstitutionsBrowser } from "@/features/knowledge/institutions/components/institutions-browser";
 
 /**
@@ -7,10 +6,8 @@ import { InstitutionsBrowser } from "@/features/knowledge/institutions/component
  */
 export function InstitutionsPage() {
   return (
-    <AppShell>
-      <div className="mx-auto max-w-[960px] px-8 py-6">
-        <InstitutionsBrowser />
-      </div>
-    </AppShell>
+    <div className="mx-auto max-w-[960px] px-8 py-6">
+      <InstitutionsBrowser />
+    </div>
   );
 }

@@ -212,8 +212,12 @@ function ExpandableNav({
       setExpanded(href, true);
       if (pathname !== dest) router.push(dest, { scroll: false });
     } else if (routeActive) {
-      // 副标题展开且处于同一主标题下:折叠侧边栏
-      setCollapsed(true);
+      // 子页面点击主标题返回主标题页;总览页再次点击才折叠侧边栏
+      if (pathname !== href) {
+        router.push(href, { scroll: false });
+      } else {
+        setCollapsed(true);
+      }
     } else if (pathname !== dest) {
       // 副标题展开但处于其他栏目:仅跳转
       router.push(dest, { scroll: false });

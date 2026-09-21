@@ -22,7 +22,6 @@ import {
 } from "./timeline";
 import { ComposerShell, type ComposerSkill } from "@/components/common/composer/composer";
 import type { WorkspaceFile } from "@/components/common/composer/attachment-menu";
-import { AppShell } from "@/components/common/layout/app-shell";
 import type { ChatAttachment, ChatConfig } from "@/types/ai-search";
 import {
   deleteSession as removeStoredSession, forkSession, getSession, listSessions, newSessionId, saveSession,
@@ -570,7 +569,7 @@ export function ShenzhiAiPage() {
   } as ChatConfig;
 
 
-  return <AppShell>
+  return <>
     <div className="flex h-[calc(100vh-3.5rem)] lg:h-screen">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-sidebar md:flex">
         <div className="p-2">
@@ -792,5 +791,5 @@ export function ShenzhiAiPage() {
       text={openReport?.text ?? ""}
       sources={openReport?.sources}
     />
-  </AppShell>;
+  </>;
 }

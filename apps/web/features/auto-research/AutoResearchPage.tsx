@@ -1,4 +1,3 @@
-import { AppShell } from "@/components/common/layout/app-shell";
 import { ResearchBoard } from "@/features/auto-research/components/research-board";
 
 /**
@@ -7,8 +6,6 @@ import { ResearchBoard } from "@/features/auto-research/components/research-boar
  */
 export function AutoResearchPage() {
   return (
-    <AppShell>
-      <ResearchBoard />
-    </AppShell>
+    <ResearchBoard />
   );
 }

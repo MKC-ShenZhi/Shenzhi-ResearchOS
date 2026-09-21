@@ -103,7 +103,7 @@ export function SidebarChatHistory({ collapsed }: { collapsed?: boolean }) {
       // Ignore a response started for an older route or auth identity.
       refreshSequence.current += 1;
     };
-  }, [identityScope, pathname, refresh, refreshNonce, resetForIdentityChange]);
+  }, [identityScope, refresh, refreshNonce, resetForIdentityChange]);
 
   useEffect(() => {
     if (editingId) editRef.current?.focus();

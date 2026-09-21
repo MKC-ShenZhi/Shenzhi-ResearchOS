@@ -1,5 +1,4 @@
 import { Share, Star } from "lucide-react";
-import { AppShell } from "@/components/common/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { ChatInput } from "@/features/chat/components/chat-input";
 import { ResearchNav } from "@/features/search/deep-search/components/research-nav";
@@ -14,7 +13,7 @@ import { agentSession } from "@/features/search/deep-search/data";
  */
 export function DeepSearchPage() {
   return (
-    <AppShell>
+    <>
       <div className="mx-auto flex max-w-[1180px] items-start gap-8 px-8 py-6">
         <ResearchNav />
 
@@ -50,6 +49,6 @@ export function DeepSearchPage() {
           <ChatInput />
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }

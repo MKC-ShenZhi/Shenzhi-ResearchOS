@@ -1,4 +1,3 @@
-import { AppShell } from "@/components/common/layout/app-shell";
 import { AgentChat } from "@/features/chat/components/agent-chat";
 import type { ChatModelId, ChatReplyMode } from "@/types/ai-search";
 
@@ -19,7 +18,7 @@ export function AskPage({
   invalidSession?: boolean;
 }) {
   return (
-    <AppShell>
+    <>
       {/* `q` is a one-shot initial-question command from Search, not a
           session navigation mechanism; changing it must start a fresh turn. */}
       <AgentChat
@@ -31,6 +30,6 @@ export function AskPage({
         initialSessionId={initialSessionId}
         invalidSession={invalidSession}
       />
-    </AppShell>
+    </>
   );
 }
