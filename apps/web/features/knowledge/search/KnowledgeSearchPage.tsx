@@ -23,7 +23,7 @@ const EMPTY_FILTERS: KnowledgeFilters = {
 };
 
 /**
- * 论文检索页 `/knowledge/search` —— 知识底座 · 论文搜索。
+ * 论文库 `/knowledge/search` —— 保留知识底座论文搜索能力。
  *
  * 业务链路：页面 → KnowledgeClient 接口 → Next.js BFF → FastAPI。
  * 页面只依赖 clients/knowledge 的契约类型与 Client 工厂。
@@ -112,7 +112,7 @@ function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }
 
 export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: string }) {
   return (
-    <Suspense fallback={<p className="p-8 text-sm text-muted">正在加载论文检索…</p>}>
+    <Suspense fallback={<p className="p-8 text-sm text-muted">正在加载论文库…</p>}>
       <KnowledgeSearchContent initialQuery={initialQuery} />
     </Suspense>
   );

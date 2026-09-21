@@ -1,7 +1,10 @@
 import { AppShell } from "@/components/common/layout/app-shell";
 import { PatentsBrowser } from "@/features/knowledge/patents/components/patents-browser";
 
-/** 专利库 `/knowledge/patents` —— 两栏布局,对齐 `/knowledge` 论文库 */
+/**
+ * V1 暂停正式接入：知识底座尚无支撑独立产品页的稳定专利实体能力。
+ * 原型与兼容路由保留，后续随科研能力重新启用或重构。
+ */
 export function PatentsPage() {
   return (
     <AppShell>

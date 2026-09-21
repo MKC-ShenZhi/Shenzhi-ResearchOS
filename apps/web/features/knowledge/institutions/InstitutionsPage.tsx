@@ -1,7 +1,10 @@
 import { AppShell } from "@/components/common/layout/app-shell";
 import { InstitutionsBrowser } from "@/features/knowledge/institutions/components/institutions-browser";
 
-/** 研究机构 `/knowledge/institutions` —— 单列大卡片,参考学者关系页 */
+/**
+ * V1 暂停正式接入：知识底座尚无支撑独立产品页的稳定机构实体能力。
+ * 原型与兼容路由保留，后续随科研能力重新启用或重构。
+ */
 export function InstitutionsPage() {
   return (
     <AppShell>

@@ -50,12 +50,12 @@ const SUBMIT_SUB_NAV = [
 
 /** 「知识库」的子栏目 */
 const KNOWLEDGE_SUB_NAV = [
-  { href: "/knowledge/search", label: "论文检索" },
-  { href: "/knowledge/papers", label: "论文库" },
-  { href: "/knowledge/patents", label: "专利库" },
-  { href: "/knowledge/funding", label: "项目基金库" },
-  { href: "/knowledge/scholars", label: "学者关系" },
-  { href: "/knowledge/institutions", label: "研究机构" },
+  { href: "/knowledge/search", label: "论文库" },
+  { href: "/knowledge/papers", label: "我的文献" },
+  { href: "/knowledge/scholars", label: "学者库" },
+  { href: "/knowledge/topics", label: "主题库" },
+  { href: "/knowledge/funding", label: "项目专利基金库" },
+  { href: "/knowledge/graph", label: "关系图谱" },
 ];
 
 /** 「AI 助手」的子栏目;AI 助手本身有独立对话页(/agents),不与子栏目共享 */
@@ -281,7 +281,7 @@ function ExpandableNav({
       {open && (
         <div className="mt-0.5 flex flex-col gap-0.5 pl-6">
           {subNav.map((sub) => {
-            const active = pathname === sub.href;
+            const active = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
             return (
               <Link
                 key={sub.href}

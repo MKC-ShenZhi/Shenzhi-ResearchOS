@@ -7,7 +7,7 @@ import { LibraryTable } from "@/features/knowledge/papers/components/library-tab
 import { ReadingHistory } from "@/features/knowledge/papers/components/reading-history";
 import { useCollections } from "@/stores/collections";
 
-/** 论文库页面 `/knowledge/papers` —— 对应「深知-知识库页面.svg」,2026-08-07 由 /knowledge 迁入 */
+/** 我的文献 `/knowledge/papers` —— 保留收藏、文件夹与阅读历史能力。 */
 export function KnowledgePapersPage() {
   const [historyActive, setHistoryActive] = useState(false);
   const [requestedFolderId, setRequestedFolderId] = useState<number | null>(null);
