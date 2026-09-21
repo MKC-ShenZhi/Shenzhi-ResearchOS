@@ -1,4 +1,5 @@
-import { ScholarDetailPage } from "@/features/scholars/[id]/ScholarDetailPage";
+import { redirect } from "next/navigation";
+import { scholarHref, scholarIdFromRouteParam } from "@/lib/navigation/scholar";
 
 export default async function Page({
   params,
@@ -6,6 +7,5 @@ export default async function Page({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-
-  return <ScholarDetailPage scholarId={id} />;
+  redirect(scholarHref(scholarIdFromRouteParam(id)));
 }
