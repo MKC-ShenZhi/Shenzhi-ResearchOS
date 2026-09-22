@@ -1,4 +1,6 @@
-# 学者库工作规划与测试报告
+# 任务1-学者库
+
+工作规划、自动化测试结果与人工验收表单。
 
 > 基线：`origin/feat/knowledge-entity-refactor@3ef4564`  
 > 开发分支：`feat/knowledge-scholar-library`（基于 `feat/knowledge-entity-refactor`，完成后合并回该父分支）  
