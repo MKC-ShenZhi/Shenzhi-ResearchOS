@@ -1,7 +1,7 @@
 # 学者库工作规划与测试报告
 
 > 基线：`origin/feat/knowledge-entity-refactor@3ef4564`  
-> 验证分支：`codex/scholar-library-validation`  
+> 开发分支：`feat/knowledge-scholar-library`（基于 `feat/knowledge-entity-refactor`，完成后合并回该父分支）  
 > 验证日期：2026-09-22
 
 ## 1. 当前代码现状
