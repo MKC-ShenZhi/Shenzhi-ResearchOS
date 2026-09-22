@@ -11,6 +11,9 @@ export type { MockKnowledgeClientOptions, MockScenario } from "./mock";
 export { BffKnowledgeClient } from "./bff";
 
 export type {
+  KnowledgeFundingSearchParams,
+  KnowledgeFundingSearchResponse,
+  KnowledgeFundingSummary,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
   KnowledgeScholarSearchParams,

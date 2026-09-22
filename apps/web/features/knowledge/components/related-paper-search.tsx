@@ -14,7 +14,7 @@ import {
   KnowledgeSearchSkeleton,
 } from "@/features/knowledge/search/components/search-states";
 
-type RelatedPaperSearchKind = "subject" | "funding";
+type RelatedPaperSearchKind = "subject";
 
 const COPY = {
   subject: {
@@ -24,20 +24,11 @@ const COPY = {
     idle: "输入研究主题开始探索相关论文",
     resultPrefix: "主题",
   },
-  funding: {
-    title: "项目专利基金库",
-    description: "按项目、专利或基金名称探索关联科研成果",
-    placeholder: "搜索项目 / 专利 / 基金名称",
-    idle: "输入项目、专利或基金名称开始探索关联论文",
-    resultPrefix: "项目 / 专利 / 基金",
-  },
 } satisfies Record<RelatedPaperSearchKind, Record<string, string>>;
 
 async function fetchRelatedPapers(kind: RelatedPaperSearchKind, query: string) {
   const client = getKnowledgeClient();
-  return kind === "subject"
-    ? client.searchBySubject(query, 20)
-    : client.searchByFunding(query, 20);
+  return client.searchBySubject(query, 20);
 }
 
 export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {

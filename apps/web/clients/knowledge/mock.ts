@@ -7,6 +7,9 @@ import {
   mockPaperDetail,
 } from "./mock-data";
 import type {
+  KnowledgeFundingSearchParams,
+  KnowledgeFundingSearchResponse,
+  KnowledgeFundingSummary,
   KnowledgeGraph,
   KnowledgePaperDetail,
   KnowledgePaperHit,
@@ -34,6 +37,15 @@ const MOCK_SCHOLAR: KnowledgeScholarDetail = {
   })),
   provenance: { source: "mock" },
 };
+
+const MOCK_FUNDINGS: KnowledgeFundingSummary[] = [
+  {
+    id: "funding:mock:research",
+    name: "Mock Research Fund",
+    paperCount: 2,
+    provenance: { source: "mock" },
+  },
+];
 
 /** Mock 可模拟的行为状态 */
 export type MockScenario =
@@ -155,6 +167,23 @@ export class MockKnowledgeClient implements KnowledgeClient {
     if (this.scenario === "upstream_unavailable") throw KnowledgeClientError.unavailable();
     if (scholarId !== MOCK_SCHOLAR.id) throw KnowledgeClientError.notFound("未找到对应学者");
     return MOCK_SCHOLAR;
+  }
+
+  async searchFundings(
+    params: KnowledgeFundingSearchParams,
+  ): Promise<KnowledgeFundingSearchResponse> {
+    await this.wait();
+    const scenario = this.throwIfNeeded(params.query ?? "");
+    if (scenario === "zero_results") return { results: [] };
+    const query = (params.query ?? "").trim().toLowerCase();
+    const matches = query
+      ? MOCK_FUNDINGS.filter((funding) =>
+        `${funding.id} ${funding.name}`.toLowerCase().includes(query),
+      )
+      : MOCK_FUNDINGS;
+    const offset = params.offset ?? 0;
+    const limit = params.limit ?? 20;
+    return { results: matches.slice(offset, offset + limit) };
   }
 
   async searchBySubject(subject: string, topK = 10): Promise<KnowledgeSearchResponse> {

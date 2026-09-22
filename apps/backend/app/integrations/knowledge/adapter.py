@@ -15,6 +15,9 @@ from app.integrations.knowledge.schemas import UpstreamSearchPayload
 from app.schemas.knowledge import (
     GraphEdge,
     GraphNode,
+    FundingSearchRequest,
+    FundingSearchResponse,
+    FundingSummary,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
     PaperDetail,
@@ -241,6 +244,20 @@ def map_scholar_summary(
         name=_required_string(item, 'name'),
         paper_count=_required_int(item, 'paper_count'),
         provenance=_provenance(scholar_id, retrieved_at),
+    ))
+
+
+def map_funding_summary(
+    item: dict[str, Any], *, retrieved_at: datetime | None = None
+) -> FundingSummary:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    funding_id = _required_string(item, 'funding_id')
+    return _contract_model(lambda: FundingSummary(
+        id=funding_id,
+        name=_required_string(item, 'name'),
+        paper_count=_required_int(item, 'paper_count'),
+        provenance=_provenance(funding_id, retrieved_at),
     ))
 
 
@@ -478,6 +495,20 @@ class KnowledgeAdapter:
     ) -> KnowledgeSearchResponse:
         body = await self.client.search_by_funding(funding, top_k=top_k)
         return self._map_related_papers(body)
+
+    async def search_fundings(
+        self, request: FundingSearchRequest
+    ) -> FundingSearchResponse:
+        body = await self.client.search_fundings(
+            request.query, limit=request.limit, offset=request.offset
+        )
+        results = body.get('results') if isinstance(body, dict) else None
+        if not isinstance(results, list):
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        return FundingSearchResponse(results=[
+            map_funding_summary(item, retrieved_at=retrieved_at) for item in results
+        ])
 
     @staticmethod
     def _map_related_papers(body: Any) -> KnowledgeSearchResponse:

@@ -4,6 +4,8 @@ import { apiJson, ApiError } from "../backend/http";
 import { KnowledgeClientError, type KnowledgeClient } from "./client";
 import type {
   KnowledgeErrorCode,
+  KnowledgeFundingSearchParams,
+  KnowledgeFundingSearchResponse,
   KnowledgeGraph,
   KnowledgeGraphDepth,
   KnowledgePaperDetail,
@@ -120,6 +122,23 @@ export class BffKnowledgeClient implements KnowledgeClient {
     try {
       return await apiJson<KnowledgeScholarDetail>(
         `/knowledge/scholars/${encodeURIComponent(scholarId)}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchFundings(
+    params: KnowledgeFundingSearchParams,
+  ): Promise<KnowledgeFundingSearchResponse> {
+    const query = new URLSearchParams();
+    const searchText = params.query?.trim();
+    if (searchText) query.set("q", searchText);
+    query.set("limit", String(params.limit ?? 20));
+    query.set("offset", String(params.offset ?? 0));
+    try {
+      return await apiJson<KnowledgeFundingSearchResponse>(
+        `/knowledge/fundings/search?${query.toString()}`,
       );
     } catch (error) {
       throw toKnowledgeError(error);

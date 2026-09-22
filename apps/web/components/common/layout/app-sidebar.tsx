@@ -54,7 +54,7 @@ const KNOWLEDGE_SUB_NAV = [
   { href: "/knowledge/papers", label: "我的文献" },
   { href: "/knowledge/scholars", label: "学者库" },
   { href: "/knowledge/topics", label: "主题库" },
-  { href: "/knowledge/funding", label: "项目专利基金库" },
+  { href: "/knowledge/funding", label: "项目基金库" },
   { href: "/knowledge/graph", label: "关系图谱" },
 ];
 

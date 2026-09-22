@@ -14,6 +14,7 @@ from app.core.logging import log_exception
 from app.core.request_context import get_request_id
 from app.core.responses import ok
 from app.schemas.knowledge import (
+    FundingSearchRequest,
     KnowledgeError,
     KnowledgeSearchRequest,
     RelatedPaperSearchRequest,
@@ -187,11 +188,37 @@ async def search_by_funding(
 ):
     search_request = _related_search_request(funding, top_k)
     if search_request is None:
-        return invalid_argument(request, '项目、专利或基金检索参数不合法')
+        return invalid_argument(request, '基金关联论文检索参数不合法')
     try:
         response = await service.search_by_funding(
             search_request.query, top_k=search_request.top_k
         )
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/fundings/search')
+async def search_fundings(
+    request: Request,
+    q: str | None = Query(default=None),
+    limit: str = Query(default='20'),
+    offset: str = Query(default='0'),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        search_request = FundingSearchRequest.model_validate({
+            'query': q,
+            'limit': int(limit),
+            'offset': int(offset),
+        })
+    except (ValidationError, TypeError, ValueError):
+        return invalid_argument(request, '基金候选检索参数不合法')
+
+    try:
+        response = await service.search_fundings(search_request)
     except KnowledgeServiceError as error:
         return _error_payload(error, request)
     except Exception as error:

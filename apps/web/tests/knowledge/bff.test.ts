@@ -151,6 +151,52 @@ test("BFF client requests Scholar, Subject and Funding through stable routes", a
   assert.ok(requests.every((request) => request.startsWith("/api/v1/knowledge/")));
 });
 
+test("BFF client requests Funding candidates through a separate stable route", async () => {
+  const requests: string[] = [];
+  await withFetch(async (input) => {
+    requests.push(String(input));
+    return jsonResponse({ code: 0, data: {
+      results: [{
+        id: "funding:nsf:graph",
+        name: "NSF Graph Research",
+        paperCount: 12,
+        provenance: { provider: "knowledge-base" },
+      }],
+    } });
+  }, async () => {
+    const result = await new BffKnowledgeClient().searchFundings({
+      query: "NSF",
+      limit: 5,
+      offset: 10,
+    });
+    assert.equal(result.results[0]?.id, "funding:nsf:graph");
+    assert.equal(result.results[0]?.paperCount, 12);
+  });
+
+  assert.deepEqual(requests, [
+    "/api/v1/knowledge/fundings/search?q=NSF&limit=5&offset=10",
+  ]);
+});
+
+test("BFF Funding candidate browsing omits an empty optional query", async () => {
+  const requests: string[] = [];
+  await withFetch(async (input) => {
+    requests.push(String(input));
+    return jsonResponse({ code: 0, data: { results: [] } });
+  }, async () => {
+    const result = await new BffKnowledgeClient().searchFundings({
+      query: "",
+      limit: 20,
+      offset: 0,
+    });
+    assert.deepEqual(result, { results: [] });
+  });
+
+  assert.deepEqual(requests, [
+    "/api/v1/knowledge/fundings/search?limit=20&offset=0",
+  ]);
+});
+
 test("BFF client preserves formal Knowledge errors and request metadata", async () => {
   const cases = [
     ["NOT_FOUND", false, 404],

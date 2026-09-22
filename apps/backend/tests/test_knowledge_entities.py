@@ -6,13 +6,14 @@ import httpx
 from app.core.identity import require_bff
 from app.integrations.knowledge.adapter import (
     KnowledgeAdapter,
+    map_funding_summary,
     map_scholar_detail,
     map_scholar_summary,
 )
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.main import app
-from app.schemas.knowledge import ScholarSearchRequest
+from app.schemas.knowledge import FundingSearchRequest, ScholarSearchRequest
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 
 
@@ -66,9 +67,29 @@ RELATED_PAPER_RESPONSE = {
     'query_parse': {},
     'query_rewrite': {},
 }
+FUNDING_SEARCH_RESPONSE = {
+    'results': [{
+        'funding_id': 'funding:nsf:graph',
+        'name': 'NSF Graph Research',
+        'paper_count': 12,
+    }],
+    'query': 'NSF',
+}
 
 
 class KnowledgeEntityMappingTests(unittest.TestCase):
+    def test_funding_summary_mapping_owns_public_names_and_opaque_id(self):
+        result = map_funding_summary(FUNDING_SEARCH_RESPONSE['results'][0])
+        self.assertEqual(result.id, 'funding:nsf:graph')
+        self.assertEqual(result.name, 'NSF Graph Research')
+        self.assertEqual(result.paper_count, 12)
+        self.assertEqual(result.provenance.external_id, 'funding:nsf:graph')
+
+    def test_funding_summary_invalid_item_is_contract_violation(self):
+        with self.assertRaises(KnowledgeIntegrationError) as caught:
+            map_funding_summary({'funding_id': 'funding:missing-name'})
+        self.assertEqual(caught.exception.code, 'CONTRACT_VIOLATION')
+
     def test_scholar_search_mapping_owns_names_and_preserves_opaque_id(self):
         result = map_scholar_summary(SCHOLAR_SEARCH_RESPONSE['results'][0])
         self.assertEqual(result.id, SCHOLAR_ID)
@@ -126,8 +147,41 @@ class EntityFixtureClient:
         self.funding_search = (funding, top_k)
         return RELATED_PAPER_RESPONSE
 
+    async def search_fundings(self, query, *, limit, offset):
+        self.funding_candidates = (query, limit, offset)
+        return FUNDING_SEARCH_RESPONSE
+
 
 class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_funding_candidate_search_maps_funding_contract(self):
+        client = EntityFixtureClient()
+        result = await KnowledgeAdapter(client).search_fundings(
+            FundingSearchRequest(query='NSF', limit=5, offset=10)
+        )
+        self.assertEqual(client.funding_candidates, ('NSF', 5, 10))
+        self.assertEqual(result.results[0].id, 'funding:nsf:graph')
+        self.assertEqual(result.results[0].name, 'NSF Graph Research')
+        self.assertEqual(result.results[0].paper_count, 12)
+
+    async def test_funding_candidate_empty_result_is_success(self):
+        class EmptyFundingClient(EntityFixtureClient):
+            async def search_fundings(self, query, *, limit, offset):
+                return {'results': []}
+
+        result = await KnowledgeAdapter(EmptyFundingClient()).search_fundings(
+            FundingSearchRequest()
+        )
+        self.assertEqual(result.results, [])
+
+    async def test_funding_candidate_blank_query_is_forwarded_as_optional(self):
+        client = EntityFixtureClient()
+
+        await KnowledgeAdapter(client).search_fundings(
+            FundingSearchRequest(query='')
+        )
+
+        self.assertEqual(client.funding_candidates, (None, 20, 0))
+
     async def test_scholar_search_and_detail_mapping(self):
         client = EntityFixtureClient()
         adapter = KnowledgeAdapter(client)
@@ -196,6 +250,8 @@ class KnowledgeEntityClientTests(unittest.IsolatedAsyncioTestCase):
                 return httpx.Response(200, json=RELATED_PAPER_RESPONSE)
             if request.url.path.endswith('/search/by-funding'):
                 return httpx.Response(200, json=RELATED_PAPER_RESPONSE)
+            if request.url.path.endswith('/fundings/search'):
+                return httpx.Response(200, json=FUNDING_SEARCH_RESPONSE)
             if request.url.path.endswith('/scholars/search'):
                 return httpx.Response(200, json=SCHOLAR_SEARCH_RESPONSE)
             return httpx.Response(200, json=SCHOLAR_DETAIL_RESPONSE)
@@ -208,12 +264,14 @@ class KnowledgeEntityClientTests(unittest.IsolatedAsyncioTestCase):
         await client.scholar(SCHOLAR_ID)
         await client.search_by_subject('graph', top_k=10)
         await client.search_by_funding('NSF', top_k=10)
+        await client.search_fundings('NSF', limit=20, offset=40)
 
         self.assertEqual([request.url.path for request in requests], [
             '/api/retrieval/scholars/search',
             f'/api/retrieval/scholars/{SCHOLAR_ID}',
             '/api/retrieval/search/by-subject',
             '/api/retrieval/search/by-funding',
+            '/api/retrieval/fundings/search',
         ])
         self.assertEqual(dict(requests[0].url.params), {
             'q': 'Hinton', 'limit': '20', 'offset': '0'
@@ -223,6 +281,25 @@ class KnowledgeEntityClientTests(unittest.IsolatedAsyncioTestCase):
         })
         self.assertEqual(dict(requests[3].url.params), {
             'funding': 'NSF', 'top_k': '10'
+        })
+        self.assertEqual(dict(requests[4].url.params), {
+            'q': 'NSF', 'limit': '20', 'offset': '40'
+        })
+
+    async def test_funding_client_omits_optional_query_when_browsing(self):
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            return httpx.Response(200, json={'results': []})
+
+        client = KnowledgeBaseClient(
+            base_url='https://knowledge.test',
+            transport=httpx.MockTransport(handler),
+        )
+        await client.search_fundings(None, limit=20, offset=0)
+        self.assertEqual(dict(requests[0].url.params), {
+            'limit': '20', 'offset': '0'
         })
 
     async def test_client_rejects_invalid_json_and_contract(self):
@@ -239,6 +316,17 @@ class KnowledgeEntityClientTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(KnowledgeIntegrationError) as caught:
                     await client.search_scholars('Hinton')
                 self.assertEqual(caught.exception.code, 'CONTRACT_VIOLATION')
+
+    async def test_funding_client_rejects_invalid_contract(self):
+        client = KnowledgeBaseClient(
+            base_url='https://knowledge.test',
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, json={'results': 'not-a-list'})
+            ),
+        )
+        with self.assertRaises(KnowledgeIntegrationError) as caught:
+            await client.search_fundings('NSF')
+        self.assertEqual(caught.exception.code, 'CONTRACT_VIOLATION')
 
     async def test_client_maps_upstream_status_for_new_endpoints(self):
         client = KnowledgeBaseClient(
@@ -307,10 +395,21 @@ class KnowledgeEntityApiTests(unittest.IsolatedAsyncioTestCase):
             '/api/v1/knowledge/funding/search',
             params={'funding': 'NSF', 'topK': 10},
         )
+        fundings = await self.client.get(
+            '/api/v1/knowledge/fundings/search',
+            params={'q': 'NSF', 'limit': 5, 'offset': 10},
+        )
         self.assertEqual(subject.status_code, 200, subject.text)
         self.assertEqual(funding.status_code, 200, funding.text)
+        self.assertEqual(fundings.status_code, 200, fundings.text)
         self.assertEqual(subject.json()['data']['results'][0]['id'], PAPER_ID)
         self.assertEqual(funding.json()['data']['results'][0]['id'], PAPER_ID)
+        funding_summary = fundings.json()['data']['results'][0]
+        self.assertEqual(funding_summary['id'], 'funding:nsf:graph')
+        self.assertEqual(funding_summary['name'], 'NSF Graph Research')
+        self.assertEqual(funding_summary['paperCount'], 12)
+        self.assertNotIn('funding_id', funding_summary)
+        self.assertNotIn('grantNo', funding_summary)
         self.assertNotIn('source_scores', subject.json()['data']['results'][0])
 
     async def test_new_routes_validate_blank_or_out_of_range_queries(self):
@@ -318,12 +417,23 @@ class KnowledgeEntityApiTests(unittest.IsolatedAsyncioTestCase):
             ('/api/v1/knowledge/scholars/search', {'q': ' '}),
             ('/api/v1/knowledge/subjects/search', {'subject': ' ', 'topK': 10}),
             ('/api/v1/knowledge/funding/search', {'funding': 'NSF', 'topK': 21}),
+            ('/api/v1/knowledge/fundings/search', {'limit': 101}),
+            ('/api/v1/knowledge/fundings/search', {'offset': -1}),
         ]
         for path, params in cases:
             with self.subTest(path=path):
                 response = await self.client.get(path, params=params)
                 self.assertEqual(response.status_code, 422)
                 self.assertEqual(response.json()['code'], 'INVALID_ARGUMENT')
+
+    async def test_funding_route_accepts_empty_query_as_browse_request(self):
+        response = await self.client.get(
+            '/api/v1/knowledge/fundings/search',
+            params={'q': '', 'limit': 20, 'offset': 0},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.adapter.funding_candidates, (None, 20, 0))
 
 
 if __name__ == '__main__':
