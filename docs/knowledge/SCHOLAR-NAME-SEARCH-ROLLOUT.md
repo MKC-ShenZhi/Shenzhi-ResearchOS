@@ -1,214 +1,187 @@
 # 落地方案-学者姓名检索
 
-## 一、方案定位
+## 一、方案结论
 
-本方案解决学者库中“中文姓名搜索无结果、英文姓名可以命中”的产品问题。当前知识底座服务可访问，英文检索与详情链路正常；问题属于姓名召回与别名匹配能力，不属于 BFF、URL 配置或前端展示故障。
+学者姓名检索采用“上游能力优先、ShenZhi 最小兜底”的方案。
 
-目标是让用户可以使用中文名、英文名、常见姓名变体或稳定 author_id 找到同一个学者，同时保持学者 ID、详情、论文和合作关系的稳定性。
+长期由知识底座在现有 Scholar Search 中原生支持中文名、英文名和已确认别名，并为同一学者返回稳定的 `scholar_id`。在上游能力落地前，ShenZhi 只在现有 `KnowledgeService.search_scholars()` 中维护极小、人工确认且只做精确匹配的临时映射，然后继续调用现有 Knowledge Adapter。
 
-## 二、总体方向
+当前已确认：知识底座 URL 和调用环境可用；英文名 `Kaiming He` 可以命中，中文名 `何恺明` 返回空结果。因此问题是上游姓名召回能力暂不完整，不是环境缺失、BFF 故障或前端展示问题。
 
-优先由知识底座提供统一的姓名别名召回能力，ShenZhi 负责产品接口、权限边界、状态处理和结果适配。产品侧不自行猜测英文姓名，也不把机器翻译结果当作权威学者身份。
+## 二、设计原则
 
-推荐调用链：
-
-```text
-用户输入姓名
-→ ShenZhi Scholar Service 规范化 Query
-→ Knowledge Integration 调用统一 Scholar Search
-→ 知识底座按中文名/英文名/别名/author_id 召回
-→ 返回稳定 scholar_id
-→ ShenZhi 读取详情并展示论文、机构、合作学者
-```
-
-如果知识底座短期无法上线别名召回，采用受控的审核别名表作为临时过渡；过渡方案必须可追溯、可更新、可回滚，不能把通用翻译模型直接放入生产搜索链路。
+1. **保持调用边界不变。** Browser → Next.js BFF → ShenZhi FastAPI → Knowledge Adapter → 知识底座。
+2. **优先推动上游完善。** 中文名与英文别名应最终由知识底座统一索引，ShenZhi 不长期维护第二套学者身份系统。
+3. **临时方案足够小。** 映射和解析函数放在现有 Knowledge Service 文件内，不为单个映射新增层级、数据表或管理系统。
+4. **只做确定性改写。** 仅精确命中已审核映射时改写；未知中文名原样传给上游，不翻译、不猜测、不自动绑定实体。
+5. **公共契约不变。** 不新增 `matched_by`、`normalized_query` 等未经上游确认的响应字段，不改变 Search、Detail 和错误响应结构。
+6. **复用统一基础设施。** 不新建 logger、request-id、中间件、异常框架、重试机制、日志库或审计库。
 
 ## 三、范围与边界
 
 ### 本次范围
 
-- Scholar Search 的中文名、英文名、姓名变体和 author_id 片段召回。
-- Search 到 Detail 的稳定 ID 传递。
-- 空结果、同名结果、上游不可用和详情不存在的状态处理。
-- 搜索命中来源和改写信息的可观测性。
+- 为已人工确认的高频中文姓名提供精确英文查询映射。
+- 保持现有 Scholar Search → Detail 的 `scholar_id` 传递和页面行为。
+- 补充映射命中、未知姓名、英文姓名以及上游错误的自动化测试。
+- 与知识底座组确认原生别名检索的契约和排期，上游支持后删除本地映射。
 
 ### 明确不做
 
-- 不新增虚构 h-index、引用数、履历、邮箱或主页字段。
-- 不在浏览器或 Next.js BFF 中直连知识底座。
-- 不在 HTTP Integration Client 中写业务级姓名翻译逻辑。
-- 不使用无来源机器翻译结果直接绑定学者实体。
-- 不修改现有论文、图谱和 Funding 的实体契约。
+- 不新增数据库表、migration、repository、管理页面或审核工作流。
+- 不引入 LLM、机器翻译、拼音转换、模糊匹配或新的第三方依赖。
+- 不在前端、BFF 或 Knowledge Integration Client 中维护姓名规则。
+- 不新增 feature flag、灰度平台、独立审计记录或产品埋点。
+- 不记录用户输入的原姓名、改写后的姓名或请求正文。
+- 不修改论文、图谱、Funding、Scholar Detail 等既有契约。
+- 不承诺 `author_id` 片段搜索、同名消歧或上游尚未确认的能力。
 
-## 四、分层设计
+## 四、轻量实现框架
 
-### 1. 前端层
+```text
+用户输入姓名
+→ 现有 Next.js BFF
+→ 现有 Knowledge API
+→ KnowledgeService.search_scholars()
+   ├─ 精确命中临时映射：构造新请求，替换 query
+   └─ 未命中：保持原 query
+→ 现有 Knowledge Adapter / Client
+→ 知识底座 Scholar Search
+→ 原样返回现有 ScholarSearchResponse
+```
 
-继续使用现有 Scholar Client 和页面状态。前端只提交用户输入，展示结果、空结果和错误态；不维护姓名词典，不判断中文名对应哪个英文名。
+临时规则属于产品侧的确定性业务判断，因此放在 Backend Service；Adapter 继续负责上游协议适配，Client 继续负责 HTTP 与外部错误转换。前端和 BFF 不感知改写。
 
-### 2. ShenZhi Backend Service 层
+映射当前只有一项，直接由 Git 评审和历史追踪即可。只有当映射数量、更新频率或治理要求真实增长时，才重新评估配置文件或持久化管理能力。
 
-新增独立的 Scholar Query 规范化和别名解析职责。该层负责：
+## 五、统一 Error & Logging 复用
 
-- trim、空白归一化和长度校验；
-- 识别是否为已审核别名；
-- 记录原始 Query 与实际请求 Query；
-- 对同名结果保持多结果返回，不擅自选择个人；
-- 将上游错误映射为现有 Knowledge Error Contract。
+本方案完全复用 `docs/logging/README.md` 定义并已落地的统一能力：
 
-### 3. Knowledge Integration 层
+- Next.js BFF 生成或透传 `X-Request-ID`；
+- FastAPI 通过 ContextVar 保存 `request_id`，HTTP 中间件记录状态与耗时；
+- Knowledge Client 继续记录 `knowledge.request.completed` / `knowledge.request.failed`；
+- `KnowledgeIntegrationError` 继续转换为 `KnowledgeServiceError`，API 再按现有 Knowledge Error Contract 返回；
+- 超时、限流、上游不可用和契约异常保持原有 code、HTTP status 与 retryable 语义。
 
-只负责调用上游接口、编码 opaque scholar_id、解析上游字段和转换异常。Integration 不保存产品别名规则，也不直接访问别名数据库。
+姓名改写不是新的外部调用边界，不增加 `try/except` 和业务日志。统一日志明确禁止记录用户 Query 原文，因此不记录原姓名、改写后姓名或映射内容，也不为了统计命中率扩展敏感日志字段。排障使用已有 `request_id`、`provider`、`operation`、`status_code`、`duration_ms`、`error_type` 和 `error_code`。
 
-### 4. 知识底座层
+## 六、阶段与退出条件
 
-负责姓名索引、中文名与英文名别名、author_id 稳定性、同名排序和检索召回质量。长期正式方案应由此层提供。
+### 阶段 1：ShenZhi 最小兜底
 
-## 五、分阶段实施
+在现有 Knowledge Service 中加入已审核的不可变映射和私有解析函数；增加单元测试，确认中文映射、英文透传、未知中文透传和错误语义均符合预期。
 
-### 阶段 0：契约确认
+### 阶段 2：知识底座原生支持
 
-由产品组和知识底座组先确认：
+知识底座在现有 Scholar Search 中提供正式别名召回。同一学者的中文名和英文名应返回相同 `scholar_id`，空结果仍返回正常的空集合，上游错误仍按既有契约表达。
 
-1. 中文名、英文名、姓名变体是否都进入同一个 Scholar Search。
-2. 是否支持 author_id 片段查询。
-3. 同名学者的返回排序和区分字段。
-4. 别名来源、更新频率和错误修正流程。
-5. 服务是否承诺空结果为 200，以及限流、超时和就绪状态。
+### 阶段 3：删除临时映射
 
-阶段 0 未确认前，ShenZhi 不上线自动翻译兜底。
+上游能力在联调和回归测试通过后，删除 ShenZhi 本地映射与对应改写测试，保留端到端中文姓名用例。无需数据迁移或功能开关，回滚只需恢复一个小型代码提交。
 
-### 阶段 1：上游别名召回
+## 七、具体实现
 
-知识底座增加别名查询能力，保持现有 Search/Detail 返回结构。ShenZhi 只需在 Service 和 Integration 层适配新增的可选命中元数据。
+### 7.1 修改位置
 
-验收重点：同一学者的中文名和英文名返回相同 scholar_id；author_id 查询可以直接定位；同名结果不会被错误合并。
+仅修改现有文件：
 
-### 阶段 2：产品侧审核别名过渡
+```text
+apps/backend/app/services/knowledge/service.py
+apps/backend/tests/test_knowledge_entities.py
+```
 
-如果阶段 1 排期较晚，ShenZhi 增加审核别名表，仅收录已确认的高频学者。未命中别名表时仍使用原 Query，不返回猜测结果。
+不创建新的 Service、Resolver、Repository、Integration 或配置层。
 
-验收重点：别名命中可观测；别名错误可禁用；删除别名后立即恢复原始搜索；不影响英文搜索和其他实体。
+### 7.2 映射与解析
 
-### 阶段 3：灰度与回收
+首个已确认映射：
 
-先对学者库页面灰度，再观察命中率、空结果率、详情一致率和错误率。上游别名能力稳定后，逐步减少产品侧临时别名，最终保留管理和审计能力，不保留重复的召回实现。
+```python
+_SCHOLAR_QUERY_ALIASES = {
+    '何恺明': 'Kaiming He',
+}
 
-## 六、验收与回滚原则
 
-必须同时满足：
+def _resolve_scholar_query(query: str) -> str:
+    return _SCHOLAR_QUERY_ALIASES.get(query, query)
+```
 
-- 中文名和英文名命中同一个稳定 scholar_id；
-- Detail 的 id 必须与 Search 结果一致；
-- 空结果仍是正常业务结果，不伪造卡片；
-- 上游超时、限流和不可用状态不被转换为空结果；
-- 任何 Query Rewrite 都能在日志中追踪原始值、改写值和规则来源，但不得记录敏感用户信息；
-- 关闭 Rewrite 或别名表后，英文搜索和 author_id 搜索仍可用。
+`KnowledgeService.search_scholars()` 解析后构造新的 `ScholarSearchRequest`，保留原 `limit` 和 `offset`，再调用现有 Adapter。不得修改传入的 Pydantic 对象，也不得绕过 Adapter 直接调用 Client。
 
-回滚只关闭别名解析或上游别名开关，不回滚 Scholar Search/Detail 基础契约。
+已有 Schema 负责 Query 的 trim、长度和分页校验，本方案不重复实现这些规则。
 
-## 七、具体接口与字段定义
+### 7.3 接口与字段
 
-### 7.1 当前 ShenZhi 接口
+ShenZhi 接口保持不变：
 
 ```text
 GET /api/v1/knowledge/scholars/search?q={query}&limit=20&offset=0
 GET /api/v1/knowledge/scholars/{scholarId}
 ```
 
-上游对应：
+上游接口保持不变：
 
 ```text
-GET http://47.110.47.12/api/retrieval/scholars/search?q={query}&limit=20&offset=0
-GET http://47.110.47.12/api/retrieval/scholars/{scholar_id}
+GET /api/retrieval/scholars/search?q={query}&limit=20&offset=0
+GET /api/retrieval/scholars/{scholar_id}
 ```
 
-### 7.2 建议的 Search 响应扩展
-
-当前基础结构保持不变：
-
-```json
-{
-  "results": [
-    {
-      "scholar_id": "author:...",
-      "name": "Kaiming He",
-      "paper_count": 11
-    }
-  ],
-  "query": "何恺明"
-}
-```
-
-如需增加诊断信息，使用可选字段，不改变现有字段含义：
-
-```json
-{
-  "query": "何恺明",
-  "normalized_query": "何恺明",
-  "matched_by": "alias",
-  "results": []
-}
-```
-
-`matched_by` 建议枚举：`exact`、`alias`、`author_id`、`fuzzy`。如果上游暂时不提供该字段，ShenZhi 不自行伪造为上游事实。
-
-### 7.3 ShenZhi Domain 字段
+请求、响应和 Domain 字段均不扩展。错误码继续使用：
 
 ```text
-ScholarSummary.id          string，opaque，必填
-ScholarSummary.name        string，必填
-ScholarSummary.paperCount  integer，>= 0，必填
-ScholarSummary.provenance  object，必填
+INVALID_ARGUMENT
+NOT_FOUND
+RATE_LIMITED
+UPSTREAM_UNAVAILABLE
+TIMEOUT
+CONTRACT_VIOLATION
 ```
 
-详情中的可选数组：
+## 八、测试与验收
+
+### 8.1 自动化测试
+
+| 用例 | 预期结果 |
+| --- | --- |
+| `何恺明` 搜索 | Adapter 收到 `Kaiming He`，分页参数不变 |
+| `Kaiming He` 搜索 | Query 原样透传 |
+| 未配置的中文姓名 | Query 原样透传，不猜测英文名 |
+| 映射后的上游空结果 | 返回现有空结果，不伪造 Scholar |
+| 映射后的上游超时/限流/不可用 | 保持现有错误码、状态码和 retryable 语义 |
+| Search 返回 Scholar | Detail 使用 Search 返回的 opaque `scholar_id` |
+| 日志检查 | 不出现原姓名、改写姓名或请求正文 |
+
+执行范围：
 
 ```text
-years         integer[]
-conferences   string[]
-topics        string[]
-funding       string[]
-institutions  string[]
-coauthors     { id: string, name: string }[]
-papers        { id: string, title: string, year: integer | null }[]
+Backend Scholar 单元测试
+Backend Knowledge 核心与 Query 回归测试
+Web Knowledge 回归测试
+TypeScript 类型检查
 ```
 
-### 7.4 临时审核别名表
+### 8.2 联调验收
+
+当前真实接口基线：
 
 ```text
-normalized_name   string，唯一索引
-canonical_query   string，必填
-scholar_id        string，可选；填写后可直接走详情
-source             string，必填，记录来源或审核人
-status             active | disabled
-created_at         datetime
-updated_at         datetime
+Geoffrey Hinton → 1 条结果
+Kaiming He      → 1 条结果
+何恺明           → 0 条结果
+Kaiming He 详情  → 11 篇论文、30 位合作学者
 ```
 
-禁止字段：未经审核的自动翻译结果、无法追溯来源的姓名映射、把多个不同学者强行合并的人工覆盖字段。
+实现后需要验证：中文输入经 ShenZhi 返回与英文输入相同的 `scholar_id`，详情页正常打开；英文检索、未知姓名空结果和其他 Knowledge 能力无回归。
 
-### 7.5 错误码
+### 8.3 人工浏览器检查
 
-继续使用现有错误契约：
+1. 打开学者库页面，搜索 `何恺明`，确认出现 `Kaiming He`。
+2. 打开该学者详情，确认 URL 使用 Search 返回的 `scholar_id`，论文和合作学者可见。
+3. 搜索 `Kaiming He`，确认结果与中文搜索指向同一 `scholar_id`。
+4. 搜索一个未配置且上游不存在的中文姓名，确认展示空结果，不出现猜测或错误学者。
+5. 在 Network 中检查 BFF 响应包含 `X-Request-ID`；服务端日志可按该 ID 关联，但不包含搜索姓名。
 
-```text
-INVALID_ARGUMENT       Query 为空、长度非法或分页参数非法
-NOT_FOUND              详情 ID 不存在
-RATE_LIMITED           上游限流，可重试
-UPSTREAM_UNAVAILABLE   上游不可用，可按 retryable 决定重试
-TIMEOUT                上游超时，可重试
-CONTRACT_VIOLATION     上游字段不符合契约，不重试
-```
+## 九、方案变更触发条件
 
-### 7.6 最小测试矩阵
-
-```text
-中文名 -> 英文名结果的 scholar_id 一致
-英文名 -> 结果和详情可打开
-author_id -> 可定位对应学者
-不存在姓名 -> 200 + results=[]
-同名姓名 -> 返回多个候选，不自动合并
-上游超时 -> TIMEOUT，不降级为空结果
-别名禁用 -> 回到原始 Query 行为
-```
+只有出现下列真实需求时才扩大设计：映射规模已无法安全代码评审、需要非开发人员高频维护、需要多来源冲突治理，或知识底座明确无法承担长期别名召回。在此之前保持当前两项改动，不提前建设别名平台。
