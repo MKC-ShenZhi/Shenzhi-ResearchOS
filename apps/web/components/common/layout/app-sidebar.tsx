@@ -231,9 +231,10 @@ function ExpandableNav({
         title={label}
         onClick={() => {
           if (routeActive) {
-            // 再次点击当前栏目图标:展开侧边栏并展开副标题
+            // 当前栏目图标直接返回栏目总览,同时展开侧边栏和子栏目
             setCollapsed(false);
             setExpanded(href, true);
+            if (pathname !== href) router.push(href, { scroll: false });
           } else {
             // 先跳转,保持图标栏
             router.push(dest, { scroll: false });

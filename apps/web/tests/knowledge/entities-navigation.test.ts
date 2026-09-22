@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const sidebar = readFileSync("components/common/layout/app-sidebar.tsx", "utf8");
+const knowledgeLayout = readFileSync("app/knowledge/layout.tsx", "utf8");
+const scholarDetailRoute = readFileSync(
+  "app/knowledge/scholars/[scholarId]/page.tsx",
+  "utf8",
+);
 const dashboard = readFileSync(
   "features/knowledge/components/knowledge-dashboard.tsx",
   "utf8",
@@ -29,6 +34,15 @@ test("Knowledge sidebar exposes exactly the six V1 capability entries", () => {
     "关系图谱",
   ]);
   assert.doesNotMatch(block, /专利库|研究机构/);
+});
+
+test("Knowledge uses one shared shell and parent navigation returns to overview", () => {
+  assert.match(knowledgeLayout, /return <AppShell>\{children\}<\/AppShell>/);
+  assert.doesNotMatch(scholarDetailRoute, /AppShell/);
+  assert.match(
+    sidebar,
+    /if \(routeActive\) \{[\s\S]*?setCollapsed\(false\);[\s\S]*?setExpanded\(href, true\);[\s\S]*?router\.push\(href, \{ scroll: false \}\);/,
+  );
 });
 
 test("Knowledge dashboard is capability-only and does not import prototype data", () => {
