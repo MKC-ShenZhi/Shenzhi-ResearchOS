@@ -483,9 +483,10 @@ class KnowledgeAdapter:
         ) for item in results]
 
     async def overview(self) -> KnowledgeOverviewResponse:
-        paper_result, asset_result = await asyncio.gather(
+        paper_result, asset_result, funding_result = await asyncio.gather(
             self.client.paper_summary(),
             self.client.research_assets_summary(),
+            self.search_fundings('', limit=3),
             return_exceptions=True,
         )
         paper_count: int | None = None
@@ -498,6 +499,9 @@ class KnowledgeAdapter:
         if not isinstance(asset_result, Exception):
             asset_count = _required_int(asset_result, 'research_asset_count')
             asset_status = 'available'
+        funding_highlights = (
+            funding_result if isinstance(funding_result, list) else []
+        )
         now = datetime.now(timezone.utc)
         return KnowledgeOverviewResponse(
             as_of=now,
@@ -511,6 +515,7 @@ class KnowledgeAdapter:
             research_assets=OverviewResearchAssets(
                 total=asset_count,
                 status=asset_status,
+                highlights=funding_highlights,
                 by_type={
                     'project': OverviewResearchAsset(status='unsupported'),
                     'patent': OverviewResearchAsset(status='unsupported'),

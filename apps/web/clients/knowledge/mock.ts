@@ -116,6 +116,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
       researchAssets: {
         total: null,
         status: "unsupported",
+        highlights: [],
         byType: {
           project: { count: null, supported: false, status: "unsupported" },
           patent: { count: null, supported: false, status: "unsupported" },

@@ -50,7 +50,9 @@ test("Knowledge dashboard uses the real overview client and preserves capability
   assert.match(dashboard, /overviewSearch/);
   assert.match(dashboard, /跨库检索/);
   assert.match(dashboard, /项目专利基金/);
-  assert.match(dashboard, /当前未接入|未接入/);
+  assert.match(dashboard, /资产信息/);
+  assert.match(dashboard, /highlights/);
+  assert.match(dashboard, /暂无可展示的真实基金资产信息/);
   for (const href of [
     "/knowledge/search",
     "/knowledge/papers",

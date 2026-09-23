@@ -190,13 +190,11 @@ export function KnowledgeDashboard() {
 
       {overviewError && !overview ? <div className="mt-7 rounded-2xl bg-danger-soft px-5 py-4 text-sm text-danger" role="alert">知识库总览数据暂时无法加载。<button type="button" onClick={() => void loadOverview()} className="ml-2 font-medium underline">重试</button></div> : <div className="mt-7 grid gap-5 xl:grid-cols-3">
         <CardShell card={CARDS[0]} className="xl:col-span-2 xl:row-span-2">
-          <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_180px]">
-            <div>
-              <div className="flex items-end justify-between gap-3"><span className="text-sm font-medium text-muted">知识底座可检索论文</span><span className="text-xs text-muted">{overview?.asOf ? `统计于 ${new Date(overview.asOf).toLocaleString("zh-CN")}` : ""}</span></div>
-              <div className="mt-2 text-4xl font-bold text-ink"><NumberValue value={papers?.paperCount ?? null} status={papers?.status ?? "pending"} /></div>
-              <div className="mt-5 divide-y divide-border rounded-2xl bg-surface">{recentPapers.length ? recentPapers.slice(0, 3).map((paper) => <Link key={paper.id} href={`/papers/${encodeURIComponent(paper.id)}`} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-soft/50"><BookOpen className="size-4 shrink-0 text-primary" /><span className="truncate text-sm text-ink">{paper.title}</span></Link>) : <p className="px-4 py-4 text-sm text-muted">暂无当前账号的最近浏览记录</p>}</div>
-            </div>
-            <div className="rounded-2xl bg-primary-soft/70 p-4"><p className="text-sm font-semibold text-ink">热门主题</p>{papers?.popularTags.length ? papers.popularTags.map((tag) => <span key={tag.name} className="mt-3 mr-2 inline-flex rounded-full bg-card px-3 py-1 text-xs text-primary">#{tag.name}</span>) : <p className="mt-3 text-xs leading-5 text-muted">暂无真实主题统计</p>}</div>
+          <div>
+            <div className="text-sm font-medium text-muted">知识底座可检索论文</div>
+            <div className="mt-2 text-4xl font-bold text-ink"><NumberValue value={papers?.paperCount ?? null} status={papers?.status ?? "pending"} /></div>
+            {overview?.asOf && <div className="mt-1 text-xs text-muted">统计于 {new Date(overview.asOf).toLocaleString("zh-CN")}</div>}
+            <div className="mt-5 divide-y divide-border rounded-2xl bg-surface">{recentPapers.length ? recentPapers.slice(0, 3).map((paper) => <Link key={paper.id} href={`/papers/${encodeURIComponent(paper.id)}`} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-soft/50"><BookOpen className="size-4 shrink-0 text-primary" /><span className="truncate text-sm text-ink">{paper.title}</span></Link>) : <p className="px-4 py-4 text-sm text-muted">暂无当前账号的最近浏览记录</p>}</div>
           </div>
         </CardShell>
 
@@ -204,9 +202,28 @@ export function KnowledgeDashboard() {
 
         <CardShell card={CARDS[2]}>{overview?.scholarHighlights.length ? <div className="grid grid-cols-3 gap-2">{overview.scholarHighlights.slice(0, 3).map((item) => <div key={item.id} className="min-w-0"><div className="truncate text-sm font-medium text-ink">{item.name}</div><div className="mt-1 text-xs text-muted">{item.count ?? "—"} 篇论文</div></div>)}</div> : <p className="rounded-xl bg-surface p-4 text-sm text-muted">学者热门排行暂未接入真实统计</p>}</CardShell>
 
-        <CardShell card={CARDS[3]}>{overview?.topicHighlights.length ? <div className="flex flex-wrap gap-2">{overview.topicHighlights.map((item) => <span key={item.id} className="rounded-full bg-brand-cyan/10 px-3 py-1.5 text-xs text-brand-cyan">{item.name} · {item.count ?? "—"}</span>)}</div> : <p className="rounded-xl bg-surface p-4 text-sm text-muted">主题排行暂未接入真实统计</p>}</CardShell>
+        <CardShell card={CARDS[3]}>
+          <div className="rounded-2xl bg-brand-cyan/10 p-4">
+            <p className="text-sm font-semibold text-ink">热门主题</p>
+            {papers?.popularTags.length ? <div className="mt-3 flex flex-wrap gap-2">{papers.popularTags.map((tag) => <span key={tag.name} className="rounded-full bg-card px-3 py-1.5 text-xs text-brand-cyan">#{tag.name}{tag.count === null ? "" : ` · ${tag.count}`}</span>)}</div> : overview?.topicHighlights.length ? <div className="mt-3 flex flex-wrap gap-2">{overview.topicHighlights.map((item) => <span key={item.id} className="rounded-full bg-card px-3 py-1.5 text-xs text-brand-cyan">{item.name}{item.count === null ? "" : ` · ${item.count}`}</span>)}</div> : <p className="mt-3 text-xs leading-5 text-muted">暂无真实主题统计</p>}
+          </div>
+        </CardShell>
 
-        <CardShell card={CARDS[4]}><div className="space-y-2">{["project", "patent", "funding"].map((kind) => { const item = assets?.byType[kind]; return <div key={kind} className="flex items-center justify-between rounded-xl bg-brand-gold/15 px-4 py-2.5"><span className="text-sm text-muted">{kind === "project" ? "项目" : kind === "patent" ? "专利" : "基金"}</span><span className="text-lg font-bold text-ink"><NumberValue value={item?.count ?? null} status={item?.status ?? "pending"} /></span></div>; })}</div>{assets?.total !== null && assets?.total !== undefined && <p className="mt-3 text-xs text-muted">统一研究资产总量：{assets.total.toLocaleString("zh-CN")}（不拆分为三类）</p>}</CardShell>
+        <CardShell card={CARDS[4]}>
+          <div className="rounded-2xl bg-primary-soft/70 px-4 py-3">
+            <div className="text-sm text-muted">资产总量</div>
+            <div className="mt-1 text-3xl font-bold text-ink"><NumberValue value={assets?.total ?? null} status={assets?.status ?? "pending"} /></div>
+            <div className="mt-1 text-xs text-muted">统一 Funding 资产，不拆分项目、专利、基金类型</div>
+          </div>
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-semibold text-ink">资产信息</span>
+              <span className="text-xs text-muted">知识底座实时返回</span>
+            </div>
+            {assets?.highlights?.length ? <div className="space-y-2">{assets.highlights.slice(0, 3).map((item) => <Link key={item.id} href={`/knowledge/funding?funding=${encodeURIComponent(item.name)}`} className="flex items-center justify-between rounded-xl bg-brand-gold/15 px-4 py-2.5 hover:bg-brand-gold/25"><span className="min-w-0 truncate text-sm font-medium text-ink">{item.name}</span><span className="ml-3 shrink-0 text-xs text-muted">{item.count === null ? "基金" : `${item.count.toLocaleString("zh-CN")} 篇论文`}</span></Link>)}</div> : <p className="rounded-xl bg-surface px-4 py-3 text-sm text-muted">暂无可展示的真实基金资产信息</p>}
+          </div>
+          <p className="mt-3 text-xs leading-5 text-muted">项目、专利暂无独立实体接口，暂不展示虚构资产。</p>
+        </CardShell>
 
         <CardShell card={CARDS[5]}>{overview?.graphPreview.supported ? <p className="text-sm text-muted">已加载 {overview.graphPreview.nodes.length} 个节点和 {overview.graphPreview.edges.length} 条关系。</p> : <div className="rounded-2xl bg-primary-soft/70 p-4 text-sm leading-6 text-muted">请选择一篇真实论文后查看关系图谱，当前没有默认中心论文。</div>}</CardShell>
       </div>}

@@ -66,6 +66,13 @@ RELATED_PAPER_RESPONSE = {
     'query_parse': {},
     'query_rewrite': {},
 }
+FUNDING_CANDIDATE_RESPONSE = {
+    'results': [
+        {'funding_id': 'funding:real:1', 'name': '国家自然科学基金', 'paper_count': 12},
+        {'funding_id': 'funding:real:2', 'name': 'National Science Foundation', 'paper_count': 8},
+    ],
+    'query': '',
+}
 
 
 class KnowledgeEntityMappingTests(unittest.TestCase):
@@ -110,6 +117,16 @@ class KnowledgeEntityMappingTests(unittest.TestCase):
 
 
 class EntityFixtureClient:
+    async def paper_summary(self):
+        return {'paper_count': 100}
+
+    async def research_assets_summary(self):
+        return {'research_asset_count': 7353}
+
+    async def search_fundings(self, query, *, limit, offset):
+        self.funding_candidates = (query, limit, offset)
+        return FUNDING_CANDIDATE_RESPONSE
+
     async def search_scholars(self, query, *, limit, offset):
         self.scholar_search = (query, limit, offset)
         return SCHOLAR_SEARCH_RESPONSE
@@ -128,6 +145,18 @@ class EntityFixtureClient:
 
 
 class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_overview_exposes_real_funding_candidates_without_fake_type_counts(self):
+        client = EntityFixtureClient()
+        result = await KnowledgeAdapter(client).overview()
+
+        self.assertEqual(client.funding_candidates, ('', 3, 0))
+        self.assertEqual(result.research_assets.total, 7353)
+        self.assertEqual(
+            [item.name for item in result.research_assets.highlights],
+            ['国家自然科学基金', 'National Science Foundation'],
+        )
+        self.assertIsNone(result.research_assets.by_type['funding'].count)
+
     async def test_scholar_search_and_detail_mapping(self):
         client = EntityFixtureClient()
         adapter = KnowledgeAdapter(client)

@@ -347,6 +347,7 @@ class OverviewResearchAsset(KnowledgeModel):
 class OverviewResearchAssets(KnowledgeModel):
     total: int | None = None
     status: OverviewStatus = 'pending'
+    highlights: list[OverviewHighlight] = Field(default_factory=list)
     by_type: dict[str, OverviewResearchAsset] = Field(
         default_factory=dict,
         validation_alias=AliasChoices('byType', 'by_type'),

@@ -239,6 +239,7 @@ export interface KnowledgeOverviewResponse {
   researchAssets: {
     total: number | null;
     status: KnowledgeOverviewStatus;
+    highlights: KnowledgeOverviewHighlight[];
     byType: Record<string, KnowledgeOverviewResearchAsset>;
     coverage: Record<string, boolean>;
   };
