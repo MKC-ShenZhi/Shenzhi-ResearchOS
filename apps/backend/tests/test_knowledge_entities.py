@@ -175,10 +175,15 @@ class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('funding', [item.type for item in result.results])
         self.assertTrue(any(item.metadata.get('matchedBy') == 'topic' for item in result.results))
 
-    async def test_overview_exposes_real_funding_candidates_without_fake_type_counts(self):
+    async def test_overview_exposes_real_scholar_and_funding_candidates(self):
         client = EntityFixtureClient()
         result = await KnowledgeAdapter(client).overview()
 
+        self.assertEqual(client.scholar_search, ('a', 3, 0))
+        self.assertEqual(
+            [(item.id, item.name, item.count) for item in result.scholar_highlights],
+            [(SCHOLAR_ID, 'Geoffrey Hinton', 7)],
+        )
         self.assertEqual(client.funding_candidates, ('', 3, 0))
         self.assertEqual(result.research_assets.total, 7353)
         self.assertEqual(

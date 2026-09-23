@@ -23,6 +23,7 @@ import {
   type KnowledgeOverviewResponse,
   type KnowledgePersonalOverviewResponse,
 } from "@/clients/knowledge";
+import { loadKnowledgeOverview } from "@/features/knowledge/lib/overview-cache";
 
 type SearchTab = { label: string; types: KnowledgeMixedSearchType[] };
 
@@ -144,7 +145,7 @@ export function KnowledgeDashboard() {
 
   const loadOverview = useCallback(async () => {
     setOverviewError(false);
-    const [publicResult, personalResult] = await Promise.allSettled([client.overview(), client.personalOverview()]);
+    const [publicResult, personalResult] = await loadKnowledgeOverview(client);
     if (publicResult.status === "fulfilled") setOverview(publicResult.value);
     else setOverviewError(true);
     if (personalResult.status === "fulfilled") setPersonal(personalResult.value);

@@ -483,9 +483,13 @@ class KnowledgeAdapter:
         ) for item in results]
 
     async def overview(self) -> KnowledgeOverviewResponse:
-        paper_result, asset_result, funding_result = await asyncio.gather(
+        paper_result, asset_result, scholar_result, funding_result = await asyncio.gather(
             self.client.paper_summary(),
             self.client.research_assets_summary(),
+            # The upstream API provides scholar candidates rather than a
+            # leaderboard. A broad real query lets the overview surface three
+            # actual, currently indexed scholars without inventing rankings.
+            self.search_scholars(ScholarSearchRequest(query='a', limit=3)),
             self.search_fundings('', limit=3),
             return_exceptions=True,
         )
@@ -502,6 +506,18 @@ class KnowledgeAdapter:
         funding_highlights = (
             funding_result if isinstance(funding_result, list) else []
         )
+        scholar_highlights = []
+        if isinstance(scholar_result, ScholarSearchResponse):
+            scholar_highlights = [
+                OverviewHighlight(
+                    id=item.id,
+                    name=item.name,
+                    count=item.paper_count,
+                    status='available',
+                    metadata={'entityType': 'scholar'},
+                )
+                for item in scholar_result.results[:3]
+            ]
         now = datetime.now(timezone.utc)
         return KnowledgeOverviewResponse(
             as_of=now,
@@ -510,7 +526,7 @@ class KnowledgeAdapter:
                 paper_count=paper_count,
                 status=paper_status,
             ),
-            scholar_highlights=[],
+            scholar_highlights=scholar_highlights,
             topic_highlights=[],
             research_assets=OverviewResearchAssets(
                 total=asset_count,
