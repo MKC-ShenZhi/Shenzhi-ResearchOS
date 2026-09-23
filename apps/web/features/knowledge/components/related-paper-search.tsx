@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { usePathname } from "next/navigation";
-import { Search } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Search } from "lucide-react";
 import { getKnowledgeClient, KnowledgeClientError } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
 import { knowledgeQueryRetry } from "@/features/knowledge/retry";
@@ -16,6 +16,10 @@ import {
 
 type RelatedPaperSearchKind = "subject";
 
+const PAGE_SIZE = 10;
+const MAX_PAGE = 100;
+const MAX_BROWSABLE_RESULTS = PAGE_SIZE * MAX_PAGE;
+
 const COPY = {
   subject: {
     title: "主题库",
@@ -26,29 +30,65 @@ const COPY = {
   },
 } satisfies Record<RelatedPaperSearchKind, Record<string, string>>;
 
-async function fetchRelatedPapers(kind: RelatedPaperSearchKind, query: string) {
+function normalizePage(value: string | null) {
+  const page = Number(value);
+  if (!Number.isInteger(page) || page < 1) return 1;
+  return Math.min(page, MAX_PAGE);
+}
+
+function topicUrl(pathname: string, subject: string, page: number) {
+  const params = new URLSearchParams();
+  if (subject) params.set("subject", subject);
+  if (subject) params.set("page", String(page));
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+async function fetchRelatedPapers(
+  query: string,
+  page: number,
+  signal?: AbortSignal,
+) {
   const client = getKnowledgeClient();
-  return client.searchBySubject(query, 20);
+  return client.searchBySubject(query, (page - 1) * PAGE_SIZE, PAGE_SIZE, signal);
 }
 
 export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {
   const copy = COPY[kind];
   const returnTo = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const subjectFromUrl = searchParams.get("subject")?.trim() ?? "";
+  const pageFromUrl = normalizePage(searchParams.get("page"));
   const [query, setQuery] = useState("");
-  const [committedQuery, setCommittedQuery] = useState("");
+  const activeQuery = subjectFromUrl;
   const { data, isPending, isFetching, isError, error, refetch } = useQuery({
-    queryKey: ["knowledge", kind, committedQuery],
-    queryFn: () => fetchRelatedPapers(kind, committedQuery),
-    enabled: committedQuery.length > 0,
+    queryKey: ["knowledge", kind, activeQuery, pageFromUrl],
+    queryFn: ({ signal }) => fetchRelatedPapers(activeQuery, pageFromUrl, signal),
+    enabled: activeQuery.length > 0,
     retry: knowledgeQueryRetry,
   });
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setCommittedQuery(query.trim());
+    router.push(topicUrl(returnTo, query.trim(), 1));
   };
 
   const results = data?.results ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = total > 0 ? Math.min(Math.ceil(total / PAGE_SIZE), MAX_PAGE) : 0;
+  const page = totalPages > 0 ? Math.min(pageFromUrl, totalPages) : pageFromUrl;
+  const goToPage = (nextPage: number) => {
+    if (!subjectFromUrl || totalPages === 0) return;
+    const boundedPage = Math.max(1, Math.min(nextPage, totalPages, MAX_PAGE));
+    router.push(topicUrl(returnTo, subjectFromUrl, boundedPage));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const submitPage = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const requestedPage = Number(new FormData(event.currentTarget).get("page"));
+    goToPage(Number.isInteger(requestedPage) ? requestedPage : 1);
+  };
 
   return (
     <div className="mx-auto max-w-[980px] px-6 py-8 lg:px-8">
@@ -75,7 +115,7 @@ export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {
       </form>
 
       <main className="mt-6">
-        {!committedQuery ? (
+        {!activeQuery ? (
           <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-line bg-card/40 px-6 text-center text-sm text-muted">
             {copy.idle}
           </div>
@@ -89,16 +129,19 @@ export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {
             onRetry={() => void refetch()}
           />
         ) : results.length === 0 ? (
-          <KnowledgeSearchEmpty query={committedQuery} />
+          <KnowledgeSearchEmpty query={activeQuery} />
         ) : (
           <div className="space-y-4">
             <div className="px-1">
               <p className="text-sm font-medium text-ink">
-                {copy.resultPrefix}：{committedQuery}
+                {copy.resultPrefix}：{activeQuery}
               </p>
               <p className="mt-1 text-xs text-muted">
-                相关论文 · {results.length} 篇
+                共 {total} 篇论文
               </p>
+              {total > MAX_BROWSABLE_RESULTS && (
+                <p className="mt-1 text-xs text-muted">最多可浏览前 1000 条</p>
+              )}
             </div>
             {results.map((hit, index) => (
               <KnowledgeResultCard
@@ -108,6 +151,36 @@ export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {
                 returnTo={returnTo}
               />
             ))}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+              <p className="text-sm text-muted">第 {page} / {totalPages} 页</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="icon" aria-label="首页" onClick={() => goToPage(1)} disabled={page <= 1 || isFetching}>
+                  <ChevronsLeft />
+                </Button>
+                <Button variant="outline" size="icon" aria-label="上一页" onClick={() => goToPage(page - 1)} disabled={page <= 1 || isFetching}>
+                  <ChevronLeft />
+                </Button>
+                <form onSubmit={submitPage} className="flex items-center gap-2">
+                  <label htmlFor="topic-page" className="sr-only">页码</label>
+                  <input
+                    key={page}
+                    id="topic-page"
+                    name="page"
+                    type="number"
+                    min={1}
+                    max={totalPages}
+                    defaultValue={page}
+                    className="h-9 w-16 rounded-lg border border-line bg-panel px-2 text-center text-sm text-ink outline-none focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
+                  />
+                </form>
+                <Button variant="outline" size="icon" aria-label="下一页" onClick={() => goToPage(page + 1)} disabled={page >= totalPages || isFetching}>
+                  <ChevronRight />
+                </Button>
+                <Button variant="outline" size="icon" aria-label="末页" onClick={() => goToPage(totalPages)} disabled={page >= totalPages || isFetching}>
+                  <ChevronsRight />
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </main>

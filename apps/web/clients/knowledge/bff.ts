@@ -14,6 +14,7 @@ import type {
   KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
 } from "./types";
 
 /**
@@ -145,11 +146,17 @@ export class BffKnowledgeClient implements KnowledgeClient {
     }
   }
 
-  async searchBySubject(subject: string, topK = 10): Promise<KnowledgeSearchResponse> {
-    const query = new URLSearchParams({ subject, topK: String(topK) });
+  async searchBySubject(
+    subject: string,
+    offset = 0,
+    limit = 10,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSubjectSearchResponse> {
+    const query = new URLSearchParams({ subject, offset: String(offset), limit: String(limit) });
     try {
-      return await apiJson<KnowledgeSearchResponse>(
+      return await apiJson<KnowledgeSubjectSearchResponse>(
         `/knowledge/subjects/search?${query.toString()}`,
+        { signal },
       );
     } catch (error) {
       throw toKnowledgeError(error);

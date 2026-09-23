@@ -13,6 +13,7 @@ import type {
   KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
 } from "./types";
 
 /**
@@ -34,7 +35,12 @@ export interface KnowledgeClient {
   /** Funding candidate search; returns Funding summaries, not papers. */
   searchFundings(params: KnowledgeFundingSearchParams): Promise<KnowledgeFundingSearchResponse>;
   /** 按研究主题获取关联论文 */
-  searchBySubject(subject: string, topK?: number): Promise<KnowledgeSearchResponse>;
+  searchBySubject(
+    subject: string,
+    offset?: number,
+    limit?: number,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSubjectSearchResponse>;
   /** 按 Funding 名称片段获取关联论文；返回 Paper Results */
   searchByFunding(funding: string, topK?: number): Promise<KnowledgeSearchResponse>;
   /** 论文关系图谱；默认 depth=1 */

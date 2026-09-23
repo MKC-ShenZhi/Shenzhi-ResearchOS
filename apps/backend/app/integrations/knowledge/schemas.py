@@ -36,6 +36,7 @@ class UpstreamSearchResult(TypedDict):
 
 class UpstreamSearchResponse(TypedDict):
     results: list[UpstreamSearchResult]
+    total: NotRequired[int]
     state: NotRequired[dict[str, Any]]
     query_parse: NotRequired[dict[str, Any]]
     query_rewrite: NotRequired[dict[str, Any]]

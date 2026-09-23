@@ -35,6 +35,11 @@ export interface KnowledgeSearchResponse {
   hasMore?: boolean;
 }
 
+export interface KnowledgeSubjectSearchResponse {
+  results: KnowledgePaperHit[];
+  total: number;
+}
+
 export interface KnowledgeScholarSearchParams {
   query: string;
   limit?: number;

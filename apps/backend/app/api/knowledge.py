@@ -158,19 +158,34 @@ def _related_search_request(
         return None
 
 
+def _subject_page_request(
+    value: str | None, offset: str, limit: str
+) -> tuple[str, int, int] | None:
+    try:
+        request = RelatedPaperSearchRequest.model_validate({'query': value, 'topK': 1})
+        offset_value = int(offset)
+        limit_value = int(limit)
+        if offset_value < 0 or offset_value >= 1000 or limit_value < 1 or limit_value > 100:
+            return None
+        return request.query, offset_value, limit_value
+    except (ValidationError, TypeError, ValueError):
+        return None
+
+
 @router.get('/subjects/search')
 async def search_by_subject(
     request: Request,
     subject: str | None = Query(default=None),
-    top_k: str = Query(default='10', alias='topK'),
+    offset: str = Query(default='0'),
+    limit: str = Query(default='10'),
     _credential: None = Depends(require_bff),
 ):
-    search_request = _related_search_request(subject, top_k)
+    search_request = _subject_page_request(subject, offset, limit)
     if search_request is None:
         return invalid_argument(request, '主题检索参数不合法')
     try:
         response = await service.search_by_subject(
-            search_request.query, top_k=search_request.top_k
+            search_request[0], offset=search_request[1], limit=search_request[2]
         )
     except KnowledgeServiceError as error:
         return _error_payload(error, request)

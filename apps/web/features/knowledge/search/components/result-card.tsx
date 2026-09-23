@@ -54,19 +54,23 @@ export function KnowledgeResultCard({
     >
       <div className="flex gap-5">
         <div className="min-w-0 flex-1">
-          {/* 元信息行 */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-            <span className="text-faint">{hit.year ?? "—"}</span>
-            {hit.venue ? (
-              <Badge variant={venueTone(index)}>{hit.venue}</Badge>
-            ) : (
-              <span className="text-[11px] text-faint">暂无会议</span>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+              <span className="text-faint">{hit.year ?? "—"}</span>
+              {hit.venue ? (
+                <Badge variant={venueTone(index)}>{hit.venue}</Badge>
+              ) : (
+                <span className="text-[11px] text-faint">暂无会议</span>
+              )}
+            </div>
+            {!historyMode && (
+              <CollectionPicker className="shrink-0" paperId={hit.id} />
             )}
-            <span className="flex min-w-0 items-center gap-1.5 text-muted">
-              <Users className="size-3.5 shrink-0 text-faint" />
-              <span className="truncate">{authors}</span>
-            </span>
-            {!historyMode && <CollectionPicker className="ml-auto" paperId={hit.id} />}
+          </div>
+
+          <div className="mt-1.5 flex min-w-0 items-start gap-1.5 text-[13px] text-muted">
+            <Users className="mt-0.5 size-3.5 shrink-0 text-faint" />
+            <span className="min-w-0 break-words leading-relaxed">{authors}</span>
           </div>
 
           {/* 标题 */}
@@ -87,35 +91,39 @@ export function KnowledgeResultCard({
           )}
 
           {/* 底部：关键词 + 操作 */}
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
-              {(hit.keywords.length ? hit.keywords : hit.subjects).slice(0, 5).map((tag) => (
-                <span key={tag} className="text-[13px] text-muted">
-                  #{tag}
-                </span>
-              ))}
-              {!hit.keywords.length && !hit.subjects.length && (
-                <span className="text-[11px] text-faint">暂无关键词</span>
-              )}
+          <div className="mt-4 flex items-end justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {(hit.keywords.length ? hit.keywords : hit.subjects).slice(0, 5).map((tag) => (
+                  <span key={tag} className="text-[13px] text-muted">
+                    #{tag}
+                  </span>
+                ))}
+                {!hit.keywords.length && !hit.subjects.length && (
+                  <span className="text-[11px] text-faint">暂无关键词</span>
+                )}
+              </div>
             </div>
             {historyMode ? (
               <time dateTime={lastViewedAt} className="shrink-0 text-xs text-faint">
                 上次浏览：{lastViewedAt ? formatLastViewedAt(lastViewedAt) : "未知"}
               </time>
-            ) : <div className="flex shrink-0 items-center gap-2">
-              <Link href={paperHref(hit.id, { mode: "create", source: returnTo })}>
-                <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-xs">
-                  论文详情
-                  <ArrowRight className="size-3.5" />
-                </Button>
-              </Link>
-              <Link href={paperHref(hit.id, { mode: "create", source: returnTo, graph: true })}>
-                <Button size="sm" className="h-8 rounded-lg px-3 text-xs">
-                  <Network className="size-3.5" />
-                  关系图谱
-                </Button>
-              </Link>
-            </div>}
+            ) : (
+              <div className="flex shrink-0 items-center gap-2">
+                <Link href={paperHref(hit.id, { mode: "create", source: returnTo })}>
+                  <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-xs">
+                    论文详情
+                    <ArrowRight className="size-3.5" />
+                  </Button>
+                </Link>
+                <Link href={paperHref(hit.id, { mode: "create", source: returnTo, graph: true })}>
+                  <Button size="sm" className="h-8 rounded-lg px-3 text-xs">
+                    <Network className="size-3.5" />
+                    关系图谱
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 

@@ -16,6 +16,7 @@ export type {
   KnowledgeFundingSummary,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
   KnowledgeScholarSearchParams,
   KnowledgeScholarSearchResponse,
   KnowledgeScholarSummary,

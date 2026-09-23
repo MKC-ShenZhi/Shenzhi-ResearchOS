@@ -10,6 +10,7 @@ from app.schemas.knowledge import (
     FundingSearchResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
+    KnowledgeSubjectSearchResponse,
     PaperDetail,
     PaperSummary,
     PaperGraph,
@@ -90,10 +91,10 @@ class KnowledgeService:
             raise KnowledgeServiceError.from_integration_error(error) from error
 
     async def search_by_subject(
-        self, subject: str, *, top_k: int = 10
-    ) -> KnowledgeSearchResponse:
+        self, subject: str, *, offset: int = 0, limit: int = 10
+    ) -> KnowledgeSubjectSearchResponse:
         try:
-            return await self.adapter.search_by_subject(subject, top_k=top_k)
+            return await self.adapter.search_by_subject(subject, offset=offset, limit=limit)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 
