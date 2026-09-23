@@ -4,13 +4,12 @@ import test from "node:test";
 import { chatTimestampMs, mergeHistorySources } from "../../features/chat/services/history-snapshot";
 import { useAskSidebarBridge } from "../../stores/ask-sidebar-bridge";
 
-test("backend list [] replaces old DB history while preserving local fallback entries", () => {
+test("formal sidebar history uses only paged Agent sessions", () => {
   const sidebar = readFileSync("components/common/layout/sidebar-chat-history.tsx", "utf8");
-  const bridge = readFileSync("stores/ask-sidebar-bridge.ts", "utf8");
-
-  assert.match(sidebar, /setHistoryItems\(mergeHistorySources\(data\.sessions/);
-  assert.doesNotMatch(sidebar, /bridgeItems\.length > 0 \? bridgeItems : fetched/);
-  assert.match(bridge, /removeHistoryItem/);
+  assert.match(sidebar, /listAgentSessions\(PAGE_SIZE/);
+  assert.match(sidebar, /const PAGE_SIZE = 10/);
+  assert.match(sidebar, /page\.next_cursor/);
+  assert.doesNotMatch(sidebar, /listChatSessions|listLocalAskSessions|mergeHistorySources|useAskSidebarBridge/);
 });
 
 test("history snapshot treats an empty backend list as authoritative", () => {
@@ -46,7 +45,7 @@ test("backend Unix seconds are normalized to browser milliseconds", () => {
   assert.equal(mergeHistorySources(db, [])[0]?.updatedAt, 1_757_116_800_000);
 });
 
-test("auth identity changes clear the cached history selection before refetch", () => {
+test("auth identity changes reset the Agent cursor before refetch", () => {
   const store = useAskSidebarBridge;
   const state = store.getState();
   state.setHistoryItems([{
@@ -67,10 +66,10 @@ test("auth identity changes clear the cached history selection before refetch", 
   assert.equal(store.getState().pendingAction, null);
 
   const sidebar = readFileSync("components/common/layout/sidebar-chat-history.tsx", "utf8");
-  assert.match(sidebar, /chatIdentityScope\(session\?\.user\.id\)/);
-  assert.match(sidebar, /resetForIdentityChange\(\)/);
-  assert.equal((sidebar.match(/listLocalAskSessions\(identityScope\)/g) ?? []).length, 2);
-  assert.match(sidebar, /deleteLocalAskSession\(identityScope, item\.id\)/);
+  assert.match(sidebar, /session\?\.user\.id/);
+  assert.match(sidebar, /cursorRef\.current = null/);
+  assert.match(sidebar, /hasMoreRef\.current = true/);
+  assert.doesNotMatch(sidebar, /listLocalAskSessions|deleteLocalAskSession|chatIdentityScope/);
   assert.doesNotMatch(sidebar, /location\.reload/);
 });
 
@@ -86,13 +85,11 @@ test("auth-owned identity scope is passed through every local-history operation"
   assert.doesNotMatch(hook, /useAuth\(/);
 });
 
-test("missing delete is idempotent and removes the exact DB item", () => {
+test("Agent delete removes the exact sidebar item and returns home for the active session", () => {
   const sidebar = readFileSync("components/common/layout/sidebar-chat-history.tsx", "utf8");
-  const errors = readFileSync("features/chat/services/errors.ts", "utf8");
-
-  assert.match(errors, /export function isMissingSessionError/);
-  assert.match(sidebar, /isMissingSessionError\(error\)/);
-  assert.match(sidebar, /removeHistoryItem/);
+  assert.match(sidebar, /await deleteAgentSession\(item\.id\)/);
+  assert.match(sidebar, /current\.filter\(\(entry\) => entry\.id !== item\.id\)/);
+  assert.match(sidebar, /currentSessionId === item\.id\) router\.push\("\/"\)/);
 });
 
 test("backend unix seconds become millisecond timestamps for sidebar dates", () => {

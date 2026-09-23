@@ -1,366 +1,182 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+
 import {
-  ChevronDown,
-  History,
-  MessageSquarePlus,
-  Pencil,
-  Search,
-  Star,
-  Trash2,
-} from "lucide-react";
+  deleteAgentSession, listAgentSessions, renameAgentSession,
+  type AgentSessionSummary,
+} from "@/clients/backend/agent";
 import { useAuth } from "@/components/auth/auth-provider";
-import { cn } from "@/lib/utils";
-import { deleteChatSession, listChatSessions, updateChatSession } from "@/clients/backend/chat";
-import { deleteLocalAskSession, listLocalAskSessions } from "@/features/chat/services/local-history";
-import { isMissingSessionError, messageForApiError } from "@/features/chat/services/errors";
-import { mergeHistorySources } from "@/features/chat/services/history-snapshot";
-import { chatIdentityScope } from "@/features/chat/services/identity-scope";
-import { askSessionUrl } from "@/features/chat/services/session-url";
+import { migrateLegacyAgentSessions } from "@/features/agent-chat/session-store";
 import {
-  useAskSidebarBridge,
-  type SidebarChatHistoryItem,
-} from "@/stores/ask-sidebar-bridge";
-import { useSidebarStore } from "@/stores/sidebar";
+  AGENT_SESSIONS_CHANGED, notifyAgentSessionsChanged,
+} from "@/features/agent-chat/session-events";
+import { cn } from "@/lib/utils";
 
-const HISTORY_KEY = "/agents/history";
+const PAGE_SIZE = 10;
 
-function relativeTime(ts: number): string {
-  const diff = Date.now() - ts;
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "刚刚";
-  if (min < 60) return `${min} 分钟前`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h} 小时前`;
-  const d = Math.floor(h / 24);
-  if (d < 30) return `${d} 天前`;
-  return new Date(ts).toLocaleDateString("zh-CN");
-}
-
-/** 主侧栏：可折叠「对话历史」下拉（Chat 唯一历史入口） */
+/** Direct Agent history list. Its sentinel observes AppSidebar nav; no nested scroll area. */
 export function SidebarChatHistory({ collapsed }: { collapsed?: boolean }) {
-  const pathname = usePathname();
   const router = useRouter();
-  const { session, isPending: authPending } = useAuth();
-  const identityScope = authPending ? null : chatIdentityScope(session?.user.id);
-  const bridgeItems = useAskSidebarBridge((s) => s.historyItems);
-  const activeId = useAskSidebarBridge((s) => s.activeHistoryId);
-  const setActiveSessionId = useAskSidebarBridge((s) => s.setActiveSessionId);
-  const refreshNonce = useAskSidebarBridge((s) => s.historyRefreshNonce);
-  const requestReset = useAskSidebarBridge((s) => s.requestReset);
-  const requestLoad = useAskSidebarBridge((s) => s.requestLoad);
-  const clearPending = useAskSidebarBridge((s) => s.clearPending);
-  const bumpHistoryRefresh = useAskSidebarBridge((s) => s.bumpHistoryRefresh);
-  const resetForIdentityChange = useAskSidebarBridge((s) => s.resetForIdentityChange);
-  const storedOpen = useSidebarStore((s) => s.expanded[HISTORY_KEY]);
-  const setExpanded = useSidebarStore((s) => s.setExpanded);
-  const open = storedOpen ?? false;
+  const searchParams = useSearchParams();
+  const currentSessionId = searchParams.get("session");
+  const { session, isPending } = useAuth();
+  const [items, setItems] = useState<AgentSessionSummary[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const requestRef = useRef(0);
+  const loadingRef = useRef(false);
+  const cursorRef = useRef<string | null>(null);
+  const hasMoreRef = useRef(true);
 
-  const [pending, setPending] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftTitle, setDraftTitle] = useState("");
-  const editRef = useRef<HTMLInputElement>(null);
-  const refreshSequence = useRef(0);
-  const previousIdentityScope = useRef<string | null>(null);
-
-  const setHistoryItems = useAskSidebarBridge((s) => s.setHistoryItems);
-  const removeHistoryItem = useAskSidebarBridge((s) => s.removeHistoryItem);
-
-  const refresh = useCallback(() => {
-    if (!identityScope) return;
-    const requestId = ++refreshSequence.current;
-    setHistoryError(null);
-    void listChatSessions()
-      .then((data) => {
-        if (requestId !== refreshSequence.current) return;
-        // The backend response is authoritative. In particular, [] must
-        // replace an old bridge snapshot after a Memory repository restart.
-        setHistoryItems(mergeHistorySources(data.sessions, listLocalAskSessions(identityScope)));
-      })
-      .catch((error) => {
-        if (requestId !== refreshSequence.current) return;
-        setHistoryItems(mergeHistorySources([], listLocalAskSessions(identityScope)));
-        setHistoryError(messageForApiError(error));
-      });
-  }, [identityScope, setHistoryItems]);
-
-  useEffect(() => {
-    if (!identityScope) {
-      refreshSequence.current += 1;
-      return;
-    }
-    if (previousIdentityScope.current !== identityScope) {
-      previousIdentityScope.current = identityScope;
-      resetForIdentityChange();
-    }
-    queueMicrotask(refresh);
-    return () => {
-      // Ignore a response started for an older route or auth identity.
-      refreshSequence.current += 1;
-    };
-  }, [identityScope, pathname, refresh, refreshNonce, resetForIdentityChange]);
-
-  useEffect(() => {
-    if (editingId) editRef.current?.focus();
-  }, [editingId]);
-
-  // The bridge is the single rendered snapshot. Never fall back to a stale
-  // local component copy when the authoritative backend list is empty.
-  const items = bridgeItems;
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) => item.title.toLowerCase().includes(q));
-  }, [items, query]);
-
-  const onAgentRoute = pathname === "/agents" || pathname.startsWith("/agents/ask");
-
-  const openSession = (item: SidebarChatHistoryItem) => {
-    if (item.source === "db") {
-      clearPending();
-      router.push(askSessionUrl(item.id));
-      return;
-    }
-    setActiveSessionId(null);
-    requestLoad(item, "/agents");
-    const actualPathname = typeof window === "undefined" ? pathname : window.location.pathname;
-    if (actualPathname !== "/agents") router.push("/agents");
-  };
-
-  const newChat = () => {
-    setActiveSessionId(null);
-    requestReset();
-    router.push(askSessionUrl(null));
-  };
-
-  const mutate = async (fn: () => Promise<void>) => {
-    if (pending) return;
-    setPending(true);
-    setHistoryError(null);
+  const load = useCallback(async (reset: boolean) => {
+    if (loadingRef.current || (!reset && !hasMoreRef.current)) return;
+    loadingRef.current = true;
+    setLoading(true);
+    setError(null);
+    const request = ++requestRef.current;
     try {
-      await fn();
-      refresh();
-      bumpHistoryRefresh();
-    } catch (error) {
-      setHistoryError(messageForApiError(error));
+      let page = await listAgentSessions(PAGE_SIZE, reset ? null : cursorRef.current);
+      if (request !== requestRef.current) return;
+      setItems((current) => reset
+        ? page.sessions
+        : [...current, ...page.sessions.filter((item) => !current.some((old) => old.id === item.id))]);
+      if (reset && !page.ephemeral) {
+        const migrated = await migrateLegacyAgentSessions();
+        if (migrated > 0) {
+          page = await listAgentSessions(PAGE_SIZE);
+          if (request !== requestRef.current) return;
+          setItems(page.sessions);
+        }
+      }
+      cursorRef.current = page.next_cursor;
+      hasMoreRef.current = page.has_more;
+      setHasMore(page.has_more);
+    } catch (cause) {
+      if (request === requestRef.current) {
+        setError(cause instanceof Error ? cause.message : "聊天历史加载失败");
+      }
     } finally {
-      setPending(false);
+      if (request === requestRef.current) {
+        loadingRef.current = false;
+        setLoading(false);
+      }
     }
-  };
+  }, []);
 
-  const togglePanel = () => setExpanded(HISTORY_KEY, !open);
+  useEffect(() => {
+    if (isPending) return;
+    let active = true;
+    requestRef.current += 1;
+    loadingRef.current = false;
+    queueMicrotask(() => {
+      if (!active) return;
+      setItems([]);
+      setHasMore(true);
+      cursorRef.current = null;
+      hasMoreRef.current = true;
+      void load(true);
+    });
+    return () => { active = false; };
+  }, [isPending, session?.user.id, load]);
 
-  const commitEdit = async (id: string) => {
-    const title = draftTitle.trim();
-    setEditingId(null);
-    if (!title) return;
+  useEffect(() => {
+    const refresh = () => {
+      loadingRef.current = false;
+      setHasMore(true);
+      cursorRef.current = null;
+      hasMoreRef.current = true;
+      void load(true);
+    };
+    window.addEventListener(AGENT_SESSIONS_CHANGED, refresh);
+    return () => window.removeEventListener(AGENT_SESSIONS_CHANGED, refresh);
+  }, [load]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    const root = sentinel?.closest("nav") ?? null;
+    if (!sentinel || !root || !hasMore) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void load(false);
+    }, { root, rootMargin: "0px 0px 120px 0px" });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, load]);
+
+  if (collapsed) return null;
+
+  const rename = async (item: AgentSessionSummary) => {
+    const title = window.prompt("重命名会话", item.title)?.trim();
+    setMenuId(null);
+    if (!title || title === item.title) return;
     try {
-      await updateChatSession(id, { title });
-      refresh();
-      bumpHistoryRefresh();
-    } catch (error) {
-      setHistoryError(messageForApiError(error));
+      const updated = await renameAgentSession(item.id, title);
+      setItems((current) => current.map((entry) => entry.id === item.id ? updated : entry));
+      notifyAgentSessionsChanged();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "重命名失败");
     }
   };
 
-  if (collapsed) {
-    return (
-      <Link
-        href="/agents"
-        title="对话历史"
-        className="flex h-10 shrink-0 items-center justify-center rounded-xl text-ink-2 transition-colors hover:bg-card"
-      >
-        <History className="size-[18px]" strokeWidth={1.8} />
-      </Link>
-    );
-  }
+  const remove = async (item: AgentSessionSummary) => {
+    setMenuId(null);
+    if (!window.confirm(`删除会话「${item.title}」？`)) return;
+    try {
+      await deleteAgentSession(item.id);
+      setItems((current) => current.filter((entry) => entry.id !== item.id));
+      notifyAgentSessionsChanged();
+      if (currentSessionId === item.id) router.push("/");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "删除失败");
+    }
+  };
 
   return (
-    <div className="shrink-0">
-      <button
-        type="button"
-        onClick={togglePanel}
-        aria-expanded={open}
-        className={cn(
-          "flex h-10 w-full cursor-pointer items-center gap-2 rounded-xl px-3 text-left transition-colors",
-          open ? "bg-card text-ink shadow-sm" : "text-ink-2 hover:bg-card",
-        )}
-      >
-        <History className="size-[18px] shrink-0" strokeWidth={1.8} />
-        <span className="flex-1 text-[15px] font-medium">对话历史</span>
-        {items.length > 0 && (
-          <span className="rounded-full bg-chip px-1.5 py-0.5 text-[10px] text-muted">
-            {items.length}
-          </span>
-        )}
-        <ChevronDown
-          className={cn("size-4 shrink-0 text-faint transition-transform", open && "rotate-180")}
-        />
-      </button>
-
-      {open && (
-        <div className="mt-0.5 flex flex-col gap-1 border-t border-line/40 pt-1 pl-3">
-          <button
-            type="button"
-            onClick={newChat}
-            className="flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-white transition-colors hover:bg-primary-deep"
-          >
-            <MessageSquarePlus className="size-4 shrink-0" strokeWidth={1.8} />
-            新对话
-          </button>
-
-          <div className="flex items-center gap-2 rounded-lg border border-line bg-card px-2.5">
-            <Search className="size-3.5 shrink-0 text-faint" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索历史…"
-              className="h-8 w-full bg-transparent text-[13px] text-ink outline-none placeholder:text-faint"
-            />
-          </div>
-
-          {historyError && (
-            <p role="alert" className="px-2 py-1 text-[12px] text-rose-500">
-              {historyError}
-            </p>
-          )}
-
-          <div className="scrollbar-subtle max-h-48 space-y-0.5 overflow-y-auto py-0.5">
-            {filtered.length === 0 ? (
-              <p className="px-2 py-3 text-center text-[12px] text-faint">
-                {items.length === 0 ? "还没有历史对话" : "无匹配结果"}
-              </p>
-            ) : (
-              filtered.map((item) => (
-                <div
-                  key={`${item.source}-${item.id}`}
-                  className={cn(
-                    "group relative flex min-h-9 items-center rounded-lg px-1 transition-colors",
-                    onAgentRoute && activeId === item.id ? "bg-primary-soft" : "hover:bg-chip",
-                  )}
-                >
-                  {editingId === item.id && item.source === "db" ? (
-                    <input
-                      ref={editRef}
-                      value={draftTitle}
-                      onChange={(e) => setDraftTitle(e.target.value)}
-                      onBlur={() => void commitEdit(item.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") void commitEdit(item.id);
-                        if (e.key === "Escape") setEditingId(null);
-                      }}
-                      className="h-8 w-full rounded-md border border-primary/40 bg-card px-2 text-[13px] text-ink outline-none"
-                    />
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        title={item.title}
-                        disabled={pending}
-                        aria-current={onAgentRoute && activeId === item.id ? "page" : undefined}
-                        onClick={() => openSession(item)}
-                        className="min-w-0 flex-1 cursor-pointer pr-16 pl-2 text-left"
-                      >
-                        <span className="flex items-center gap-1 truncate text-[13px] text-ink-2">
-                          {item.favorite && (
-                            <Star className="size-3 shrink-0 fill-current text-primary" />
-                          )}
-                          {item.title}
-                        </span>
-                        <span className="block text-[10.5px] text-faint">
-                          {relativeTime(item.updatedAt)}
-                          {item.source === "local" ? " · 本地" : ""}
-                        </span>
-                      </button>
-                      <div className="absolute right-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                        {item.source === "db" && (
-                          <>
-                            <button
-                              type="button"
-                              title={item.favorite ? "取消收藏" : "收藏"}
-                              disabled={pending}
-                              onClick={() =>
-                                void mutate(async () => {
-                                  await updateChatSession(item.id, {
-                                    favorite: !item.favorite,
-                                  });
-                                })
-                              }
-                              className="rounded-md bg-card p-1 text-faint shadow-sm ring-1 ring-line/60 hover:text-primary"
-                            >
-                              <Star
-                                className={cn(
-                                  "size-3.5",
-                                  item.favorite && "fill-current text-primary",
-                                )}
-                              />
-                            </button>
-                            <button
-                              type="button"
-                              title="重命名"
-                              disabled={pending}
-                              onClick={() => {
-                                setEditingId(item.id);
-                                setDraftTitle(item.title);
-                              }}
-                              className="rounded-md bg-card p-1 text-faint shadow-sm ring-1 ring-line/60 hover:text-primary"
-                            >
-                              <Pencil className="size-3.5" />
-                            </button>
-                          </>
-                        )}
-                        <button
-                          type="button"
-                          title="删除"
-                          disabled={pending}
-                          onClick={() => {
-                            if (!window.confirm(`删除会话「${item.title}」？`)) return;
-                            if (item.source === "db") {
-                              void mutate(async () => {
-                                try {
-                                  await deleteChatSession(item.id);
-                                } catch (error) {
-                                  // DELETE is idempotent from the UI's point
-                                  // of view: a missing backend session already
-                                  // satisfies the desired final state.
-                                  if (!isMissingSessionError(error)) throw error;
-                                }
-                                removeHistoryItem(item.id, "db");
-                                if (activeId === item.id) {
-                                  requestReset();
-                                  router.push(askSessionUrl(null));
-                                }
-                              });
-                            } else {
-                              if (!identityScope) return;
-                              deleteLocalAskSession(identityScope, item.id);
-                              removeHistoryItem(item.id, "local");
-                              refresh();
-                              bumpHistoryRefresh();
-                              if (activeId === item.id) {
-                                requestReset();
-                                router.push(askSessionUrl(null));
-                              }
-                            }
-                          }}
-                          className="rounded-md bg-card p-1 text-faint shadow-sm ring-1 ring-line/60 hover:text-rose-500"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))
+    <section className="mt-3 shrink-0" aria-label="聊天历史">
+      <p className="px-3 pb-1.5 pt-2 text-[11px] font-medium tracking-wide text-faint">聊天</p>
+      <div className="space-y-0.5">
+        {items.map((item) => (
+          <div key={item.id} className={cn(
+            "group relative flex min-h-9 items-center rounded-lg transition-colors",
+            currentSessionId === item.id ? "bg-primary-soft" : "hover:bg-chip",
+          )}>
+            <button type="button" title={item.title}
+              onClick={() => router.push(`/agents?session=${encodeURIComponent(item.id)}`)}
+              className="min-w-0 flex-1 cursor-pointer truncate px-3 py-2 pr-9 text-left text-[13px] text-ink-2"
+              aria-current={currentSessionId === item.id ? "page" : undefined}>
+              {item.title}
+            </button>
+            <button type="button" aria-label={`${item.title} 更多操作`}
+              onClick={() => setMenuId((current) => current === item.id ? null : item.id)}
+              className="absolute right-1 rounded-md p-1 text-faint opacity-0 transition-opacity hover:bg-card hover:text-ink group-hover:opacity-100 focus:opacity-100">
+              <MoreHorizontal className="size-4" />
+            </button>
+            {menuId === item.id && (
+              <div className="absolute right-1 top-8 z-40 w-28 rounded-xl border border-line bg-card p-1 shadow-pop">
+                <button type="button" onClick={() => void rename(item)}
+                  className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-xs text-ink-2 hover:bg-chip">
+                  <Pencil className="size-3.5" />重命名
+                </button>
+                <button type="button" onClick={() => void remove(item)}
+                  className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-xs text-red-600 hover:bg-chip">
+                  <Trash2 className="size-3.5" />删除
+                </button>
+              </div>
             )}
           </div>
-        </div>
-      )}
-    </div>
+        ))}
+        {items.length === 0 && !loading && !error && (
+          <p className="px-3 py-2 text-xs text-faint">还没有聊天</p>
+        )}
+        {error && <p role="alert" className="px-3 py-1 text-xs text-red-600">{error}</p>}
+        {loading && <p className="px-3 py-1 text-xs text-faint">加载中…</p>}
+        <div ref={sentinelRef} className="h-px" aria-hidden />
+      </div>
+    </section>
   );
 }

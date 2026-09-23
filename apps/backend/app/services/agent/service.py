@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +41,7 @@ from app.integrations.web_search.provider import web_search
 __all__ = [
     'build_run_runtime', 'create_workspace', 'decode_history', 'default_store',
     'read_session_file', 'resolve_attachments',
-    'run_deadline_s', 'run_events', 'steer_run', 'write_workspace_file',
+    'run_deadline_s', 'run_events', 'steer_run', 'stop_run', 'write_workspace_file',
     'compose_agent_system',
 ]
 
@@ -196,17 +196,26 @@ def build_run_runtime(*, owner: str, model: str | None = None, mode: str = 'fast
 
 # ---- 事件流桥接 ----
 
-# 运行中的 steer 通道（run_id → channel）：单进程内 SSE run 的插话入口。
+# 运行中的控制通道（run_id → owner/channel/stop）：单进程内 SSE run 的插话与停止入口。
 # run 结束（含消费者断开取消）由 worker 的 finally 摘除，绝不泄漏。
-_active_channels: dict[str, RunChannel] = {}
+_active_channels: dict[str, tuple[str | None, RunChannel, asyncio.Event]] = {}
 
 
-def steer_run(run_id: str, text: str) -> bool:
+def steer_run(run_id: str, text: str, owner: str | None = None) -> bool:
     """向运行中的 run 插话（下一模型请求前注入）；run 不存在返回 False。"""
-    channel = _active_channels.get(run_id)
-    if channel is None:
+    active = _active_channels.get(run_id)
+    if active is None or (owner is not None and active[0] != owner):
         return False
-    channel.steer(text)
+    active[1].steer(text)
+    return True
+
+
+def stop_run(run_id: str, owner: str | None = None) -> bool:
+    """Request a clean stop so the runtime can close and persist its partial transcript."""
+    active = _active_channels.get(run_id)
+    if active is None or (owner is not None and active[0] != owner):
+        return False
+    active[2].set()
     return True
 
 
@@ -252,7 +261,9 @@ def _latest_report_path(owner: str, session_id: str, result: Any) -> str | None:
 
 async def run_events(runtime: AgentRuntime, prompt: str, history: Sequence[AgentMessage] = (),
                      meta: dict | None = None, *, owner: str | None = None,
-                     session_id: str | None = None) -> AsyncIterator[tuple[str, dict]]:
+                     session_id: str | None = None,
+                     on_complete: Callable[[RunResult], Awaitable[None]] | None = None,
+                     ) -> AsyncIterator[tuple[str, dict]]:
     """把 runtime.run 桥接为 (事件名, data) 流；先发 meta（如附件告警），末尾发 result。
 
     消费方断开时（生成器被关闭）取消运行任务并跳过 result——客户端已不在。
@@ -263,18 +274,31 @@ async def run_events(runtime: AgentRuntime, prompt: str, history: Sequence[Agent
     queue: asyncio.Queue = asyncio.Queue()
     box: dict[str, RunResult] = {}
     channel = RunChannel()
+    stop_event = asyncio.Event()
 
     async def worker() -> None:
         def on_event(event: AgentEvent) -> None:
             if event.name == RUN_START:
-                _active_channels[event.data['run_id']] = channel
+                _active_channels[event.data['run_id']] = (owner, channel, stop_event)
             queue.put_nowait(event)
         try:
-            box['result'] = await runtime.run(prompt, history=history,
-                                              on_event=on_event, channel=channel)
+            result = await runtime.run(prompt, history=history, on_event=on_event,
+                                       stop=stop_event, channel=channel)
+            # 报告制品的回填（B 方案）：技能要求报告落盘成工作区文件，而模型回复里只给摘要与路径。
+            if session_id and not (result.output or {}).get('report'):
+                report_path = _latest_report_path(owner, session_id, result)
+                if report_path:
+                    try:
+                        content, _ = read_session_file(owner, session_id, report_path)
+                        result.output = {**(result.output or {}), 'kind': 'report',
+                                         'report': content.decode('utf-8', 'replace'),
+                                         'report_path': report_path}
+                    except (OSError, BusinessError):
+                        pass
+            box['result'] = result
         finally:
             for key, registered in list(_active_channels.items()):
-                if registered is channel:
+                if registered[1] is channel:
                     _active_channels.pop(key, None)
             await queue.put(None)
 
@@ -295,19 +319,11 @@ async def run_events(runtime: AgentRuntime, prompt: str, history: Sequence[Agent
         except asyncio.CancelledError:
             pass
     result = box.get('result') or RunResult(stop_reason=StopReason.CANCELLED)
-    # 报告制品的回填（B 方案）：技能要求报告落盘成工作区文件，而模型回复里只给摘要与路径，
-    # 于是对话里没有全文、前端渲染器拿不到东西。这里在 run 结束后把**最新写出的 markdown
-    # 报告**读回，作为 output.report 交给前端——侧边目录、图片、引用 chip 才有内容可渲染。
-    if session_id and not (result.output or {}).get('report'):
-        report_path = _latest_report_path(owner, session_id, result)
-        if report_path:
-            try:
-                text, _ = read_session_file(owner, session_id, report_path)
-                result.output = {**(result.output or {}), 'kind': 'report',
-                                 'report': text.decode('utf-8', 'replace'),
-                                 'report_path': report_path}
-            except (OSError, BusinessError):
-                pass    # 读不回就照常交付，报告内容仍在工作区文件里
+    # Persist only after every queued event has passed through the consumer. Session callers
+    # build their UI timeline while consuming those events; completing inside ``worker`` can
+    # otherwise race ahead and store a truncated timeline for very fast runs.
+    if on_complete is not None:
+        await on_complete(result)
     yield ('result', {
         'status': result.status,
         'stop_reason': result.stop_reason.value,  # 前端据此区分"到点了"与"你停的"

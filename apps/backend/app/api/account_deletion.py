@@ -29,4 +29,5 @@ async def cleanup_business_data(request: Request):
         'profiles_deleted': result.profiles_deleted,
         'settings_deleted': result.settings_deleted,
         'chat_sessions_deleted': result.chat_sessions_deleted,
+        'agent_sessions_deleted': result.agent_sessions_deleted,
     })

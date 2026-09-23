@@ -2,7 +2,7 @@ import { apiJson, apiPath } from "./http";
 import { readSseStream } from "./sse";
 
 /**
- * Agent 基座（ShenzhiAi）客户端：无状态 run，会话历史由调用方组装回传。
+ * Agent 基座（ShenzhiAi）客户端：产品路径使用 Backend Session；无状态 run 仅保留兼容。
  * 事件协议见 apps/backend/app/services/agent/types.py 与 docs/agent/README.md §9。
  */
 
@@ -60,6 +60,67 @@ export interface AgentConfig {
   upload: { max_size_mb: number; max_files: number; accept: string[] };
 }
 
+export type AgentMode = "fast" | "deep" | "idea" | "doubt";
+
+export interface AgentSessionSummary {
+  id: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+  settings: {
+    model?: string | null;
+    mode?: AgentMode;
+    attachments?: unknown[];
+    skills?: string[];
+    workspace_id?: string | null;
+  };
+  branched_from?: string | null;
+}
+
+export interface AgentStoredTurn {
+  id: string;
+  user_content: string;
+  assistant_content: string;
+  reasoning: string;
+  process: Array<
+    { kind: "reasoning" | "text"; text: string } |
+    { kind: "tool"; tool: AgentActivity }
+  >;
+  steers: Array<{ text: string; kind: "steer" | "follow_up" | "system" }>;
+  report?: string | null;
+  sources: AgentSource[];
+  question?: AgentQuestion | null;
+  warnings: string[];
+  error?: string | null;
+  stopped: boolean;
+  stop_reason?: string | null;
+  status: AgentRunResult["status"] | "running";
+  settings: AgentSessionSummary["settings"];
+  usage: Record<string, number | boolean>;
+  created_at: number;
+  completed_at?: number | null;
+}
+
+export interface AgentSessionDetail extends AgentSessionSummary {
+  turns: AgentStoredTurn[];
+}
+
+export interface AgentSessionPage {
+  sessions: AgentSessionSummary[];
+  next_cursor: string | null;
+  has_more: boolean;
+  ephemeral: boolean;
+}
+
+export interface AgentRunInput {
+  prompt: string;
+  model?: string;
+  mode: AgentMode;
+  attachments: unknown[];
+  skills: string[];
+  workspace_id?: string;
+}
+
 export function fetchAgentConfig() {
   return apiJson<AgentConfig>("/agent/config");
 }
@@ -68,6 +129,48 @@ export function steerAgentRun(runId: string, text: string) {
   return apiJson<{ injected: boolean }>(
     `/agent/run/${encodeURIComponent(runId)}/steer`,
     { method: "POST", body: JSON.stringify({ text }) });
+}
+
+export function stopAgentRun(runId: string) {
+  return apiJson<{ stopping: boolean }>(
+    `/agent/run/${encodeURIComponent(runId)}/stop`, { method: "POST" });
+}
+
+export function createAgentSession(input: AgentRunInput) {
+  return apiJson<AgentSessionSummary>("/agent/sessions", {
+    method: "POST", body: JSON.stringify(input),
+  });
+}
+
+export function listAgentSessions(limit = 10, cursor?: string | null) {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor) query.set("cursor", cursor);
+  return apiJson<AgentSessionPage>(`/agent/sessions?${query.toString()}`);
+}
+
+export function getAgentSession(sessionId: string) {
+  return apiJson<AgentSessionDetail>(`/agent/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export function renameAgentSession(sessionId: string, title: string) {
+  return apiJson<AgentSessionSummary>(`/agent/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH", body: JSON.stringify({ title }),
+  });
+}
+
+export function deleteAgentSession(sessionId: string) {
+  return apiJson<{ ok: boolean }>(`/agent/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function importLegacyAgentSession(body: {
+  import_key: string; title: string; created_at?: number; updated_at?: number;
+  branched_from?: string; turns: Array<Record<string, unknown>>;
+}) {
+  return apiJson<AgentSessionSummary>("/agent/sessions/import", {
+    method: "POST", body: JSON.stringify(body),
+  });
 }
 
 /** 会话导出（pi session-export）：POST 本地会话数据，返回 HTML 报告或 JSONL 文本。 */
@@ -120,7 +223,27 @@ export async function streamAgentRun(
   },
   signal?: AbortSignal,
 ): Promise<void> {
-  await readSseStream(apiPath("/agent/run"), {
+  await streamAgentEndpoint(apiPath("/agent/run"), body, handlers, signal);
+}
+
+export async function streamAgentSessionRun(
+  sessionId: string,
+  body: AgentRunInput,
+  handlers: Parameters<typeof streamAgentRun>[1],
+  signal?: AbortSignal,
+): Promise<void> {
+  await streamAgentEndpoint(
+    apiPath(`/agent/sessions/${encodeURIComponent(sessionId)}/run`), body, handlers, signal,
+  );
+}
+
+async function streamAgentEndpoint(
+  url: string,
+  body: unknown,
+  handlers: Parameters<typeof streamAgentRun>[1],
+  signal?: AbortSignal,
+): Promise<void> {
+  await readSseStream(url, {
     body,
     signal,
     onEvent: (event) => {

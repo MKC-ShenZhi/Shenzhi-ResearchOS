@@ -174,7 +174,7 @@ test("explicit URL navigation remains the sole owner over bridge continuity", ()
   const hook = readFileSync("features/chat/hooks/use-chat-session.ts", "utf8");
   const sidebar = readFileSync("components/common/layout/sidebar-chat-history.tsx", "utf8");
 
-  assert.match(sidebar, /router\.push\(askSessionUrl\(item\.id\)\)/);
+  assert.match(sidebar, /router\.push\(`\/agents\?session=\$\{encodeURIComponent\(item\.id\)\}`\)/);
   assert.match(hook, /readCurrentSessionId\(\) \?\? initialSessionId \?\? null/);
   assert.match(hook, /transitionSessionNavigation/);
   assert.match(hook, /void openSession\(urlSessionId\)/);

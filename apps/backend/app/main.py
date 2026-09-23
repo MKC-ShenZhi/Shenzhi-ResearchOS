@@ -11,12 +11,15 @@ from app.core.request_context import (
     get_request_id,
 )
 from app.services.chat.repository import repository
+from app.services.agent_sessions.repository import agent_session_repository
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await repository.recover()
+    await agent_session_repository.recover()
     yield
+    await agent_session_repository.close()
     await repository.close()
 
 

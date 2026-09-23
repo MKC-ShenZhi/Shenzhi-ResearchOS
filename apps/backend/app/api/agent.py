@@ -1,10 +1,10 @@
-"""Agent 基座的 HTTP 入口：无状态 run + SSE、运行配置、Web 工作区上传、会话产物文件。"""
+"""Agent HTTP 入口：产品会话、SSE run、运行配置、Web 工作区与产物文件。"""
 import json
 from pathlib import PurePosixPath
 from typing import Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, Query, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -14,6 +14,11 @@ from app.core.identity import request_owner, require_bff
 from app.core.responses import ok
 from app.services.agent import service as agent_service
 from app.services.agent import export as agent_export
+from app.schemas.agent import (
+    AgentSessionCreate, AgentSessionRun, AgentSessionUpdate, LegacyAgentSessionImport,
+)
+from app.services.agent_sessions.repository import agent_session_repository
+from app.services.agent_sessions.service import start_session_run
 
 router = APIRouter(prefix='/api/v1/agent', tags=['agent'])
 
@@ -80,9 +85,87 @@ async def steer(run_id: str, body: SteerBody, owner: str = Depends(request_owner
     """运行中插话：下一模型请求前注入（不打断当前工具批）。"""
     if not body.text.strip():
         raise BusinessError(20001, '插话内容不能为空')
-    if not agent_service.steer_run(run_id, body.text.strip()):
+    if not agent_service.steer_run(run_id, body.text.strip(), owner):
         raise BusinessError(20004, '该运行已结束或不存在', 404)
     return ok({'injected': True})
+
+
+@router.post('/run/{run_id}/stop')
+async def stop(run_id: str, owner: str = Depends(request_owner)):
+    """Cleanly stop the active run so its partial result remains recoverable."""
+    if not agent_service.stop_run(run_id, owner):
+        raise BusinessError(20004, '该运行已结束或不存在', 404)
+    return ok({'stopping': True})
+
+
+@router.post('/sessions')
+async def create_agent_session(body: AgentSessionCreate, owner: str = Depends(request_owner)):
+    settings = {
+        'model': body.model, 'mode': body.mode, 'attachments': body.attachments,
+        'skills': body.skills, 'workspace_id': body.workspace_id,
+    }
+    session = await agent_session_repository.create(
+        owner, body.prompt, settings, branched_from=body.branched_from,
+    )
+    return ok(session.summary())
+
+
+@router.get('/sessions')
+async def list_agent_sessions(
+    limit: int = Query(default=10, ge=1, le=50),
+    cursor: str | None = Query(default=None, max_length=500),
+    owner: str = Depends(request_owner),
+):
+    page = await agent_session_repository.list_page(owner, limit, cursor)
+    return ok({**page, 'ephemeral': not agent_session_repository.is_durable})
+
+
+@router.post('/sessions/import')
+async def import_agent_session(
+    body: LegacyAgentSessionImport, owner: str = Depends(request_owner),
+):
+    session = await agent_session_repository.import_legacy(owner, body.model_dump())
+    return ok(session.summary())
+
+
+@router.get('/sessions/{session_id}')
+async def get_agent_session(session_id: str, owner: str = Depends(request_owner)):
+    return ok((await agent_session_repository.get(session_id, owner)).public())
+
+
+@router.patch('/sessions/{session_id}')
+async def update_agent_session(
+    session_id: str, body: AgentSessionUpdate, owner: str = Depends(request_owner),
+):
+    session = await agent_session_repository.update_title(session_id, owner, body.title)
+    return ok(session.summary())
+
+
+@router.delete('/sessions/{session_id}')
+async def delete_agent_session(session_id: str, owner: str = Depends(request_owner)):
+    # Workspace removal is intentionally not recursive here. Database rows cascade; the bounded
+    # workspace lifecycle needs a separate retention job rather than deleting model-provided paths.
+    await agent_session_repository.delete(session_id, owner)
+    return ok({'ok': True})
+
+
+@router.post('/sessions/{session_id}/run')
+async def run_agent_session(
+    session_id: str, body: AgentSessionRun, owner: str = Depends(request_owner),
+):
+    events = await start_session_run(
+        owner=owner, session_id=session_id, prompt=body.prompt, model=body.model,
+        mode=body.mode, attachments=body.attachments, workspace_id=body.workspace_id,
+        skills=body.skills,
+    )
+
+    async def generate():
+        async for name, data in events:
+            yield f'event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'
+
+    return StreamingResponse(generate(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache, no-transform',
+                                      'X-Accel-Buffering': 'no'})
 
 
 @router.get('/session/{session_id}/file')

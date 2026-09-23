@@ -1,33 +1,34 @@
 "use client";
 
-// ShenzhiAi 对话页（ChatGPT 式排版）：
-// 左：全局侧边栏（AppShell）+ 会话历史面板（localStorage，pi 式管理）
+// ShenzhiAi 持久化对话页（ChatGPT 式排版）：
+// 左：全局 AppSidebar 中的 Backend Agent 会话历史
 // 中：用户右气泡 / 回答左通栏（头像 + 思考折叠 + 过程卡）/ 运行中插话右气泡
-// 空状态：品牌欢迎屏 + 快捷卡（QUICK_STARTS，本地常量）
+// 空状态：轻量提示并引导回发现页开始新对话
 // 下：居中悬浮 Composer；运行中发送 = 插话（steer，不打断当前工具批）
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { BookOpenText, Compass, Download, FileSearch, FileText, MessageCircleQuestion, Quote, Sparkles, Zap } from "lucide-react";
+import { Download, FileText, MessageCircleQuestion, Quote, Sparkles, Zap } from "lucide-react";
 
 import {
-  createWorkspace, exportAgentSession, fetchAgentConfig, steerAgentRun, streamAgentRun, uploadWorkspaceFile,
-  type AgentConfig, type AgentQuestion, type AgentQuestionOption, type AgentRunResult,
+  createWorkspace, exportAgentSession, fetchAgentConfig, getAgentSession, steerAgentRun,
+  stopAgentRun, streamAgentSessionRun, uploadWorkspaceFile,
+  type AgentConfig, type AgentQuestion, type AgentQuestionOption, type AgentRunInput,
+  type AgentRunResult, type AgentStoredTurn,
 } from "@/clients/backend/agent";
 import { ReportDialog } from "./report-dialog";
 import { Timeline } from "./timeline-view";
 import {
   applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, restoreEntries,
-  type Activity, type Entry, type StreamState,
+  type Entry, type StreamState,
 } from "./timeline";
 import { ComposerShell, type ComposerSkill } from "@/components/common/composer/composer";
 import type { WorkspaceFile } from "@/components/common/composer/attachment-menu";
 import { AppShell } from "@/components/common/layout/app-shell";
 import type { ChatAttachment, ChatConfig } from "@/types/ai-search";
-import {
-  deleteSession as removeStoredSession, forkSession, getSession, listSessions, newSessionId, saveSession,
-  type AgentSession, type StoredTurn,
-} from "./session-store";
+import { takeAgentLaunch } from "./launch-store";
+import { notifyAgentSessionsChanged } from "./session-events";
 
 // 类型别名而非 interface：报告渲染器（ReportView）要的是带索引签名的 AgentSource，
 // interface 不满足索引签名（TS2322），别名可以直接赋给它。
@@ -122,48 +123,21 @@ function stopLabel(reason?: string): string {
   }
 }
 
-/** 会话存储里的过程条目（与 session-store 的 process 形状一致）。 */
-type StoredSegment = { kind: "reasoning" | "text"; text: string } | { kind: "tool"; tool: Activity };
-
-/**
- * 过程流 → 会话存储的既有形状（不引入新格式）。
- *
- * 存储里 `process` 本来就是"交错条目数组"，正好对应我们的 entries；工具条目原样落盘，
- * 思考条目落成 reasoning，正文条目落成 text；旧会话的 reasoning 条目仍可读取。
- */
-function toStoredProcess(stream: StreamState): StoredSegment[] | undefined {
-  const segments: StoredSegment[] = [];
-  for (const entry of stream.entries) {
-    if (entry.kind === "tool") { segments.push({ kind: "tool", tool: entry.tool }); continue; }
-    if (entry.text.trim()) segments.push({ kind: entry.kind === "text" ? "text" : "reasoning", text: entry.text });
-  }
-  return segments.length ? segments : undefined;
-}
-
 /** 持久化形状 → 过程流（旧会话只有 activity 时按工具顺序恢复）。 */
-function fromStoredTurn(turn: StoredTurn): StreamState {
+function fromStoredTurn(turn: AgentStoredTurn): StreamState {
   const segments = turn.process;
   const entries: Entry[] = segments?.length
     ? segments.map((segment) => segment.kind === "tool"
         ? { kind: "tool" as const, tool: segment.tool }
         : { kind: segment.kind === "text" ? "text" as const : "thinking" as const, text: segment.text })
-    : restoreEntries(undefined, turn.activity);
+    : restoreEntries(undefined, undefined);
   return { turn: 0, entries, thinkingIndex: -1, textIndex: -1 };
 }
 
 const FALLBACK_CONFIG: AgentConfig = {
   models: [], default_model: "default", skills: [],
-  upload: { max_size_mb: 20, max_files: 5, accept: [".pdf", ".txt", ".md", ".markdown"] },
+  upload: { max_size_mb: 0, max_files: 0, accept: [] },
 };
-
-const TEMPLATE_ICONS = [FileSearch, BookOpenText, Compass, Sparkles];
-
-/** 固定快捷入口卡（取证工具常驻，无需任何开关）。 */
-const QUICK_STARTS: Array<{ title: string; description: string; prompt: string }> = [
-  { title: "知识库检索", description: "在论文库里找文献、看引用关系", prompt: "帮我在知识库里检索近年的「长上下文」相关论文，并梳理引用脉络。" },
-  { title: "联网快问", description: "实时信息、新闻与文档查询",
-    prompt: "用联网搜索告诉我本周 AI 领域有什么值得关注的新进展。" },
-];
 
 function Md({ text }: { text: string }) {
   return <div className="min-w-0 break-words text-[15px] leading-7">
@@ -236,8 +210,15 @@ function ReportSummary({ text, sources, onOpen }: {
 }
 
 export function ShenzhiAiPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get("session") ?? "";
+  const launchId = searchParams.get("launch");
   const [agentConfig, setAgentConfig] = useState<AgentConfig>(FALLBACK_CONFIG);
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [sessionTitle, setSessionTitle] = useState("Agent 会话");
+  const [hydratedSessionId, setHydratedSessionId] = useState<string | null>(null);
+  const [loadingSession, setLoadingSession] = useState(true);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
@@ -250,8 +231,6 @@ export function ShenzhiAiPage() {
   const [mode, setMode] = useState<"fast" | "deep" | "idea" | "doubt">("fast");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<ComposerSkill[]>([]);
-  const [sessionId, setSessionId] = useState(() => newSessionId());
-  const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [quote, setQuote] = useState<QuoteDraft | null>(null);   // 引用回复草稿
   /** 正在弹层里查看的报告（null = 关闭）。 */
   const [openReport, setOpenReport] = useState<{ text: string; sources?: Source[] } | null>(null);
@@ -261,74 +240,70 @@ export function ShenzhiAiPage() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
-  const usageRef = useRef<{ promptTokens: number; completionTokens: number } | null>(null);
+  const loadedSessionRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetchAgentConfig().then((config) => {
       setAgentConfig(config);
-      setModel(config.default_model || "default");
+      setModel((current) => current === "default" ? config.default_model || "default" : current);
+      setSelectedSkills((current) => current.map((selected) =>
+        config.skills.find((skill) => skill.name === selected.name) ?? selected));
     }).catch(() => { /* 后端不可用时保持 fallback，发送时给出可读错误 */ });
   }, []);
 
   useEffect(() => {
-    queueMicrotask(() => setSessions(listSessions()));
-  }, []);
+    if (!sessionId) {
+      router.replace("/");
+      return;
+    }
+    if (loadedSessionRef.current && loadedSessionRef.current !== sessionId) {
+      if (runIdRef.current) void stopAgentRun(runIdRef.current).catch(() => {});
+      abortRef.current?.abort();
+    }
+    loadedSessionRef.current = sessionId;
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setRunning(false);
+      setLoadingSession(true);
+      setHydratedSessionId(null);
+      setRunError(null);
+      void getAgentSession(sessionId).then((session) => {
+        if (!active) return;
+        setSessionTitle(session.title);
+        setTurns(session.turns.flatMap((turn) => [
+          { role: "user" as const, content: turn.user_content, reasoning: "",
+            stream: initialStreamState(), steers: [] },
+          { role: "assistant" as const, content: turn.assistant_content,
+            reasoning: turn.reasoning ?? "", stream: fromStoredTurn(turn),
+            steers: turn.steers ?? [], report: turn.report ?? undefined,
+            sources: turn.sources, question: turn.question ?? undefined,
+            warnings: turn.warnings, error: turn.error ?? undefined,
+            stopped: turn.stopped, stopReason: turn.stop_reason ?? undefined },
+        ]));
+        const settings = session.settings ?? {};
+        setModel(settings.model || "default");
+        if (settings.mode) setMode(settings.mode);
+        setAttachments((settings.attachments ?? []) as ChatAttachment[]);
+        setSelectedSkills((settings.skills ?? []).map((name) => ({ name, description: "" })));
+        setWorkspace(settings.workspace_id
+          ? { id: settings.workspace_id, name: "会话工作区", files: 0 } : null);
+        setHydratedSessionId(session.id);
+      }).catch((cause) => {
+        if (!active) return;
+        setRunError(cause instanceof Error ? cause.message : "会话不存在或无权访问");
+      }).finally(() => {
+        if (active) setLoadingSession(false);
+      });
+    });
+    return () => { active = false; };
+  }, [sessionId, router]);
 
   useEffect(() => {
     if (stickRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }
   }, [turns]);
-
-  // 运行结束后持久化当前会话（pi 式本地会话；浏览器侧为 localStorage）
-  useEffect(() => {
-    if (running || turns.length === 0) return;
-    const firstUser = turns.find((turn) => turn.role === "user");
-    const title = (firstUser?.content ?? "新会话").slice(0, 30);
-    const stored: StoredTurn[] = turns.map((turn) => ({
-      role: turn.role, content: turn.content, reasoning: turn.reasoning || undefined,
-      // 过程流按会话存储的既有形状落盘（steps/segments/narrations），不引入新格式
-      process: toStoredProcess(turn.stream),
-      steers: turn.steers.length ? turn.steers : undefined,
-      report: turn.report, sources: turn.sources, question: turn.question,
-      warnings: turn.warnings, error: turn.error, stopped: turn.stopped,
-      stopReason: turn.stopReason,
-    }));
-    saveSession(sessionId, title, stored, usageRef.current ?? undefined);
-    usageRef.current = null;
-    queueMicrotask(() => setSessions(listSessions()));
-  }, [running, turns, sessionId]);
-
-  const openSession = useCallback((id: string) => {
-    if (running) return;
-    const session = getSession(id);
-    if (!session) return;
-    setSessionId(session.id);
-    setTurns(session.turns.map((turn) => ({
-      role: turn.role, content: turn.content,
-      reasoning: turn.reasoning ?? "",
-      stream: fromStoredTurn(turn),
-      steers: turn.steers ?? [],
-      report: turn.report, sources: turn.sources, question: turn.question,
-      warnings: turn.warnings, error: turn.error, stopped: turn.stopped,
-      stopReason: turn.stopReason,
-    })));
-    setRunError(null);
-  }, [running]);
-
-  const startNewSession = useCallback(() => {
-    if (running) return;
-    setTurns([]);
-    setSessionId(newSessionId());
-    setRunError(null);
-  }, [running]);
-
-  const removeSession = useCallback((id: string) => {
-    if (running) return;
-    removeStoredSession(id);
-    setSessions(listSessions());
-    if (id === sessionId) { setTurns([]); setSessionId(newSessionId()); }
-  }, [sessionId, running]);
 
   const patchAssistant = useCallback((patch: (turn: Turn) => Turn) => {
     setTurns((previous) => {
@@ -370,40 +345,13 @@ export function ShenzhiAiPage() {
       : [...previous, ...agentConfig.skills.filter((skill) => skill.name === name)]);
   }, [agentConfig]);
 
-  const send = useCallback(async (answer?: string) => {
-    let prompt = (answer ?? input).trim();
-    if (!prompt || running) return;
-    const skillsForRun = selectedSkills.map((skill) => skill.name);
-    if (quote) {
-      // 引用回复：引文作为锚点前缀（后端 history 不变，模型看到的是上下文充分的单一提问）
-      const quoted = quote.text.slice(0, 2_000);
-      prompt = `针对之前回答中的这段内容：\n\n${quoted}\n\n我的问题/意见是：${prompt}`;
-      setQuote(null);
-    }
-    if (prompt.startsWith("/research ")) {
-      // /research <题目> 模板：强制挂载深度研究技能
-      const skill = agentConfig.skills.find((item) => item.name === "deep-research");
-      if (!skill) {
-        setRunError("深度研究技能尚未安装，请直接提问或使用基础检索工具");
-        return;
-      }
-      const topic = prompt.slice("/research ".length).trim();
-      prompt = `对「${topic}」执行 deep-research 技能的深度研究流程，交付带引用的研究报告。`;
-      if (!selectedSkills.some((skill) => skill.name === "deep-research")) {
-        setSelectedSkills((previous) => [...previous, skill]);
-        skillsForRun.push(skill.name);
-      }
-    }
+  /** All normal sends and the home-page launch use this exact persisted run path. */
+  const runPrompt = useCallback(async (runInput: AgentRunInput) => {
+    const prompt = runInput.prompt.trim();
+    if (!prompt || running || !sessionId) return;
     setTurns((previous) => [...previous,
       { role: "user", content: prompt, reasoning: "", stream: initialStreamState(), steers: [] },
       { role: "assistant", content: "", reasoning: "", stream: initialStreamState(), steers: [] }]);
-    const history = turns
-      .filter((turn) => turn.role === "user"
-        || (turn.role === "assistant" && (turn.content || turn.report || turn.question)))
-      .map((turn) => turn.role === "user"
-        ? { kind: "user", text: turn.content }
-        : { kind: "assistant", content: turn.report || turn.content || askedText(turn.question),
-            reasoning: "", tool_calls: [], stop_reason: "stop" });
     setInput("");
     setRunError(null);
     setSteerError(null);
@@ -412,14 +360,7 @@ export function ShenzhiAiPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      await streamAgentRun({
-        prompt, history,
-        model: model === "default" ? undefined : model,
-        mode,
-        attachments, workspace_id: workspace?.id,
-        skills: skillsForRun,
-        session_id: sessionId,
-      }, {
+      await streamAgentSessionRun(sessionId, runInput, {
         onRunStart: (runId) => { runIdRef.current = runId; },
         onDelta: (text, reasoning, turn) => patchAssistant((current) => {
           // 状态机全在 timeline.ts（可测）。这里只负责把它与页面的 Turn 接起来。
@@ -451,12 +392,6 @@ export function ShenzhiAiPage() {
           stream: applyToolEnd(turn.stream, toolCallId, { done: true, isError, durationMs, summary }),
         })),
         onResult: (result: AgentRunResult) => {
-          if (result.prompt_tokens || result.completion_tokens) {
-            usageRef.current = {
-              promptTokens: (usageRef.current?.promptTokens ?? 0) + (result.prompt_tokens ?? 0),
-              completionTokens: (usageRef.current?.completionTokens ?? 0) + (result.completion_tokens ?? 0),
-            };
-          }
           patchAssistant((turn) => {
           const sources = result.output?.sources;
           return {
@@ -473,6 +408,7 @@ export function ShenzhiAiPage() {
             content: result.question ? "" : turn.content || result.final_text || "",
           };
           });
+          notifyAgentSessionsChanged();
         },
       }, controller.signal);
     } catch (error) {
@@ -486,7 +422,45 @@ export function ShenzhiAiPage() {
       abortRef.current = null;
       runIdRef.current = null;
     }
-  }, [input, running, quote, turns, model, mode, attachments, workspace, selectedSkills, agentConfig, sessionId, patchAssistant]);
+  }, [running, sessionId, patchAssistant]);
+
+  const send = useCallback(async (answer?: string) => {
+    let prompt = (answer ?? input).trim();
+    if (!prompt || running) return;
+    const skillsForRun = selectedSkills.map((skill) => skill.name);
+    if (quote) {
+      const quoted = quote.text.slice(0, 2_000);
+      prompt = `针对之前回答中的这段内容：\n\n${quoted}\n\n我的问题/意见是：${prompt}`;
+      setQuote(null);
+    }
+    if (prompt.startsWith("/research ")) {
+      const skill = agentConfig.skills.find((item) => item.name === "deep-research");
+      if (!skill) {
+        setRunError("深度研究技能尚未安装，请直接提问或使用基础检索工具");
+        return;
+      }
+      const topic = prompt.slice("/research ".length).trim();
+      prompt = `对「${topic}」执行 deep-research 技能的深度研究流程，交付带引用的研究报告。`;
+      if (!skillsForRun.includes(skill.name)) {
+        setSelectedSkills((previous) => [...previous, skill]);
+        skillsForRun.push(skill.name);
+      }
+    }
+    await runPrompt({
+      prompt, model: model === "default" ? undefined : model, mode,
+      attachments, workspace_id: workspace?.id, skills: skillsForRun,
+    });
+  }, [input, running, selectedSkills, quote, agentConfig, runPrompt, model, mode, attachments, workspace]);
+
+  useEffect(() => {
+    if (!launchId || hydratedSessionId !== sessionId || running) return;
+    const launch = takeAgentLaunch(launchId, sessionId);
+    if (!launch) return;
+    queueMicrotask(() => {
+      void runPrompt(launch);
+      router.replace(`/agents?session=${encodeURIComponent(sessionId)}`, { scroll: false });
+    });
+  }, [launchId, hydratedSessionId, sessionId, running, runPrompt, router]);
 
   /** 运行中发送 = 插话（steer）：不打断当前工具批，下一个模型请求前注入。 */
   const steer = useCallback(async () => {
@@ -502,8 +476,17 @@ export function ShenzhiAiPage() {
     }
   }, [input, running]);
 
-  const applyQuickStart = useCallback((prompt: string) => {
-    setInput(prompt);
+  const stop = useCallback(async () => {
+    const runId = runIdRef.current;
+    if (!runId) {
+      abortRef.current?.abort();
+      return;
+    }
+    try {
+      await stopAgentRun(runId);
+    } catch (error) {
+      setRunError(error instanceof Error ? error.message : "停止失败，请重试");
+    }
   }, []);
 
   /** 引用回复：mouseup 后若在回答区（data-quote-source）内有选区，展示引用条。 */
@@ -536,8 +519,7 @@ export function ShenzhiAiPage() {
                 .filter((entry): entry is Extract<Entry, { kind: "tool" }> => entry.kind === "tool")
                 .map((entry) => ({ id: entry.tool.toolCallId, name: entry.tool.name, arguments: entry.tool.arguments })),
               stop_reason: "stop" });
-      const title = turns.find((turn) => turn.role === "user")?.content.slice(0, 60) || "ShenzhiAi 会话";
-      const { blob, filename } = await exportAgentSession({ title, messages, format });
+      const { blob, filename } = await exportAgentSession({ title: sessionTitle, messages, format });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -549,7 +531,7 @@ export function ShenzhiAiPage() {
     } finally {
       setExporting(false);
     }
-  }, [turns, exporting]);
+  }, [turns, exporting, sessionTitle]);
 
   /**
    * 回答 agent 的提问：点选项即发（填入输入框并立刻发送，下一帧触发一次 send）。
@@ -572,50 +554,9 @@ export function ShenzhiAiPage() {
 
   return <AppShell>
     <div className="flex h-[calc(100vh-3.5rem)] lg:h-screen">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-sidebar md:flex">
-        <div className="p-2">
-          <button onClick={startNewSession} disabled={running}
-            className="h-9 w-full cursor-pointer rounded-xl bg-primary text-sm font-medium text-white transition-colors hover:bg-primary-deep disabled:opacity-40">
-            + 新会话
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-2 pb-2">
-          {sessions.length === 0 && <p className="px-2 py-3 text-xs text-muted">暂无历史会话</p>}
-          {sessions.map((session) => (
-            <div key={session.id}
-              className={`group mb-0.5 flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-2 text-[13px] transition-colors ${session.id === sessionId ? "bg-chip text-ink" : "text-ink-2 hover:bg-chip"}`}
-              onClick={() => openSession(session.id)}>
-              <div className="min-w-0 flex-1">
-                <div className="truncate">{session.title}</div>
-                <div className="text-[11px] text-faint">
-                  {new Date(session.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                  · {session.turns.filter((turn) => turn.role === "user").length} 问
-                  {session.usage?.runs
-                    ? ` · ${(session.usage.prompt + session.usage.completion).toLocaleString()} tok`
-                    : ""}
-                </div>
-              </div>
-              <span className="invisible shrink-0 group-hover:visible">
-                <button onClick={(event) => {
-                  event.stopPropagation();
-                  const fork = forkSession(session.id);
-                  if (fork) setSessions(listSessions());
-                }}
-                  className="cursor-pointer rounded p-1 text-faint hover:text-ink"
-                  title="从此会话分叉"
-                  aria-label="分叉会话">⑂</button>
-                <button onClick={(event) => { event.stopPropagation(); removeSession(session.id); }}
-                  className="cursor-pointer rounded p-1 text-faint hover:text-red-500"
-                  aria-label="删除会话">✕</button>
-              </span>
-            </div>
-          ))}
-        </div>
-      </aside>
-
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center justify-between border-b border-line px-6 py-3">
-          <h1 className="text-base font-semibold">ShenzhiAi</h1>
+          <h1 className="max-w-[45%] truncate text-base font-semibold">{sessionTitle}</h1>
           <div className="flex items-center gap-2">
             <span className="mr-1 hidden text-[11px] text-faint sm:inline">选中回答文本可引用追问</span>
             <button type="button" disabled={turns.length === 0 || exporting} onClick={() => void exportSession("html")}
@@ -639,28 +580,19 @@ export function ShenzhiAiPage() {
               （用户反馈"死空白太多"）。上限放宽到 1100px 只防止超宽屏上单行过长难以阅读。 */}
           <div className="mx-auto w-full max-w-[1100px] px-6 pt-8">
             {turns.length === 0 && !running && (
-              <div className="mt-20 mb-16 text-center">
-                <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-agent text-white shadow-pop" aria-hidden>
-                  <Sparkles className="size-7" strokeWidth={2} />
+              <div className="mt-24 mb-16 text-center">
+                <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary-soft text-primary" aria-hidden>
+                  <Sparkles className="size-6" strokeWidth={2} />
                 </div>
-                <div className="mb-1 text-3xl font-semibold tracking-tight text-ink">ShenzhiAi</div>
-                <p className="mb-10 text-sm text-muted">深知科研智能体 —— 检索、精读、综述与报告，一个入口</p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {QUICK_STARTS.map((card, index) => {
-                    const Icon = TEMPLATE_ICONS[index % TEMPLATE_ICONS.length];
-                    return <button key={card.title} type="button"
-                      onClick={() => applyQuickStart(card.prompt)}
-                      className="group flex cursor-pointer items-start gap-3 rounded-2xl border border-line bg-card p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-pop">
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary transition-colors group-hover:bg-primary group-hover:text-white" aria-hidden>
-                        <Icon className="size-4.5" strokeWidth={1.8} />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-medium text-ink">{card.title}</span>
-                        <span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-muted">{card.description}</span>
-                      </span>
-                    </button>;
-                  })}
-                </div>
+                <p className="text-sm text-muted">
+                  {loadingSession ? "正在加载会话…" : runError ? "无法打开这个会话" : "这个会话还没有消息"}
+                </p>
+                {!loadingSession && (
+                  <button type="button" onClick={() => router.push("/")}
+                    className="mt-4 cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary-deep">
+                    返回发现页开始新对话
+                  </button>
+                )}
               </div>
             )}
             {turns.map((turn, index) => turn.role === "user"
@@ -749,7 +681,7 @@ export function ShenzhiAiPage() {
                 <Zap className="size-3.5 shrink-0 text-agent" strokeWidth={2.2} aria-hidden />
                 <span className="text-[11px] leading-4 text-agent">运行中 · 现在发送的内容将作为插话注入，不打断当前任务</span>
                 <button type="button"
-                  onClick={() => abortRef.current?.abort()}
+                  onClick={() => void stop()}
                   className="ml-auto shrink-0 cursor-pointer rounded-full border border-agent/40 px-2.5 py-0.5 text-[11px] font-medium text-agent transition-colors hover:bg-agent hover:text-white">
                   停止
                 </button>
@@ -776,8 +708,9 @@ export function ShenzhiAiPage() {
               onSelectSkill={(name) => toggleSkill(name)}
               config={chatConfig}
               busy={uploading}
+              disabled={loadingSession || !hydratedSessionId}
               hideStyleRow
-              onStop={() => abortRef.current?.abort()}
+              onStop={() => void stop()}
               skills={agentConfig.skills}
             />
             {steerError && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{steerError}</div>}

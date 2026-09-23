@@ -21,11 +21,10 @@ function withWindowSearch(search: string, callback: () => void) {
   }
 }
 
-test("ask route reads and normalizes the session query", () => {
+test("legacy ask route redirects to the Discover entry", () => {
   const route = readFileSync("app/agents/ask/page.tsx", "utf8");
-  assert.match(route, /normalizeAskSessionId/);
-  assert.match(route, /invalidSession/);
-  assert.match(route, /session/);
+  assert.match(route, /redirect\("\/"\)/);
+  assert.doesNotMatch(route, /AskPage/);
 });
 
 test("session URLs use the ask route and preserve opaque IDs", () => {
