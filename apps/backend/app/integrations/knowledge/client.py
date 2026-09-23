@@ -15,6 +15,7 @@ from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.core.logging import log_event
 from app.integrations.knowledge.schemas import (
     UpstreamGraphResponse,
+    UpstreamFundingSearchResponse,
     UpstreamPaperResponse,
     UpstreamScholarResponse,
     UpstreamScholarSearchResponse,
@@ -105,6 +106,20 @@ class KnowledgeBaseClient:
             validate=lambda value: isinstance(value.get('results'), list),
         )
         return cast(UpstreamSearchResponse, body)
+
+    async def search_fundings(
+        self, query: str | None, *, limit: int = 20, offset: int = 0
+    ) -> UpstreamFundingSearchResponse:
+        params: dict[str, Any] = {'limit': limit, 'offset': offset}
+        if query is not None:
+            params['q'] = query
+        body = await self._request_json(
+            'GET',
+            '/api/retrieval/fundings/search',
+            params=params,
+            validate=lambda value: isinstance(value.get('results'), list),
+        )
+        return cast(UpstreamFundingSearchResponse, body)
 
     async def paper(self, paper_id: str) -> UpstreamPaperResponse:
         """GET an upstream paper detail using an opaque paper ID."""

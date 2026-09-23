@@ -6,6 +6,8 @@ from app.integrations.knowledge.adapter import KnowledgeAdapter
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.schemas.knowledge import (
     KnowledgeError,
+    FundingSearchRequest,
+    FundingSearchResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
     PaperDetail,
@@ -100,6 +102,14 @@ class KnowledgeService:
     ) -> KnowledgeSearchResponse:
         try:
             return await self.adapter.search_by_funding(funding, top_k=top_k)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_fundings(
+        self, request: FundingSearchRequest
+    ) -> FundingSearchResponse:
+        try:
+            return await self.adapter.search_fundings(request)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 

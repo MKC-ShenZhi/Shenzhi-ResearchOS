@@ -46,8 +46,8 @@ const CAPABILITIES: Array<{
     tone: "bg-brand-cyan/10 text-brand-cyan",
   },
   {
-    title: "项目专利基金库",
-    description: "按项目、专利或基金探索关联科研成果",
+    title: "项目基金库",
+    description: "浏览基金并探索关联科研论文",
     href: "/knowledge/funding",
     icon: Landmark,
     tone: "bg-brand-gold/20 text-ink",

@@ -165,6 +165,17 @@ class RelatedPaperSearchRequest(KnowledgeModel):
         return value
 
 
+class FundingSearchRequest(KnowledgeModel):
+    query: str | None = Field(default=None, validation_alias=AliasChoices('q', 'query'))
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+    @field_validator('query')
+    @classmethod
+    def normalize_query(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
+
 class ScholarSummary(KnowledgeModel):
     id: str
     name: str
@@ -178,6 +189,21 @@ class ScholarSummary(KnowledgeModel):
 
 class ScholarSearchResponse(KnowledgeModel):
     results: list[ScholarSummary] = Field(default_factory=list)
+
+
+class FundingSummary(KnowledgeModel):
+    id: str
+    name: str
+    paper_count: int = Field(
+        ge=0,
+        validation_alias=AliasChoices('paperCount', 'paper_count'),
+        serialization_alias='paperCount',
+    )
+    provenance: Provenance
+
+
+class FundingSearchResponse(KnowledgeModel):
+    results: list[FundingSummary] = Field(default_factory=list)
 
 
 class ScholarReference(KnowledgeModel):

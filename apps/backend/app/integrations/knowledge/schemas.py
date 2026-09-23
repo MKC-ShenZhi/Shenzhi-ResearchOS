@@ -76,6 +76,17 @@ class UpstreamScholarResponse(TypedDict):
     papers: NotRequired[list[UpstreamScholarPaper] | None]
 
 
+class UpstreamFundingSearchResult(TypedDict):
+    funding_id: str
+    name: str
+    paper_count: int | str
+
+
+class UpstreamFundingSearchResponse(TypedDict):
+    results: list[UpstreamFundingSearchResult]
+    query: NotRequired[str]
+
+
 class UpstreamPaperResponse(TypedDict):
     paper_id: str
     title: str

@@ -73,6 +73,23 @@ export interface KnowledgeScholarDetail extends KnowledgeScholarSummary {
   papers: KnowledgeScholarPaper[];
 }
 
+export interface KnowledgeFundingSearchParams {
+  query?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface KnowledgeFundingSummary {
+  id: string;
+  name: string;
+  paperCount: number;
+  provenance: unknown;
+}
+
+export interface KnowledgeFundingSearchResponse {
+  results: KnowledgeFundingSummary[];
+}
+
 /** 搜索结果单条（论文） */
 export interface KnowledgePaperHit {
   id: string;

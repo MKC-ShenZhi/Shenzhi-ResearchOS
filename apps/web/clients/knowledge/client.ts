@@ -3,6 +3,8 @@
 import type {
   KnowledgeApiError,
   KnowledgeErrorCode,
+  KnowledgeFundingSearchParams,
+  KnowledgeFundingSearchResponse,
   KnowledgeGraphDepth,
   KnowledgeGraph,
   KnowledgePaperDetail,
@@ -29,9 +31,11 @@ export interface KnowledgeClient {
   searchScholars(params: KnowledgeScholarSearchParams): Promise<KnowledgeScholarSearchResponse>;
   /** 学者详情；id 作为 opaque string 使用 */
   scholar(scholarId: string): Promise<KnowledgeScholarDetail>;
+  /** Funding candidate search; returns Funding summaries, not papers. */
+  searchFundings(params: KnowledgeFundingSearchParams): Promise<KnowledgeFundingSearchResponse>;
   /** 按研究主题获取关联论文 */
   searchBySubject(subject: string, topK?: number): Promise<KnowledgeSearchResponse>;
-  /** 按项目、专利或基金文本获取关联论文 */
+  /** 按 Funding 名称片段获取关联论文；返回 Paper Results */
   searchByFunding(funding: string, topK?: number): Promise<KnowledgeSearchResponse>;
   /** 论文关系图谱；默认 depth=1 */
   graph(paperId: string, depth?: KnowledgeGraphDepth): Promise<KnowledgeGraph>;

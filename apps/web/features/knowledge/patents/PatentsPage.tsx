@@ -1,5 +1,4 @@
 import { AppShell } from "@/components/common/layout/app-shell";
-import { PatentsBrowser } from "@/features/knowledge/patents/components/patents-browser";
 
 /**
  * V1 暂停正式接入：知识底座尚无支撑独立产品页的稳定专利实体能力。
@@ -8,8 +7,11 @@ import { PatentsBrowser } from "@/features/knowledge/patents/components/patents-
 export function PatentsPage() {
   return (
     <AppShell>
-      <div className="flex min-h-[calc(100vh)] items-stretch">
-        <PatentsBrowser />
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-[980px] items-center justify-center px-6 py-8">
+        <div className="rounded-2xl border border-dashed border-line bg-card px-8 py-12 text-center shadow-card">
+          <h1 className="text-xl font-semibold text-ink">专利库</h1>
+          <p className="mt-3 text-sm text-muted">当前知识底座暂未提供专利实体检索能力。</p>
+        </div>
       </div>
     </AppShell>
   );
