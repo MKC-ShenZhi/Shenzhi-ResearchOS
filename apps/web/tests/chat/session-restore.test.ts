@@ -42,25 +42,25 @@ test("session lifecycle uses one URL hydration path without visibility hacks", (
   assert.match(workspace, /history\.replaceState/);
   assert.match(hook, /urlSessionId === sessionRef\.current/);
   assert.doesNotMatch(workspace, /getChatSession\(/);
-  assert.match(sidebar, /askSessionUrl\(item\.id\)/);
-  assert.match(sidebar, /askSessionUrl\(null\)/);
-  assert.match(sidebar, /setActiveSessionId\(null\)/);
+  assert.match(sidebar, /listAgentSessions/);
+  assert.match(sidebar, /`\/agents\?session=\$\{encodeURIComponent\(item\.id\)\}`/);
   assert.match(bridge, /activeSessionId/);
-  assert.match(sidebar, /requestLoad\(item, "\/agents"\)/);
-  assert.match(sidebar, /removeHistoryItem/);
-  assert.match(sidebar, /isMissingSessionError/);
+  assert.match(sidebar, /deleteAgentSession/);
+  assert.match(sidebar, /renameAgentSession/);
+  assert.doesNotMatch(sidebar, /requestLoad|removeHistoryItem|isMissingSessionError/);
   assert.doesNotMatch(sidebar, /requestNewChat/);
   assert.match(workspace, /该对话已过期或不存在/);
   assert.match(workspace, /新建对话/);
   assert.match(thread, /busy && turn\.status === "streaming"/);
 });
 
-test("DB history click is URL-only while local history is route guarded", () => {
+test("Agent history click is URL-only and has no local-history branch", () => {
   const bridge = readFileSync("stores/ask-sidebar-bridge.ts", "utf8");
   const sidebar = readFileSync("components/common/layout/sidebar-chat-history.tsx", "utf8");
   const hook = readFileSync("features/chat/hooks/use-chat-session.ts", "utf8");
 
-  assert.match(sidebar, /if \(item\.source === "db"\) \{[\s\S]*?router\.push\(askSessionUrl\(item\.id\)\);[\s\S]*?return;/);
+  assert.match(sidebar, /router\.push\(`\/agents\?session=\$\{encodeURIComponent\(item\.id\)\}`\)/);
+  assert.doesNotMatch(sidebar, /item\.source|askSessionUrl|listLocalAskSessions/);
   assert.match(bridge, /targetPath\?: string/);
   assert.match(bridge, /requestReset/);
   assert.match(hook, /item\.source !== "local"/);

@@ -377,7 +377,7 @@ export function ComposerShell({
 
   return (
     <div className="relative overflow-visible rounded-2xl border border-line/80 bg-card p-3 shadow-pop">
-      {selectedSkills && selectedSkills.length > 0 && (
+      {isSmartSearch && selectedSkills && selectedSkills.length > 0 && (
         <div className="mb-1.5 flex flex-wrap gap-1.5">
           {selectedSkills.map((skill) => (
             <span key={skill.name} title={skill.description.split("。")[0]}
@@ -392,7 +392,7 @@ export function ComposerShell({
         </div>
       )}
 
-      {attachments.length > 0 && (
+      {isSmartSearch && attachments.length > 0 && (
         <div className="mb-1.5 flex flex-wrap gap-1.5">
           {attachments.map((item, i) => (
             <button
@@ -442,24 +442,26 @@ export function ComposerShell({
 
       <div className="mt-1.5 flex items-center gap-1.5">
         {modeSwitch && <SearchModeSwitch mode={entryMode} onChange={setEntryMode} />}
-        <PlusMenu webSearch={webSearch} onWebSearchChange={setWebSearch} skills={skills}
-          showWebSearch={webSearchSwitch}
-          selectedSkills={selectedSkills?.map((skill) => skill.name)}
-          onToggleSkill={onSelectSkill || onRemoveSkill ? (name) => {
-            const skill = selectedSkills?.find((item) => item.name === name);
-            if (skill) onRemoveSkill?.(name); else onSelectSkill?.(name);
-          } : undefined} />
-        <AttachmentMenu
-          onWorkspaceFolder={onWorkspaceFolder}
-          disabled={busy || disabled}
-          onUploadingChange={setUploading}
-          accept={config.upload.accept.join(",")}
-          maxFiles={Math.max(0, config.upload.max_files - attachments.length)}
-          maxSizeMb={config.upload.max_size_mb}
-          onAdd={(items) =>
-            setAttachments([...attachments, ...items].slice(0, config.upload.max_files))
-          }
-        />
+        {isSmartSearch && <>
+          <PlusMenu webSearch={webSearch} onWebSearchChange={setWebSearch} skills={skills}
+            showWebSearch={webSearchSwitch}
+            selectedSkills={selectedSkills?.map((skill) => skill.name)}
+            onToggleSkill={onSelectSkill || onRemoveSkill ? (name) => {
+              const skill = selectedSkills?.find((item) => item.name === name);
+              if (skill) onRemoveSkill?.(name); else onSelectSkill?.(name);
+            } : undefined} />
+          <AttachmentMenu
+            onWorkspaceFolder={onWorkspaceFolder}
+            disabled={busy || disabled}
+            onUploadingChange={setUploading}
+            accept={config.upload.accept.join(",")}
+            maxFiles={Math.max(0, config.upload.max_files - attachments.length)}
+            maxSizeMb={config.upload.max_size_mb}
+            onAdd={(items) =>
+              setAttachments([...attachments, ...items].slice(0, config.upload.max_files))
+            }
+          />
+        </>}
         {isSmartSearch && (
           <div ref={controlRef} className="relative min-w-0 shrink">
             <ComposerControlPicker

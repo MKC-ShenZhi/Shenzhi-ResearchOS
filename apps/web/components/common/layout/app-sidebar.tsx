@@ -6,8 +6,6 @@ import * as React from "react";
 import {
   ChevronDown,
   Compass,
-  Folder,
-  History,
   Layers,
   Library,
   LogOut,
@@ -69,12 +67,6 @@ const PROJECT_SUB_NAV = projects.map((p) => ({
   href: `/projects/${p.id}`,
   label: p.name,
 }));
-
-const HISTORY_NAV: NavItem[] = [
-  { href: "/history", label: "搜索", icon: History, disabled: true },
-  { href: "/my-projects", label: "项目", icon: Folder, disabled: true },
-  { href: "/deliveries", label: "投递", icon: Send, disabled: true },
-];
 
 const subscribeHydration = () => () => {};
 
@@ -494,7 +486,6 @@ export function AppSidebar() {
           subNav={AGENT_SUB_NAV}
           collapsed={collapsed}
         />
-        {pathname !== "/agents" && <SidebarChatHistory collapsed={collapsed} />}
         <ExpandableNav
           href="/knowledge"
           label="知识库"
@@ -526,14 +517,9 @@ export function AppSidebar() {
           subNav={SUBMIT_SUB_NAV}
           collapsed={collapsed}
         />
-        {!collapsed && (
-          <p className="shrink-0 px-3 pb-1.5 pt-4 text-[11px] font-medium tracking-wide text-faint">
-            历史
-          </p>
-        )}
-        {HISTORY_NAV.map((item) => (
-          <NavLink key={item.label} item={item} collapsed={collapsed} />
-        ))}
+        <React.Suspense fallback={null}>
+          <SidebarChatHistory collapsed={collapsed} />
+        </React.Suspense>
       </nav>
 
       {/* 设置(悬停显示选项栏) */}

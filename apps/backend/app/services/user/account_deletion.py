@@ -6,6 +6,7 @@ from sqlalchemy import delete, select
 
 from app.core.database import session_scope
 from app.models.chat import ChatSessionRow
+from app.models.agent_session import AgentSessionRow
 from app.models.collections import CollectionFolderRow, CollectionItemRow, CollectionUserStateRow
 from app.models.profile import UserProfileRow
 from app.models.reading_history import ReadingHistoryRow
@@ -18,6 +19,7 @@ class BusinessDataDeletionResult:
     profiles_deleted: int
     settings_deleted: int
     chat_sessions_deleted: int
+    agent_sessions_deleted: int = 0
 
 
 class AccountDeletionService:
@@ -63,6 +65,11 @@ class AccountDeletionService:
                 .where(ChatSessionRow.owner == owner)
                 .returning(ChatSessionRow.id)
             )
+            agent_sessions = await db.execute(
+                delete(AgentSessionRow)
+                .where(AgentSessionRow.owner == owner)
+                .returning(AgentSessionRow.id)
+            )
 
         # chat_messages cascade from chat_sessions. Counts deliberately omit
         # message content and identifiers so logs and the response stay safe.
@@ -70,4 +77,5 @@ class AccountDeletionService:
             profiles_deleted=len(profiles.all()),
             settings_deleted=len(settings.all()),
             chat_sessions_deleted=len(sessions.all()),
+            agent_sessions_deleted=len(agent_sessions.all()),
         )

@@ -230,13 +230,13 @@ def _html_payload(url: str, text: str, max_chars: int, failures: list[str]) -> d
 
 
 async def _resolve_pdf_url(knowledge: Any, paper_id: str) -> str | None:
-    """若知识库能按 paper_id 给出 pdf_url，优先用它（比猜 arXiv 路径可靠）。"""
+    """若知识库能按 opaque paper_id 给出 pdf_url，优先使用且不得改写 ID。"""
     if knowledge is None or not paper_id:
         return None
-    match = re.search(r'(paper:[\w:.-]+)', paper_id)
-    if match is None:
+    exact_id = paper_id.strip()
+    if not exact_id.startswith('paper:'):
         return None
-    detail = await knowledge.get_paper(match.group(1))
+    detail = await knowledge.get_paper(exact_id)
     return getattr(detail, 'pdf_url', None) or None
 
 

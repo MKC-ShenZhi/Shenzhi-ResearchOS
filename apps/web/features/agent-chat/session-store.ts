@@ -1,9 +1,10 @@
 "use client";
 
-// ShenzhiAi 会话存储：浏览器本地持久化（pi 的本地会话文件在 Web 的对等物）。
-// 会话 = 标题（首条提问自动生成）+ 完整轮次（含工具活动与产物）。
+// 旧 ShenzhiAi localStorage 形状。正式 source of truth 已是 Backend；这里只保留
+// 兼容读写和一次性迁移，不再被新会话页或 Sidebar 当作正式历史。
 
 import type { AgentQuestion } from "@/clients/backend/agent";
+import { importLegacyAgentSession } from "@/clients/backend/agent";
 
 /** 一次工具调用的持久化形态（页面侧 Activity 的存储对等物）。 */
 export interface StoredActivity {
@@ -50,6 +51,7 @@ export interface AgentSession {
 }
 
 const KEY = "shenzhi-agent-sessions";
+const MIGRATION_KEY = "shenzhi-agent-sessions-backend-migrated-v1";
 const MAX_SESSIONS = 50;
 
 function load(): AgentSession[] {
@@ -127,4 +129,27 @@ export function deleteSession(id: string) {
 
 export function newSessionId(): string {
   return `ses_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Idempotent localStorage migration; source data is removed only after every import succeeds. */
+export async function migrateLegacyAgentSessions(): Promise<number> {
+  if (typeof window === "undefined" || window.localStorage.getItem(MIGRATION_KEY) === "1") return 0;
+  const sessions = listSessions();
+  if (sessions.length === 0) {
+    window.localStorage.setItem(MIGRATION_KEY, "1");
+    return 0;
+  }
+  for (const session of sessions) {
+    await importLegacyAgentSession({
+      import_key: `local-v1:${session.id}`,
+      title: session.title,
+      created_at: session.createdAt / 1000,
+      updated_at: session.updatedAt / 1000,
+      branched_from: session.branchedFrom,
+      turns: session.turns as unknown as Array<Record<string, unknown>>,
+    });
+  }
+  window.localStorage.setItem(MIGRATION_KEY, "1");
+  window.localStorage.removeItem(KEY);
+  return sessions.length;
 }
