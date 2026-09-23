@@ -187,7 +187,6 @@ export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {
                     defaultValue={page}
                     className="h-9 w-16 rounded-lg border border-line bg-panel px-2 text-center text-sm text-ink outline-none focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
                   />
-                  <Button type="submit" variant="outline" disabled={isFetching}>跳转</Button>
                 </form>
                 <Button variant="outline" size="icon" aria-label="下一页" onClick={() => goToPage(page + 1)} disabled={page >= totalPages || isFetching}>
                   <ChevronRight />
