@@ -128,7 +128,7 @@ async def search_scholars(
     return ok(response.model_dump(mode='json', by_alias=True))
 
 
-@router.get('/scholars/{scholar_id}')
+@router.get('/scholars/{scholar_id:path}')
 async def scholar(
     scholar_id: str,
     request: Request,

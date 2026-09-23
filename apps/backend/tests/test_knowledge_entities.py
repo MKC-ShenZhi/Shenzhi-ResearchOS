@@ -1,4 +1,5 @@
 import unittest
+from urllib.parse import quote
 from unittest.mock import patch
 
 import httpx
@@ -140,6 +141,57 @@ class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.scholar_id, SCHOLAR_ID)
         self.assertEqual(detail.papers[0].id, PAPER_ID)
 
+    async def test_scholar_service_resolves_confirmed_chinese_alias(self):
+        class CapturingAdapter:
+            async def search_scholars(self, request):
+                self.request = request
+                return await KnowledgeAdapter(EntityFixtureClient()).search_scholars(request)
+
+        adapter = CapturingAdapter()
+        request = ScholarSearchRequest(query='何恺明', limit=5, offset=10)
+        result = await KnowledgeService(adapter).search_scholars(request)
+
+        self.assertEqual(adapter.request.query, 'Kaiming He')
+        self.assertEqual(adapter.request.limit, 5)
+        self.assertEqual(adapter.request.offset, 10)
+        self.assertEqual(request.query, '何恺明')
+        self.assertEqual(result.results[0].id, SCHOLAR_ID)
+
+    async def test_scholar_service_passes_unknown_and_english_queries_unchanged(self):
+        class CapturingAdapter:
+            async def search_scholars(self, request):
+                self.queries.append(request.query)
+                return await KnowledgeAdapter(EntityFixtureClient()).search_scholars(request)
+
+            def __init__(self):
+                self.queries = []
+
+        adapter = CapturingAdapter()
+        service = KnowledgeService(adapter)
+        await service.search_scholars(ScholarSearchRequest(query='Kaiming He'))
+        await service.search_scholars(ScholarSearchRequest(query='未知学者甲'))
+
+        self.assertEqual(adapter.queries, ['Kaiming He', '未知学者甲'])
+
+    async def test_scholar_search_preserves_unicode_query_and_empty_result(self):
+        class EmptyScholarClient(EntityFixtureClient):
+            async def search_scholars(self, query, *, limit, offset):
+                self.scholar_search = (query, limit, offset)
+                return {'results': [], 'query': query}
+
+        client = EmptyScholarClient()
+        result = await KnowledgeAdapter(client).search_scholars(
+            ScholarSearchRequest(query=' Geoffrey Hinton ')
+        )
+        self.assertEqual(client.scholar_search, ('Geoffrey Hinton', 20, 0))
+        self.assertEqual(result.results, [])
+
+        chinese_result = await KnowledgeAdapter(client).search_scholars(
+            ScholarSearchRequest(query='何恺明')
+        )
+        self.assertEqual(client.scholar_search, ('何恺明', 20, 0))
+        self.assertEqual(chinese_result.results, [])
+
     async def test_subject_query_maps_paper_results_and_omits_upstream_fields(self):
         client = EntityFixtureClient()
         result = await KnowledgeAdapter(client).search_by_subject('graph', top_k=7)
@@ -174,6 +226,34 @@ class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(caught.exception.error.code, 'TIMEOUT')
         self.assertTrue(caught.exception.error.retryable)
         self.assertEqual(caught.exception.status_code, 504)
+
+    async def test_resolved_scholar_query_preserves_upstream_error_contract(self):
+        class FailingAdapter:
+            async def search_scholars(self, request):
+                self.query = request.query
+                raise KnowledgeIntegrationError.timeout()
+
+        adapter = FailingAdapter()
+        with self.assertRaises(KnowledgeServiceError) as caught:
+            await KnowledgeService(adapter).search_scholars(
+                ScholarSearchRequest(query='何恺明')
+            )
+
+        self.assertEqual(adapter.query, 'Kaiming He')
+        self.assertEqual(caught.exception.error.code, 'TIMEOUT')
+        self.assertTrue(caught.exception.error.retryable)
+        self.assertEqual(caught.exception.status_code, 504)
+
+    async def test_scholar_not_found_is_non_retryable(self):
+        class MissingScholarAdapter:
+            async def scholar(self, scholar_id):
+                raise KnowledgeIntegrationError.not_found()
+
+        with self.assertRaises(KnowledgeServiceError) as caught:
+            await KnowledgeService(MissingScholarAdapter()).get_scholar(SCHOLAR_ID)
+        self.assertEqual(caught.exception.error.code, 'NOT_FOUND')
+        self.assertFalse(caught.exception.error.retryable)
+        self.assertEqual(caught.exception.status_code, 404)
 
     async def test_upstream_failure_maps_through_service(self):
         class FailingAdapter:
@@ -312,6 +392,26 @@ class KnowledgeEntityApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(subject.json()['data']['results'][0]['id'], PAPER_ID)
         self.assertEqual(funding.json()['data']['results'][0]['id'], PAPER_ID)
         self.assertNotIn('source_scores', subject.json()['data']['results'][0])
+
+    async def test_scholar_detail_accepts_encoded_opaque_id_with_slash(self):
+        opaque_id = 'author:legacy/何恺明?source=kb'
+        received_ids = []
+
+        class CapturingService:
+            async def get_scholar(self, scholar_id):
+                received_ids.append(scholar_id)
+                return map_scholar_detail({
+                    **SCHOLAR_DETAIL_RESPONSE,
+                    'scholar_id': opaque_id,
+                })
+
+        with patch('app.api.knowledge.service', CapturingService()):
+            response = await self.client.get(
+                '/api/v1/knowledge/scholars/' + quote(opaque_id, safe='')
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(received_ids, [opaque_id])
 
     async def test_new_routes_validate_blank_or_out_of_range_queries(self):
         cases = [
