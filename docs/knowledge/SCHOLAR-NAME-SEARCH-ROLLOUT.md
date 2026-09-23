@@ -185,3 +185,11 @@ Kaiming He 详情  → 11 篇论文、30 位合作学者
 ## 九、方案变更触发条件
 
 只有出现下列真实需求时才扩大设计：映射规模已无法安全代码评审、需要非开发人员高频维护、需要多来源冲突治理，或知识底座明确无法承担长期别名召回。在此之前保持当前两项改动，不提前建设别名平台。
+
+## 十、当前落地状态（2026-09-23）
+
+- 已在 `KnowledgeService.search_scholars()` 对人工确认的 `何恺明` 做精确映射至 `Kaiming He`；未知中文名与英文名保持原样透传，未引入模糊匹配或翻译。
+- 已修复学者详情 API 对 opaque ID 中斜杠的路由限制；编码后的完整 ID 会传至 Service，API 公共字段和 BFF 边界不变。
+- Backend Scholar 专项 21 项通过；Web 全量 221 项通过；Web typecheck 和本次 Backend Ruff 检查通过。
+- M01-M08 的自动化契约覆盖与人工浏览器未完成项记录在 `SCHOLAR-LIBRARY-VALIDATION.md`。自动化测试不代表真实知识底座或浏览器 E2E 验收。
+- Backend 全量中的数据库验收用例因测试进程未注入 `CHAT_DATABASE_URL` 而跳过；未尝试连接数据库。另有 `reading_history` 缺失和 Windows 换行断言两项既有失败，与本方案无关。

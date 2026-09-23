@@ -4,7 +4,7 @@
 
 > 基线：`origin/feat/knowledge-entity-refactor@3ef4564`  
 > 开发分支：`feat/knowledge-scholar-library`（基于 `feat/knowledge-entity-refactor`，完成后合并回该父分支）  
-> 验证日期：2026-09-22
+> 验证日期：2026-09-23
 
 ## 1. 当前代码现状
 
@@ -21,14 +21,14 @@
 
 已具备：真实姓名检索、学者详情、论文成果跳转、合作学者跳转、加载态、空结果、错误态、一次受控重试，以及 opaque ID 编解码边界。当前公开字段仅包括上游明确提供的姓名、论文数、年份、会议、主题、基金、机构、合作学者和论文；不虚构 h-index、引用数、履历、角色、邮箱或主页。
 
-已确认的主要缺口：中文姓名当前会原样发送给知识底座，没有中英文姓名转换或 Query Rewrite。若知识底座只命中英文姓名，产品页面只会提示用户尝试英文姓名。
+已修复的两个边界问题：对已人工确认的 `何恺明` 使用 Knowledge Service 内的精确英文名映射；学者详情 API 改为捕获完整 opaque ID 路径，支持 ID 中包含斜杠等字符。未知中文姓名仍原样发送，不猜测或自动翻译。知识底座全量中文姓名召回能力仍需与上游确认。
 
 ## 2. 工作规划
 
 ### 阶段 A：稳定性与契约验收
 
 1. 固化学者 Search、Detail、空结果、错误码和 opaque ID 自动化测试。
-2. 使用真实环境验证典型英文姓名、中文姓名和不存在姓名。
+2. 自动化验证姓名映射和空结果契约；使用真实环境对照典型英文姓名、中文姓名和不存在姓名。
 3. 核对详情中所有可选字段；上游未返回的字段必须隐藏，不显示伪造的零值或占位事实。
 4. 验证学者到论文、合作学者的完整导航与返回路径。
 
@@ -37,7 +37,7 @@
 1. 对同一学者分别使用中文名、英文名和常见英文变体检索，并记录请求、结果数和首条 ID。
 2. 若知识底座可以稳定支持中文名，产品侧不增加 Rewrite。
 3. 若知识底座不能支持中文名，先向知识底座组确认正式能力和姓名词典来源。
-4. 确需产品侧处理时，在 FastAPI Knowledge Service 的 Query 层实现可测试的 Rewrite；不得放在页面、BFF 或 Integration transport 中，也不得维护无法追溯的硬编码个人名单。
+4. 对已确认姓名在 FastAPI Knowledge Service Query 层做精确 Rewrite；不得放在页面、BFF 或 Integration transport 中，也不得维护无法追溯的个人名单。
 
 ### 阶段 C：修复与回归
 
@@ -54,7 +54,7 @@
 - 类型：自动化
 - 覆盖：首尾空格归一化；Unicode 中文姓名不被损坏；Query 当前原样进入 Integration。
 - 命令：`uv run python -m unittest tests.test_knowledge_entities -v`
-- 当前结果：通过。
+- 当前结果：通过；本轮专项共 21 项通过。
 - 说明：此项验证传输正确，不代表上游能够命中中文姓名。
 
 ### A02 学者 Search 和 Detail 契约
@@ -62,34 +62,34 @@
 - 类型：自动化
 - 覆盖：Search/Detail 端点、limit/offset、字段映射、opaque ID、缺省可选数组。
 - 命令：同 A01。
-- 当前结果：通过。
+- 当前结果：通过；包括含斜杠、中文和问号的 opaque ID 经 API 详情路由往返。
 
 ### A03 空结果与异常映射
 
 - 类型：自动化
 - 覆盖：空结果为成功响应；TIMEOUT 可重试；NOT_FOUND 不可重试；非法参数返回 `INVALID_ARGUMENT`。
 - 命令：同 A01。
-- 当前结果：通过。
+- 当前结果：通过；空结果、错误映射和参数校验均覆盖。
 
 ### A04 前端状态与跳转
 
 - 类型：自动化
 - 覆盖：初始态、loading、zero-result、error、重试入口、论文链接、合作学者链接、opaque ID 路由恢复。
 - 命令：`corepack pnpm test`
-- 当前结果：通过。
+- 当前结果：通过；Web 套件含学者链接编解码、页面状态及导航契约测试，但不是浏览器 E2E。
 
 ### A05 静态类型与全量回归
 
 - 类型：自动化
 - 命令：`corepack pnpm typecheck`、`corepack pnpm test`、`corepack pnpm lint`。
-- 当前结果：typecheck 通过；Web 221 项测试全部通过；lint 0 error、2 warning。
+- 当前结果：typecheck 通过；Web 221 项测试全部通过；本次修改文件 Ruff 检查通过。未重跑 Web lint；上次基线为 0 error、2 个无关 warning。
 - Lint 基线 warning：`features/chat/hooks/use-chat-session.ts` 缺少 `setBusyValue` dependency；`lib/use-popover-placement.ts` 缺少 `anchorRef` dependency，均与学者库无关。
 
 ### A06 Backend 全量基线
 
 - 类型：自动化
 - 命令：`uv run python -m unittest discover -s tests -v`。
-- 当前结果：阻塞于两个与学者库无关的既有问题：`app.services.reading_history` 缺失；Deep Research 报告在 Windows 下使用 CRLF，测试固定断言 LF。
+- 当前结果：325 项运行，21 项因进程未设置 `CHAT_DATABASE_URL` 跳过；302 项通过；另有 1 个既有导入错误（`app.services.reading_history` 缺失）和 1 个既有 Deep Research Windows CRLF/LF 断言失败。跳过不代表连接尝试失败：本轮未连接数据库。后端 `.env` 有 URL 配置，但 unittest 启动进程未加载该文件。
 - 学者专项影响：无；`test_knowledge_entities` 独立通过。
 
 ## 4. 人工浏览器测试表单
@@ -151,13 +151,33 @@
 2. 仅使用键盘完成输入、搜索、进入结果、返回。
 3. 焦点应可见，无横向溢出；搜索按钮在空输入时禁用。
 
-## 5. 本轮测试报告
+## 5. M01-M08 自动化覆盖状态
 
-- 学者专项 Backend：17 项通过，0 失败。
+自动化测试验证 API / Service / 前端代码契约，不等同于真实浏览器 E2E。以下“部分通过”表示该场景的可自动化契约有测试，人工步骤仍未执行。
+
+- M01 英文姓名正常检索：部分通过。Scholar Search API / Adapter 映射、前端 BFF 请求边界已由自动化测试覆盖；真实知识底座响应、Network 与 Console 检查未自动完成。
+- M02 中文姓名对照检索：部分通过。`何恺明` 精确映射至 `Kaiming He`、分页参数保留以及未知中文名透传有 Backend 单测；真实上游中英文返回相同 Scholar ID 尚未在本轮自动验证。
+- M03 空结果：部分通过。Backend 空 results 成功响应及前端空结果状态契约有测试；浏览器实际显示未做 E2E。
+- M04 搜索错误与重试：部分通过。上游 TIMEOUT / 错误码映射及 UI 错误、重试入口有自动化契约覆盖；断网后恢复并点击重试未做浏览器 E2E。
+- M05 学者详情字段：部分通过。字段映射、可选数组缺省、契约异常及空状态显示规则有测试；真实上游字段逐项核对未完成。
+- M06 论文跳转：部分通过。论文链接使用 opaque ID 与返回来源的前端契约有测试；浏览器实际加载论文及后退恢复未做 E2E。
+- M07 合作学者跳转：自动化契约通过。前端 opaque ID 编解码用例覆盖 slash、中文、问号；本轮新增 Backend API 用例确认编码 ID 完整到达详情服务。浏览器历史导航未做 E2E。
+- M08 响应式与可访问性：未自动完成。现有 Node 测试和 typecheck 不会布局页面或驱动键盘；375/768/桌面视口、焦点可见性和键盘流程仍需人工浏览器验收。
+
+## 6. 本轮测试报告
+
+- 学者专项 Backend：21 项通过，0 失败。
 - Web 全量测试：221 项通过，0 失败。
 - Web TypeScript typecheck：通过。
-- Web lint：0 error、2 个与学者库无关的既有 warning。
-- Backend 全量：319 项运行，1 失败、1 导入错误、21 跳过；两项失败均不属于学者库。
-- 真实知识底座与浏览器人工验收：待执行，重点是中文名/英文名对照、详情字段和跳转。
+- Ruff（本次 Backend 修改文件）：通过。
+- Backend 全量：325 项运行，302 项通过、21 项因 `CHAT_DATABASE_URL` 未注入测试进程跳过、1 项导入错误、1 项 Deep Research 换行断言失败；两项失败均不属于学者库。
+- 真实知识底座与浏览器人工验收：M01-M08 对应未完成项见上表，重点是中英文同 ID 对照、真实详情字段、Network/Console、交互导航和响应式键盘流程。
 
-当前结论：学者库的正式调用链和基础 UI 状态已经成型，可以进入真实环境验收；中文姓名 Query Rewrite 尚未实现，应先用 M02 获得稳定复现证据，再决定由产品 Query 层修复还是反馈知识底座组。
+当前结论：学者库的 API / Service 契约和 opaque ID 详情边界已有自动化回归；已确认的中文姓名问题由一项精确映射兜底。测试没有冒充真实浏览器验收；M01-M06 仍需真实环境确认，M08 需人工完成。
+
+## 7. 代码说明
+
+- `apps/backend/app/services/knowledge/service.py`：在现有 Knowledge Service 对已审核姓名做精确查询映射，保持 Adapter、API 和响应契约不变；未知姓名原样透传。
+- `apps/backend/app/api/knowledge.py`：学者详情路由使用 path 参数接收完整 opaque ID，避免 ID 含 `/` 时路由 404。
+- `apps/backend/tests/test_knowledge_entities.py`：覆盖已确认映射、未知姓名透传、上游错误语义，以及编码后的含 slash / Unicode / query 字符 ID 经过 API 的回归。
+- 无新增依赖、数据库表、迁移、日志框架或前端科研服务直连。
