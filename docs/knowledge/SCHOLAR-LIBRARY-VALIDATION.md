@@ -89,7 +89,7 @@
 
 - 类型：自动化
 - 命令：`uv run python -m unittest discover -s tests -v`。
-- 当前结果：325 项运行，21 项因进程未设置 `CHAT_DATABASE_URL` 跳过；302 项通过；另有 1 个既有导入错误（`app.services.reading_history` 缺失）和 1 个既有 Deep Research Windows CRLF/LF 断言失败。跳过不代表连接尝试失败：本轮未连接数据库。后端 `.env` 有 URL 配置，但 unittest 启动进程未加载该文件。
+- 当前结果：本轮执行 `uv run python -m unittest discover -s tests -v`，未使用 `--env-file .env`。因此 21 项依赖 PostgreSQL 的用例被 `skipUnless(os.getenv('CHAT_DATABASE_URL'))` 跳过；这是测试进程环境注入差异，不是数据库连接失败，也不是 `.env` 缺少配置。302 项通过，另有 1 个既有导入错误（`app.services.reading_history` 缺失）和 1 个既有 Deep Research Windows CRLF/LF 断言失败。项目约定的带库跑法见 `docs/settings/FIX-20260916-phase2-automation.md`；若要验证数据库本身，使用 `uv run --env-file .env python -m unittest discover -s tests`，并确保 PostgreSQL 已启动且迁移完成。本轮没有执行该带库验证。
 - 学者专项影响：无；`test_knowledge_entities` 独立通过。
 
 ## 4. 人工浏览器测试表单
@@ -170,7 +170,7 @@
 - Web 全量测试：221 项通过，0 失败。
 - Web TypeScript typecheck：通过。
 - Ruff（本次 Backend 修改文件）：通过。
-- Backend 全量：325 项运行，302 项通过、21 项因 `CHAT_DATABASE_URL` 未注入测试进程跳过、1 项导入错误、1 项 Deep Research 换行断言失败；两项失败均不属于学者库。
+- Backend 全量：325 项运行，302 项通过、21 项因 unittest 未通过 `--env-file .env` 注入 `CHAT_DATABASE_URL` 而跳过、1 项导入错误、1 项 Deep Research 换行断言失败；两项失败均不属于学者库。该 skip 不能说明数据库连接状态；本轮未运行带库测试。
 - 真实知识底座与浏览器人工验收：M01-M08 对应未完成项见上表，重点是中英文同 ID 对照、真实详情字段、Network/Console、交互导航和响应式键盘流程。
 
 当前结论：学者库的 API / Service 契约和 opaque ID 详情边界已有自动化回归；已确认的中文姓名问题由一项精确映射兜底。测试没有冒充真实浏览器验收；M01-M06 仍需真实环境确认，M08 需人工完成。

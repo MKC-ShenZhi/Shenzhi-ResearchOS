@@ -192,4 +192,4 @@ Kaiming He 详情  → 11 篇论文、30 位合作学者
 - 已修复学者详情 API 对 opaque ID 中斜杠的路由限制；编码后的完整 ID 会传至 Service，API 公共字段和 BFF 边界不变。
 - Backend Scholar 专项 21 项通过；Web 全量 221 项通过；Web typecheck 和本次 Backend Ruff 检查通过。
 - M01-M08 的自动化契约覆盖与人工浏览器未完成项记录在 `SCHOLAR-LIBRARY-VALIDATION.md`。自动化测试不代表真实知识底座或浏览器 E2E 验收。
-- Backend 全量中的数据库验收用例因测试进程未注入 `CHAT_DATABASE_URL` 而跳过；未尝试连接数据库。另有 `reading_history` 缺失和 Windows 换行断言两项既有失败，与本方案无关。
+- Backend 全量未使用 `uv run --env-file .env`，导致测试进程没有 `CHAT_DATABASE_URL`，21 项数据库验收用例按条件跳过；这是测试运行环境注入差异，不代表 `.env` 缺配置或 PostgreSQL 连接失败。本轮未执行带库测试。项目带库跑法见 `docs/settings/FIX-20260916-phase2-automation.md`。另有 `reading_history` 缺失和 Windows 换行断言两项既有失败，与本方案无关。
