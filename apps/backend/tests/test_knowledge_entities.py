@@ -1,4 +1,5 @@
 import unittest
+from urllib.parse import quote
 from unittest.mock import patch
 
 import httpx
@@ -391,6 +392,26 @@ class KnowledgeEntityApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(subject.json()['data']['results'][0]['id'], PAPER_ID)
         self.assertEqual(funding.json()['data']['results'][0]['id'], PAPER_ID)
         self.assertNotIn('source_scores', subject.json()['data']['results'][0])
+
+    async def test_scholar_detail_accepts_encoded_opaque_id_with_slash(self):
+        opaque_id = 'author:legacy/何恺明?source=kb'
+        received_ids = []
+
+        class CapturingService:
+            async def get_scholar(self, scholar_id):
+                received_ids.append(scholar_id)
+                return map_scholar_detail({
+                    **SCHOLAR_DETAIL_RESPONSE,
+                    'scholar_id': opaque_id,
+                })
+
+        with patch('app.api.knowledge.service', CapturingService()):
+            response = await self.client.get(
+                '/api/v1/knowledge/scholars/' + quote(opaque_id, safe='')
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(received_ids, [opaque_id])
 
     async def test_new_routes_validate_blank_or_out_of_range_queries(self):
         cases = [
