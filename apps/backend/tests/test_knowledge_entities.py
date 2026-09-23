@@ -12,7 +12,7 @@ from app.integrations.knowledge.adapter import (
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.main import app
-from app.schemas.knowledge import ScholarSearchRequest
+from app.schemas.knowledge import KnowledgeMixedSearchRequest, ScholarSearchRequest
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 
 
@@ -145,6 +145,36 @@ class EntityFixtureClient:
 
 
 class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_mixed_search_uses_public_top_k_alias_and_preserves_each_supported_source(self):
+        class MixedFixtureClient(EntityFixtureClient):
+            async def search(self, payload):
+                self.search_payloads = getattr(self, 'search_payloads', []) + [payload]
+                return RELATED_PAPER_RESPONSE
+
+            async def search_by_subject(self, subject, *, top_k):
+                self.subject_search = (subject, top_k)
+                return {'results': [{
+                    **RELATED_PAPER_RESPONSE['results'][0],
+                    'paper_id': 'paper:opaque:topic',
+                }]}
+
+        client = MixedFixtureClient()
+        result = await KnowledgeAdapter(client).mixed_search(KnowledgeMixedSearchRequest(
+            query='graph',
+            types=['paper', 'scholar', 'topic', 'project', 'patent', 'funding', 'graph'],
+            limit=10,
+        ))
+
+        self.assertEqual([payload['top_k'] for payload in client.search_payloads], [2, 2])
+        self.assertEqual(client.scholar_search, ('graph', 2, 0))
+        self.assertEqual(client.subject_search, ('graph', 2))
+        self.assertEqual(client.funding_candidates, ('graph', 2, 0))
+        self.assertEqual(result.supported_types, ['paper', 'scholar', 'topic', 'funding', 'graph'])
+        self.assertEqual(result.unsupported_types, ['project', 'patent'])
+        self.assertIn('scholar', [item.type for item in result.results])
+        self.assertIn('funding', [item.type for item in result.results])
+        self.assertTrue(any(item.metadata.get('matchedBy') == 'topic' for item in result.results))
+
     async def test_overview_exposes_real_funding_candidates_without_fake_type_counts(self):
         client = EntityFixtureClient()
         result = await KnowledgeAdapter(client).overview()

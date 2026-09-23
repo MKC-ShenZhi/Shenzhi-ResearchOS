@@ -35,6 +35,16 @@ const SEARCH_TABS: SearchTab[] = [
   { label: "关系图谱", types: ["graph"] },
 ];
 
+const SEARCH_TYPE_LABELS: Record<KnowledgeMixedSearchType, string> = {
+  paper: "论文",
+  scholar: "学者",
+  topic: "主题",
+  project: "项目",
+  patent: "专利",
+  funding: "基金",
+  graph: "关系图谱",
+};
+
 const CARDS: Array<{
   title: string;
   description: string;
@@ -93,21 +103,30 @@ function NumberValue({ value, status }: { value: number | null; status: string }
 }
 
 function SearchResults({ response, query }: { response: KnowledgeMixedSearchResponse; query: string }) {
+  const unsupportedLabels = response.unsupportedTypes.map((type) => SEARCH_TYPE_LABELS[type]).join("、");
+  const failedLabels = response.failedTypes.map((type) => SEARCH_TYPE_LABELS[type]).join("、");
+  const resultLabel = (result: KnowledgeMixedSearchResponse["results"][number]) => (
+    result.metadata.matchedBy === "topic" ? SEARCH_TYPE_LABELS.topic : SEARCH_TYPE_LABELS[result.type]
+  );
+
   if (!response.results.length) {
-    return <div className="rounded-2xl bg-surface px-4 py-5 text-sm text-muted">没有找到与“{query}”匹配的已接入结果。{response.unsupportedTypes.length > 0 ? " 部分类型当前未接入。" : ""}</div>;
+    return <div className="rounded-2xl bg-surface px-4 py-5 text-sm text-muted"><p>没有找到与“{query}”匹配的已接入结果。</p>{unsupportedLabels && <p className="mt-2">{unsupportedLabels}当前未接入。</p>}{failedLabels && <p className="mt-2 text-danger">{failedLabels}暂时不可用，请稍后重试。</p>}</div>;
   }
   return (
-    <div className="divide-y divide-border rounded-2xl bg-surface">
-      {response.results.map((result) => (
-        <Link key={`${result.type}:${result.id}`} href={result.action ?? "/knowledge/search"} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-soft/50">
-          <span className="rounded-md bg-card px-2 py-1 text-[11px] font-medium text-primary">{result.type}</span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-ink">{result.title}</span>
-            {result.summary && <span className="mt-0.5 block truncate text-xs text-muted">{result.summary}</span>}
-          </span>
-          <ArrowRight className="size-4 shrink-0 text-muted" />
-        </Link>
-      ))}
+    <div className="space-y-3">
+      {(unsupportedLabels || failedLabels) && <div className="rounded-xl bg-brand-gold/15 px-4 py-3 text-xs leading-5 text-muted">{unsupportedLabels && <p>{unsupportedLabels}当前未接入，以下仅展示已支持的检索结果。</p>}{failedLabels && <p className={unsupportedLabels ? "mt-1 text-danger" : "text-danger"}>{failedLabels}暂时不可用，请稍后重试。</p>}</div>}
+      <div className="divide-y divide-border rounded-2xl bg-surface">
+        {response.results.map((result) => (
+          <Link key={`${result.type}:${result.id}`} href={result.action ?? "/knowledge/search"} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-soft/50">
+            <span className="rounded-md bg-card px-2 py-1 text-[11px] font-medium text-primary">{resultLabel(result)}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-ink">{result.title}</span>
+              {result.summary && <span className="mt-0.5 block truncate text-xs text-muted">{result.summary}</span>}
+            </span>
+            <ArrowRight className="size-4 shrink-0 text-muted" />
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
@@ -198,9 +217,14 @@ export function KnowledgeDashboard() {
           </div>
         </CardShell>
 
-        <CardShell card={CARDS[1]}>{personal?.authRequired ? <p className="rounded-xl bg-surface p-4 text-sm text-muted">登录后查看你的收藏和阅读状态。</p> : personalFolders.length ? <div className="grid grid-cols-3 gap-2">{personalFolders.slice(0, 3).map((folder) => <div key={folder.id} className="rounded-xl bg-primary-soft/70 p-3"><div className="text-xl font-bold text-ink">{folder.paperCount}</div><div className="mt-1 truncate text-xs text-muted">{folder.name}</div></div>)}</div> : <p className="rounded-xl bg-surface p-4 text-sm text-muted">暂无个人文献数据</p>}{recentPapers[0] && <p className="mt-4 truncate text-sm text-muted">最近浏览：{recentPapers[0].title}</p>}</CardShell>
+        <CardShell card={CARDS[1]}>
+          {personal?.authRequired ? <div className="rounded-2xl bg-surface p-4"><p className="text-sm text-muted">数据暂无</p><p className="mt-1 text-xs text-muted">登录后查看个人文献数据</p></div> : personalFolders.length ? <div className="grid grid-cols-3 gap-2">{personalFolders.slice(0, 3).map((folder) => <div key={folder.id} className="rounded-xl bg-primary-soft/70 p-3"><div className="text-xl font-bold text-ink">{folder.paperCount}</div><div className="mt-1 truncate text-xs text-muted">{folder.name}</div></div>)}</div> : <p className="rounded-2xl bg-surface p-4 text-sm text-muted">数据暂无</p>}
+          {recentPapers[0] ? <p className="mt-4 truncate text-sm text-muted">最近浏览：{recentPapers[0].title}</p> : <p className="mt-4 text-xs text-muted">最近浏览：数据暂无</p>}
+        </CardShell>
 
-        <CardShell card={CARDS[2]}>{overview?.scholarHighlights.length ? <div className="grid grid-cols-3 gap-2">{overview.scholarHighlights.slice(0, 3).map((item) => <div key={item.id} className="min-w-0"><div className="truncate text-sm font-medium text-ink">{item.name}</div><div className="mt-1 text-xs text-muted">{item.count ?? "—"} 篇论文</div></div>)}</div> : <p className="rounded-xl bg-surface p-4 text-sm text-muted">学者热门排行暂未接入真实统计</p>}</CardShell>
+        <CardShell card={CARDS[2]}>
+          {overview?.scholarHighlights.length ? <div className="grid grid-cols-3 gap-2">{overview.scholarHighlights.slice(0, 3).map((item) => <Link key={item.id} href={`/knowledge/scholars/${encodeURIComponent(item.id)}`} className="min-w-0 rounded-xl p-2 hover:bg-success-soft/60"><div className="mx-auto flex size-10 items-center justify-center rounded-full bg-success text-sm font-semibold text-white">{item.name.slice(0, 1)}</div><div className="mt-2 truncate text-center text-sm font-medium text-ink">{item.name}</div><div className="mt-1 truncate text-center text-xs text-muted">{item.count === null ? "数据暂无" : `${item.count.toLocaleString("zh-CN")} 篇论文`}</div></Link>)}</div> : <p className="rounded-2xl bg-surface p-4 text-sm text-muted">数据暂无</p>}
+        </CardShell>
 
         <CardShell card={CARDS[3]}>
           <div className="rounded-2xl bg-brand-cyan/10 p-4">

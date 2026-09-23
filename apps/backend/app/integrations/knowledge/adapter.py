@@ -535,6 +535,12 @@ class KnowledgeAdapter:
         unsupported: list[str] = []
         failed: list[str] = []
         results: list[KnowledgeMixedSearchResult] = []
+        runnable_types = [
+            kind for kind in request.types if kind not in ('project', 'patent')
+        ]
+        # A mixed query must leave space for every supported source. Individual
+        # type tabs still receive the full requested limit.
+        per_source_limit = max(1, (request.limit + len(runnable_types) - 1) // len(runnable_types)) if runnable_types else request.limit
 
         async def run(kind: str, operation: Any) -> None:
             nonlocal results
@@ -594,20 +600,24 @@ class KnowledgeAdapter:
                 unsupported.append(kind)
                 continue
             if kind == 'paper':
-                await run(kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, top_k=request.limit)))
+                await run(kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, topK=per_source_limit)))
             elif kind == 'graph':
-                await run(kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, top_k=request.limit)))
+                await run(kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, topK=per_source_limit)))
             elif kind == 'scholar':
-                await run(kind, lambda: self.search_scholars(ScholarSearchRequest(query=request.query, limit=request.limit)))
+                await run(kind, lambda: self.search_scholars(ScholarSearchRequest(query=request.query, limit=per_source_limit)))
             elif kind == 'topic':
-                await run(kind, lambda: self.search_by_subject(request.query, top_k=request.limit))
+                await run(kind, lambda: self.search_by_subject(request.query, top_k=per_source_limit))
             elif kind == 'funding':
-                await run(kind, lambda: self.search_fundings(request.query, limit=request.limit))
+                await run(kind, lambda: self.search_fundings(request.query, limit=per_source_limit))
 
         deduped: list[KnowledgeMixedSearchResult] = []
-        seen: set[tuple[str, str]] = set()
+        seen: set[tuple[str, str, str]] = set()
         for result in results:
-            key = (result.type, result.id)
+            # A topic match can legitimately point to the same paper as the
+            # general paper search. Preserve that separate discovery path so
+            # the mixed result list can represent both capabilities.
+            matched_by = result.metadata.get('matchedBy')
+            key = (result.type, result.id, str(matched_by) if matched_by is not None else '')
             if key not in seen:
                 seen.add(key)
                 deduped.append(result)
