@@ -425,6 +425,40 @@ def map_graph(
     ))
 
 
+def overview_graph_preview(graph: PaperGraph, *, related_limit: int = 6) -> OverviewGraphPreview:
+    """Keep the overview payload small while retaining real root relationships."""
+    nodes_by_id = {node.id: node for node in graph.nodes}
+    root = nodes_by_id.get(graph.root_id)
+    if root is None:
+        return OverviewGraphPreview(status='empty', root_paper_id=graph.root_id)
+
+    related_ids: list[str] = []
+    for edge in graph.edges:
+        if edge.source_id == graph.root_id:
+            related_id = edge.target_id
+        elif edge.target_id == graph.root_id:
+            related_id = edge.source_id
+        else:
+            continue
+        if related_id in nodes_by_id and related_id not in related_ids:
+            related_ids.append(related_id)
+        if len(related_ids) >= related_limit:
+            break
+
+    selected_ids = {graph.root_id, *related_ids}
+    selected_edges = [
+        edge for edge in graph.edges
+        if edge.source_id in selected_ids and edge.target_id in selected_ids
+    ]
+    return OverviewGraphPreview(
+        supported=bool(related_ids),
+        status='available' if related_ids else 'empty',
+        root_paper_id=graph.root_id,
+        nodes=[node for node in graph.nodes if node.id in selected_ids],
+        edges=selected_edges,
+    )
+
+
 class KnowledgeAdapter:
     """Translate upstream Knowledge calls into the ShenZhi domain contract."""
 
@@ -543,6 +577,19 @@ class KnowledgeAdapter:
             for (source_name, display_name), topic_result in zip(self.OVERVIEW_TOPICS, topic_results)
             if isinstance(topic_result, KnowledgeSearchResponse) and topic_result.total is not None
         ]
+        graph_preview = OverviewGraphPreview(status='empty')
+        graph_source = next((
+            result.results[0]
+            for result in topic_results
+            if isinstance(result, KnowledgeSearchResponse) and result.results
+        ), None)
+        if graph_source is not None:
+            try:
+                graph_preview = overview_graph_preview(await self.graph(graph_source.id))
+            except Exception:
+                # The graph is supplementary overview content: an unavailable
+                # upstream graph must not hide the independently loaded cards.
+                graph_preview = OverviewGraphPreview(status='error')
         now = datetime.now(timezone.utc)
         return KnowledgeOverviewResponse(
             as_of=now,
@@ -568,7 +615,7 @@ class KnowledgeAdapter:
                     'fundingEntities': False,
                 },
             ),
-            graph_preview=OverviewGraphPreview(status='unsupported'),
+            graph_preview=graph_preview,
         )
 
     async def mixed_search(self, request: KnowledgeMixedSearchRequest) -> KnowledgeMixedSearchResponse:

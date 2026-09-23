@@ -24,6 +24,7 @@ import {
   type KnowledgePersonalOverviewResponse,
 } from "@/clients/knowledge";
 import { loadKnowledgeOverview } from "@/features/knowledge/lib/overview-cache";
+import { paperHref } from "@/lib/navigation/paper";
 
 type SearchTab = { label: string; types: KnowledgeMixedSearchType[] };
 
@@ -103,6 +104,66 @@ function NumberValue({ value, status }: { value: number | null; status: string }
   return <StatusText status={status} />;
 }
 
+function formatViewedAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "浏览时间未知";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function graphLabel(value: string, maxLength = 10) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+}
+
+function OverviewGraphPreview({ preview }: { preview: KnowledgeOverviewResponse["graphPreview"] }) {
+  const root = preview.rootPaperId ? preview.nodes.find((node) => node.id === preview.rootPaperId) : null;
+  if (!root) return null;
+
+  const relatedNodeIds: string[] = [];
+  for (const edge of preview.edges) {
+    const relatedId = edge.sourceId === root.id
+      ? edge.targetId
+      : edge.targetId === root.id
+        ? edge.sourceId
+        : null;
+    if (relatedId && relatedId !== root.id && !relatedNodeIds.includes(relatedId)) relatedNodeIds.push(relatedId);
+  }
+  const relatedNodes = relatedNodeIds
+    .map((id) => preview.nodes.find((node) => node.id === id))
+    .filter((node): node is NonNullable<typeof node> => Boolean(node))
+    .slice(0, 6);
+  const center = { x: 140, y: 76 };
+  const radius = 54;
+  const positions = relatedNodes.map((node, index) => {
+    const angle = (-Math.PI / 2) + ((Math.PI * 2 * index) / Math.max(relatedNodes.length, 1));
+    return { node, x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius };
+  });
+
+  return (
+    <div className="rounded-2xl bg-primary-soft/55 px-3 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold text-ink">真实论文关系预览</span>
+        <span className="text-[11px] text-muted">{relatedNodes.length} 个关联节点</span>
+      </div>
+      <svg viewBox="0 0 280 154" className="mt-1 h-36 w-full" role="img" aria-label={`${root.label} 的关系预览图`}>
+        {positions.map(({ node, x, y }) => <g key={node.id}>
+          <line x1={center.x} y1={center.y} x2={x} y2={y} stroke="currentColor" className="text-primary/30" strokeWidth="1.5" />
+          <circle cx={x} cy={y} r="15" className="fill-card stroke-primary/35" strokeWidth="1.5" />
+          <text x={x} y={y + 3.5} textAnchor="middle" className="fill-primary text-[7px] font-medium">{graphLabel(node.label, 5)}</text>
+        </g>)}
+        <circle cx={center.x} cy={center.y} r="25" className="fill-primary stroke-primary" strokeWidth="2" />
+        <text x={center.x} y={center.y - 2} textAnchor="middle" className="fill-white text-[8px] font-semibold">论文</text>
+        <text x={center.x} y={center.y + 9} textAnchor="middle" className="fill-white text-[7px]">{graphLabel(root.label, 8)}</text>
+      </svg>
+      <p className="truncate text-center text-xs text-muted" title={root.label}>中心论文：{root.label}</p>
+    </div>
+  );
+}
+
 function SearchResults({ response, query }: { response: KnowledgeMixedSearchResponse; query: string }) {
   const unsupportedLabels = response.unsupportedTypes.map((type) => SEARCH_TYPE_LABELS[type]).join("、");
   const failedLabels = response.failedTypes.map((type) => SEARCH_TYPE_LABELS[type]).join("、");
@@ -179,7 +240,10 @@ export function KnowledgeDashboard() {
     .slice(0, 4);
   const maxTopicCount = topicStats[0]?.count ?? 0;
   const personalFolders = personal?.folders ?? [];
-  const recentPapers = personal?.recentPapers ?? papers?.recentPapers ?? [];
+  const recentPapers = personal?.recentPapers ?? [];
+  const paperTags = papers?.popularTags.length
+    ? papers.popularTags.slice(0, 5).map((tag) => tag.name)
+    : (overview?.topicHighlights ?? []).slice(0, 5).map((item) => item.name);
 
   return (
     <div className="mx-auto max-w-[1440px] px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
@@ -215,12 +279,31 @@ export function KnowledgeDashboard() {
 
       {overviewError && !overview ? <div className="mt-7 rounded-2xl bg-danger-soft px-5 py-4 text-sm text-danger" role="alert">知识库总览数据暂时无法加载。<button type="button" onClick={() => void loadOverview()} className="ml-2 font-medium underline">重试</button></div> : <div className="mt-7 grid gap-5 xl:grid-cols-3">
         <CardShell card={CARDS[0]} className="xl:col-span-2 xl:row-span-2">
-          <div>
-            <div className="text-sm font-medium text-muted">知识底座可检索论文</div>
-            <div className="mt-2 text-4xl font-bold text-ink"><NumberValue value={papers?.paperCount ?? null} status={papers?.status ?? "pending"} /></div>
-            {overview?.asOf && <div className="mt-1 text-xs text-muted">统计于 {new Date(overview.asOf).toLocaleString("zh-CN")}</div>}
-            <div className="mt-5 divide-y divide-border rounded-2xl bg-surface">{recentPapers.length ? recentPapers.slice(0, 3).map((paper) => <Link key={paper.id} href={`/papers/${encodeURIComponent(paper.id)}`} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-soft/50"><BookOpen className="size-4 shrink-0 text-primary" /><span className="truncate text-sm text-ink">{paper.title}</span></Link>) : <p className="px-4 py-4 text-sm text-muted">暂无当前账号的最近浏览记录</p>}</div>
+          <div className="grid gap-5 xl:grid-cols-[246px_minmax(0,1fr)]">
+            <div className="rounded-2xl bg-primary-soft/70 p-5">
+              <p className="text-base font-semibold text-ink">论文</p>
+              <div className="mt-7 space-y-5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-primary/70">全部论文</span>
+                  <span className="text-base font-medium text-primary"><NumberValue value={papers?.paperCount ?? null} status={papers?.status ?? "pending"} /></span>
+                </div>
+                <div className="h-px bg-primary/10" />
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-primary/70">已收藏</span>
+                  <span className="text-sm text-muted">暂无数据</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="min-w-0 px-1 py-1">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-base font-semibold text-ink">最近浏览</span>
+                <span className="text-sm text-muted">{recentPapers.length ? `共 ${recentPapers.length} 篇` : "暂无数据"}</span>
+              </div>
+              {recentPapers.length ? <div className="mt-3 divide-y divide-border">{recentPapers.slice(0, 3).map((paper) => <Link key={`${paper.id}-${paper.last_viewed_at}`} href={`/papers/${encodeURIComponent(paper.id)}`} className="group flex items-center gap-4 py-3 first:pt-2 hover:bg-primary-soft/30"><span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft"><BookOpen className="size-5 text-primary" /></span><span className="min-w-0 flex-1"><span className="block truncate text-base text-ink group-hover:text-primary">{paper.title}</span><span className="mt-1 block truncate text-sm text-muted">当前账号最近浏览 · {formatViewedAt(paper.last_viewed_at)}</span></span><ArrowRight className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" /></Link>)}</div> : <p className="mt-5 text-sm text-muted">暂无当前账号的最近浏览记录</p>}
+            </div>
           </div>
+          {paperTags.length ? <div className="mt-5 flex flex-wrap gap-2">{paperTags.map((tag) => <Link key={tag} href={`/knowledge/topics?subject=${encodeURIComponent(tag)}`} className="rounded-full bg-surface px-3.5 py-2 text-xs text-muted transition hover:bg-primary-soft hover:text-primary">#{tag}</Link>)}</div> : null}
         </CardShell>
 
         <CardShell card={CARDS[1]}>
@@ -268,7 +351,12 @@ export function KnowledgeDashboard() {
           <p className="mt-3 text-xs leading-5 text-muted">项目、专利暂无独立实体接口，暂不展示虚构资产。</p>
         </CardShell>
 
-        <CardShell card={CARDS[5]}>{overview?.graphPreview.supported ? <p className="text-sm text-muted">已加载 {overview.graphPreview.nodes.length} 个节点和 {overview.graphPreview.edges.length} 条关系。</p> : <div className="rounded-2xl bg-primary-soft/70 p-4 text-sm leading-6 text-muted">请选择一篇真实论文后查看关系图谱，当前没有默认中心论文。</div>}</CardShell>
+        <CardShell card={CARDS[5]}>
+          {overview?.graphPreview.supported && overview.graphPreview.rootPaperId ? <Link href={paperHref(overview.graphPreview.rootPaperId, { mode: "create", source: "/knowledge", graph: true })} className="group block">
+            <OverviewGraphPreview preview={overview.graphPreview} />
+            <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary group-hover:underline">查看完整关系图谱 <ArrowRight className="size-3.5" /></span>
+          </Link> : <div className="rounded-2xl bg-primary-soft/70 p-4 text-sm leading-6 text-muted">{overview?.graphPreview.status === "error" ? "关系图谱暂时无法加载，请稍后重试。" : "当前暂无可展示的真实论文关系图谱。"}</div>}
+        </CardShell>
       </div>}
     </div>
   );

@@ -18,6 +18,7 @@ from app.schemas.knowledge import (
     KnowledgeMixedSearchRequest,
     KnowledgePersonalOverviewResponse,
     KnowledgeSearchRequest,
+    PersonalRecentPaper,
     RelatedPaperSearchRequest,
     ScholarSearchRequest,
 )
@@ -137,7 +138,10 @@ async def personal_overview(
         history = await reading_history_service.list(identity.subject_id, 1, 5, '')
         response = KnowledgePersonalOverviewResponse(
             folders=[folder.model_dump() for folder in folders.folders],
-            recent_papers=history.items,
+            recent_papers=[
+                PersonalRecentPaper.model_validate(item.model_dump())
+                for item in history.items
+            ],
         )
     except KnowledgeServiceError as error:
         return _error_payload(error, request)

@@ -66,6 +66,18 @@ RELATED_PAPER_RESPONSE = {
     'query_parse': {},
     'query_rewrite': {},
 }
+GRAPH_RESPONSE = {
+    'rootId': PAPER_ID,
+    'nodes': [
+        {'id': PAPER_ID, 'text': 'A real paper', 'data': {'type': 'Paper'}},
+        {'id': 'author:opaque:1', 'text': 'Ada Lovelace', 'data': {'type': 'Author'}},
+        {'id': 'topic:opaque:1', 'text': 'Graph learning', 'data': {'type': 'Topic'}},
+    ],
+    'lines': [
+        {'from': PAPER_ID, 'to': 'author:opaque:1', 'data': {'type': 'AUTHORED_BY'}},
+        {'from': PAPER_ID, 'to': 'topic:opaque:1', 'data': {'type': 'HAS_TOPIC'}},
+    ],
+}
 FUNDING_CANDIDATE_RESPONSE = {
     'results': [
         {'funding_id': 'funding:real:1', 'name': '国家自然科学基金', 'paper_count': 12},
@@ -147,6 +159,10 @@ class EntityFixtureClient:
         self.funding_search = (funding, top_k)
         return RELATED_PAPER_RESPONSE
 
+    async def graph(self, paper_id, depth):
+        self.graph_request = (paper_id, depth)
+        return GRAPH_RESPONSE
+
 
 class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_mixed_search_uses_public_top_k_alias_and_preserves_each_supported_source(self):
@@ -192,6 +208,13 @@ class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             [(item.name, item.count) for item in result.topic_highlights],
             [('大语言模型', 42), ('模型压缩', 42), ('低秩压缩', 42), ('论证与辩论', 42)],
+        )
+        self.assertEqual(client.graph_request, (PAPER_ID, 1))
+        self.assertTrue(result.graph_preview.supported)
+        self.assertEqual(result.graph_preview.root_paper_id, PAPER_ID)
+        self.assertEqual(
+            [node.id for node in result.graph_preview.nodes],
+            [PAPER_ID, 'author:opaque:1', 'topic:opaque:1'],
         )
         self.assertEqual(result.research_assets.total, 7353)
         self.assertEqual(

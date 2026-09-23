@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.schemas.collections import CollectionFolder, FolderListResponse
-from app.schemas.history import ReadingHistoryResponse
+from app.schemas.history import ReadingHistoryItem, ReadingHistoryResponse
+from app.schemas.knowledge import PaperDetail, Provenance
 
 
 class LibraryApiTests(unittest.TestCase):
@@ -48,6 +49,28 @@ class LibraryApiTests(unittest.TestCase):
         get_folders.assert_awaited_once_with('user-a')
         get_history.assert_awaited_once_with('user-a', 1, 20, '')
         record.assert_awaited_once_with('user-a', 'paper-a')
+
+    def test_personal_overview_maps_real_reading_history_items(self):
+        history_item = ReadingHistoryItem.model_validate({
+            **PaperDetail(
+                id='paper:real:1',
+                title='A real paper',
+                provenance=Provenance(external_id='paper:real:1'),
+            ).model_dump(),
+            'paper_id': 'paper:real:1',
+            'last_viewed_at': '2026-09-23T07:42:06Z',
+        })
+        folders = FolderListResponse(folders=[])
+        history = ReadingHistoryResponse(items=[history_item], total=1, page=1, page_size=5)
+        with (
+            patch('app.api.knowledge.collection_service.folders', new=AsyncMock(return_value=folders)),
+            patch('app.api.knowledge.reading_history_service.list', new=AsyncMock(return_value=history)),
+        ):
+            response = self.client.get('/api/v1/knowledge/personal-overview', headers=self.user_headers)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['data']['recentPapers'][0]['id'], 'paper:real:1')
+        self.assertEqual(response.json()['data']['recentPapers'][0]['paper_id'], 'paper:real:1')
 
 
 if __name__ == '__main__':
