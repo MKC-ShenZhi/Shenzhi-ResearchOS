@@ -130,6 +130,7 @@ class PaperSearchResult(KnowledgeModel):
 class KnowledgeSearchResponse(KnowledgeModel):
     results: list[PaperSearchResult] = Field(default_factory=list)
     has_more: bool = Field(default=False, serialization_alias='hasMore')
+    total: int | None = None
 
 
 class ScholarSearchRequest(KnowledgeModel):

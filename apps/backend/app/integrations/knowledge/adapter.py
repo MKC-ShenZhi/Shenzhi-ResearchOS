@@ -428,6 +428,13 @@ def map_graph(
 class KnowledgeAdapter:
     """Translate upstream Knowledge calls into the ShenZhi domain contract."""
 
+    OVERVIEW_TOPICS = (
+        ('large language models', '大语言模型'),
+        ('model compression', '模型压缩'),
+        ('low-rank compression', '低秩压缩'),
+        ('argumentation', '论证与辩论'),
+    )
+
     def __init__(self, client: Any | None = None):
         self.client = client or KnowledgeBaseClient()
 
@@ -483,13 +490,17 @@ class KnowledgeAdapter:
         ) for item in results]
 
     async def overview(self) -> KnowledgeOverviewResponse:
-        paper_result, asset_result, scholar_result, funding_result = await asyncio.gather(
+        paper_result, asset_result, scholar_result, topic_results, funding_result = await asyncio.gather(
             self.client.paper_summary(),
             self.client.research_assets_summary(),
             # The upstream API provides scholar candidates rather than a
             # leaderboard. A broad real query lets the overview surface three
             # actual, currently indexed scholars without inventing rankings.
             self.search_scholars(ScholarSearchRequest(query='a', limit=3)),
+            asyncio.gather(
+                *(self.search_by_subject(source_name, top_k=10) for source_name, _ in self.OVERVIEW_TOPICS),
+                return_exceptions=True,
+            ),
             self.search_fundings('', limit=3),
             return_exceptions=True,
         )
@@ -518,6 +529,20 @@ class KnowledgeAdapter:
                 )
                 for item in scholar_result.results[:3]
             ]
+        topic_highlights = [
+            OverviewHighlight(
+                id=f'topic:{source_name}',
+                name=display_name,
+                count=topic_result.total,
+                status='available',
+                metadata={
+                    'entityType': 'topic',
+                    'sourceSubject': source_name,
+                },
+            )
+            for (source_name, display_name), topic_result in zip(self.OVERVIEW_TOPICS, topic_results)
+            if isinstance(topic_result, KnowledgeSearchResponse) and topic_result.total is not None
+        ]
         now = datetime.now(timezone.utc)
         return KnowledgeOverviewResponse(
             as_of=now,
@@ -527,7 +552,7 @@ class KnowledgeAdapter:
                 status=paper_status,
             ),
             scholar_highlights=scholar_highlights,
-            topic_highlights=[],
+            topic_highlights=topic_highlights,
             research_assets=OverviewResearchAssets(
                 total=asset_count,
                 status=asset_status,
@@ -669,9 +694,13 @@ class KnowledgeAdapter:
         if not isinstance(results, list):
             raise KnowledgeIntegrationError.contract_violation()
         retrieved_at = datetime.now(timezone.utc)
-        return KnowledgeSearchResponse(results=[
-            map_search_result(item, retrieved_at=retrieved_at) for item in results
-        ])
+        total = body.get('total') if isinstance(body, dict) else None
+        if total is not None and (not isinstance(total, int) or total < 0):
+            raise KnowledgeIntegrationError.contract_violation()
+        return KnowledgeSearchResponse(
+            results=[map_search_result(item, retrieved_at=retrieved_at) for item in results],
+            total=total,
+        )
 
     async def paper(self, paper_id: str) -> PaperDetail:
         body = await self.client.paper(paper_id)

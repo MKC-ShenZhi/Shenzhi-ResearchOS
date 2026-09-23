@@ -127,6 +127,10 @@ class EntityFixtureClient:
         self.funding_candidates = (query, limit, offset)
         return FUNDING_CANDIDATE_RESPONSE
 
+    async def search(self, payload):
+        self.paper_search = payload
+        return RELATED_PAPER_RESPONSE
+
     async def search_scholars(self, query, *, limit, offset):
         self.scholar_search = (query, limit, offset)
         return SCHOLAR_SEARCH_RESPONSE
@@ -137,7 +141,7 @@ class EntityFixtureClient:
 
     async def search_by_subject(self, subject, *, top_k):
         self.subject_search = (subject, top_k)
-        return RELATED_PAPER_RESPONSE
+        return {**RELATED_PAPER_RESPONSE, 'total': 42}
 
     async def search_by_funding(self, funding, *, top_k):
         self.funding_search = (funding, top_k)
@@ -185,6 +189,10 @@ class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
             [(SCHOLAR_ID, 'Geoffrey Hinton', 7)],
         )
         self.assertEqual(client.funding_candidates, ('', 3, 0))
+        self.assertEqual(
+            [(item.name, item.count) for item in result.topic_highlights],
+            [('大语言模型', 42), ('模型压缩', 42), ('低秩压缩', 42), ('论证与辩论', 42)],
+        )
         self.assertEqual(result.research_assets.total, 7353)
         self.assertEqual(
             [item.name for item in result.research_assets.highlights],
@@ -211,6 +219,7 @@ class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.results[0].id, PAPER_ID)
         self.assertFalse(hasattr(result.results[0], 'source_scores'))
         self.assertFalse(hasattr(result.results[0], 'funding'))
+        self.assertEqual(result.total, 42)
 
     async def test_subject_empty_result_is_success(self):
         class EmptyClient(EntityFixtureClient):
@@ -283,7 +292,7 @@ class KnowledgeEntityClientTests(unittest.IsolatedAsyncioTestCase):
             'q': 'Hinton', 'limit': '20', 'offset': '0'
         })
         self.assertEqual(dict(requests[2].url.params), {
-            'subject': 'graph', 'top_k': '10'
+            'subject': 'graph', 'offset': '0', 'limit': '10'
         })
         self.assertEqual(dict(requests[3].url.params), {
             'funding': 'NSF', 'top_k': '10'

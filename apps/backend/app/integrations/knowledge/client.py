@@ -120,7 +120,10 @@ class KnowledgeBaseClient:
         body = await self._request_json(
             'GET',
             '/api/retrieval/search/by-subject',
-            params={'subject': subject, 'top_k': top_k},
+            # The documented paginated contract returns `total` only when
+            # called with limit/offset. `top_k` is legacy-compatible but
+            # omits the total needed by the overview topic chart.
+            params={'subject': subject, 'offset': 0, 'limit': top_k},
             validate=lambda value: isinstance(value.get('results'), list),
         )
         return cast(UpstreamSearchResponse, body)
