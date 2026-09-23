@@ -46,6 +46,7 @@ SCHOLAR_DETAIL_RESPONSE = {
     }],
 }
 RELATED_PAPER_RESPONSE = {
+    'total': 327,
     'results': [{
         'paper_id': PAPER_ID,
         'title': 'A real paper',
@@ -118,8 +119,8 @@ class EntityFixtureClient:
         self.scholar_id = scholar_id
         return SCHOLAR_DETAIL_RESPONSE
 
-    async def search_by_subject(self, subject, *, top_k):
-        self.subject_search = (subject, top_k)
+    async def search_by_subject(self, subject, *, offset, limit):
+        self.subject_search = (subject, offset, limit)
         return RELATED_PAPER_RESPONSE
 
     async def search_by_funding(self, funding, *, top_k):
@@ -142,16 +143,17 @@ class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_subject_query_maps_paper_results_and_omits_upstream_fields(self):
         client = EntityFixtureClient()
-        result = await KnowledgeAdapter(client).search_by_subject('graph', top_k=7)
-        self.assertEqual(client.subject_search, ('graph', 7))
+        result = await KnowledgeAdapter(client).search_by_subject('graph', offset=10, limit=10)
+        self.assertEqual(client.subject_search, ('graph', 10, 10))
         self.assertEqual(result.results[0].id, PAPER_ID)
+        self.assertEqual(result.total, 327)
         self.assertFalse(hasattr(result.results[0], 'source_scores'))
         self.assertFalse(hasattr(result.results[0], 'funding'))
 
     async def test_subject_empty_result_is_success(self):
         class EmptyClient(EntityFixtureClient):
-            async def search_by_subject(self, subject, *, top_k):
-                return {'results': []}
+            async def search_by_subject(self, subject, *, offset, limit):
+                return {'results': [], 'total': 0}
 
         result = await KnowledgeAdapter(EmptyClient()).search_by_subject('rare')
         self.assertEqual(result.results, [])
@@ -177,7 +179,7 @@ class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_upstream_failure_maps_through_service(self):
         class FailingAdapter:
-            async def search_by_subject(self, subject, *, top_k):
+            async def search_by_subject(self, subject, *, offset, limit):
                 raise KnowledgeIntegrationError.connection_unavailable()
 
         with self.assertRaises(KnowledgeServiceError) as caught:
@@ -206,7 +208,7 @@ class KnowledgeEntityClientTests(unittest.IsolatedAsyncioTestCase):
         )
         await client.search_scholars('Hinton', limit=20, offset=0)
         await client.scholar(SCHOLAR_ID)
-        await client.search_by_subject('graph', top_k=10)
+        await client.search_by_subject('graph', offset=10, limit=10)
         await client.search_by_funding('NSF', top_k=10)
 
         self.assertEqual([request.url.path for request in requests], [
@@ -219,7 +221,7 @@ class KnowledgeEntityClientTests(unittest.IsolatedAsyncioTestCase):
             'q': 'Hinton', 'limit': '20', 'offset': '0'
         })
         self.assertEqual(dict(requests[2].url.params), {
-            'subject': 'graph', 'top_k': '10'
+            'subject': 'graph', 'offset': '10', 'limit': '10'
         })
         self.assertEqual(dict(requests[3].url.params), {
             'funding': 'NSF', 'top_k': '10'
@@ -310,6 +312,7 @@ class KnowledgeEntityApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(subject.status_code, 200, subject.text)
         self.assertEqual(funding.status_code, 200, funding.text)
         self.assertEqual(subject.json()['data']['results'][0]['id'], PAPER_ID)
+        self.assertEqual(subject.json()['data']['total'], 327)
         self.assertEqual(funding.json()['data']['results'][0]['id'], PAPER_ID)
         self.assertNotIn('source_scores', subject.json()['data']['results'][0])
 
@@ -317,6 +320,7 @@ class KnowledgeEntityApiTests(unittest.IsolatedAsyncioTestCase):
         cases = [
             ('/api/v1/knowledge/scholars/search', {'q': ' '}),
             ('/api/v1/knowledge/subjects/search', {'subject': ' ', 'topK': 10}),
+            ('/api/v1/knowledge/subjects/search', {'subject': 'graph', 'offset': 1000, 'limit': 10}),
             ('/api/v1/knowledge/funding/search', {'funding': 'NSF', 'topK': 21}),
         ]
         for path, params in cases:

@@ -15,6 +15,7 @@ import type {
   KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
 } from "./types";
 
 const MOCK_SCHOLAR: KnowledgeScholarDetail = {
@@ -157,10 +158,15 @@ export class MockKnowledgeClient implements KnowledgeClient {
     return MOCK_SCHOLAR;
   }
 
-  async searchBySubject(subject: string, topK = 10): Promise<KnowledgeSearchResponse> {
-    return this.search({
+  async searchBySubject(
+    subject: string,
+    offset = 0,
+    limit = 10,
+  ): Promise<KnowledgeSubjectSearchResponse> {
+    const response = await this.search({
       query: subject,
-      topK,
+      topK: limit,
+      offset,
       yearFrom: null,
       yearTo: null,
       venue: [],
@@ -168,6 +174,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
       keyword: [],
       subject: [],
     });
+    return { results: response.results, total: response.results.length };
   }
 
   async searchByFunding(funding: string, topK = 10): Promise<KnowledgeSearchResponse> {

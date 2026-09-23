@@ -132,6 +132,11 @@ class KnowledgeSearchResponse(KnowledgeModel):
     has_more: bool = Field(default=False, serialization_alias='hasMore')
 
 
+class KnowledgeSubjectSearchResponse(KnowledgeModel):
+    results: list[PaperSearchResult] = Field(default_factory=list)
+    total: int = Field(ge=0)
+
+
 class ScholarSearchRequest(KnowledgeModel):
     query: str = Field(min_length=1, max_length=200)
     limit: int = Field(default=20, ge=1, le=100)

@@ -85,13 +85,17 @@ class KnowledgeBaseClient:
         return cast(UpstreamScholarResponse, body)
 
     async def search_by_subject(
-        self, subject: str, *, top_k: int = 10
+        self, subject: str, *, offset: int = 0, limit: int = 10
     ) -> UpstreamSearchResponse:
         body = await self._request_json(
             'GET',
             '/api/retrieval/search/by-subject',
-            params={'subject': subject, 'top_k': top_k},
-            validate=lambda value: isinstance(value.get('results'), list),
+            params={'subject': subject, 'offset': offset, 'limit': limit},
+            validate=lambda value: (
+                isinstance(value.get('results'), list)
+                and isinstance(value.get('total'), int)
+                and value['total'] >= 0
+            ),
         )
         return cast(UpstreamSearchResponse, body)
 

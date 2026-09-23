@@ -13,6 +13,7 @@ export { BffKnowledgeClient } from "./bff";
 export type {
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
   KnowledgeScholarSearchParams,
   KnowledgeScholarSearchResponse,
   KnowledgeScholarSummary,

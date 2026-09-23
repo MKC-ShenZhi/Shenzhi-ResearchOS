@@ -11,6 +11,7 @@ import type {
   KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
 } from "./types";
 
 /**
@@ -30,7 +31,12 @@ export interface KnowledgeClient {
   /** 学者详情；id 作为 opaque string 使用 */
   scholar(scholarId: string): Promise<KnowledgeScholarDetail>;
   /** 按研究主题获取关联论文 */
-  searchBySubject(subject: string, topK?: number): Promise<KnowledgeSearchResponse>;
+  searchBySubject(
+    subject: string,
+    offset?: number,
+    limit?: number,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSubjectSearchResponse>;
   /** 按项目、专利或基金文本获取关联论文 */
   searchByFunding(funding: string, topK?: number): Promise<KnowledgeSearchResponse>;
   /** 论文关系图谱；默认 depth=1 */

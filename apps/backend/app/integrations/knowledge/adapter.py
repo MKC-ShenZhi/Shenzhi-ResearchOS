@@ -17,6 +17,7 @@ from app.schemas.knowledge import (
     GraphNode,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
+    KnowledgeSubjectSearchResponse,
     PaperDetail,
     PaperSummary,
     PaperGraph,
@@ -468,10 +469,10 @@ class KnowledgeAdapter:
         return detail
 
     async def search_by_subject(
-        self, subject: str, *, top_k: int = 10
-    ) -> KnowledgeSearchResponse:
-        body = await self.client.search_by_subject(subject, top_k=top_k)
-        return self._map_related_papers(body)
+        self, subject: str, *, offset: int = 0, limit: int = 10
+    ) -> KnowledgeSubjectSearchResponse:
+        body = await self.client.search_by_subject(subject, offset=offset, limit=limit)
+        return self._map_subject_papers(body)
 
     async def search_by_funding(
         self, funding: str, *, top_k: int = 10
@@ -488,6 +489,18 @@ class KnowledgeAdapter:
         return KnowledgeSearchResponse(results=[
             map_search_result(item, retrieved_at=retrieved_at) for item in results
         ])
+
+    @staticmethod
+    def _map_subject_papers(body: Any) -> KnowledgeSubjectSearchResponse:
+        results = body.get('results') if isinstance(body, dict) else None
+        total = body.get('total') if isinstance(body, dict) else None
+        if not isinstance(results, list) or not isinstance(total, int) or total < 0:
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        return KnowledgeSubjectSearchResponse(
+            results=[map_search_result(item, retrieved_at=retrieved_at) for item in results],
+            total=total,
+        )
 
     async def paper(self, paper_id: str) -> PaperDetail:
         body = await self.client.paper(paper_id)
