@@ -109,6 +109,94 @@ test("BFF client requests Detail and Graph through same-origin routes", async ()
   assert.ok(requests.every((request) => !request.includes("%253A")));
 });
 
+test("BFF client requests Scholar, Subject and Funding through stable routes", async () => {
+  const requests: string[] = [];
+  const scholarId = "author:legacy:d1381dc0b07a0347ebb834d5";
+  await withFetch(async (input) => {
+    requests.push(String(input));
+    if (requests.length === 1) {
+      return jsonResponse({ code: 0, data: { results: [] } });
+    }
+    if (requests.length === 2) {
+      return jsonResponse({ code: 0, data: {
+        id: scholarId,
+        name: "Geoffrey Hinton",
+        paperCount: 0,
+        years: [],
+        conferences: [],
+        topics: [],
+        funding: [],
+        institutions: [],
+        coauthors: [],
+        papers: [],
+        provenance: null,
+      } });
+    }
+    return jsonResponse({ code: 0, data: { results: [] } });
+  }, async () => {
+    const client = new BffKnowledgeClient();
+    await client.searchScholars({ query: "Hinton", limit: 20, offset: 0 });
+    const scholar = await client.scholar(scholarId);
+    await client.searchBySubject("graph", 10, 20);
+    await client.searchByFunding("NSF", 20);
+    assert.equal(scholar.id, scholarId);
+  });
+
+  assert.deepEqual(requests, [
+    "/api/v1/knowledge/scholars/search?q=Hinton&limit=20&offset=0",
+    `/api/v1/knowledge/scholars/${encodeURIComponent(scholarId)}`,
+    "/api/v1/knowledge/subjects/search?subject=graph&offset=10&limit=20",
+    "/api/v1/knowledge/funding/search?funding=NSF&topK=20",
+  ]);
+  assert.ok(requests.every((request) => request.startsWith("/api/v1/knowledge/")));
+});
+
+test("BFF client requests Funding candidates through a separate stable route", async () => {
+  const requests: string[] = [];
+  await withFetch(async (input) => {
+    requests.push(String(input));
+    return jsonResponse({ code: 0, data: {
+      results: [{
+        id: "funding:nsf:graph",
+        name: "NSF Graph Research",
+        paperCount: 12,
+        provenance: { provider: "knowledge-base" },
+      }],
+    } });
+  }, async () => {
+    const result = await new BffKnowledgeClient().searchFundings({
+      query: "NSF",
+      limit: 5,
+      offset: 10,
+    });
+    assert.equal(result.results[0]?.id, "funding:nsf:graph");
+    assert.equal(result.results[0]?.paperCount, 12);
+  });
+
+  assert.deepEqual(requests, [
+    "/api/v1/knowledge/fundings/search?q=NSF&limit=5&offset=10",
+  ]);
+});
+
+test("BFF Funding candidate browsing omits an empty optional query", async () => {
+  const requests: string[] = [];
+  await withFetch(async (input) => {
+    requests.push(String(input));
+    return jsonResponse({ code: 0, data: { results: [] } });
+  }, async () => {
+    const result = await new BffKnowledgeClient().searchFundings({
+      query: "",
+      limit: 20,
+      offset: 0,
+    });
+    assert.deepEqual(result, { results: [] });
+  });
+
+  assert.deepEqual(requests, [
+    "/api/v1/knowledge/fundings/search?limit=20&offset=0",
+  ]);
+});
+
 test("BFF client preserves formal Knowledge errors and request metadata", async () => {
   const cases = [
     ["NOT_FOUND", false, 404],

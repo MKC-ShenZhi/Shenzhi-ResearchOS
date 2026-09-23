@@ -15,8 +15,6 @@ import {
 import { cn } from "@/lib/utils";
 import { popoverPosition, usePopoverPlacement } from "@/lib/use-popover-placement";
 import { feedPapers } from "@/features/knowledge/data-papers";
-import { patents } from "@/features/knowledge/data-patents";
-import { fundings } from "@/features/knowledge/data-funding";
 import { scholars } from "@/features/knowledge/data-scholars";
 import { institutions } from "@/features/knowledge/data-institutions";
 import { projects } from "@/features/projects/data";
@@ -41,22 +39,6 @@ const KNOWLEDGE_GROUPS: RefGroup[] = [
       kind: "paper" as const,
       ref_id: p.id,
       title: p.title,
-    })),
-  },
-  {
-    label: "专利库",
-    items: patents.slice(0, 3).map((p) => ({
-      kind: "patent" as const,
-      ref_id: p.id,
-      title: p.title,
-    })),
-  },
-  {
-    label: "项目基金库",
-    items: fundings.slice(0, 3).map((f) => ({
-      kind: "funding" as const,
-      ref_id: f.id,
-      title: f.title,
     })),
   },
   {

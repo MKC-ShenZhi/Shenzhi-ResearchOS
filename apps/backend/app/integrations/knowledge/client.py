@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import logging
+from urllib.parse import quote
 from time import perf_counter
 from collections.abc import Callable
 from typing import Any, Mapping, cast
@@ -14,7 +15,12 @@ from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.core.logging import log_event
 from app.integrations.knowledge.schemas import (
     UpstreamGraphResponse,
+    UpstreamFundingSearchResponse,
     UpstreamPaperResponse,
+    UpstreamPaperSummaryResponse,
+    UpstreamResearchAssetsSummaryResponse,
+    UpstreamScholarResponse,
+    UpstreamScholarSearchResponse,
     UpstreamSearchResponse,
 )
 
@@ -33,7 +39,7 @@ def _configured_timeout() -> float:
 
 
 class KnowledgeBaseClient:
-    """Async transport client for the three existing upstream endpoints."""
+    """Async transport client for the supported upstream Knowledge endpoints."""
 
     def __init__(
         self,
@@ -56,6 +62,86 @@ class KnowledgeBaseClient:
             validate=lambda value: isinstance(value.get('results'), list),
         )
         return cast(UpstreamSearchResponse, body)
+
+    async def search_scholars(
+        self, query: str, *, limit: int = 20, offset: int = 0
+    ) -> UpstreamScholarSearchResponse:
+        body = await self._request_json(
+            'GET',
+            '/api/retrieval/scholars/search',
+            params={'q': query, 'limit': limit, 'offset': offset},
+            validate=lambda value: isinstance(value.get('results'), list),
+        )
+        return cast(UpstreamScholarSearchResponse, body)
+
+    async def paper_summary(self) -> UpstreamPaperSummaryResponse:
+        body = await self._request_json(
+            'GET',
+            '/api/knowledge/papers/summary',
+            validate=lambda value: 'paper_count' in value,
+        )
+        return cast(UpstreamPaperSummaryResponse, body)
+
+    async def research_assets_summary(self) -> UpstreamResearchAssetsSummaryResponse:
+        body = await self._request_json(
+            'GET',
+            '/api/knowledge/research-assets/summary',
+            validate=lambda value: 'research_asset_count' in value,
+        )
+        return cast(UpstreamResearchAssetsSummaryResponse, body)
+
+    async def scholar(self, scholar_id: str) -> UpstreamScholarResponse:
+        body = await self._request_json(
+            'GET',
+            f'/api/retrieval/scholars/{quote(scholar_id, safe="")}',
+            validate=lambda value: (
+                isinstance(value.get('scholar_id'), str)
+                and bool(value['scholar_id'].strip())
+                and isinstance(value.get('name'), str)
+                and bool(value['name'].strip())
+            ),
+        )
+        return cast(UpstreamScholarResponse, body)
+
+    async def search_by_subject(
+        self, subject: str, *, offset: int = 0, limit: int = 10
+    ) -> UpstreamSearchResponse:
+        body = await self._request_json(
+            'GET',
+            '/api/retrieval/search/by-subject',
+            params={'subject': subject, 'offset': offset, 'limit': limit},
+            validate=lambda value: (
+                isinstance(value.get('results'), list)
+                and isinstance(value.get('total'), int)
+                and value['total'] >= 0
+            ),
+        )
+        return cast(UpstreamSearchResponse, body)
+
+    async def search_by_funding(
+        self, funding: str, *, top_k: int = 10
+    ) -> UpstreamSearchResponse:
+        body = await self._request_json(
+            'GET',
+            '/api/retrieval/search/by-funding',
+            params={'funding': funding, 'top_k': top_k},
+            validate=lambda value: isinstance(value.get('results'), list),
+        )
+        return cast(UpstreamSearchResponse, body)
+
+    async def search_fundings(
+        self, query: str | None, *, limit: int = 20, offset: int = 0
+    ) -> UpstreamFundingSearchResponse:
+        params: dict[str, Any] = {'limit': limit, 'offset': offset}
+        if query is not None:
+            params['q'] = query
+        body = await self._request_json(
+            'GET',
+            '/api/retrieval/fundings/search',
+            params=params,
+            validate=lambda value: isinstance(value.get('results'), list),
+        )
+        return cast(UpstreamFundingSearchResponse, body)
 
     async def paper(self, paper_id: str) -> UpstreamPaperResponse:
         """GET an upstream paper detail using an opaque paper ID."""

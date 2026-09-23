@@ -11,8 +11,18 @@ export type { MockKnowledgeClientOptions, MockScenario } from "./mock";
 export { BffKnowledgeClient } from "./bff";
 
 export type {
+  KnowledgeFundingSearchParams,
+  KnowledgeFundingSearchResponse,
+  KnowledgeFundingSummary,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
+  KnowledgeScholarSearchParams,
+  KnowledgeScholarSearchResponse,
+  KnowledgeScholarSummary,
+  KnowledgeScholarDetail,
+  KnowledgeScholarReference,
+  KnowledgeScholarPaper,
   KnowledgePaperHit,
   KnowledgePaperDetail,
   ReadingHistoryItem,
@@ -30,6 +40,17 @@ export type {
   KnowledgeRelationDirection,
   KnowledgeErrorCode,
   KnowledgeApiError,
+  KnowledgeOverviewStatus,
+  KnowledgeOverviewTag,
+  KnowledgeOverviewPaperLibrary,
+  KnowledgeOverviewHighlight,
+  KnowledgeOverviewResearchAsset,
+  KnowledgeOverviewResponse,
+  KnowledgePersonalOverviewResponse,
+  KnowledgeMixedSearchType,
+  KnowledgeMixedSearchParams,
+  KnowledgeMixedSearchResult,
+  KnowledgeMixedSearchResponse,
 } from "./types";
 export { KNOWLEDGE_RELATION_LABELS } from "./types";
 

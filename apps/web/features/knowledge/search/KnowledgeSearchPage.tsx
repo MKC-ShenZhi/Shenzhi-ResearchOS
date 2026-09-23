@@ -2,7 +2,6 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppShell } from "@/components/common/layout/app-shell";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { KnowledgeFilterPanel, type KnowledgeFilters } from "./components/filter-panel";
@@ -23,7 +22,7 @@ const EMPTY_FILTERS: KnowledgeFilters = {
 };
 
 /**
- * 论文检索页 `/knowledge/search` —— 知识底座 · 论文搜索。
+ * 论文库 `/knowledge/search` —— 保留知识底座论文搜索能力。
  *
  * 业务链路：页面 → KnowledgeClient 接口 → Next.js BFF → FastAPI。
  * 页面只依赖 clients/knowledge 的契约类型与 Client 工厂。
@@ -68,7 +67,6 @@ function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }
   };
 
   return (
-    <AppShell>
       <div className="mx-auto max-w-[1120px] px-6 py-8 lg:px-8">
         <KnowledgeSearchHero
           initialQuery={query}
@@ -106,13 +104,12 @@ function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }
           </main>
         </div>
       </div>
-    </AppShell>
   );
 }
 
 export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: string }) {
   return (
-    <Suspense fallback={<p className="p-8 text-sm text-muted">正在加载论文检索…</p>}>
+    <Suspense fallback={<p className="p-8 text-sm text-muted">正在加载论文库…</p>}>
       <KnowledgeSearchContent initialQuery={initialQuery} />
     </Suspense>
   );

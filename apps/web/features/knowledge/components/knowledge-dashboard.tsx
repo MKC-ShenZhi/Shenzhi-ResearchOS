@@ -1,393 +1,365 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowRight,
-  Award,
-  Banknote,
   BookOpen,
-  Building2,
-  Clock3,
-  FileText,
-  FolderOpen,
+  Bookmark,
+  ChevronRight,
+  Landmark,
   Network,
   Search,
   Sparkles,
-  TrendingUp,
+  Tags,
   Users,
+  type LucideIcon,
 } from "lucide-react";
-import { libraryFolders, libraryItems, libraryTags } from "@/features/knowledge/data-library";
-import { patents } from "@/features/knowledge/data-patents";
-import { fundings } from "@/features/knowledge/data-funding";
-import { scholars } from "@/features/knowledge/data-scholars";
-import { institutions } from "@/features/knowledge/data-institutions";
-import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import {
+  getKnowledgeClient,
+  KnowledgeClientError,
+  type KnowledgeMixedSearchResponse,
+  type KnowledgeMixedSearchType,
+  type KnowledgeOverviewResponse,
+  type KnowledgePersonalOverviewResponse,
+} from "@/clients/knowledge";
+import { loadKnowledgeOverview } from "@/features/knowledge/lib/overview-cache";
 import { paperHref } from "@/lib/navigation/paper";
-import { cn } from "@/lib/utils";
 
-type SearchType = "全部" | "论文" | "专利" | "基金" | "学者" | "机构";
+type SearchTab = { label: string; types: KnowledgeMixedSearchType[] };
 
-interface SearchEntry {
-  type: Exclude<SearchType, "全部">;
-  title: string;
-  meta: string;
-  href: string;
-}
+const SEARCH_TABS: SearchTab[] = [
+  { label: "全部", types: ["paper", "scholar", "topic", "project", "patent", "funding", "graph"] },
+  { label: "论文", types: ["paper"] },
+  { label: "学者", types: ["scholar"] },
+  { label: "主题", types: ["topic"] },
+  { label: "项目专利基金", types: ["project", "patent", "funding"] },
+  { label: "关系图谱", types: ["graph"] },
+];
 
-const searchTypes: SearchType[] = ["全部", "论文", "专利", "基金", "学者", "机构"];
-
-const typeStyle: Record<Exclude<SearchType, "全部">, string> = {
-  论文: "bg-primary-soft text-primary",
-  专利: "bg-brand-violet/10 text-brand-violet",
-  基金: "bg-brand-gold/20 text-ink",
-  学者: "bg-success-soft text-success",
-  机构: "bg-brand-cyan/10 text-brand-cyan",
+const SEARCH_TYPE_LABELS: Record<KnowledgeMixedSearchType, string> = {
+  paper: "论文",
+  scholar: "学者",
+  topic: "主题",
+  project: "项目",
+  patent: "专利",
+  funding: "基金",
+  graph: "关系图谱",
 };
 
-function Metric({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="min-w-0 rounded-xl border border-line/70 bg-panel px-4 py-3">
-      <p className="text-lg font-bold tracking-tight text-ink">{value}</p>
-      <p className="mt-0.5 truncate text-[11px] text-faint">{label}</p>
-    </div>
-  );
-}
-
-function CardHeader({
-  icon: Icon,
-  title,
-  description,
-  href,
-  tone = "primary",
-}: {
-  icon: ComponentType<{ className?: string; strokeWidth?: number }>;
+const CARDS: Array<{
   title: string;
   description: string;
   href: string;
-  tone?: "primary" | "violet" | "gold" | "cyan" | "green";
+  icon: LucideIcon;
+  tone: string;
+}> = [
+  { title: "论文库", description: "检索和探索学术论文，连接论文、主题与引用脉络", href: "/knowledge/search", icon: BookOpen, tone: "bg-primary-soft text-primary" },
+  { title: "我的文献", description: "管理收藏、阅读状态和个人科研文献", href: "/knowledge/papers", icon: Bookmark, tone: "bg-brand-violet/10 text-brand-violet" },
+  { title: "学者库", description: "搜索学者、研究主题与论文成果", href: "/knowledge/scholars", icon: Users, tone: "bg-success-soft text-success" },
+  { title: "主题库", description: "按科研主题探索相关论文", href: "/knowledge/topics", icon: Tags, tone: "bg-brand-cyan/10 text-brand-cyan" },
+  { title: "项目基金库", description: "浏览基金并探索关联科研论文", href: "/knowledge/funding", icon: Landmark, tone: "bg-brand-gold/20 text-ink" },
+  { title: "关系图谱", description: "从真实论文出发探索引用和知识关系", href: "/knowledge/graph", icon: Network, tone: "bg-primary-soft text-primary" },
+];
+
+function StatusText({ status }: { status: string }) {
+  if (status === "error") return <span className="text-danger">暂时无法加载</span>;
+  if (status === "unsupported") return <span className="text-muted">当前未接入</span>;
+  if (status === "pending") return <span className="text-muted">数据准备中</span>;
+  if (status === "empty") return <span className="text-muted">暂无数据</span>;
+  return null;
+}
+
+function CardShell({
+  card,
+  children,
+  className = "",
+  bodyClassName = "",
+}: {
+  card: (typeof CARDS)[number];
+  children: ReactNode;
+  className?: string;
+  bodyClassName?: string;
 }) {
-  const tones = {
-    primary: "bg-primary-soft text-primary",
-    violet: "bg-brand-violet/10 text-brand-violet",
-    gold: "bg-brand-gold/20 text-ink",
-    cyan: "bg-brand-cyan/10 text-brand-cyan",
-    green: "bg-success-soft text-success",
-  };
+  const Icon = card.icon;
+  return (
+    <section className={`rounded-3xl bg-card p-6 shadow-card ${className}`}>
+      <Link href={card.href} className="group flex items-start gap-4">
+        <span className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${card.tone}`}>
+          <Icon className="size-6" strokeWidth={1.8} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center justify-between gap-3">
+            <span className="text-lg font-bold text-ink group-hover:text-primary">{card.title}</span>
+            <ChevronRight className="size-5 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" />
+          </span>
+          <span className="mt-1 block text-sm leading-6 text-muted">{card.description}</span>
+        </span>
+      </Link>
+      <div className={`mt-5 ${bodyClassName}`}>{children}</div>
+    </section>
+  );
+}
+
+function NumberValue({ value, status }: { value: number | null; status: string }) {
+  if (value !== null && status === "available") return <span>{value.toLocaleString("zh-CN")}</span>;
+  return <StatusText status={status} />;
+}
+
+function formatViewedAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "浏览时间未知";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function graphLabel(value: string, maxLength = 10) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+}
+
+function OverviewGraphPreview({ preview }: { preview: KnowledgeOverviewResponse["graphPreview"] }) {
+  const root = preview.rootPaperId ? preview.nodes.find((node) => node.id === preview.rootPaperId) : null;
+  if (!root) return null;
+
+  const relatedNodeIds: string[] = [];
+  for (const edge of preview.edges) {
+    const relatedId = edge.sourceId === root.id
+      ? edge.targetId
+      : edge.targetId === root.id
+        ? edge.sourceId
+        : null;
+    if (relatedId && relatedId !== root.id && !relatedNodeIds.includes(relatedId)) relatedNodeIds.push(relatedId);
+  }
+  const relatedNodes = relatedNodeIds
+    .map((id) => preview.nodes.find((node) => node.id === id))
+    .filter((node): node is NonNullable<typeof node> => Boolean(node))
+    .slice(0, 6);
+  const center = { x: 140, y: 76 };
+  const radius = 54;
+  const positions = relatedNodes.map((node, index) => {
+    const angle = (-Math.PI / 2) + ((Math.PI * 2 * index) / Math.max(relatedNodes.length, 1));
+    return { node, x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius };
+  });
 
   return (
-    <div className="flex items-start gap-3">
-      <span className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl", tones[tone])}>
-        <Icon className="size-5" strokeWidth={1.8} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <h2 className="text-[15px] font-bold text-ink">
-          <Link href={href} onClick={(event) => event.stopPropagation()} className="hover:text-primary">
-            {title}
-          </Link>
-        </h2>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted">{description}</p>
+    <div className="flex min-h-0 flex-1 flex-col rounded-2xl bg-primary-soft/55 px-3 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold text-ink">真实论文关系预览</span>
+        <span className="text-[11px] text-muted">{relatedNodes.length} 个关联节点</span>
       </div>
-      <Link
-        href={href}
-        aria-label={`进入${title}`}
-        className="flex size-8 shrink-0 items-center justify-center rounded-lg text-faint transition-colors hover:bg-chip hover:text-primary"
-      >
-        <ArrowRight className="size-4" />
-      </Link>
+      <svg viewBox="0 0 280 154" className="mt-1 min-h-36 flex-1 w-full" role="img" aria-label={`${root.label} 的关系预览图`}>
+        {positions.map(({ node, x, y }) => <g key={node.id}>
+          <line x1={center.x} y1={center.y} x2={x} y2={y} stroke="currentColor" className="text-primary/30" strokeWidth="1.5" />
+          <circle cx={x} cy={y} r="15" className="fill-card stroke-primary/35" strokeWidth="1.5" />
+          <text x={x} y={y + 3.5} textAnchor="middle" className="fill-primary text-[7px] font-medium">{graphLabel(node.label, 5)}</text>
+        </g>)}
+        <circle cx={center.x} cy={center.y} r="25" className="fill-primary stroke-primary" strokeWidth="2" />
+        <text x={center.x} y={center.y - 2} textAnchor="middle" className="fill-white text-[8px] font-semibold">论文</text>
+        <text x={center.x} y={center.y + 9} textAnchor="middle" className="fill-white text-[7px]">{graphLabel(root.label, 8)}</text>
+      </svg>
+      <p className="truncate text-center text-xs text-muted" title={root.label}>中心论文：{root.label}</p>
     </div>
   );
 }
 
-function MiniNetwork({ institution = false }: { institution?: boolean }) {
-  const nodes = institution
-    ? [
-        [18, 48, 7], [45, 22, 5], [53, 54, 9], [78, 29, 6], [83, 66, 5],
-      ]
-    : [
-        [16, 35, 5], [39, 18, 6], [51, 48, 9], [76, 25, 5], [82, 63, 6], [31, 69, 4],
-      ];
-  const lines = institution
-    ? [[18,48,45,22],[18,48,53,54],[45,22,78,29],[53,54,78,29],[53,54,83,66]]
-    : [[16,35,39,18],[16,35,51,48],[39,18,51,48],[51,48,76,25],[51,48,82,63],[51,48,31,69]];
+function SearchResults({ response, query }: { response: KnowledgeMixedSearchResponse; query: string }) {
+  const unsupportedLabels = response.unsupportedTypes.map((type) => SEARCH_TYPE_LABELS[type]).join("、");
+  const failedLabels = response.failedTypes.map((type) => SEARCH_TYPE_LABELS[type]).join("、");
+  const resultLabel = (result: KnowledgeMixedSearchResponse["results"][number]) => (
+    result.metadata.matchedBy === "topic" ? SEARCH_TYPE_LABELS.topic : SEARCH_TYPE_LABELS[result.type]
+  );
 
+  if (!response.results.length) {
+    return <div className="rounded-2xl bg-surface px-4 py-5 text-sm text-muted"><p>没有找到与“{query}”匹配的已接入结果。</p>{unsupportedLabels && <p className="mt-2">{unsupportedLabels}当前未接入。</p>}{failedLabels && <p className="mt-2 text-danger">{failedLabels}暂时不可用，请稍后重试。</p>}</div>;
+  }
   return (
-    <svg viewBox="0 0 100 82" className="h-24 w-full" aria-hidden>
-      {lines.map((line, index) => (
-        <line key={index} x1={line[0]} y1={line[1]} x2={line[2]} y2={line[3]} className="stroke-primary/20" strokeWidth="1.2" />
-      ))}
-      {nodes.map(([x, y, r], index) => (
-        <circle
-          key={index}
-          cx={x}
-          cy={y}
-          r={r}
-          className={index === 2 ? "fill-primary" : institution ? "fill-brand-cyan/55" : "fill-primary/35"}
-        />
-      ))}
-    </svg>
+    <div className="space-y-3">
+      {(unsupportedLabels || failedLabels) && <div className="rounded-xl bg-brand-gold/15 px-4 py-3 text-xs leading-5 text-muted">{unsupportedLabels && <p>{unsupportedLabels}当前未接入，以下仅展示已支持的检索结果。</p>}{failedLabels && <p className={unsupportedLabels ? "mt-1 text-danger" : "text-danger"}>{failedLabels}暂时不可用，请稍后重试。</p>}</div>}
+      <div className="divide-y divide-border rounded-2xl bg-surface">
+        {response.results.map((result) => (
+          <Link key={`${result.type}:${result.id}`} href={result.action ?? "/knowledge/search"} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-soft/50">
+            <span className="rounded-md bg-card px-2 py-1 text-[11px] font-medium text-primary">{resultLabel(result)}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-ink">{result.title}</span>
+              {result.summary && <span className="mt-0.5 block truncate text-xs text-muted">{result.summary}</span>}
+            </span>
+            <ArrowRight className="size-4 shrink-0 text-muted" />
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }
 
 export function KnowledgeDashboard() {
-  const router = useRouter();
-  const returnTo = useCurrentInternalPath();
+  const client = useMemo(() => getKnowledgeClient(), []);
+  const [overview, setOverview] = useState<KnowledgeOverviewResponse | null>(null);
+  const [personal, setPersonal] = useState<KnowledgePersonalOverviewResponse | null>(null);
+  const [overviewError, setOverviewError] = useState(false);
   const [query, setQuery] = useState("");
-  const [activeType, setActiveType] = useState<SearchType>("全部");
+  const [activeTab, setActiveTab] = useState(0);
+  const [searching, setSearching] = useState(false);
+  const [searchResponse, setSearchResponse] = useState<KnowledgeMixedSearchResponse | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
-  const entries = useMemo<SearchEntry[]>(() => [
-    ...libraryItems.map((item) => ({
-      type: "论文" as const,
-      title: item.title,
-      meta: `${item.venue} · ${item.authors}`,
-      href: paperHref(item.id, { mode: "create", source: returnTo }),
-    })),
-    ...patents.map((item) => ({
-      type: "专利" as const,
-      title: item.title,
-      meta: `${item.applicant} · ${item.status}`,
-      href: "/knowledge/patents",
-    })),
-    ...fundings.map((item) => ({
-      type: "基金" as const,
-      title: item.title,
-      meta: `${item.institution} · ${item.amount}`,
-      href: "/knowledge/funding",
-    })),
-    ...scholars.map((item) => ({
-      type: "学者" as const,
-      title: `${item.nameCn} · ${item.nameEn}`,
-      meta: `${item.affiliation} · h-index ${item.hIndex}`,
-      href: `/scholars/${item.id}`,
-    })),
-    ...institutions.map((item) => ({
-      type: "机构" as const,
-      title: item.nameCn,
-      meta: `${item.type} · ${item.location}`,
-      href: "/knowledge/institutions",
-    })),
-  ], [returnTo]);
+  const loadOverview = useCallback(async () => {
+    setOverviewError(false);
+    const [publicResult, personalResult] = await loadKnowledgeOverview(client);
+    if (publicResult.status === "fulfilled") setOverview(publicResult.value);
+    else setOverviewError(true);
+    if (personalResult.status === "fulfilled") setPersonal(personalResult.value);
+  }, [client]);
 
-  const results = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-    if (!keyword) return [];
-    return entries
-      .filter((entry) => activeType === "全部" || entry.type === activeType)
-      .filter((entry) => `${entry.title} ${entry.meta}`.toLowerCase().includes(keyword))
-      .slice(0, 6);
-  }, [activeType, entries, query]);
+  useEffect(() => {
+    const handle = window.setTimeout(() => { void loadOverview(); }, 0);
+    return () => window.clearTimeout(handle);
+  }, [loadOverview]);
 
-  const openCard = (href: string) => router.push(href);
-  const cardKeyDown = (event: React.KeyboardEvent<HTMLElement>, href: string) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      router.push(href);
+  const submitSearch = async () => {
+    const normalized = query.trim();
+    if (!normalized) return;
+    setSearching(true);
+    setSearchError(null);
+    try {
+      setSearchResponse(await client.overviewSearch({ query: normalized, types: SEARCH_TABS[activeTab].types, limit: 20 }));
+    } catch (error) {
+      setSearchResponse(null);
+      setSearchError(error instanceof KnowledgeClientError ? error.message : "混合搜索暂时不可用");
+    } finally {
+      setSearching(false);
     }
   };
 
+  const papers = overview?.paperLibrary;
+  const assets = overview?.researchAssets;
+  const topicStats = (overview?.topicHighlights ?? [])
+    .filter((item) => item.count !== null)
+    .sort((left, right) => (right.count ?? 0) - (left.count ?? 0))
+    .slice(0, 4);
+  const maxTopicCount = topicStats[0]?.count ?? 0;
+  const personalFolders = personal?.folders ?? [];
+  const recentPapers = personal?.recentPapers ?? [];
+  const paperTags = papers?.popularTags.length
+    ? papers.popularTags.slice(0, 5).map((tag) => tag.name)
+    : (overview?.topicHighlights ?? []).slice(0, 5).map((item) => item.name);
+
   return (
-    <div className="mx-auto max-w-[1180px] px-6 py-7 lg:px-8 lg:py-9">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <div className="mx-auto max-w-[1440px] px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
+      <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-ink">知识库</h1>
-            <span className="rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-medium text-primary">科研资产中心</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-ink">知识库</h1>
+            <span className="rounded-full bg-primary-soft px-3 py-1 text-sm font-medium text-primary">科研资产中心 · 知识底座</span>
           </div>
-          <p className="mt-1.5 text-sm text-muted">连接论文、专利、基金、学者与机构，让知识不再彼此孤立</p>
+          <p className="mt-2 text-base leading-7 text-muted">通过知识底座检索论文、学者与科研主题，并管理你的个人文献和论文关系图谱。</p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Link
-            href="/knowledge/search"
-            className="flex h-9 items-center gap-2 rounded-lg bg-primary px-3.5 text-xs font-medium text-primary-foreground shadow-card transition-colors hover:bg-primary-deep"
-          >
-            <Search className="size-4" />
-            论文检索
-          </Link>
-          <Link href="/knowledge/graph" className="flex h-9 items-center gap-2 rounded-lg border border-line bg-card px-3.5 text-xs font-medium text-ink-2 shadow-card transition-colors hover:bg-chip hover:text-primary">
-            <Network className="size-4" />
-            打开私域知识图谱
-          </Link>
+        <div className="flex gap-3">
+          <Link href="/knowledge/search" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"><Search className="size-4" /> 论文检索</Link>
+          <Link href="/knowledge/graph" className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-ink hover:bg-surface"><Network className="size-4" /> 打开关系图谱</Link>
         </div>
       </header>
 
-      <section className="relative mt-6 rounded-2xl bg-card p-4 shadow-card">
-        <div className="flex items-center gap-3 rounded-xl border border-line bg-panel px-4">
-          <Search className="size-5 shrink-0 text-faint" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索论文、专利、基金、学者或研究机构…"
-            className="h-12 min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-faint"
-          />
-          <span className="hidden items-center gap-1 text-[11px] text-faint sm:flex">
-            <Sparkles className="size-3.5" /> 跨库检索
-          </span>
+      <section className="mt-7 rounded-3xl bg-card p-5 shadow-card sm:p-6" aria-label="知识库混合搜索">
+        <form onSubmit={(event) => { event.preventDefault(); void submitSearch(); }} className="flex items-center gap-3 rounded-2xl border border-primary/15 bg-primary-soft/60 px-4 py-3">
+          <Search className="size-5 shrink-0 text-primary/60" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索论文、学者、主题、项目或基金……" className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-muted" aria-label="搜索论文、学者、主题、项目或基金" />
+          <button type="submit" disabled={searching || !query.trim()} className="hidden items-center gap-1 text-sm font-medium text-primary disabled:cursor-not-allowed disabled:opacity-50 sm:inline-flex"><Sparkles className="size-4" /> 跨库检索</button>
+        </form>
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="混合搜索类型">
+          {SEARCH_TABS.map((tab, index) => <button key={tab.label} type="button" role="tab" aria-selected={activeTab === index} onClick={() => { setActiveTab(index); setSearchResponse(null); }} className={`shrink-0 rounded-full px-4 py-2 text-sm transition-colors ${activeTab === index ? "bg-primary text-white" : "bg-surface text-muted hover:text-ink"}`}>{tab.label}</button>)}
         </div>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {searchTypes.map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setActiveType(type)}
-              className={cn(
-                "h-7 rounded-full px-3 text-xs transition-colors",
-                activeType === type ? "bg-primary text-white" : "bg-chip text-muted hover:text-ink",
-              )}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
-
-        {query.trim() && (
-          <div className="absolute inset-x-4 top-[82px] z-20 overflow-hidden rounded-xl border border-line bg-card shadow-pop">
-            {results.length ? (
-              <div className="divide-y divide-line">
-                {results.map((result, index) => (
-                  <Link key={`${result.type}-${result.title}-${index}`} href={result.href} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-panel">
-                    <span className={cn("rounded-md px-2 py-1 text-[10px] font-medium", typeStyle[result.type])}>{result.type}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-ink">{result.title}</p>
-                      <p className="mt-0.5 truncate text-xs text-faint">{result.meta}</p>
-                    </div>
-                    <ArrowRight className="size-4 shrink-0 text-faint" />
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="px-4 py-6 text-center text-sm text-muted">没有找到相关科研资产，试试更短的关键词</div>
-            )}
-          </div>
-        )}
+        {(searching || searchError || searchResponse) && <div className="mt-4" aria-live="polite">
+          {searching && <div className="rounded-2xl bg-surface px-4 py-5 text-sm text-muted">正在检索知识底座……</div>}
+          {!searching && searchError && <div className="rounded-2xl bg-danger-soft px-4 py-5 text-sm text-danger">{searchError}</div>}
+          {!searching && searchResponse && <SearchResults response={searchResponse} query={query.trim()} />}
+        </div>}
       </section>
 
-      <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Metric value="93" label="文献资产" />
-        <Metric value={String(patents.length)} label="专利记录" />
-        <Metric value={String(fundings.length)} label="基金项目" />
-        <Metric value={String(scholars.length)} label="关注学者" />
-        <Metric value={String(institutions.length)} label="研究机构" />
-      </section>
-
-      <section className="mt-5 grid gap-5 xl:grid-cols-12">
-        <article
-          role="link"
-          tabIndex={0}
-          onClick={() => openCard("/knowledge/papers")}
-          onKeyDown={(event) => cardKeyDown(event, "/knowledge/papers")}
-          className="group overflow-hidden rounded-2xl bg-card p-6 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-pop focus-visible:outline-2 focus-visible:outline-primary xl:col-span-7 xl:row-span-2"
-        >
-          <CardHeader icon={BookOpen} title="论文库" description="管理私有论文与收藏文献，按文件夹、标签和研究主题组织" href="/knowledge/papers" />
-          <div className="mt-5 grid gap-5 lg:grid-cols-[180px_1fr]">
-            <div className="rounded-xl bg-panel p-4">
-              <p className="flex items-center gap-2 text-xs font-semibold text-ink-2"><FolderOpen className="size-4 text-primary" />文献文件夹</p>
-              <ul className="mt-3 space-y-1.5">
-                {libraryFolders.slice(0, 4).map((folder) => (
-                  <li key={folder.name} className={cn("flex items-center justify-between rounded-lg px-2.5 py-2 text-xs", folder.active ? "bg-primary-soft font-medium text-primary" : "text-muted")}>
-                    <span>{folder.name}</span><span>{folder.count}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-ink-2">最近加入</p>
-                <span className="text-[11px] text-faint">共 93 篇</span>
-              </div>
-              <div className="mt-2 divide-y divide-line">
-                {libraryItems.map((item) => (
-                  <Link key={item.id} href={paperHref(item.id, { mode: "create", source: returnTo })} onClick={(event) => event.stopPropagation()} className="group/item flex items-start gap-3 py-3 first:pt-1">
-                    <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><FileText className="size-4" /></span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium text-ink group-hover/item:text-primary">{item.title}</span>
-                      <span className="mt-1 block truncate text-[11px] text-faint">{item.venue} · {item.authors}</span>
-                    </span>
-                  </Link>
-                ))}
+      {overviewError && !overview ? <div className="mt-7 rounded-2xl bg-danger-soft px-5 py-4 text-sm text-danger" role="alert">知识库总览数据暂时无法加载。<button type="button" onClick={() => void loadOverview()} className="ml-2 font-medium underline">重试</button></div> : <div className="mt-7 grid gap-5 xl:grid-cols-3">
+        <CardShell card={CARDS[0]} className="flex h-full flex-col xl:col-span-2 xl:row-span-2" bodyClassName="flex min-h-0 flex-1 flex-col">
+          <div className="grid min-h-0 flex-1 gap-5 xl:grid-cols-[246px_minmax(0,1fr)]">
+            <div className="h-full rounded-2xl bg-primary-soft/70 p-5">
+              <p className="text-base font-semibold text-ink">论文</p>
+              <div className="mt-7 space-y-5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-primary/70">全部论文</span>
+                  <span className="text-base font-medium text-primary"><NumberValue value={papers?.paperCount ?? null} status={papers?.status ?? "pending"} /></span>
+                </div>
+                <div className="h-px bg-primary/10" />
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-primary/70">已收藏</span>
+                  <span className="text-sm text-muted">暂无数据</span>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
-            {libraryTags.map((tag) => <span key={tag} className="rounded-full bg-chip px-3 py-1 text-[11px] text-muted">#{tag}</span>)}
-          </div>
-        </article>
 
-        <article role="link" tabIndex={0} onClick={() => openCard("/knowledge/patents")} onKeyDown={(event) => cardKeyDown(event, "/knowledge/patents")} className="rounded-2xl bg-card p-5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-pop focus-visible:outline-2 focus-visible:outline-primary xl:col-span-5">
-          <CardHeader icon={Award} title="专利库" description="按技术领域与法律状态追踪创新成果" href="/knowledge/patents" tone="violet" />
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <Metric value="4" label="已授权" /><Metric value="3" label="审查中" /><Metric value="5" label="技术领域" />
-          </div>
-          <p className="mt-4 truncate text-xs text-muted"><span className="font-medium text-ink-2">最新：</span>{patents[0]?.title}</p>
-        </article>
-
-        <article role="link" tabIndex={0} onClick={() => openCard("/knowledge/funding")} onKeyDown={(event) => cardKeyDown(event, "/knowledge/funding")} className="rounded-2xl bg-card p-5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-pop focus-visible:outline-2 focus-visible:outline-primary xl:col-span-5">
-          <CardHeader icon={Banknote} title="项目基金库" description="洞察资助方向、项目金额与研究进展" href="/knowledge/funding" tone="gold" />
-          <div className="mt-4 flex items-end gap-2">
-            {[42, 66, 52, 84, 72, 94].map((height, index) => (
-              <div key={index} className="flex-1 rounded-t-md bg-primary/15" style={{ height }}><div className="w-full rounded-t-md bg-primary" style={{ height: `${Math.max(10, height - 36)}px` }} /></div>
-            ))}
-            <div className="ml-2 shrink-0 pb-1 text-right"><p className="text-xl font-bold text-ink">10</p><p className="text-[11px] text-faint">项目在库</p></div>
-          </div>
-        </article>
-
-        <article role="link" tabIndex={0} onClick={() => openCard("/knowledge/scholars")} onKeyDown={(event) => cardKeyDown(event, "/knowledge/scholars")} className="rounded-2xl bg-card p-5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-pop focus-visible:outline-2 focus-visible:outline-primary xl:col-span-5">
-          <CardHeader icon={Users} title="学者关系" description="从合作网络与引用脉络中发现关键学者" href="/knowledge/scholars" tone="green" />
-          <div className="mt-2 grid grid-cols-[1fr_120px] items-center gap-3">
-            <div className="space-y-2">
-              {scholars.slice(0, 3).map((scholar) => (
-                <Link key={scholar.id} href={`/scholars/${scholar.id}`} onClick={(event) => event.stopPropagation()} className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-panel">
-                  <span className="flex size-7 items-center justify-center rounded-full text-[10px] font-semibold text-white" style={{ backgroundColor: scholar.avatarColor }}>{scholar.initials}</span>
-                  <span className="min-w-0"><span className="block truncate text-xs font-medium text-ink">{scholar.nameCn}</span><span className="block text-[10px] text-faint">h-index {scholar.hIndex}</span></span>
-                </Link>
-              ))}
-            </div>
-            <MiniNetwork />
-          </div>
-        </article>
-
-        <article role="link" tabIndex={0} onClick={() => openCard("/knowledge/institutions")} onKeyDown={(event) => cardKeyDown(event, "/knowledge/institutions")} className="rounded-2xl bg-card p-5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-pop focus-visible:outline-2 focus-visible:outline-primary xl:col-span-7">
-          <CardHeader icon={Building2} title="研究机构" description="浏览高校、研究院与企业实验室的科研画像和优势方向" href="/knowledge/institutions" tone="cyan" />
-          <div className="mt-3 grid items-stretch gap-4 sm:grid-cols-[1fr_190px]">
-            <div className="grid grid-cols-2 gap-2">
-              {institutions.slice(0, 4).map((institution) => (
-                <Link key={institution.id} href="/knowledge/institutions" onClick={(event) => event.stopPropagation()} className="flex items-center gap-2 rounded-xl bg-panel p-2.5 hover:bg-chip">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[9px] font-bold text-white" style={{ backgroundColor: institution.logoColor }}>{institution.initials}</span>
-                  <span className="min-w-0"><span className="block truncate text-xs font-medium text-ink">{institution.nameCn}</span><span className="block truncate text-[10px] text-faint">{institution.type} · {institution.location}</span></span>
-                </Link>
-              ))}
-            </div>
-            <div className="rounded-xl bg-panel p-3.5">
-              <p className="text-[11px] font-semibold text-ink-2">热门研究方向</p>
-              <div className="mt-2.5 flex flex-wrap gap-1.5">
-                {institutions.flatMap((item) => item.fields).filter((field, index, all) => all.indexOf(field) === index).slice(0, 5).map((field) => (
-                  <span key={field} className="rounded-md bg-card px-2 py-1 text-[10px] text-muted shadow-card">{field}</span>
-                ))}
+            <div className="min-h-0 min-w-0 px-1 py-1">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-base font-semibold text-ink">最近浏览</span>
+                <span className="text-sm text-muted">{recentPapers.length ? `共 ${recentPapers.length} 篇` : "暂无数据"}</span>
               </div>
-              <p className="mt-3 text-[10px] leading-relaxed text-faint">按综合排名、论文数量和机构类型浏览科研画像</p>
+              {recentPapers.length ? <div className="mt-3 divide-y divide-border">{recentPapers.slice(0, 3).map((paper) => <Link key={`${paper.id}-${paper.last_viewed_at}`} href={`/papers/${encodeURIComponent(paper.id)}`} className="group flex items-center gap-4 py-3 first:pt-2 hover:bg-primary-soft/30"><span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft"><BookOpen className="size-5 text-primary" /></span><span className="min-w-0 flex-1"><span className="block truncate text-base text-ink group-hover:text-primary">{paper.title}</span><span className="mt-1 block truncate text-sm text-muted">当前账号最近浏览 · {formatViewedAt(paper.last_viewed_at)}</span></span><ArrowRight className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" /></Link>)}</div> : <p className="mt-5 text-sm text-muted">暂无当前账号的最近浏览记录</p>}
             </div>
           </div>
-        </article>
-      </section>
+          {paperTags.length ? <div className="mt-5 flex shrink-0 flex-wrap gap-2">{paperTags.map((tag) => <Link key={tag} href={`/knowledge/topics?subject=${encodeURIComponent(tag)}`} className="rounded-full bg-surface px-3.5 py-2 text-xs text-muted transition hover:bg-primary-soft hover:text-primary">#{tag}</Link>)}</div> : null}
+        </CardShell>
 
-      <section className="mt-5 rounded-2xl bg-card p-5 shadow-card">
-        <div className="flex items-center justify-between">
-          <div><h2 className="text-sm font-bold text-ink">最近活动</h2><p className="mt-0.5 text-xs text-faint">继续上次的科研探索</p></div>
-          <button type="button" className="text-xs text-primary hover:underline">查看全部</button>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {[
-            { icon: Clock3, title: "阅读了 Long-Context Reasoning", meta: "论文库 · 2 小时前" },
-            { icon: Network, title: "探索了何恺明的合作网络", meta: "学者关系 · 昨天" },
-            { icon: TrendingUp, title: "收藏了科学文献知识图谱项目", meta: "项目基金库 · 3 天前" },
-          ].map((activity) => (
-            <div key={activity.title} className="flex items-center gap-3 rounded-xl bg-panel p-3.5">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-card text-primary shadow-card"><activity.icon className="size-4" /></span>
-              <span className="min-w-0"><span className="block truncate text-xs font-medium text-ink">{activity.title}</span><span className="mt-1 block text-[10px] text-faint">{activity.meta}</span></span>
+        <CardShell card={CARDS[1]}>
+          {personal?.authRequired ? <div className="rounded-2xl bg-surface p-4"><p className="text-sm text-muted">数据暂无</p><p className="mt-1 text-xs text-muted">登录后查看个人文献数据</p></div> : personalFolders.length ? <div className="grid grid-cols-3 gap-2">{personalFolders.slice(0, 3).map((folder) => <div key={folder.id} className="rounded-xl bg-primary-soft/70 p-3"><div className="text-xl font-bold text-ink">{folder.paperCount}</div><div className="mt-1 truncate text-xs text-muted">{folder.name}</div></div>)}</div> : <p className="rounded-2xl bg-surface p-4 text-sm text-muted">数据暂无</p>}
+          {recentPapers[0] ? <p className="mt-4 truncate text-sm text-muted">最近浏览：{recentPapers[0].title}</p> : <p className="mt-4 text-xs text-muted">最近浏览：数据暂无</p>}
+        </CardShell>
+
+        <CardShell card={CARDS[2]}>
+          {overview?.scholarHighlights.length ? <div className="grid grid-cols-3 gap-2">{overview.scholarHighlights.slice(0, 3).map((item) => <Link key={item.id} href={`/knowledge/scholars/${encodeURIComponent(item.id)}`} className="min-w-0 rounded-xl p-2 hover:bg-success-soft/60"><div className="mx-auto flex size-10 items-center justify-center rounded-full bg-success text-sm font-semibold text-white">{item.name.slice(0, 1)}</div><div className="mt-2 truncate text-center text-sm font-medium text-ink">{item.name}</div><div className="mt-1 truncate text-center text-xs text-muted">{item.count === null ? "数据暂无" : `${item.count.toLocaleString("zh-CN")} 篇论文`}</div></Link>)}</div> : <p className="rounded-2xl bg-surface p-4 text-sm text-muted">数据暂无</p>}
+        </CardShell>
+
+        <CardShell card={CARDS[3]} className="flex h-full flex-col" bodyClassName="flex min-h-0 flex-1 flex-col">
+          <div className="grid min-h-[280px] flex-1 gap-5 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="flex min-h-0 min-w-0 flex-col">
+              <p className="text-sm font-semibold text-ink">热门研究主题</p>
+              <p className="mt-1 text-xs text-muted">来自知识底座的真实主题</p>
+              {papers?.popularTags.length ? <div className="mt-4 flex flex-1 flex-col items-start justify-evenly gap-2">{papers.popularTags.slice(0, 6).map((tag) => <span key={tag.name} className="rounded-lg bg-brand-cyan/10 px-3 py-2 text-xs font-medium text-brand-cyan">{tag.name}</span>)}</div> : overview?.topicHighlights.length ? <div className="mt-4 flex flex-1 flex-col items-start justify-evenly gap-2">{overview.topicHighlights.slice(0, 6).map((item) => <Link key={item.id} href={`/knowledge/topics?subject=${encodeURIComponent(item.metadata.sourceSubject as string ?? item.name)}`} className="rounded-lg bg-brand-cyan/10 px-3 py-2 text-xs font-medium text-brand-cyan transition hover:bg-brand-cyan/20"><span className="block max-w-32 truncate">{item.name}</span></Link>)}</div> : <p className="mt-4 text-xs leading-5 text-muted">暂无真实主题数据</p>}
             </div>
-          ))}
-        </div>
-      </section>
+            <div className="flex min-h-0 min-w-0 flex-col border-border md:border-l md:pl-5" role="img" aria-label="四个主题的论文数量柱状图">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink">各主题论文数量</p>
+                  <p className="mt-1 text-xs text-muted">按主题匹配论文总量排序</p>
+                </div>
+                {topicStats.length ? <span className="text-xs text-muted">共 {topicStats.length} 项</span> : null}
+              </div>
+              {topicStats.length ? <div className="mt-4 flex min-h-44 flex-1 items-end gap-2 border-b border-border px-1 sm:gap-3">{topicStats.map((item) => <Link key={item.id} href={`/knowledge/topics?subject=${encodeURIComponent(item.metadata.sourceSubject as string ?? item.name)}`} className="group flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"><span className="text-[11px] font-semibold text-brand-cyan">{item.count?.toLocaleString("zh-CN")}</span><span className="relative flex min-h-28 flex-1 w-full max-w-9 items-end overflow-hidden rounded-t-lg bg-brand-cyan/15"><span className="w-full rounded-t-lg bg-brand-cyan/80 transition-all group-hover:bg-primary" style={{ height: `${Math.max(14, ((item.count ?? 0) / maxTopicCount) * 100)}%` }} /></span><span className="w-full truncate text-center text-[10px] text-muted group-hover:text-primary" title={item.name}>{item.name}</span></Link>)}</div> : <p className="mt-4 rounded-xl bg-surface px-3 py-3 text-xs leading-5 text-muted">暂无真实主题论文数量统计</p>}
+            </div>
+          </div>
+        </CardShell>
+
+        <CardShell card={CARDS[4]}>
+          <div className="rounded-2xl bg-primary-soft/70 px-4 py-3">
+            <div className="text-sm text-muted">资产总量</div>
+            <div className="mt-1 text-3xl font-bold text-ink"><NumberValue value={assets?.total ?? null} status={assets?.status ?? "pending"} /></div>
+            <div className="mt-1 text-xs text-muted">统一 Funding 资产，不拆分项目、专利、基金类型</div>
+          </div>
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-semibold text-ink">资产信息</span>
+              <span className="text-xs text-muted">知识底座实时返回</span>
+            </div>
+            {assets?.highlights?.length ? <div className="space-y-2">{assets.highlights.slice(0, 3).map((item) => <Link key={item.id} href={`/knowledge/funding?funding=${encodeURIComponent(item.id)}`} className="flex items-center justify-between rounded-xl bg-brand-gold/15 px-4 py-2.5 hover:bg-brand-gold/25"><span className="min-w-0 truncate text-sm font-medium text-ink">{item.name}</span><span className="ml-3 shrink-0 text-xs text-muted">{item.count === null ? "基金" : `${item.count.toLocaleString("zh-CN")} 篇论文`}</span></Link>)}</div> : <p className="rounded-xl bg-surface px-4 py-3 text-sm text-muted">暂无可展示的真实基金资产信息</p>}
+          </div>
+          <p className="mt-3 text-xs leading-5 text-muted">项目、专利暂无独立实体接口，暂不展示虚构资产。</p>
+        </CardShell>
+
+        <CardShell card={CARDS[5]} className="flex h-full flex-col" bodyClassName="flex min-h-0 flex-1 flex-col">
+          {overview?.graphPreview.supported && overview.graphPreview.rootPaperId ? <Link href={paperHref(overview.graphPreview.rootPaperId, { mode: "create", source: "/knowledge", graph: true })} className="group flex min-h-0 flex-1 flex-col">
+            <OverviewGraphPreview preview={overview.graphPreview} />
+            <span className="mt-3 inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary group-hover:underline">查看完整关系图谱 <ArrowRight className="size-3.5" /></span>
+          </Link> : <div className="rounded-2xl bg-primary-soft/70 p-4 text-sm leading-6 text-muted">{overview?.graphPreview.status === "error" ? "关系图谱暂时无法加载，请稍后重试。" : "当前暂无可展示的真实论文关系图谱。"}</div>}
+        </CardShell>
+      </div>}
     </div>
   );
 }

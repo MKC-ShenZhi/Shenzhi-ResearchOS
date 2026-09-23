@@ -1,6 +1,6 @@
 # 知识底座接入说明
 
-本文说明 ShenZhi Knowledge MVP（论文搜索、论文详情、论文关系图谱）的
+本文说明 ShenZhi Knowledge V1（论文、学者、主题、Funding 候选/关联检索与论文关系图谱）的
 工程边界、运行配置和稳定契约。科研组 Knowledge Base 是外部 Capability：
 ShenZhi 只调用、隔离并适配，不修改其内部实现。
 
@@ -29,13 +29,13 @@ External Knowledge Base
 
 | 路径 | 职责 |
 |---|---|
-| `apps/web/clients/knowledge/types.ts` | Search / Detail / Graph / Error 的前端 wire type |
+| `apps/web/clients/knowledge/types.ts` | Paper / Scholar / Related Search / Graph / Error 的前端 wire type |
 | `apps/web/clients/knowledge/client.ts` | `KnowledgeClient` 与 `KnowledgeClientError` |
 | `apps/web/clients/knowledge/bff.ts` | 调用同源 `/api/v1/knowledge/*`，解析正式错误契约 |
 | `apps/web/clients/knowledge/mock.ts` | 显式开发、测试和 demo fixture 使用的 Mock Client |
 | `apps/web/clients/knowledge/index.ts` | Client 工厂；默认 BFF，显式 `source=mock` 才启用 Mock |
 | `apps/web/features/knowledge/retry.ts` | Knowledge 查询的局部 retry predicate |
-| `apps/web/features/knowledge/{search,paper,graph}` | 页面、交互和展示逻辑 |
+| `apps/web/features/knowledge/{search,paper,graph,scholars,topics,funding}` | 页面、交互和展示逻辑 |
 
 ### Backend
 
@@ -86,7 +86,23 @@ PAPER_MAX_SIZE_MB=150
 | 论文检索 | `POST /api/v1/knowledge/search` | `POST /api/retrieval/search` |
 | 论文详情 | `GET /api/v1/knowledge/paper?paperId=...` | `GET /api/kg/paper?paperId=...` |
 | 论文图谱 | `GET /api/v1/knowledge/graph?paperId=...&depth=1\|2` | `GET /api/kg/graph?paperId=...&depth=1\|2` |
+| 学者搜索 | `GET /api/v1/knowledge/scholars/search?q=...&limit=20&offset=0` | `GET /api/retrieval/scholars/search?q=...&limit=20&offset=0` |
+| 学者详情 | `GET /api/v1/knowledge/scholars/{scholarId}` | `GET /api/retrieval/scholars/{scholar_id}` |
+| 主题关联论文 | `GET /api/v1/knowledge/subjects/search?subject=...&topK=10` | `GET /api/retrieval/search/by-subject?subject=...&top_k=10` |
+| Funding 候选检索 | `GET /api/v1/knowledge/fundings/search?q=...&limit=20&offset=0` | `GET /api/retrieval/fundings/search?q=...&limit=20&offset=0` |
+| Funding 关联论文 | `GET /api/v1/knowledge/funding/search?funding=...&topK=10` | `GET /api/retrieval/search/by-funding?funding=...&top_k=10` |
 | PDF 字节流 | `GET /api/v1/paper-resource/pdf?paperId=...` | `pdf_url` 对应资源 |
+
+Scholar 公共契约统一使用 `id`、`paperCount`，不向 Web 暴露上游
+`scholar_id`、`paper_count`。详情当前只映射上游明确提供的 `years`、
+`conferences`、`topics`、`funding`、`institutions`、`coauthors` 和 `papers`；
+不提供 h-index、引用数、履历、角色、邮箱或个人主页。
+
+Subject 关联检索和旧 Funding 关联检索上游返回的都是 Paper Results；Funding 候选
+检索返回独立的 `FundingSummary`，只包含 `id`、`name`、`paperCount` 和统一
+`provenance`。Funding 当前没有 Detail API，因此不能定义或推断 grant number、PI、
+金额、周期、项目状态、专利状态等实体字段，也不提供 `total` 或 `hasMore`。上游返回的 `source_scores`、
+`retrieval_mode`、`image_id` 等内部检索字段停留在 Adapter 边界之外。
 
 论文详情中的 `pdf_url` 只由 Knowledge Integration 读取和映射，公共 Detail Contract
 仅保留 `pdfUrl`。`GET /api/v1/knowledge/paper` 不调用 `paper_resource` Service，也不访问
@@ -153,6 +169,12 @@ Knowledge 查询最多自动重试一次；`TIMEOUT`、`RATE_LIMITED`、
 | 路由 | 行为 |
 |---|---|
 | `/knowledge/search` | 论文搜索、筛选、loading、zero-result、error |
+| `/knowledge/papers` | 我的文献、收藏、文件夹和阅读历史 |
+| `/knowledge/scholars` | 真实 Scholar Search；仅按姓名搜索 |
+| `/knowledge/scholars/[scholarId]` | 真实 Scholar Detail；空 optional section 隐藏 |
+| `/knowledge/topics` | 按 Subject 查询关联论文 |
+| `/knowledge/funding` | 项目基金库：浏览 Funding 候选；选择 Funding 后按名称查询关联论文；使用 `q` 与 opaque `funding` URL 参数恢复页面状态 |
+| `/knowledge/graph` | 保留现有论文关系图谱 |
 | `/papers/[id]` | 统一论文详情与 PDF 阅读器；通过 Knowledge Client 加载真实详情 |
 | `/papers/[id]/graph` | fullGraph（保留异构节点/边）、References/Citations 筛选、节点详情 |
 | `/knowledge/search/[paperId]` | 旧链接兼容跳转到 `/papers/[id]`，保留合法 `returnTo` |
@@ -164,9 +186,11 @@ attachment 显式绑定当前 `paperId`，由 Backend 重新读取对应论文�
 title、authors、venue、year、abstract 等元信息回答；该流程不使用全局 Search
 猜测“这篇论文”，也不读取 PDF 全文。
 
-暂不包含
-multistep、会议浏览、ID resolver、scholar、patents、projects、funds、
-Deep Research 或 Auto Research。
+`/knowledge/patents` 与 `/knowledge/institutions` 兼容路由继续保留，但不进入正式
+产品导航；专利兼容路由只显示不可用状态。当前知识底座没有正式
+Patent、Project 实体 Search/Detail，也没有 Funding Detail。产品中的
+`/projects/[id]` 属于用户科研项目能力，不是 Knowledge Base Project。仍暂不包含
+multistep、会议浏览、ID resolver、Deep Research 或 Auto Research。
 
 ## Mock 规则
 

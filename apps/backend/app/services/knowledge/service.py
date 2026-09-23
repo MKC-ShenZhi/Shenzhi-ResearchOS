@@ -6,12 +6,30 @@ from app.integrations.knowledge.adapter import KnowledgeAdapter
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.schemas.knowledge import (
     KnowledgeError,
+    FundingSearchRequest,
+    FundingSearchResponse,
+    KnowledgeMixedSearchRequest,
+    KnowledgeMixedSearchResponse,
+    KnowledgeOverviewResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
+    KnowledgeSubjectSearchResponse,
     PaperDetail,
     PaperSummary,
     PaperGraph,
+    ScholarDetail,
+    ScholarSearchRequest,
+    ScholarSearchResponse,
 )
+
+
+_SCHOLAR_QUERY_ALIASES = {
+    '何恺明': 'Kaiming He',
+}
+
+
+def _resolve_scholar_query(query: str) -> str:
+    return _SCHOLAR_QUERY_ALIASES.get(query, query)
 
 
 class KnowledgeServiceError(Exception):
@@ -53,6 +71,63 @@ class KnowledgeService:
     async def search(self, request: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
         try:
             return await self.adapter.search(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_scholars(
+        self, request: ScholarSearchRequest
+    ) -> ScholarSearchResponse:
+        resolved_request = ScholarSearchRequest(
+            query=_resolve_scholar_query(request.query),
+            limit=request.limit,
+            offset=request.offset,
+        )
+        try:
+            return await self.adapter.search_scholars(resolved_request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def overview(self) -> KnowledgeOverviewResponse:
+        try:
+            return await self.adapter.overview()
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def mixed_search(
+        self, request: KnowledgeMixedSearchRequest
+    ) -> KnowledgeMixedSearchResponse:
+        try:
+            return await self.adapter.mixed_search(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def get_scholar(self, scholar_id: str) -> ScholarDetail:
+        try:
+            return await self.adapter.scholar(scholar_id)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_by_subject(
+        self, subject: str, *, offset: int = 0, limit: int = 10
+    ) -> KnowledgeSubjectSearchResponse:
+        try:
+            return await self.adapter.search_by_subject(subject, offset=offset, limit=limit)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_by_funding(
+        self, funding: str, *, top_k: int = 10
+    ) -> KnowledgeSearchResponse:
+        try:
+            return await self.adapter.search_by_funding(funding, top_k=top_k)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_fundings(
+        self, request: FundingSearchRequest
+    ) -> FundingSearchResponse:
+        try:
+            return await self.adapter.search_fundings(request)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 

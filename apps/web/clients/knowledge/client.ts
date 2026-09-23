@@ -3,11 +3,21 @@
 import type {
   KnowledgeApiError,
   KnowledgeErrorCode,
+  KnowledgeFundingSearchParams,
+  KnowledgeFundingSearchResponse,
   KnowledgeGraphDepth,
   KnowledgeGraph,
+  KnowledgeMixedSearchParams,
+  KnowledgeMixedSearchResponse,
+  KnowledgeOverviewResponse,
+  KnowledgePersonalOverviewResponse,
   KnowledgePaperDetail,
+  KnowledgeScholarDetail,
+  KnowledgeScholarSearchParams,
+  KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
 } from "./types";
 
 /**
@@ -18,10 +28,31 @@ import type {
  * 显式配置用于开发、测试或 demo fixture。
  */
 export interface KnowledgeClient {
+  /** 总览页公共统计；所有数字必须来自真实后端契约 */
+  overview(): Promise<KnowledgeOverviewResponse>;
+  /** 总览页个人文献统计；匿名会话返回 authRequired */
+  personalOverview(): Promise<KnowledgePersonalOverviewResponse>;
+  /** 总览页跨实体混合搜索 */
+  overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse>;
   /** 论文搜索；无匹配返回空 results（不是错误） */
   search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse>;
   /** 论文详情；id 作为 opaque string 使用 */
   paper(paperId: string): Promise<KnowledgePaperDetail>;
+  /** 按姓名搜索学者；无匹配返回空 results */
+  searchScholars(params: KnowledgeScholarSearchParams): Promise<KnowledgeScholarSearchResponse>;
+  /** 学者详情；id 作为 opaque string 使用 */
+  scholar(scholarId: string): Promise<KnowledgeScholarDetail>;
+  /** Funding candidate search; returns Funding summaries, not papers. */
+  searchFundings(params: KnowledgeFundingSearchParams): Promise<KnowledgeFundingSearchResponse>;
+  /** 按研究主题获取关联论文 */
+  searchBySubject(
+    subject: string,
+    offset?: number,
+    limit?: number,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSubjectSearchResponse>;
+  /** 按 Funding 名称片段获取关联论文；返回 Paper Results */
+  searchByFunding(funding: string, topK?: number): Promise<KnowledgeSearchResponse>;
   /** 论文关系图谱；默认 depth=1 */
   graph(paperId: string, depth?: KnowledgeGraphDepth): Promise<KnowledgeGraph>;
 }

@@ -118,7 +118,7 @@ export function LibraryPanel({
       <div className="mt-auto">
         <Link href="/knowledge/graph" className="mb-3 flex items-center gap-2.5 rounded-lg bg-panel p-2.5 text-xs text-ink-2 transition-colors hover:bg-primary-soft">
           <Network className="size-4 text-primary" />
-          私域知识图谱
+          关系图谱
         </Link>
         <hr className="mb-3 border-line" />
 

@@ -2,7 +2,7 @@
 
 import { Search, Sparkles } from "lucide-react";
 
-/** 论文检索页顶部 —— 标题 + 检索框 */
+/** 论文库顶部 —— 保留现有论文检索能力。 */
 export function KnowledgeSearchHero({
   initialQuery,
   onQueryChange,
@@ -15,7 +15,7 @@ export function KnowledgeSearchHero({
   return (
     <header>
       <div className="flex items-center gap-2.5">
-        <h1 className="text-2xl font-bold tracking-tight text-ink">论文检索</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-ink">论文库</h1>
         <span className="rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-medium text-primary">
           知识底座
         </span>

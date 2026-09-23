@@ -6,6 +6,7 @@ import math
 import asyncio
 from datetime import datetime, timezone
 from typing import Any, Callable
+from urllib.parse import quote
 
 from pydantic import ValidationError
 
@@ -15,13 +16,32 @@ from app.integrations.knowledge.schemas import UpstreamSearchPayload
 from app.schemas.knowledge import (
     GraphEdge,
     GraphNode,
+    FundingSearchRequest,
+    FundingSearchResponse,
+    FundingSummary,
+    KnowledgeMixedSearchRequest,
+    KnowledgeMixedSearchResponse,
+    KnowledgeMixedSearchResult,
+    KnowledgeOverviewResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
+    KnowledgeSubjectSearchResponse,
     PaperDetail,
     PaperSummary,
     PaperGraph,
     PaperSearchResult,
+    OverviewHighlight,
+    OverviewPaperLibrary,
+    OverviewResearchAsset,
+    OverviewResearchAssets,
+    OverviewGraphPreview,
     Provenance,
+    ScholarDetail,
+    ScholarPaper,
+    ScholarReference,
+    ScholarSearchRequest,
+    ScholarSearchResponse,
+    ScholarSummary,
 )
 
 
@@ -98,6 +118,27 @@ def _optional_int(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise KnowledgeIntegrationError.contract_violation()
     return value
+
+
+def _required_int(item: dict[str, Any], key: str) -> int:
+    value = _optional_int(item.get(key))
+    if value is None:
+        raise KnowledgeIntegrationError.contract_violation()
+    return value
+
+
+def _int_list(value: Any) -> list[int]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise KnowledgeIntegrationError.contract_violation()
+    result: list[int] = []
+    for item in value:
+        parsed = _optional_int(item)
+        if parsed is None:
+            raise KnowledgeIntegrationError.contract_violation()
+        result.append(parsed)
+    return result
 
 
 def _optional_number(value: Any) -> float | None:
@@ -200,6 +241,82 @@ def map_search_result(
         score=_optional_number(item.get('score')),
         rank=_optional_int(item.get('rank')),
         provenance=_provenance(paper_id, retrieved_at),
+    ))
+
+
+def map_scholar_summary(
+    item: dict[str, Any], *, retrieved_at: datetime | None = None
+) -> ScholarSummary:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    scholar_id = _required_string(item, 'scholar_id')
+    return _contract_model(lambda: ScholarSummary(
+        id=scholar_id,
+        name=_required_string(item, 'name'),
+        paper_count=_required_int(item, 'paper_count'),
+        provenance=_provenance(scholar_id, retrieved_at),
+    ))
+
+
+def map_funding_summary(
+    item: dict[str, Any], *, retrieved_at: datetime | None = None
+) -> FundingSummary:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    funding_id = _required_string(item, 'funding_id')
+    return _contract_model(lambda: FundingSummary(
+        id=funding_id,
+        name=_required_string(item, 'name'),
+        paper_count=_required_int(item, 'paper_count'),
+        provenance=_provenance(funding_id, retrieved_at),
+    ))
+
+
+def _scholar_reference(item: dict[str, Any]) -> ScholarReference:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    return _contract_model(lambda: ScholarReference(
+        id=_required_string(item, 'scholar_id'),
+        name=_required_string(item, 'name'),
+    ))
+
+
+def _scholar_paper(item: dict[str, Any]) -> ScholarPaper:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    return _contract_model(lambda: ScholarPaper(
+        id=_required_string(item, 'paper_id'),
+        title=_required_string(item, 'title'),
+        year=_optional_int(item.get('year')),
+    ))
+
+
+def _object_list(value: Any, mapper: Callable[[dict[str, Any]], Any]) -> list[Any]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise KnowledgeIntegrationError.contract_violation()
+    return [mapper(item) for item in value]
+
+
+def map_scholar_detail(
+    item: dict[str, Any], *, retrieved_at: datetime | None = None
+) -> ScholarDetail:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    scholar_id = _required_string(item, 'scholar_id')
+    return _contract_model(lambda: ScholarDetail(
+        id=scholar_id,
+        name=_required_string(item, 'name'),
+        paper_count=_required_int(item, 'paper_count'),
+        years=_int_list(item.get('years')),
+        conferences=_string_list(item.get('conferences')),
+        topics=_string_list(item.get('topics')),
+        funding=_string_list(item.get('funding')),
+        institutions=_string_list(item.get('institutions')),
+        coauthors=_object_list(item.get('coauthors'), _scholar_reference),
+        papers=_object_list(item.get('papers'), _scholar_paper),
+        provenance=_provenance(scholar_id, retrieved_at),
     ))
 
 
@@ -326,8 +443,49 @@ def map_graph(
     ))
 
 
+def overview_graph_preview(graph: PaperGraph, *, related_limit: int = 6) -> OverviewGraphPreview:
+    """Keep the overview payload small while retaining real root relationships."""
+    nodes_by_id = {node.id: node for node in graph.nodes}
+    root = nodes_by_id.get(graph.root_id)
+    if root is None:
+        return OverviewGraphPreview(status='empty', root_paper_id=graph.root_id)
+
+    related_ids: list[str] = []
+    for edge in graph.edges:
+        if edge.source_id == graph.root_id:
+            related_id = edge.target_id
+        elif edge.target_id == graph.root_id:
+            related_id = edge.source_id
+        else:
+            continue
+        if related_id in nodes_by_id and related_id not in related_ids:
+            related_ids.append(related_id)
+        if len(related_ids) >= related_limit:
+            break
+
+    selected_ids = {graph.root_id, *related_ids}
+    selected_edges = [
+        edge for edge in graph.edges
+        if edge.source_id in selected_ids and edge.target_id in selected_ids
+    ]
+    return OverviewGraphPreview(
+        supported=bool(related_ids),
+        status='available' if related_ids else 'empty',
+        root_paper_id=graph.root_id,
+        nodes=[node for node in graph.nodes if node.id in selected_ids],
+        edges=selected_edges,
+    )
+
+
 class KnowledgeAdapter:
-    """Translate the three upstream calls into the ShenZhi domain contract."""
+    """Translate upstream Knowledge calls into the ShenZhi domain contract."""
+
+    OVERVIEW_TOPICS = (
+        ('large language models', '大语言模型'),
+        ('model compression', '模型压缩'),
+        ('low-rank compression', '低秩压缩'),
+        ('argumentation', '论证与辩论'),
+    )
 
     def __init__(self, client: Any | None = None):
         self.client = client or KnowledgeBaseClient()
@@ -355,6 +513,291 @@ class KnowledgeAdapter:
         return KnowledgeSearchResponse(
             results=mapped[request.offset:page_end],
             has_more=len(mapped) > page_end,
+        )
+
+    async def search_scholars(
+        self, request: ScholarSearchRequest
+    ) -> ScholarSearchResponse:
+        body = await self.client.search_scholars(
+            request.query, limit=request.limit, offset=request.offset
+        )
+        results = body.get('results') if isinstance(body, dict) else None
+        if not isinstance(results, list):
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        return ScholarSearchResponse(results=[
+            map_scholar_summary(item, retrieved_at=retrieved_at) for item in results
+        ])
+
+    async def _funding_highlights(
+        self, query: str | None, *, limit: int = 20, offset: int = 0
+    ) -> list[OverviewHighlight]:
+        response = await self.search_fundings(FundingSearchRequest(
+            query=query,
+            limit=limit,
+            offset=offset,
+        ))
+        return [OverviewHighlight(
+            id=item.id,
+            name=item.name,
+            count=item.paper_count,
+            metadata={'entityType': 'funding'},
+        ) for item in response.results]
+
+    async def overview(self) -> KnowledgeOverviewResponse:
+        paper_result, asset_result, scholar_result, topic_results, funding_result = await asyncio.gather(
+            self.client.paper_summary(),
+            self.client.research_assets_summary(),
+            # The upstream API provides scholar candidates rather than a
+            # leaderboard. A broad real query lets the overview surface three
+            # actual, currently indexed scholars without inventing rankings.
+            self.search_scholars(ScholarSearchRequest(query='a', limit=3)),
+            asyncio.gather(
+                *(self.search_by_subject(source_name, offset=0, limit=10) for source_name, _ in self.OVERVIEW_TOPICS),
+                return_exceptions=True,
+            ),
+            self._funding_highlights(None, limit=3),
+            return_exceptions=True,
+        )
+        paper_count: int | None = None
+        paper_status = 'error'
+        if not isinstance(paper_result, Exception):
+            paper_count = _required_int(paper_result, 'paper_count')
+            paper_status = 'available'
+        asset_count: int | None = None
+        asset_status = 'error'
+        if not isinstance(asset_result, Exception):
+            asset_count = _required_int(asset_result, 'research_asset_count')
+            asset_status = 'available'
+        funding_highlights = (
+            funding_result if isinstance(funding_result, list) else []
+        )
+        scholar_highlights = []
+        if isinstance(scholar_result, ScholarSearchResponse):
+            scholar_highlights = [
+                OverviewHighlight(
+                    id=item.id,
+                    name=item.name,
+                    count=item.paper_count,
+                    status='available',
+                    metadata={'entityType': 'scholar'},
+                )
+                for item in scholar_result.results[:3]
+            ]
+        topic_highlights = [
+            OverviewHighlight(
+                id=f'topic:{source_name}',
+                name=display_name,
+                count=topic_result.total,
+                status='available',
+                metadata={
+                    'entityType': 'topic',
+                    'sourceSubject': source_name,
+                },
+            )
+            for (source_name, display_name), topic_result in zip(self.OVERVIEW_TOPICS, topic_results)
+            if isinstance(topic_result, KnowledgeSubjectSearchResponse)
+        ]
+        graph_preview = OverviewGraphPreview(status='empty')
+        graph_source = next((
+            result.results[0]
+            for result in topic_results
+            if isinstance(result, KnowledgeSubjectSearchResponse) and result.results
+        ), None)
+        if graph_source is not None:
+            try:
+                graph_preview = overview_graph_preview(await self.graph(graph_source.id))
+            except Exception:
+                # The graph is supplementary overview content: an unavailable
+                # upstream graph must not hide the independently loaded cards.
+                graph_preview = OverviewGraphPreview(status='error')
+        now = datetime.now(timezone.utc)
+        return KnowledgeOverviewResponse(
+            as_of=now,
+            scope='已入库且可检索的论文及知识底座公开统计',
+            paper_library=OverviewPaperLibrary(
+                paper_count=paper_count,
+                status=paper_status,
+            ),
+            scholar_highlights=scholar_highlights,
+            topic_highlights=topic_highlights,
+            research_assets=OverviewResearchAssets(
+                total=asset_count,
+                status=asset_status,
+                highlights=funding_highlights,
+                by_type={
+                    'project': OverviewResearchAsset(status='unsupported'),
+                    'patent': OverviewResearchAsset(status='unsupported'),
+                    'funding': OverviewResearchAsset(supported=True, status='available'),
+                },
+                coverage={
+                    'projectEntities': False,
+                    'patentEntities': False,
+                    'fundingEntities': True,
+                },
+            ),
+            graph_preview=graph_preview,
+        )
+
+    async def mixed_search(self, request: KnowledgeMixedSearchRequest) -> KnowledgeMixedSearchResponse:
+        supported: list[str] = []
+        unsupported: list[str] = []
+        failed: list[str] = []
+        results: list[KnowledgeMixedSearchResult] = []
+        runnable_types = [
+            kind for kind in request.types if kind not in ('project', 'patent')
+        ]
+        # A mixed query must leave space for every supported source. Individual
+        # type tabs still receive the full requested limit.
+        per_source_limit = max(1, (request.limit + len(runnable_types) - 1) // len(runnable_types)) if runnable_types else request.limit
+
+        async def run(kind: str, operation: Any) -> None:
+            nonlocal results
+            try:
+                value = await operation()
+            except KnowledgeIntegrationError:
+                failed.append(kind)
+                return
+            supported.append(kind)
+            if kind == 'paper' or kind == 'graph':
+                papers = value.results
+                for paper in papers:
+                    results.append(KnowledgeMixedSearchResult(
+                        type=kind,
+                        id=paper.id,
+                        title=paper.title,
+                        summary=paper.abstract,
+                        metadata={'year': paper.year, 'venue': paper.venue},
+                        action=f"/papers/{quote(paper.id, safe='')}" + ('/graph' if kind == 'graph' else ''),
+                    ))
+            elif kind == 'scholar':
+                for scholar in value.results:
+                    results.append(KnowledgeMixedSearchResult(
+                        type='scholar',
+                        id=scholar.id,
+                        title=scholar.name,
+                        summary=f'收录论文 {scholar.paper_count} 篇',
+                        metadata={'paperCount': scholar.paper_count},
+                        action=f"/knowledge/scholars/{quote(scholar.id, safe='')}",
+                    ))
+            elif kind == 'funding':
+                for funding in value:
+                    results.append(KnowledgeMixedSearchResult(
+                        type='funding',
+                        id=funding.id,
+                        title=funding.name,
+                        summary=f'关联论文 {funding.count} 篇' if funding.count is not None else None,
+                        metadata=funding.metadata,
+                        action=f"/knowledge/funding?funding={quote(funding.id, safe='')}",
+                    ))
+            elif kind == 'topic':
+                for paper in value.results:
+                    results.append(KnowledgeMixedSearchResult(
+                        type='paper',
+                        id=paper.id,
+                        title=paper.title,
+                        summary=paper.abstract,
+                        metadata={'matchedBy': kind, 'year': paper.year, 'venue': paper.venue},
+                        action=f"/papers/{quote(paper.id, safe='')}",
+                    ))
+            elif kind == 'project' or kind == 'patent':
+                unsupported.append(kind)
+
+        requested = request.types
+        for kind in requested:
+            if kind in ('project', 'patent'):
+                unsupported.append(kind)
+                continue
+            if kind == 'paper':
+                await run(kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, topK=per_source_limit)))
+            elif kind == 'graph':
+                await run(kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, topK=per_source_limit)))
+            elif kind == 'scholar':
+                await run(kind, lambda: self.search_scholars(ScholarSearchRequest(query=request.query, limit=per_source_limit)))
+            elif kind == 'topic':
+                await run(kind, lambda: self.search_by_subject(
+                    request.query, offset=0, limit=per_source_limit
+                ))
+            elif kind == 'funding':
+                await run(kind, lambda: self._funding_highlights(
+                    request.query, limit=per_source_limit
+                ))
+
+        deduped: list[KnowledgeMixedSearchResult] = []
+        seen: set[tuple[str, str, str]] = set()
+        for result in results:
+            # A topic match can legitimately point to the same paper as the
+            # general paper search. Preserve that separate discovery path so
+            # the mixed result list can represent both capabilities.
+            matched_by = result.metadata.get('matchedBy')
+            key = (result.type, result.id, str(matched_by) if matched_by is not None else '')
+            if key not in seen:
+                seen.add(key)
+                deduped.append(result)
+        return KnowledgeMixedSearchResponse(
+            results=deduped[:request.limit],
+            supported_types=supported,
+            unsupported_types=unsupported,
+            failed_types=failed,
+        )
+
+    async def scholar(self, scholar_id: str) -> ScholarDetail:
+        body = await self.client.scholar(scholar_id)
+        detail = map_scholar_detail(body, retrieved_at=datetime.now(timezone.utc))
+        if detail.id != scholar_id:
+            raise KnowledgeIntegrationError.contract_violation()
+        return detail
+
+    async def search_by_subject(
+        self, subject: str, *, offset: int = 0, limit: int = 10
+    ) -> KnowledgeSubjectSearchResponse:
+        body = await self.client.search_by_subject(subject, offset=offset, limit=limit)
+        return self._map_subject_papers(body)
+
+    async def search_by_funding(
+        self, funding: str, *, top_k: int = 10
+    ) -> KnowledgeSearchResponse:
+        body = await self.client.search_by_funding(funding, top_k=top_k)
+        return self._map_related_papers(body)
+
+    async def search_fundings(
+        self, request: FundingSearchRequest
+    ) -> FundingSearchResponse:
+        body = await self.client.search_fundings(
+            request.query, limit=request.limit, offset=request.offset
+        )
+        results = body.get('results') if isinstance(body, dict) else None
+        if not isinstance(results, list):
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        return FundingSearchResponse(results=[
+            map_funding_summary(item, retrieved_at=retrieved_at) for item in results
+        ])
+
+    @staticmethod
+    def _map_related_papers(body: Any) -> KnowledgeSearchResponse:
+        results = body.get('results') if isinstance(body, dict) else None
+        if not isinstance(results, list):
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        total = body.get('total') if isinstance(body, dict) else None
+        if total is not None and (not isinstance(total, int) or total < 0):
+            raise KnowledgeIntegrationError.contract_violation()
+        return KnowledgeSearchResponse(
+            results=[map_search_result(item, retrieved_at=retrieved_at) for item in results],
+            total=total,
+        )
+
+    @staticmethod
+    def _map_subject_papers(body: Any) -> KnowledgeSubjectSearchResponse:
+        results = body.get('results') if isinstance(body, dict) else None
+        total = body.get('total') if isinstance(body, dict) else None
+        if not isinstance(results, list) or not isinstance(total, int) or total < 0:
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        return KnowledgeSubjectSearchResponse(
+            results=[map_search_result(item, retrieved_at=retrieved_at) for item in results],
+            total=total,
         )
 
     async def paper(self, paper_id: str) -> PaperDetail:

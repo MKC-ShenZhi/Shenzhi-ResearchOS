@@ -166,45 +166,6 @@ export interface PaperGraph {
   relatedIds: string[];
 }
 
-/** 专利 */
-export interface Patent {
-  id: string;
-  /** 专利名称 */
-  title: string;
-  /** 申请号,如 CN202410123456.7 */
-  applicationNo: string;
-  /** 申请人 */
-  applicant: string;
-  /** 公开日 YYYY-MM-DD(字典序即可排序) */
-  publishedAt: string;
-  /** 技术领域(左栏筛选维度) */
-  field: string;
-  status: "已授权" | "实质审查" | "已公开" | "PCT";
-  kind: "发明" | "实用新型";
-  /** 被引次数(排序用) */
-  citations: number;
-}
-
-/** 项目基金 */
-export interface Funding {
-  id: string;
-  /** 项目名称 */
-  title: string;
-  /** 批准号 */
-  grantNo: string;
-  /** 负责人 */
-  pi: string;
-  /** 依托单位 */
-  institution: string;
-  /** 资助金额,如 300 万元 */
-  amount: string;
-  /** 起止年限,如 2024-01 ~ 2027-12 */
-  period: string;
-  /** 资助类别(左栏筛选维度) */
-  category: string;
-  status: "在研" | "结题";
-}
-
 /** 机构统计项 */
 export interface InstitutionStat {
   label: string;

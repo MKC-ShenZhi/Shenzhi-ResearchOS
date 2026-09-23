@@ -50,12 +50,12 @@ const SUBMIT_SUB_NAV = [
 
 /** 「知识库」的子栏目 */
 const KNOWLEDGE_SUB_NAV = [
-  { href: "/knowledge/search", label: "论文检索" },
-  { href: "/knowledge/papers", label: "论文库" },
-  { href: "/knowledge/patents", label: "专利库" },
+  { href: "/knowledge/search", label: "论文库" },
+  { href: "/knowledge/papers", label: "我的文献" },
+  { href: "/knowledge/scholars", label: "学者库" },
+  { href: "/knowledge/topics", label: "主题库" },
   { href: "/knowledge/funding", label: "项目基金库" },
-  { href: "/knowledge/scholars", label: "学者关系" },
-  { href: "/knowledge/institutions", label: "研究机构" },
+  { href: "/knowledge/graph", label: "关系图谱" },
 ];
 
 /** 「AI 助手」的子栏目;AI 助手本身有独立对话页(/agents),不与子栏目共享 */
@@ -212,8 +212,12 @@ function ExpandableNav({
       setExpanded(href, true);
       if (pathname !== dest) router.push(dest, { scroll: false });
     } else if (routeActive) {
-      // 副标题展开且处于同一主标题下:折叠侧边栏
-      setCollapsed(true);
+      // Knowledge 子页面点击主标题返回总览;其他栏目保持原有折叠行为
+      if (href === "/knowledge" && pathname !== href) {
+        router.push(href, { scroll: false });
+      } else {
+        setCollapsed(true);
+      }
     } else if (pathname !== dest) {
       // 副标题展开但处于其他栏目:仅跳转
       router.push(dest, { scroll: false });
@@ -227,9 +231,12 @@ function ExpandableNav({
         title={label}
         onClick={() => {
           if (routeActive) {
-            // 再次点击当前栏目图标:展开侧边栏并展开副标题
+            // Knowledge 图标从子页面返回总览;其他栏目保持原有展开行为
             setCollapsed(false);
             setExpanded(href, true);
+            if (href === "/knowledge" && pathname !== href) {
+              router.push(href, { scroll: false });
+            }
           } else {
             // 先跳转,保持图标栏
             router.push(dest, { scroll: false });
@@ -281,7 +288,7 @@ function ExpandableNav({
       {open && (
         <div className="mt-0.5 flex flex-col gap-0.5 pl-6">
           {subNav.map((sub) => {
-            const active = pathname === sub.href;
+            const active = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
             return (
               <Link
                 key={sub.href}

@@ -135,7 +135,7 @@ test("Paper Detail uses the generic Back label without a source-specific parent"
   assert.doesNotMatch(`${detail}\n${detailPage}`, /返回论文检索|返回论文检索页|返回来源|返回对话/);
 });
 
-test("Paper entry points create returnTo while Paper scope links preserve it", () => {
+test("real Paper entry points create returnTo while capability-only Dashboard has no paper links", () => {
   const hook = readFileSync("hooks/use-current-internal-path.ts", "utf8");
   const discovery = readFileSync("features/search/components/paper-card.tsx", "utf8");
   const dashboard = readFileSync("features/knowledge/components/knowledge-dashboard.tsx", "utf8");
@@ -147,7 +147,7 @@ test("Paper entry points create returnTo while Paper scope links preserve it", (
   assert.match(hook, /usePathname\(\)/);
   assert.match(hook, /useSearchParams\(\)/);
   assert.match(discovery, /paperHref\(paper\.id, \{ mode: "create", source: returnTo \}\)/);
-  assert.match(dashboard, /paperHref\(item\.id, \{ mode: "create", source: returnTo \}\)/);
+  assert.doesNotMatch(dashboard, /paperHref|data-library/);
   assert.match(search, /returnTo=\{returnTo\}/);
   assert.match(chat, /paperReferenceHref\(ref, returnTo\)/);
   assert.match(privateGraph, /paperHref\(node\.paperId, \{ mode: "create", source: returnTo \}\)/);

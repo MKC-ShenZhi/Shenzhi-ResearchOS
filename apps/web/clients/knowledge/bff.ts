@@ -4,11 +4,21 @@ import { apiJson, ApiError } from "../backend/http";
 import { KnowledgeClientError, type KnowledgeClient } from "./client";
 import type {
   KnowledgeErrorCode,
+  KnowledgeFundingSearchParams,
+  KnowledgeFundingSearchResponse,
   KnowledgeGraph,
   KnowledgeGraphDepth,
+  KnowledgeMixedSearchParams,
+  KnowledgeMixedSearchResponse,
+  KnowledgeOverviewResponse,
+  KnowledgePersonalOverviewResponse,
   KnowledgePaperDetail,
+  KnowledgeScholarDetail,
+  KnowledgeScholarSearchParams,
+  KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
 } from "./types";
 
 /**
@@ -65,6 +75,33 @@ function toKnowledgeError(error: unknown): KnowledgeClientError {
 }
 
 export class BffKnowledgeClient implements KnowledgeClient {
+  async overview(): Promise<KnowledgeOverviewResponse> {
+    try {
+      return await apiJson<KnowledgeOverviewResponse>("/knowledge/overview");
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async personalOverview(): Promise<KnowledgePersonalOverviewResponse> {
+    try {
+      return await apiJson<KnowledgePersonalOverviewResponse>("/knowledge/personal-overview");
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse> {
+    try {
+      return await apiJson<KnowledgeMixedSearchResponse>("/knowledge/overview/search", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
   async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {
     try {
       return await apiJson<KnowledgeSearchResponse>("/knowledge/search", {
@@ -90,6 +127,78 @@ export class BffKnowledgeClient implements KnowledgeClient {
     try {
       return await apiJson<KnowledgePaperDetail>(
         `/knowledge/paper?paperId=${encodeURIComponent(paperId)}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchScholars(
+    params: KnowledgeScholarSearchParams,
+  ): Promise<KnowledgeScholarSearchResponse> {
+    const query = new URLSearchParams({
+      q: params.query,
+      limit: String(params.limit ?? 20),
+      offset: String(params.offset ?? 0),
+    });
+    try {
+      return await apiJson<KnowledgeScholarSearchResponse>(
+        `/knowledge/scholars/search?${query.toString()}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async scholar(scholarId: string): Promise<KnowledgeScholarDetail> {
+    try {
+      return await apiJson<KnowledgeScholarDetail>(
+        `/knowledge/scholars/${encodeURIComponent(scholarId)}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchFundings(
+    params: KnowledgeFundingSearchParams,
+  ): Promise<KnowledgeFundingSearchResponse> {
+    const query = new URLSearchParams();
+    const searchText = params.query?.trim();
+    if (searchText) query.set("q", searchText);
+    query.set("limit", String(params.limit ?? 20));
+    query.set("offset", String(params.offset ?? 0));
+    try {
+      return await apiJson<KnowledgeFundingSearchResponse>(
+        `/knowledge/fundings/search?${query.toString()}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchBySubject(
+    subject: string,
+    offset = 0,
+    limit = 10,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSubjectSearchResponse> {
+    const query = new URLSearchParams({ subject, offset: String(offset), limit: String(limit) });
+    try {
+      return await apiJson<KnowledgeSubjectSearchResponse>(
+        `/knowledge/subjects/search?${query.toString()}`,
+        { signal },
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchByFunding(funding: string, topK = 10): Promise<KnowledgeSearchResponse> {
+    const query = new URLSearchParams({ funding, topK: String(topK) });
+    try {
+      return await apiJson<KnowledgeSearchResponse>(
+        `/knowledge/funding/search?${query.toString()}`,
       );
     } catch (error) {
       throw toKnowledgeError(error);

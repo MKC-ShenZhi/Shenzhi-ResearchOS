@@ -7,12 +7,50 @@ import {
   mockPaperDetail,
 } from "./mock-data";
 import type {
+  KnowledgeFundingSearchParams,
+  KnowledgeFundingSearchResponse,
+  KnowledgeFundingSummary,
   KnowledgeGraph,
+  KnowledgeMixedSearchParams,
+  KnowledgeMixedSearchResponse,
+  KnowledgeOverviewResponse,
+  KnowledgePersonalOverviewResponse,
   KnowledgePaperDetail,
   KnowledgePaperHit,
+  KnowledgeScholarDetail,
+  KnowledgeScholarSearchParams,
+  KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
 } from "./types";
+
+const MOCK_SCHOLAR: KnowledgeScholarDetail = {
+  id: "author:mock:geoffrey-hinton",
+  name: "Geoffrey Hinton",
+  paperCount: 2,
+  years: [2021, 2022],
+  conferences: ["NeurIPS 2021", "NeurIPS 2022"],
+  topics: ["neural networks", "interpretable machine learning"],
+  funding: [],
+  institutions: [],
+  coauthors: [],
+  papers: MOCK_PAPERS.slice(0, 2).map((paper) => ({
+    id: paper.id,
+    title: paper.title,
+    year: paper.year,
+  })),
+  provenance: { source: "mock" },
+};
+
+const MOCK_FUNDINGS: KnowledgeFundingSummary[] = [
+  {
+    id: "funding:mock:research",
+    name: "Mock Research Fund",
+    paperCount: 2,
+    provenance: { source: "mock" },
+  },
+];
 
 /** Mock 可模拟的行为状态 */
 export type MockScenario =
@@ -74,6 +112,79 @@ export class MockKnowledgeClient implements KnowledgeClient {
     return effective;
   }
 
+  async overview(): Promise<KnowledgeOverviewResponse> {
+    await this.wait();
+    this.throwIfNeeded();
+    return {
+      asOf: new Date().toISOString(),
+      scope: "mock fixture",
+      paperLibrary: {
+        paperCount: MOCK_PAPERS.length,
+        status: "available",
+        popularTags: [],
+        recentPapers: [],
+      },
+      scholarHighlights: [],
+      topicHighlights: [],
+      researchAssets: {
+        total: null,
+        status: "unsupported",
+        highlights: [],
+        byType: {
+          project: { count: null, supported: false, status: "unsupported" },
+          patent: { count: null, supported: false, status: "unsupported" },
+          funding: { count: null, supported: false, status: "unsupported" },
+        },
+        coverage: {},
+      },
+      graphPreview: {
+        supported: false,
+        status: "unsupported",
+        rootPaperId: null,
+        nodes: [],
+        edges: [],
+      },
+    };
+  }
+
+  async personalOverview(): Promise<KnowledgePersonalOverviewResponse> {
+    await this.wait();
+    this.throwIfNeeded();
+    return { authRequired: false, folders: [], recentPapers: [] };
+  }
+
+  async overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse> {
+    await this.wait();
+    const scenario = this.throwIfNeeded(params.query);
+    if (scenario === "zero_results") {
+      return { results: [], supportedTypes: params.types, unsupportedTypes: [], failedTypes: [], nextCursor: null };
+    }
+    const response = await this.search({
+      query: params.query,
+      topK: params.limit ?? 20,
+      yearFrom: null,
+      yearTo: null,
+      venue: [],
+      author: [],
+      keyword: [],
+      subject: [],
+    });
+    return {
+      results: response.results.map((paper) => ({
+        type: "paper",
+        id: paper.id,
+        title: paper.title,
+        summary: paper.abstract,
+        metadata: { year: paper.year, venue: paper.venue },
+        action: `/papers/${encodeURIComponent(paper.id)}`,
+      })),
+      supportedTypes: params.types.filter((type) => type === "paper"),
+      unsupportedTypes: params.types.filter((type) => type !== "paper"),
+      failedTypes: [],
+      nextCursor: null,
+    };
+  }
+
   async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {
     await this.wait();
     const scenario = this.throwIfNeeded(params.query);
@@ -115,6 +226,74 @@ export class MockKnowledgeClient implements KnowledgeClient {
     const detail = mockPaperDetail(paperId);
     if (!detail) throw KnowledgeClientError.notFound();
     return detail;
+  }
+
+  async searchScholars(
+    params: KnowledgeScholarSearchParams,
+  ): Promise<KnowledgeScholarSearchResponse> {
+    await this.wait();
+    const scenario = this.throwIfNeeded(params.query);
+    if (scenario === "zero_results") return { results: [] };
+    const query = params.query.trim().toLowerCase();
+    if (query && !MOCK_SCHOLAR.name.toLowerCase().includes(query)) return { results: [] };
+    return { results: [MOCK_SCHOLAR] };
+  }
+
+  async scholar(scholarId: string): Promise<KnowledgeScholarDetail> {
+    await this.wait();
+    if (this.scenario === "timeout") throw KnowledgeClientError.timeout();
+    if (this.scenario === "upstream_unavailable") throw KnowledgeClientError.unavailable();
+    if (scholarId !== MOCK_SCHOLAR.id) throw KnowledgeClientError.notFound("未找到对应学者");
+    return MOCK_SCHOLAR;
+  }
+
+  async searchFundings(
+    params: KnowledgeFundingSearchParams,
+  ): Promise<KnowledgeFundingSearchResponse> {
+    await this.wait();
+    const scenario = this.throwIfNeeded(params.query ?? "");
+    if (scenario === "zero_results") return { results: [] };
+    const query = (params.query ?? "").trim().toLowerCase();
+    const matches = query
+      ? MOCK_FUNDINGS.filter((funding) =>
+        `${funding.id} ${funding.name}`.toLowerCase().includes(query),
+      )
+      : MOCK_FUNDINGS;
+    const offset = params.offset ?? 0;
+    const limit = params.limit ?? 20;
+    return { results: matches.slice(offset, offset + limit) };
+  }
+
+  async searchBySubject(
+    subject: string,
+    offset = 0,
+    limit = 10,
+  ): Promise<KnowledgeSubjectSearchResponse> {
+    const response = await this.search({
+      query: subject,
+      topK: limit,
+      offset,
+      yearFrom: null,
+      yearTo: null,
+      venue: [],
+      author: [],
+      keyword: [],
+      subject: [],
+    });
+    return { results: response.results, total: response.results.length };
+  }
+
+  async searchByFunding(funding: string, topK = 10): Promise<KnowledgeSearchResponse> {
+    return this.search({
+      query: funding,
+      topK,
+      yearFrom: null,
+      yearTo: null,
+      venue: [],
+      author: [],
+      keyword: [],
+      subject: [],
+    });
   }
 
   async graph(paperId: string): Promise<KnowledgeGraph> {
