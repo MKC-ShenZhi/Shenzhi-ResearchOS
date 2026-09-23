@@ -232,26 +232,23 @@ export function KnowledgeDashboard() {
           {overview?.scholarHighlights.length ? <div className="grid grid-cols-3 gap-2">{overview.scholarHighlights.slice(0, 3).map((item) => <Link key={item.id} href={`/knowledge/scholars/${encodeURIComponent(item.id)}`} className="min-w-0 rounded-xl p-2 hover:bg-success-soft/60"><div className="mx-auto flex size-10 items-center justify-center rounded-full bg-success text-sm font-semibold text-white">{item.name.slice(0, 1)}</div><div className="mt-2 truncate text-center text-sm font-medium text-ink">{item.name}</div><div className="mt-1 truncate text-center text-xs text-muted">{item.count === null ? "数据暂无" : `${item.count.toLocaleString("zh-CN")} 篇论文`}</div></Link>)}</div> : <p className="rounded-2xl bg-surface p-4 text-sm text-muted">数据暂无</p>}
         </CardShell>
 
-        <CardShell card={CARDS[3]} className="self-start">
-          <div className="rounded-2xl border border-brand-cyan/15 bg-brand-cyan/5 p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-ink">热门主题</p>
-                <p className="mt-1 text-xs text-muted">来自知识底座的真实主题</p>
-              </div>
-              {overview?.topicHighlights.length ? <span className="rounded-full bg-card px-2.5 py-1 text-[11px] text-muted">{Math.min(overview.topicHighlights.length, 4)} 个主题</span> : null}
+        <CardShell card={CARDS[3]}>
+          <div className="grid min-h-[280px] content-center gap-5 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink">热门研究主题</p>
+              <p className="mt-1 text-xs text-muted">来自知识底座的真实主题</p>
+              {papers?.popularTags.length ? <div className="mt-4 flex flex-wrap gap-2">{papers.popularTags.slice(0, 6).map((tag) => <span key={tag.name} className="rounded-lg bg-brand-cyan/10 px-3 py-2 text-xs font-medium text-brand-cyan">{tag.name}</span>)}</div> : overview?.topicHighlights.length ? <div className="mt-4 flex flex-wrap gap-2">{overview.topicHighlights.slice(0, 6).map((item) => <Link key={item.id} href={`/knowledge/topics?subject=${encodeURIComponent(item.metadata.sourceSubject as string ?? item.name)}`} className="rounded-lg bg-brand-cyan/10 px-3 py-2 text-xs font-medium text-brand-cyan transition hover:bg-brand-cyan/20"><span className="block max-w-32 truncate">{item.name}</span></Link>)}</div> : <p className="mt-4 text-xs leading-5 text-muted">暂无真实主题数据</p>}
             </div>
-            {papers?.popularTags.length ? <div className="mt-4 flex flex-wrap gap-2">{papers.popularTags.map((tag) => <span key={tag.name} className="rounded-full bg-card px-3 py-2 text-xs font-medium text-brand-cyan shadow-sm">#{tag.name}{tag.count === null ? "" : ` · ${tag.count}`}</span>)}</div> : overview?.topicHighlights.length ? <div className="mt-4 grid grid-cols-2 gap-2">{overview.topicHighlights.slice(0, 4).map((item) => <Link key={item.id} href={`/knowledge/topics?subject=${encodeURIComponent(item.metadata.sourceSubject as string ?? item.name)}`} className="min-w-0 rounded-xl bg-card px-3 py-2.5 text-sm font-medium text-brand-cyan shadow-sm transition hover:-translate-y-0.5 hover:bg-primary-soft"><span className="block truncate">{item.name}</span></Link>)}</div> : <p className="mt-4 text-xs leading-5 text-muted">暂无真实主题数据</p>}
-          </div>
-          <div className="mt-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-ink">主题论文数量</p>
-                <p className="mt-1 text-xs text-muted">按主题匹配论文总量排序</p>
+            <div className="min-w-0 border-border md:border-l md:pl-5" role="img" aria-label="四个主题的论文数量柱状图">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink">各主题论文数量</p>
+                  <p className="mt-1 text-xs text-muted">按主题匹配论文总量排序</p>
+                </div>
+                {topicStats.length ? <span className="text-xs text-muted">共 {topicStats.length} 项</span> : null}
               </div>
-              {topicStats.length ? <span className="text-xs text-muted">共 {topicStats.length} 项</span> : null}
+              {topicStats.length ? <div className="mt-4 flex h-44 items-end gap-2 border-b border-border px-1 sm:gap-3">{topicStats.map((item) => <Link key={item.id} href={`/knowledge/topics?subject=${encodeURIComponent(item.metadata.sourceSubject as string ?? item.name)}`} className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1"><span className="text-[11px] font-semibold text-brand-cyan">{item.count?.toLocaleString("zh-CN")}</span><span className="relative flex h-28 w-full max-w-9 items-end overflow-hidden rounded-t-lg bg-brand-cyan/15"><span className="w-full rounded-t-lg bg-brand-cyan/80 transition-all group-hover:bg-primary" style={{ height: `${Math.max(14, ((item.count ?? 0) / maxTopicCount) * 100)}%` }} /></span><span className="w-full truncate text-center text-[10px] text-muted group-hover:text-primary" title={item.name}>{item.name}</span></Link>)}</div> : <p className="mt-4 rounded-xl bg-surface px-3 py-3 text-xs leading-5 text-muted">暂无真实主题论文数量统计</p>}
             </div>
-            {topicStats.length ? <div className="mt-5 space-y-4">{topicStats.map((item) => <Link key={item.id} href={`/knowledge/topics?subject=${encodeURIComponent(item.metadata.sourceSubject as string ?? item.name)}`} className="group block"><div className="mb-1.5 flex items-center justify-between gap-3 text-xs"><span className="min-w-0 truncate font-medium text-ink group-hover:text-primary">{item.name}</span><span className="shrink-0 font-semibold text-brand-cyan">{item.count?.toLocaleString("zh-CN")} 篇</span></div><div className="h-2 overflow-hidden rounded-full bg-surface"><div className="h-full rounded-full bg-brand-cyan transition-all group-hover:bg-primary" style={{ width: `${Math.max(4, ((item.count ?? 0) / maxTopicCount) * 100)}%` }} /></div></Link>)}</div> : <p className="mt-4 rounded-xl bg-surface px-3 py-3 text-xs leading-5 text-muted">暂无真实主题论文数量统计</p>}
           </div>
         </CardShell>
 
