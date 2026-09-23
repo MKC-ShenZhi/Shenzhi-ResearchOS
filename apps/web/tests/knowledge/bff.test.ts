@@ -137,7 +137,7 @@ test("BFF client requests Scholar, Subject and Funding through stable routes", a
     const client = new BffKnowledgeClient();
     await client.searchScholars({ query: "Hinton", limit: 20, offset: 0 });
     const scholar = await client.scholar(scholarId);
-    await client.searchBySubject("graph", 20);
+    await client.searchBySubject("graph", 10, 20);
     await client.searchByFunding("NSF", 20);
     assert.equal(scholar.id, scholarId);
   });
@@ -145,7 +145,7 @@ test("BFF client requests Scholar, Subject and Funding through stable routes", a
   assert.deepEqual(requests, [
     "/api/v1/knowledge/scholars/search?q=Hinton&limit=20&offset=0",
     `/api/v1/knowledge/scholars/${encodeURIComponent(scholarId)}`,
-    "/api/v1/knowledge/subjects/search?subject=graph&topK=20",
+    "/api/v1/knowledge/subjects/search?subject=graph&offset=10&limit=20",
     "/api/v1/knowledge/funding/search?funding=NSF&topK=20",
   ]);
   assert.ok(requests.every((request) => request.startsWith("/api/v1/knowledge/")));

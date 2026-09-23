@@ -8,6 +8,10 @@ import type {
   KnowledgeFundingSearchResponse,
   KnowledgeGraph,
   KnowledgeGraphDepth,
+  KnowledgeMixedSearchParams,
+  KnowledgeMixedSearchResponse,
+  KnowledgeOverviewResponse,
+  KnowledgePersonalOverviewResponse,
   KnowledgePaperDetail,
   KnowledgeScholarDetail,
   KnowledgeScholarSearchParams,
@@ -71,6 +75,33 @@ function toKnowledgeError(error: unknown): KnowledgeClientError {
 }
 
 export class BffKnowledgeClient implements KnowledgeClient {
+  async overview(): Promise<KnowledgeOverviewResponse> {
+    try {
+      return await apiJson<KnowledgeOverviewResponse>("/knowledge/overview");
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async personalOverview(): Promise<KnowledgePersonalOverviewResponse> {
+    try {
+      return await apiJson<KnowledgePersonalOverviewResponse>("/knowledge/personal-overview");
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse> {
+    try {
+      return await apiJson<KnowledgeMixedSearchResponse>("/knowledge/overview/search", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
   async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {
     try {
       return await apiJson<KnowledgeSearchResponse>("/knowledge/search", {

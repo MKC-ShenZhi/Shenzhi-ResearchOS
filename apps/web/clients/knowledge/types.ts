@@ -219,6 +219,108 @@ export interface KnowledgeGraph {
   provenance?: unknown;
 }
 
+export type KnowledgeOverviewStatus =
+  | "available"
+  | "empty"
+  | "unsupported"
+  | "pending"
+  | "error";
+
+export interface KnowledgeOverviewTag {
+  name: string;
+  count: number | null;
+}
+
+export interface KnowledgeOverviewPaperLibrary {
+  paperCount: number | null;
+  status: KnowledgeOverviewStatus;
+  popularTags: KnowledgeOverviewTag[];
+  recentPapers: KnowledgePaperDetail[];
+}
+
+export interface KnowledgeOverviewHighlight {
+  id: string;
+  name: string;
+  count: number | null;
+  status: KnowledgeOverviewStatus;
+  metadata: Record<string, unknown>;
+}
+
+export interface KnowledgeOverviewResearchAsset {
+  count: number | null;
+  supported: boolean;
+  status: KnowledgeOverviewStatus;
+}
+
+export interface KnowledgeOverviewResponse {
+  asOf: string;
+  scope: string;
+  paperLibrary: KnowledgeOverviewPaperLibrary;
+  scholarHighlights: KnowledgeOverviewHighlight[];
+  topicHighlights: KnowledgeOverviewHighlight[];
+  researchAssets: {
+    total: number | null;
+    status: KnowledgeOverviewStatus;
+    highlights: KnowledgeOverviewHighlight[];
+    byType: Record<string, KnowledgeOverviewResearchAsset>;
+    coverage: Record<string, boolean>;
+  };
+  graphPreview: {
+    supported: boolean;
+    status: KnowledgeOverviewStatus;
+    rootPaperId: string | null;
+    nodes: KnowledgeGraphNode[];
+    edges: KnowledgeGraphEdge[];
+  };
+}
+
+export interface KnowledgePersonalOverviewResponse {
+  authRequired: boolean;
+  folders: Array<{
+    id: number;
+    name: string;
+    isDefault: boolean;
+    paperCount: number;
+  }>;
+  recentPapers: Array<KnowledgePaperDetail & {
+    paper_id: string;
+    last_viewed_at: string;
+  }>;
+}
+
+export type KnowledgeMixedSearchType =
+  | "paper"
+  | "scholar"
+  | "topic"
+  | "project"
+  | "patent"
+  | "funding"
+  | "graph";
+
+export interface KnowledgeMixedSearchParams {
+  query: string;
+  types: KnowledgeMixedSearchType[];
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface KnowledgeMixedSearchResult {
+  type: KnowledgeMixedSearchType;
+  id: string;
+  title: string;
+  summary: string | null;
+  metadata: Record<string, unknown>;
+  action: string | null;
+}
+
+export interface KnowledgeMixedSearchResponse {
+  results: KnowledgeMixedSearchResult[];
+  supportedTypes: KnowledgeMixedSearchType[];
+  unsupportedTypes: KnowledgeMixedSearchType[];
+  failedTypes: KnowledgeMixedSearchType[];
+  nextCursor: string | null;
+}
+
 /** Backend-supported graph depth. */
 export type KnowledgeGraphDepth = 1 | 2;
 

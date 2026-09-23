@@ -14,7 +14,11 @@ from app.integrations.knowledge.adapter import (
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.main import app
-from app.schemas.knowledge import FundingSearchRequest, ScholarSearchRequest
+from app.schemas.knowledge import (
+    FundingSearchRequest,
+    KnowledgeMixedSearchRequest,
+    ScholarSearchRequest,
+)
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 
 
@@ -77,6 +81,25 @@ FUNDING_SEARCH_RESPONSE = {
     }],
     'query': 'NSF',
 }
+GRAPH_RESPONSE = {
+    'rootId': PAPER_ID,
+    'nodes': [
+        {'id': PAPER_ID, 'text': 'A real paper', 'data': {'type': 'Paper'}},
+        {'id': 'author:opaque:1', 'text': 'Ada Lovelace', 'data': {'type': 'Author'}},
+        {'id': 'topic:opaque:1', 'text': 'Graph learning', 'data': {'type': 'Topic'}},
+    ],
+    'lines': [
+        {'from': PAPER_ID, 'to': 'author:opaque:1', 'data': {'type': 'AUTHORED_BY'}},
+        {'from': PAPER_ID, 'to': 'topic:opaque:1', 'data': {'type': 'HAS_TOPIC'}},
+    ],
+}
+FUNDING_CANDIDATE_RESPONSE = {
+    'results': [
+        {'funding_id': 'funding:real:1', 'name': '国家自然科学基金', 'paper_count': 12},
+        {'funding_id': 'funding:real:2', 'name': 'National Science Foundation', 'paper_count': 8},
+    ],
+    'query': '',
+}
 
 
 class KnowledgeEntityMappingTests(unittest.TestCase):
@@ -133,6 +156,20 @@ class KnowledgeEntityMappingTests(unittest.TestCase):
 
 
 class EntityFixtureClient:
+    async def paper_summary(self):
+        return {'paper_count': 100}
+
+    async def research_assets_summary(self):
+        return {'research_asset_count': 7353}
+
+    async def search_fundings(self, query, *, limit, offset):
+        self.funding_candidates = (query, limit, offset)
+        return FUNDING_SEARCH_RESPONSE if query == 'NSF' else FUNDING_CANDIDATE_RESPONSE
+
+    async def search(self, payload):
+        self.paper_search = payload
+        return RELATED_PAPER_RESPONSE
+
     async def search_scholars(self, query, *, limit, offset):
         self.scholar_search = (query, limit, offset)
         return SCHOLAR_SEARCH_RESPONSE
@@ -149,9 +186,9 @@ class EntityFixtureClient:
         self.funding_search = (funding, top_k)
         return RELATED_PAPER_RESPONSE
 
-    async def search_fundings(self, query, *, limit, offset):
-        self.funding_candidates = (query, limit, offset)
-        return FUNDING_SEARCH_RESPONSE
+    async def graph(self, paper_id, depth):
+        self.graph_request = (paper_id, depth)
+        return GRAPH_RESPONSE
 
 
 class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
@@ -183,6 +220,66 @@ class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(client.funding_candidates, (None, 20, 0))
+
+    async def test_mixed_search_uses_public_top_k_alias_and_preserves_each_supported_source(self):
+        class MixedFixtureClient(EntityFixtureClient):
+            async def search(self, payload):
+                self.search_payloads = getattr(self, 'search_payloads', []) + [payload]
+                return RELATED_PAPER_RESPONSE
+
+            async def search_by_subject(self, subject, *, offset, limit):
+                self.subject_search = (subject, offset, limit)
+                return {'total': 1, 'results': [{
+                    **RELATED_PAPER_RESPONSE['results'][0],
+                    'paper_id': 'paper:opaque:topic',
+                }]}
+
+        client = MixedFixtureClient()
+        result = await KnowledgeAdapter(client).mixed_search(KnowledgeMixedSearchRequest(
+            query='graph',
+            types=['paper', 'scholar', 'topic', 'project', 'patent', 'funding', 'graph'],
+            limit=10,
+        ))
+
+        self.assertEqual([payload['top_k'] for payload in client.search_payloads], [2, 2])
+        self.assertEqual(client.scholar_search, ('graph', 2, 0))
+        self.assertEqual(client.subject_search, ('graph', 0, 2))
+        self.assertEqual(client.funding_candidates, ('graph', 2, 0))
+        self.assertEqual(result.supported_types, ['paper', 'scholar', 'topic', 'funding', 'graph'])
+        self.assertEqual(result.unsupported_types, ['project', 'patent'])
+        self.assertIn('scholar', [item.type for item in result.results])
+        self.assertIn('funding', [item.type for item in result.results])
+        self.assertTrue(any(item.metadata.get('matchedBy') == 'topic' for item in result.results))
+
+    async def test_overview_exposes_real_scholar_and_funding_candidates(self):
+        client = EntityFixtureClient()
+        result = await KnowledgeAdapter(client).overview()
+
+        self.assertEqual(client.scholar_search, ('a', 3, 0))
+        self.assertEqual(
+            [(item.id, item.name, item.count) for item in result.scholar_highlights],
+            [(SCHOLAR_ID, 'Geoffrey Hinton', 7)],
+        )
+        self.assertEqual(client.funding_candidates, (None, 3, 0))
+        self.assertEqual(
+            [(item.name, item.count) for item in result.topic_highlights],
+            [('大语言模型', 327), ('模型压缩', 327), ('低秩压缩', 327), ('论证与辩论', 327)],
+        )
+        self.assertEqual(client.graph_request, (PAPER_ID, 1))
+        self.assertTrue(result.graph_preview.supported)
+        self.assertEqual(result.graph_preview.root_paper_id, PAPER_ID)
+        self.assertEqual(
+            [node.id for node in result.graph_preview.nodes],
+            [PAPER_ID, 'author:opaque:1', 'topic:opaque:1'],
+        )
+        self.assertEqual(result.research_assets.total, 7353)
+        self.assertEqual(
+            [item.name for item in result.research_assets.highlights],
+            ['国家自然科学基金', 'National Science Foundation'],
+        )
+        self.assertIsNone(result.research_assets.by_type['funding'].count)
+        self.assertTrue(result.research_assets.by_type['funding'].supported)
+        self.assertTrue(result.research_assets.coverage['fundingEntities'])
 
     async def test_scholar_search_and_detail_mapping(self):
         client = EntityFixtureClient()

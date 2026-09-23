@@ -7,6 +7,10 @@ import type {
   KnowledgeFundingSearchResponse,
   KnowledgeGraphDepth,
   KnowledgeGraph,
+  KnowledgeMixedSearchParams,
+  KnowledgeMixedSearchResponse,
+  KnowledgeOverviewResponse,
+  KnowledgePersonalOverviewResponse,
   KnowledgePaperDetail,
   KnowledgeScholarDetail,
   KnowledgeScholarSearchParams,
@@ -24,6 +28,12 @@ import type {
  * 显式配置用于开发、测试或 demo fixture。
  */
 export interface KnowledgeClient {
+  /** 总览页公共统计；所有数字必须来自真实后端契约 */
+  overview(): Promise<KnowledgeOverviewResponse>;
+  /** 总览页个人文献统计；匿名会话返回 authRequired */
+  personalOverview(): Promise<KnowledgePersonalOverviewResponse>;
+  /** 总览页跨实体混合搜索 */
+  overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse>;
   /** 论文搜索；无匹配返回空 results（不是错误） */
   search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse>;
   /** 论文详情；id 作为 opaque string 使用 */

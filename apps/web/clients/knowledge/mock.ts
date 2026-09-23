@@ -11,6 +11,10 @@ import type {
   KnowledgeFundingSearchResponse,
   KnowledgeFundingSummary,
   KnowledgeGraph,
+  KnowledgeMixedSearchParams,
+  KnowledgeMixedSearchResponse,
+  KnowledgeOverviewResponse,
+  KnowledgePersonalOverviewResponse,
   KnowledgePaperDetail,
   KnowledgePaperHit,
   KnowledgeScholarDetail,
@@ -106,6 +110,79 @@ export class MockKnowledgeClient implements KnowledgeClient {
     if (effective === "timeout") throw KnowledgeClientError.timeout();
     if (effective === "upstream_unavailable") throw KnowledgeClientError.unavailable();
     return effective;
+  }
+
+  async overview(): Promise<KnowledgeOverviewResponse> {
+    await this.wait();
+    this.throwIfNeeded();
+    return {
+      asOf: new Date().toISOString(),
+      scope: "mock fixture",
+      paperLibrary: {
+        paperCount: MOCK_PAPERS.length,
+        status: "available",
+        popularTags: [],
+        recentPapers: [],
+      },
+      scholarHighlights: [],
+      topicHighlights: [],
+      researchAssets: {
+        total: null,
+        status: "unsupported",
+        highlights: [],
+        byType: {
+          project: { count: null, supported: false, status: "unsupported" },
+          patent: { count: null, supported: false, status: "unsupported" },
+          funding: { count: null, supported: false, status: "unsupported" },
+        },
+        coverage: {},
+      },
+      graphPreview: {
+        supported: false,
+        status: "unsupported",
+        rootPaperId: null,
+        nodes: [],
+        edges: [],
+      },
+    };
+  }
+
+  async personalOverview(): Promise<KnowledgePersonalOverviewResponse> {
+    await this.wait();
+    this.throwIfNeeded();
+    return { authRequired: false, folders: [], recentPapers: [] };
+  }
+
+  async overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse> {
+    await this.wait();
+    const scenario = this.throwIfNeeded(params.query);
+    if (scenario === "zero_results") {
+      return { results: [], supportedTypes: params.types, unsupportedTypes: [], failedTypes: [], nextCursor: null };
+    }
+    const response = await this.search({
+      query: params.query,
+      topK: params.limit ?? 20,
+      yearFrom: null,
+      yearTo: null,
+      venue: [],
+      author: [],
+      keyword: [],
+      subject: [],
+    });
+    return {
+      results: response.results.map((paper) => ({
+        type: "paper",
+        id: paper.id,
+        title: paper.title,
+        summary: paper.abstract,
+        metadata: { year: paper.year, venue: paper.venue },
+        action: `/papers/${encodeURIComponent(paper.id)}`,
+      })),
+      supportedTypes: params.types.filter((type) => type === "paper"),
+      unsupportedTypes: params.types.filter((type) => type !== "paper"),
+      failedTypes: [],
+      nextCursor: null,
+    };
   }
 
   async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {

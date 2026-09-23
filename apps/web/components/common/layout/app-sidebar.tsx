@@ -212,8 +212,12 @@ function ExpandableNav({
       setExpanded(href, true);
       if (pathname !== dest) router.push(dest, { scroll: false });
     } else if (routeActive) {
-      // 副标题展开且处于同一主标题下:折叠侧边栏
-      setCollapsed(true);
+      // Knowledge 子页面点击主标题返回总览;其他栏目保持原有折叠行为
+      if (href === "/knowledge" && pathname !== href) {
+        router.push(href, { scroll: false });
+      } else {
+        setCollapsed(true);
+      }
     } else if (pathname !== dest) {
       // 副标题展开但处于其他栏目:仅跳转
       router.push(dest, { scroll: false });
@@ -227,9 +231,12 @@ function ExpandableNav({
         title={label}
         onClick={() => {
           if (routeActive) {
-            // 再次点击当前栏目图标:展开侧边栏并展开副标题
+            // Knowledge 图标从子页面返回总览;其他栏目保持原有展开行为
             setCollapsed(false);
             setExpanded(href, true);
+            if (href === "/knowledge" && pathname !== href) {
+              router.push(href, { scroll: false });
+            }
           } else {
             // 先跳转,保持图标栏
             router.push(dest, { scroll: false });

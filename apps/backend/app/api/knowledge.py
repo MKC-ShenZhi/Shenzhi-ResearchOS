@@ -9,24 +9,31 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from app.core.identity import require_bff
+from app.core.identity import request_identity, require_bff
 from app.core.logging import log_exception
 from app.core.request_context import get_request_id
 from app.core.responses import ok
 from app.schemas.knowledge import (
     FundingSearchRequest,
     KnowledgeError,
+    KnowledgeMixedSearchRequest,
+    KnowledgePersonalOverviewResponse,
     KnowledgeSearchRequest,
+    PersonalRecentPaper,
     RelatedPaperSearchRequest,
     ScholarSearchRequest,
 )
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
+from app.services.library.collections import CollectionService
+from app.services.library.reading_history import ReadingHistoryService
 from app.schemas.knowledge import PaperBatchRequest
 
 
 router = APIRouter(prefix='/api/v1/knowledge', tags=['knowledge'])
 papers_router = APIRouter(prefix='/api/v1', tags=['papers'])
 service = KnowledgeService()
+collection_service = CollectionService()
+reading_history_service = ReadingHistoryService()
 logger = logging.getLogger(__name__)
 
 
@@ -96,6 +103,67 @@ async def search(
 
     try:
         response = await service.search(search_request)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/overview')
+async def overview(
+    request: Request,
+    _credential: None = Depends(require_bff),
+):
+    try:
+        response = await service.overview()
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/personal-overview')
+async def personal_overview(
+    request: Request,
+    _credential: None = Depends(require_bff),
+):
+    try:
+        identity = request_identity(request)
+        if identity.kind != 'user':
+            return ok(KnowledgePersonalOverviewResponse(auth_required=True).model_dump(
+                mode='json', by_alias=True
+            ))
+        folders = await collection_service.folders(identity.subject_id)
+        history = await reading_history_service.list(identity.subject_id, 1, 5, '')
+        response = KnowledgePersonalOverviewResponse(
+            folders=[folder.model_dump() for folder in folders.folders],
+            recent_papers=[
+                PersonalRecentPaper.model_validate(item.model_dump())
+                for item in history.items
+            ],
+        )
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.post('/overview/search')
+async def overview_search(
+    request: Request,
+    _credential: None = Depends(require_bff),
+):
+    try:
+        body = await request.json()
+        search_request = KnowledgeMixedSearchRequest.model_validate(body)
+    except (ValidationError, ValueError, UnicodeDecodeError):
+        return invalid_argument(request, '混合检索参数不合法')
+
+    try:
+        response = await service.mixed_search(search_request)
     except KnowledgeServiceError as error:
         return _error_payload(error, request)
     except Exception as error:

@@ -8,6 +8,9 @@ from app.schemas.knowledge import (
     KnowledgeError,
     FundingSearchRequest,
     FundingSearchResponse,
+    KnowledgeMixedSearchRequest,
+    KnowledgeMixedSearchResponse,
+    KnowledgeOverviewResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
     KnowledgeSubjectSearchResponse,
@@ -81,6 +84,20 @@ class KnowledgeService:
         )
         try:
             return await self.adapter.search_scholars(resolved_request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def overview(self) -> KnowledgeOverviewResponse:
+        try:
+            return await self.adapter.overview()
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def mixed_search(
+        self, request: KnowledgeMixedSearchRequest
+    ) -> KnowledgeMixedSearchResponse:
+        try:
+            return await self.adapter.mixed_search(request)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 

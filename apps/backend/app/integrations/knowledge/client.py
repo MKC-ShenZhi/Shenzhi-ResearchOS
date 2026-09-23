@@ -17,6 +17,8 @@ from app.integrations.knowledge.schemas import (
     UpstreamGraphResponse,
     UpstreamFundingSearchResponse,
     UpstreamPaperResponse,
+    UpstreamPaperSummaryResponse,
+    UpstreamResearchAssetsSummaryResponse,
     UpstreamScholarResponse,
     UpstreamScholarSearchResponse,
     UpstreamSearchResponse,
@@ -71,6 +73,22 @@ class KnowledgeBaseClient:
             validate=lambda value: isinstance(value.get('results'), list),
         )
         return cast(UpstreamScholarSearchResponse, body)
+
+    async def paper_summary(self) -> UpstreamPaperSummaryResponse:
+        body = await self._request_json(
+            'GET',
+            '/api/knowledge/papers/summary',
+            validate=lambda value: 'paper_count' in value,
+        )
+        return cast(UpstreamPaperSummaryResponse, body)
+
+    async def research_assets_summary(self) -> UpstreamResearchAssetsSummaryResponse:
+        body = await self._request_json(
+            'GET',
+            '/api/knowledge/research-assets/summary',
+            validate=lambda value: 'research_asset_count' in value,
+        )
+        return cast(UpstreamResearchAssetsSummaryResponse, body)
 
     async def scholar(self, scholar_id: str) -> UpstreamScholarResponse:
         body = await self._request_json(

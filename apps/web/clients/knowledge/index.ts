@@ -40,6 +40,17 @@ export type {
   KnowledgeRelationDirection,
   KnowledgeErrorCode,
   KnowledgeApiError,
+  KnowledgeOverviewStatus,
+  KnowledgeOverviewTag,
+  KnowledgeOverviewPaperLibrary,
+  KnowledgeOverviewHighlight,
+  KnowledgeOverviewResearchAsset,
+  KnowledgeOverviewResponse,
+  KnowledgePersonalOverviewResponse,
+  KnowledgeMixedSearchType,
+  KnowledgeMixedSearchParams,
+  KnowledgeMixedSearchResult,
+  KnowledgeMixedSearchResponse,
 } from "./types";
 export { KNOWLEDGE_RELATION_LABELS } from "./types";
 

@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const sidebar = readFileSync("components/common/layout/app-sidebar.tsx", "utf8");
+const knowledgeLayout = readFileSync("app/knowledge/layout.tsx", "utf8");
+const scholarDetailRoute = readFileSync(
+  "app/knowledge/scholars/[scholarId]/page.tsx",
+  "utf8",
+);
 const dashboard = readFileSync(
   "features/knowledge/components/knowledge-dashboard.tsx",
   "utf8",
@@ -48,9 +53,27 @@ test("Knowledge sidebar exposes exactly the six V1 capability entries", () => {
   assert.doesNotMatch(block, /专利库|研究机构/);
 });
 
-test("Knowledge dashboard is capability-only and does not import prototype data", () => {
+test("Knowledge uses one shared shell and parent navigation returns to overview", () => {
+  assert.match(knowledgeLayout, /return <AppShell>\{children\}<\/AppShell>/);
+  assert.doesNotMatch(scholarDetailRoute, /AppShell/);
+  assert.match(
+    sidebar,
+    /if \(routeActive\) \{[\s\S]*?setCollapsed\(false\);[\s\S]*?setExpanded\(href, true\);[\s\S]*?router\.push\(href, \{ scroll: false \}\);/,
+  );
+});
+
+test("Knowledge dashboard uses the real overview client and preserves capability routes", () => {
   assert.doesNotMatch(dashboard, /data-(scholars|funding|patents|institutions|library)/);
-  assert.doesNotMatch(dashboard, /跨库检索|专利记录|关注学者/);
+  assert.match(dashboard, /overviewSearch/);
+  assert.match(dashboard, /跨库检索/);
+  assert.match(dashboard, /项目专利基金/);
+  assert.match(dashboard, /unsupportedTypes/);
+  assert.match(dashboard, /failedTypes/);
+  assert.match(dashboard, /以下仅展示已支持的检索结果/);
+  assert.match(dashboard, /资产信息/);
+  assert.match(dashboard, /highlights/);
+  assert.match(dashboard, /funding=\$\{encodeURIComponent\(item\.id\)\}/);
+  assert.match(dashboard, /暂无可展示的真实基金资产信息/);
   for (const href of [
     "/knowledge/search",
     "/knowledge/papers",

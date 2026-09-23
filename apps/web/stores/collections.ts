@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { apiJson, ApiError } from "@/clients/backend/http";
+import { invalidateKnowledgeOverviewCache } from "@/features/knowledge/lib/overview-cache";
 
 export interface CollectionFolder {
   id: number;
@@ -41,12 +42,16 @@ export const useCollections = create<CollectionState>((set, get) => ({
   folders: [],
   paperFolders: {},
   loading: false,
-  syncIdentity: (userId) => set((state) => state.identityKey === userId ? state : {
-    identityKey: userId,
-    generation: state.generation + 1,
-    folders: [],
-    paperFolders: {},
-    loading: false,
+  syncIdentity: (userId) => set((state) => {
+    if (state.identityKey === userId) return state;
+    invalidateKnowledgeOverviewCache();
+    return {
+      identityKey: userId,
+      generation: state.generation + 1,
+      folders: [],
+      paperFolders: {},
+      loading: false,
+    };
   }),
   loadFolders: async () => {
     const generation = get().generation;
@@ -82,6 +87,7 @@ export const useCollections = create<CollectionState>((set, get) => ({
       body: JSON.stringify({ name }),
     });
     set((state) => ({ folders: [...state.folders, folder] }));
+    invalidateKnowledgeOverviewCache();
     return folder;
   },
   renameFolder: async (folderId, name) => {
@@ -90,6 +96,7 @@ export const useCollections = create<CollectionState>((set, get) => ({
       body: JSON.stringify({ name }),
     });
     set((state) => ({ folders: state.folders.map((item) => item.id === folderId ? folder : item) }));
+    invalidateKnowledgeOverviewCache();
     return folder;
   },
   deleteFolder: async (folderId) => {
@@ -100,6 +107,7 @@ export const useCollections = create<CollectionState>((set, get) => ({
         Object.entries(state.paperFolders).map(([paperId, ids]) => [paperId, ids.filter((id) => id !== folderId)]),
       ),
     }));
+    invalidateKnowledgeOverviewCache();
   },
   updatePaperFolders: async (paperId, folderIds) => {
     await apiJson<unknown>(`/papers/${encodeURIComponent(paperId)}/collections`, {
@@ -113,6 +121,7 @@ export const useCollections = create<CollectionState>((set, get) => ({
         paper_count: folder.paper_count + (folderIds.includes(folder.id) ? 1 : 0),
       })),
     }));
+    invalidateKnowledgeOverviewCache();
     await get().loadFolders();
   },
 }));
