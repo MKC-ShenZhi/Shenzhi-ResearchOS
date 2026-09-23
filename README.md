@@ -8,8 +8,6 @@
 
 ## 快速开始
 
-Windows 本地全栈测试可在仓库根目录双击 `start-dev.bat`。它会检查本地配置和依赖、按需启动项目 PostgreSQL，再分别打开 FastAPI 与 Next.js 窗口；服务健康后自动打开学者库页面。脚本不会自动安装依赖或结束已运行的进程。
-
 ```bash
 cd apps/web
 pnpm install        # pnpm 11:构建脚本白名单见 pnpm-workspace.yaml(sharp)

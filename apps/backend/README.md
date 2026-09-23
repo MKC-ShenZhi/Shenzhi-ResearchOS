@@ -7,7 +7,7 @@ cd apps/backend
 uv sync
 cp .env.example .env
 
-# Windows 本地持久化开发：先启动项目专用 PostgreSQL 5432 实例。
+# Windows 本地持久化开发：先启动项目专用 PostgreSQL 5433 实例。
 # PowerShell/CMD:
 #   ..\..\scripts\start-local-postgres.bat
 # 若已有可用的 PostgreSQL，请确保 CHAT_DATABASE_URL 的 host/port 与实例一致。
