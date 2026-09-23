@@ -6,6 +6,7 @@ import math
 import asyncio
 from datetime import datetime, timezone
 from typing import Any, Callable
+from urllib.parse import quote
 
 from pydantic import ValidationError
 
@@ -15,12 +16,21 @@ from app.integrations.knowledge.schemas import UpstreamSearchPayload
 from app.schemas.knowledge import (
     GraphEdge,
     GraphNode,
+    KnowledgeMixedSearchRequest,
+    KnowledgeMixedSearchResponse,
+    KnowledgeMixedSearchResult,
+    KnowledgeOverviewResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
     PaperDetail,
     PaperSummary,
     PaperGraph,
     PaperSearchResult,
+    OverviewHighlight,
+    OverviewPaperLibrary,
+    OverviewResearchAsset,
+    OverviewResearchAssets,
+    OverviewGraphPreview,
     Provenance,
     ScholarDetail,
     ScholarPaper,
@@ -459,6 +469,149 @@ class KnowledgeAdapter:
         return ScholarSearchResponse(results=[
             map_scholar_summary(item, retrieved_at=retrieved_at) for item in results
         ])
+
+    async def search_fundings(self, query: str, *, limit: int = 20, offset: int = 0) -> list[OverviewHighlight]:
+        body = await self.client.search_fundings(query, limit=limit, offset=offset)
+        results = body.get('results') if isinstance(body, dict) else None
+        if not isinstance(results, list):
+            raise KnowledgeIntegrationError.contract_violation()
+        return [OverviewHighlight(
+            id=_required_string(item, 'funding_id'),
+            name=_required_string(item, 'name'),
+            count=_required_int(item, 'paper_count'),
+            metadata={'entityType': 'funding'},
+        ) for item in results]
+
+    async def overview(self) -> KnowledgeOverviewResponse:
+        paper_result, asset_result = await asyncio.gather(
+            self.client.paper_summary(),
+            self.client.research_assets_summary(),
+            return_exceptions=True,
+        )
+        paper_count: int | None = None
+        paper_status = 'error'
+        if not isinstance(paper_result, Exception):
+            paper_count = _required_int(paper_result, 'paper_count')
+            paper_status = 'available'
+        asset_count: int | None = None
+        asset_status = 'error'
+        if not isinstance(asset_result, Exception):
+            asset_count = _required_int(asset_result, 'research_asset_count')
+            asset_status = 'available'
+        now = datetime.now(timezone.utc)
+        return KnowledgeOverviewResponse(
+            as_of=now,
+            scope='已入库且可检索的论文及知识底座公开统计',
+            paper_library=OverviewPaperLibrary(
+                paper_count=paper_count,
+                status=paper_status,
+            ),
+            scholar_highlights=[],
+            topic_highlights=[],
+            research_assets=OverviewResearchAssets(
+                total=asset_count,
+                status=asset_status,
+                by_type={
+                    'project': OverviewResearchAsset(status='unsupported'),
+                    'patent': OverviewResearchAsset(status='unsupported'),
+                    'funding': OverviewResearchAsset(status='unsupported'),
+                },
+                coverage={
+                    'projectEntities': False,
+                    'patentEntities': False,
+                    'fundingEntities': False,
+                },
+            ),
+            graph_preview=OverviewGraphPreview(status='unsupported'),
+        )
+
+    async def mixed_search(self, request: KnowledgeMixedSearchRequest) -> KnowledgeMixedSearchResponse:
+        supported: list[str] = []
+        unsupported: list[str] = []
+        failed: list[str] = []
+        results: list[KnowledgeMixedSearchResult] = []
+
+        async def run(kind: str, operation: Any) -> None:
+            nonlocal results
+            try:
+                value = await operation()
+            except KnowledgeIntegrationError:
+                failed.append(kind)
+                return
+            supported.append(kind)
+            if kind == 'paper' or kind == 'graph':
+                papers = value.results
+                for paper in papers:
+                    results.append(KnowledgeMixedSearchResult(
+                        type=kind,
+                        id=paper.id,
+                        title=paper.title,
+                        summary=paper.abstract,
+                        metadata={'year': paper.year, 'venue': paper.venue},
+                        action=f"/papers/{quote(paper.id, safe='')}" + ('/graph' if kind == 'graph' else ''),
+                    ))
+            elif kind == 'scholar':
+                for scholar in value.results:
+                    results.append(KnowledgeMixedSearchResult(
+                        type='scholar',
+                        id=scholar.id,
+                        title=scholar.name,
+                        summary=f'收录论文 {scholar.paper_count} 篇',
+                        metadata={'paperCount': scholar.paper_count},
+                        action=f"/knowledge/scholars/{quote(scholar.id, safe='')}",
+                    ))
+            elif kind == 'funding':
+                for funding in value:
+                    results.append(KnowledgeMixedSearchResult(
+                        type='funding',
+                        id=funding.id,
+                        title=funding.name,
+                        summary=f'关联论文 {funding.count} 篇' if funding.count is not None else None,
+                        metadata=funding.metadata,
+                        action=f"/knowledge/funding?funding={quote(funding.name, safe='')}",
+                    ))
+            elif kind == 'topic':
+                for paper in value.results:
+                    results.append(KnowledgeMixedSearchResult(
+                        type='paper',
+                        id=paper.id,
+                        title=paper.title,
+                        summary=paper.abstract,
+                        metadata={'matchedBy': kind, 'year': paper.year, 'venue': paper.venue},
+                        action=f"/papers/{quote(paper.id, safe='')}",
+                    ))
+            elif kind == 'project' or kind == 'patent':
+                unsupported.append(kind)
+
+        requested = request.types
+        for kind in requested:
+            if kind in ('project', 'patent'):
+                unsupported.append(kind)
+                continue
+            if kind == 'paper':
+                await run(kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, top_k=request.limit)))
+            elif kind == 'graph':
+                await run(kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, top_k=request.limit)))
+            elif kind == 'scholar':
+                await run(kind, lambda: self.search_scholars(ScholarSearchRequest(query=request.query, limit=request.limit)))
+            elif kind == 'topic':
+                await run(kind, lambda: self.search_by_subject(request.query, top_k=request.limit))
+            elif kind == 'funding':
+                await run(kind, lambda: self.search_fundings(request.query, limit=request.limit))
+
+        deduped: list[KnowledgeMixedSearchResult] = []
+        seen: set[tuple[str, str]] = set()
+        for result in results:
+            key = (result.type, result.id)
+            if key not in seen:
+                seen.add(key)
+                deduped.append(result)
+        return KnowledgeMixedSearchResponse(
+            results=deduped[:request.limit],
+            supported_types=supported,
+            unsupported_types=unsupported,
+            failed_types=failed,
+        )
 
     async def scholar(self, scholar_id: str) -> ScholarDetail:
         body = await self.client.scholar(scholar_id)

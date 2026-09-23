@@ -45,9 +45,12 @@ test("Knowledge uses one shared shell and parent navigation returns to overview"
   );
 });
 
-test("Knowledge dashboard is capability-only and does not import prototype data", () => {
+test("Knowledge dashboard uses the real overview client and preserves capability routes", () => {
   assert.doesNotMatch(dashboard, /data-(scholars|funding|patents|institutions|library)/);
-  assert.doesNotMatch(dashboard, /跨库检索|专利记录|关注学者/);
+  assert.match(dashboard, /overviewSearch/);
+  assert.match(dashboard, /跨库检索/);
+  assert.match(dashboard, /项目专利基金/);
+  assert.match(dashboard, /当前未接入|未接入/);
   for (const href of [
     "/knowledge/search",
     "/knowledge/papers",

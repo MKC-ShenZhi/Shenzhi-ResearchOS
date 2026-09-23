@@ -52,6 +52,25 @@ class UpstreamScholarSearchResponse(TypedDict):
     query: NotRequired[str]
 
 
+class UpstreamFundingSearchResult(TypedDict):
+    funding_id: str
+    name: str
+    paper_count: int | str
+
+
+class UpstreamFundingSearchResponse(TypedDict):
+    results: list[UpstreamFundingSearchResult]
+    query: NotRequired[str]
+
+
+class UpstreamPaperSummaryResponse(TypedDict):
+    paper_count: int | str
+
+
+class UpstreamResearchAssetsSummaryResponse(TypedDict):
+    research_asset_count: int | str
+
+
 class UpstreamScholarReference(TypedDict):
     scholar_id: str
     name: str

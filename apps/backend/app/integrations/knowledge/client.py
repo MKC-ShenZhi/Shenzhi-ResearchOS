@@ -16,6 +16,9 @@ from app.core.logging import log_event
 from app.integrations.knowledge.schemas import (
     UpstreamGraphResponse,
     UpstreamPaperResponse,
+    UpstreamPaperSummaryResponse,
+    UpstreamResearchAssetsSummaryResponse,
+    UpstreamFundingSearchResponse,
     UpstreamScholarResponse,
     UpstreamScholarSearchResponse,
     UpstreamSearchResponse,
@@ -70,6 +73,33 @@ class KnowledgeBaseClient:
             validate=lambda value: isinstance(value.get('results'), list),
         )
         return cast(UpstreamScholarSearchResponse, body)
+
+    async def search_fundings(
+        self, query: str, *, limit: int = 20, offset: int = 0
+    ) -> UpstreamFundingSearchResponse:
+        body = await self._request_json(
+            'GET',
+            '/api/retrieval/fundings/search',
+            params={'q': query, 'limit': limit, 'offset': offset},
+            validate=lambda value: isinstance(value.get('results'), list),
+        )
+        return cast(UpstreamFundingSearchResponse, body)
+
+    async def paper_summary(self) -> UpstreamPaperSummaryResponse:
+        body = await self._request_json(
+            'GET',
+            '/api/knowledge/papers/summary',
+            validate=lambda value: 'paper_count' in value,
+        )
+        return cast(UpstreamPaperSummaryResponse, body)
+
+    async def research_assets_summary(self) -> UpstreamResearchAssetsSummaryResponse:
+        body = await self._request_json(
+            'GET',
+            '/api/knowledge/research-assets/summary',
+            validate=lambda value: 'research_asset_count' in value,
+        )
+        return cast(UpstreamResearchAssetsSummaryResponse, body)
 
     async def scholar(self, scholar_id: str) -> UpstreamScholarResponse:
         body = await self._request_json(
