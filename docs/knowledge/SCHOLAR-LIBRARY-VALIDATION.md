@@ -52,10 +52,10 @@
 ### A01 中文与英文 Query 契约
 
 - 类型：自动化
-- 覆盖：首尾空格归一化；Unicode 中文姓名不被损坏；Query 当前原样进入 Integration。
+- 覆盖：首尾空格归一化；Unicode 中文姓名传输；已确认姓名精确映射，未知中文姓名与英文姓名原样透传。
 - 命令：`uv run python -m unittest tests.test_knowledge_entities -v`
 - 当前结果：通过；本轮专项共 21 项通过。
-- 说明：此项验证传输正确，不代表上游能够命中中文姓名。
+- 说明：此项验证产品 Query 规则和传输契约，不代表知识底座对任意中文姓名均可召回。
 
 ### A02 学者 Search 和 Detail 契约
 
