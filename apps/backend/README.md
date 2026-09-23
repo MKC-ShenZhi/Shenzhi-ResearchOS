@@ -7,10 +7,9 @@ cd apps/backend
 uv sync
 cp .env.example .env
 
-# Windows 本地持久化开发：先启动项目专用 PostgreSQL 5433 实例。
-# PowerShell/CMD:
-#   ..\..\scripts\start-local-postgres.bat
-# 若已有可用的 PostgreSQL，请确保 CHAT_DATABASE_URL 的 host/port 与实例一致。
+# Windows + Chat 持久化：见 docs/engineering/local-postgres-windows.md
+# 先（按需）运行 ..\..\scripts\start-local-postgres.bat（127.0.0.1:5432）
+# CHAT_DATABASE_URL 的 host/port 须与脚本或自建实例一致；登录/BFF 问题不在该文档范围。
 
 # Configure provider/search keys before starting.
 # Missing keys produce explicit errors, never mock answers.
