@@ -198,10 +198,9 @@ test("paper journey uses one real detail and graph implementation with compatibi
   assert.match(detailPage, /<PaperPdfViewer/);
   assert.match(detailPage, /<PaperAbstractView/);
   assert.match(detailPage, /<PaperRightPanel/);
-  assert.match(assistant, /embedded:\s*true/);
-  assert.match(assistant, /kind:\s*"paper"/);
-  assert.match(assistant, /ref_id:\s*paper\.id/);
-  assert.match(assistant, /web_search:\s*false/);
+  assert.match(assistant, /usePaperAgent\(paper\)/);
+  assert.match(assistant, /Assistant 可读取当前论文 PDF/);
+  assert.doesNotMatch(assistant, /useChatSession|仅基于当前论文的元信息与摘要/);
   assert.match(pdf, /在新窗口打开 PDF/);
   assert.match(pdf, /当前论文暂无可用 PDF 链接/);
   assert.match(pdf, /\/paper-resource\/pdf\?paperId=/);
@@ -291,10 +290,12 @@ test("Paper Detail uses a slim reader header and a proportional dual workspace",
   assert.match(detailPage, /data-\[state=active\]:bg-card/);
 });
 
-test("Paper Assistant uses abstract-safe prompt cards and role-specific message surfaces", () => {
+test("Paper Assistant uses PDF-aware prompt cards and role-specific message surfaces", () => {
   const assistant = readFileSync("features/papers/[id]/components/paper-assistant-panel.tsx", "utf8");
 
-  assert.match(assistant, /尚未读取 PDF 全文/);
+  assert.match(assistant, /Assistant 可读取当前论文 PDF/);
+  assert.match(assistant, /扫描件、图表和图片中的内容可能无法识别/);
+  assert.doesNotMatch(assistant, /尚未读取 PDF 全文|根据摘要，询问这篇论文/);
   assert.match(assistant, /grid-cols-2/);
   assert.match(assistant, /这篇论文主要解决什么问题？/);
   assert.match(assistant, /论文的核心贡献是什么？/);
