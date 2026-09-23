@@ -17,6 +17,15 @@ from app.schemas.knowledge import (
 )
 
 
+_SCHOLAR_QUERY_ALIASES = {
+    '何恺明': 'Kaiming He',
+}
+
+
+def _resolve_scholar_query(query: str) -> str:
+    return _SCHOLAR_QUERY_ALIASES.get(query, query)
+
+
 class KnowledgeServiceError(Exception):
     """Safe domain error returned by the Knowledge service boundary."""
 
@@ -62,8 +71,13 @@ class KnowledgeService:
     async def search_scholars(
         self, request: ScholarSearchRequest
     ) -> ScholarSearchResponse:
+        resolved_request = ScholarSearchRequest(
+            query=_resolve_scholar_query(request.query),
+            limit=request.limit,
+            offset=request.offset,
+        )
         try:
-            return await self.adapter.search_scholars(request)
+            return await self.adapter.search_scholars(resolved_request)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 
