@@ -74,10 +74,12 @@ function CardShell({
   card,
   children,
   className = "",
+  bodyClassName = "",
 }: {
   card: (typeof CARDS)[number];
   children: ReactNode;
   className?: string;
+  bodyClassName?: string;
 }) {
   const Icon = card.icon;
   return (
@@ -94,7 +96,7 @@ function CardShell({
           <span className="mt-1 block text-sm leading-6 text-muted">{card.description}</span>
         </span>
       </Link>
-      <div className="mt-5">{children}</div>
+      <div className={`mt-5 ${bodyClassName}`}>{children}</div>
     </section>
   );
 }
@@ -144,12 +146,12 @@ function OverviewGraphPreview({ preview }: { preview: KnowledgeOverviewResponse[
   });
 
   return (
-    <div className="rounded-2xl bg-primary-soft/55 px-3 py-3">
+    <div className="flex min-h-0 flex-1 flex-col rounded-2xl bg-primary-soft/55 px-3 py-3">
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs font-semibold text-ink">真实论文关系预览</span>
         <span className="text-[11px] text-muted">{relatedNodes.length} 个关联节点</span>
       </div>
-      <svg viewBox="0 0 280 154" className="mt-1 h-36 w-full" role="img" aria-label={`${root.label} 的关系预览图`}>
+      <svg viewBox="0 0 280 154" className="mt-1 min-h-36 flex-1 w-full" role="img" aria-label={`${root.label} 的关系预览图`}>
         {positions.map(({ node, x, y }) => <g key={node.id}>
           <line x1={center.x} y1={center.y} x2={x} y2={y} stroke="currentColor" className="text-primary/30" strokeWidth="1.5" />
           <circle cx={x} cy={y} r="15" className="fill-card stroke-primary/35" strokeWidth="1.5" />
@@ -278,9 +280,9 @@ export function KnowledgeDashboard() {
       </section>
 
       {overviewError && !overview ? <div className="mt-7 rounded-2xl bg-danger-soft px-5 py-4 text-sm text-danger" role="alert">知识库总览数据暂时无法加载。<button type="button" onClick={() => void loadOverview()} className="ml-2 font-medium underline">重试</button></div> : <div className="mt-7 grid gap-5 xl:grid-cols-3">
-        <CardShell card={CARDS[0]} className="xl:col-span-2 xl:row-span-2">
-          <div className="grid gap-5 xl:grid-cols-[246px_minmax(0,1fr)]">
-            <div className="rounded-2xl bg-primary-soft/70 p-5">
+        <CardShell card={CARDS[0]} className="flex h-full flex-col xl:col-span-2 xl:row-span-2" bodyClassName="flex min-h-0 flex-1 flex-col">
+          <div className="grid min-h-0 flex-1 gap-5 xl:grid-cols-[246px_minmax(0,1fr)]">
+            <div className="h-full rounded-2xl bg-primary-soft/70 p-5">
               <p className="text-base font-semibold text-ink">论文</p>
               <div className="mt-7 space-y-5">
                 <div className="flex items-center justify-between gap-3">
@@ -295,7 +297,7 @@ export function KnowledgeDashboard() {
               </div>
             </div>
 
-            <div className="min-w-0 px-1 py-1">
+            <div className="min-h-0 min-w-0 px-1 py-1">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-base font-semibold text-ink">最近浏览</span>
                 <span className="text-sm text-muted">{recentPapers.length ? `共 ${recentPapers.length} 篇` : "暂无数据"}</span>
@@ -303,7 +305,7 @@ export function KnowledgeDashboard() {
               {recentPapers.length ? <div className="mt-3 divide-y divide-border">{recentPapers.slice(0, 3).map((paper) => <Link key={`${paper.id}-${paper.last_viewed_at}`} href={`/papers/${encodeURIComponent(paper.id)}`} className="group flex items-center gap-4 py-3 first:pt-2 hover:bg-primary-soft/30"><span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft"><BookOpen className="size-5 text-primary" /></span><span className="min-w-0 flex-1"><span className="block truncate text-base text-ink group-hover:text-primary">{paper.title}</span><span className="mt-1 block truncate text-sm text-muted">当前账号最近浏览 · {formatViewedAt(paper.last_viewed_at)}</span></span><ArrowRight className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" /></Link>)}</div> : <p className="mt-5 text-sm text-muted">暂无当前账号的最近浏览记录</p>}
             </div>
           </div>
-          {paperTags.length ? <div className="mt-5 flex flex-wrap gap-2">{paperTags.map((tag) => <Link key={tag} href={`/knowledge/topics?subject=${encodeURIComponent(tag)}`} className="rounded-full bg-surface px-3.5 py-2 text-xs text-muted transition hover:bg-primary-soft hover:text-primary">#{tag}</Link>)}</div> : null}
+          {paperTags.length ? <div className="mt-5 flex shrink-0 flex-wrap gap-2">{paperTags.map((tag) => <Link key={tag} href={`/knowledge/topics?subject=${encodeURIComponent(tag)}`} className="rounded-full bg-surface px-3.5 py-2 text-xs text-muted transition hover:bg-primary-soft hover:text-primary">#{tag}</Link>)}</div> : null}
         </CardShell>
 
         <CardShell card={CARDS[1]}>
@@ -315,14 +317,14 @@ export function KnowledgeDashboard() {
           {overview?.scholarHighlights.length ? <div className="grid grid-cols-3 gap-2">{overview.scholarHighlights.slice(0, 3).map((item) => <Link key={item.id} href={`/knowledge/scholars/${encodeURIComponent(item.id)}`} className="min-w-0 rounded-xl p-2 hover:bg-success-soft/60"><div className="mx-auto flex size-10 items-center justify-center rounded-full bg-success text-sm font-semibold text-white">{item.name.slice(0, 1)}</div><div className="mt-2 truncate text-center text-sm font-medium text-ink">{item.name}</div><div className="mt-1 truncate text-center text-xs text-muted">{item.count === null ? "数据暂无" : `${item.count.toLocaleString("zh-CN")} 篇论文`}</div></Link>)}</div> : <p className="rounded-2xl bg-surface p-4 text-sm text-muted">数据暂无</p>}
         </CardShell>
 
-        <CardShell card={CARDS[3]}>
-          <div className="grid min-h-[280px] content-center gap-5 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-            <div className="min-w-0">
+        <CardShell card={CARDS[3]} className="flex h-full flex-col" bodyClassName="flex min-h-0 flex-1 flex-col">
+          <div className="grid min-h-[280px] flex-1 gap-5 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="flex min-h-0 min-w-0 flex-col">
               <p className="text-sm font-semibold text-ink">热门研究主题</p>
               <p className="mt-1 text-xs text-muted">来自知识底座的真实主题</p>
-              {papers?.popularTags.length ? <div className="mt-4 flex flex-wrap gap-2">{papers.popularTags.slice(0, 6).map((tag) => <span key={tag.name} className="rounded-lg bg-brand-cyan/10 px-3 py-2 text-xs font-medium text-brand-cyan">{tag.name}</span>)}</div> : overview?.topicHighlights.length ? <div className="mt-4 flex flex-wrap gap-2">{overview.topicHighlights.slice(0, 6).map((item) => <Link key={item.id} href={`/knowledge/topics?subject=${encodeURIComponent(item.metadata.sourceSubject as string ?? item.name)}`} className="rounded-lg bg-brand-cyan/10 px-3 py-2 text-xs font-medium text-brand-cyan transition hover:bg-brand-cyan/20"><span className="block max-w-32 truncate">{item.name}</span></Link>)}</div> : <p className="mt-4 text-xs leading-5 text-muted">暂无真实主题数据</p>}
+              {papers?.popularTags.length ? <div className="mt-4 flex flex-1 flex-col items-start justify-evenly gap-2">{papers.popularTags.slice(0, 6).map((tag) => <span key={tag.name} className="rounded-lg bg-brand-cyan/10 px-3 py-2 text-xs font-medium text-brand-cyan">{tag.name}</span>)}</div> : overview?.topicHighlights.length ? <div className="mt-4 flex flex-1 flex-col items-start justify-evenly gap-2">{overview.topicHighlights.slice(0, 6).map((item) => <Link key={item.id} href={`/knowledge/topics?subject=${encodeURIComponent(item.metadata.sourceSubject as string ?? item.name)}`} className="rounded-lg bg-brand-cyan/10 px-3 py-2 text-xs font-medium text-brand-cyan transition hover:bg-brand-cyan/20"><span className="block max-w-32 truncate">{item.name}</span></Link>)}</div> : <p className="mt-4 text-xs leading-5 text-muted">暂无真实主题数据</p>}
             </div>
-            <div className="min-w-0 border-border md:border-l md:pl-5" role="img" aria-label="四个主题的论文数量柱状图">
+            <div className="flex min-h-0 min-w-0 flex-col border-border md:border-l md:pl-5" role="img" aria-label="四个主题的论文数量柱状图">
               <div className="flex items-end justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-ink">各主题论文数量</p>
@@ -330,7 +332,7 @@ export function KnowledgeDashboard() {
                 </div>
                 {topicStats.length ? <span className="text-xs text-muted">共 {topicStats.length} 项</span> : null}
               </div>
-              {topicStats.length ? <div className="mt-4 flex h-44 items-end gap-2 border-b border-border px-1 sm:gap-3">{topicStats.map((item) => <Link key={item.id} href={`/knowledge/topics?subject=${encodeURIComponent(item.metadata.sourceSubject as string ?? item.name)}`} className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1"><span className="text-[11px] font-semibold text-brand-cyan">{item.count?.toLocaleString("zh-CN")}</span><span className="relative flex h-28 w-full max-w-9 items-end overflow-hidden rounded-t-lg bg-brand-cyan/15"><span className="w-full rounded-t-lg bg-brand-cyan/80 transition-all group-hover:bg-primary" style={{ height: `${Math.max(14, ((item.count ?? 0) / maxTopicCount) * 100)}%` }} /></span><span className="w-full truncate text-center text-[10px] text-muted group-hover:text-primary" title={item.name}>{item.name}</span></Link>)}</div> : <p className="mt-4 rounded-xl bg-surface px-3 py-3 text-xs leading-5 text-muted">暂无真实主题论文数量统计</p>}
+              {topicStats.length ? <div className="mt-4 flex min-h-44 flex-1 items-end gap-2 border-b border-border px-1 sm:gap-3">{topicStats.map((item) => <Link key={item.id} href={`/knowledge/topics?subject=${encodeURIComponent(item.metadata.sourceSubject as string ?? item.name)}`} className="group flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"><span className="text-[11px] font-semibold text-brand-cyan">{item.count?.toLocaleString("zh-CN")}</span><span className="relative flex min-h-28 flex-1 w-full max-w-9 items-end overflow-hidden rounded-t-lg bg-brand-cyan/15"><span className="w-full rounded-t-lg bg-brand-cyan/80 transition-all group-hover:bg-primary" style={{ height: `${Math.max(14, ((item.count ?? 0) / maxTopicCount) * 100)}%` }} /></span><span className="w-full truncate text-center text-[10px] text-muted group-hover:text-primary" title={item.name}>{item.name}</span></Link>)}</div> : <p className="mt-4 rounded-xl bg-surface px-3 py-3 text-xs leading-5 text-muted">暂无真实主题论文数量统计</p>}
             </div>
           </div>
         </CardShell>
@@ -351,10 +353,10 @@ export function KnowledgeDashboard() {
           <p className="mt-3 text-xs leading-5 text-muted">项目、专利暂无独立实体接口，暂不展示虚构资产。</p>
         </CardShell>
 
-        <CardShell card={CARDS[5]}>
-          {overview?.graphPreview.supported && overview.graphPreview.rootPaperId ? <Link href={paperHref(overview.graphPreview.rootPaperId, { mode: "create", source: "/knowledge", graph: true })} className="group block">
+        <CardShell card={CARDS[5]} className="flex h-full flex-col" bodyClassName="flex min-h-0 flex-1 flex-col">
+          {overview?.graphPreview.supported && overview.graphPreview.rootPaperId ? <Link href={paperHref(overview.graphPreview.rootPaperId, { mode: "create", source: "/knowledge", graph: true })} className="group flex min-h-0 flex-1 flex-col">
             <OverviewGraphPreview preview={overview.graphPreview} />
-            <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary group-hover:underline">查看完整关系图谱 <ArrowRight className="size-3.5" /></span>
+            <span className="mt-3 inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary group-hover:underline">查看完整关系图谱 <ArrowRight className="size-3.5" /></span>
           </Link> : <div className="rounded-2xl bg-primary-soft/70 p-4 text-sm leading-6 text-muted">{overview?.graphPreview.status === "error" ? "关系图谱暂时无法加载，请稍后重试。" : "当前暂无可展示的真实论文关系图谱。"}</div>}
         </CardShell>
       </div>}
