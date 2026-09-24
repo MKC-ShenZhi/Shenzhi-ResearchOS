@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Script from "next/script";
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { FeatureAvailabilityProvider } from "@/components/common/feature-availability-provider";
 import { ThemeStoreHydrator } from "@/components/common/theme-store-hydrator";
 import { QueryProvider } from "@/providers/query-provider";
 import "@/styles/globals.css";
@@ -24,10 +25,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Script id="shenzhi-theme" strategy="beforeInteractive">
           {themeScript}
         </Script>
-        <AuthProvider>
-          <ThemeStoreHydrator />
-          <QueryProvider>{children}</QueryProvider>
-        </AuthProvider>
+        <FeatureAvailabilityProvider>
+          <AuthProvider>
+            <ThemeStoreHydrator />
+            <QueryProvider>{children}</QueryProvider>
+          </AuthProvider>
+        </FeatureAvailabilityProvider>
       </body>
     </html>
   );
