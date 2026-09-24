@@ -21,7 +21,15 @@ import { cn } from "@/lib/utils";
 import { SITE } from "@/lib/constants";
 import { projects } from "@/features/projects/data";
 import { useAuth } from "@/components/auth/auth-provider";
+import { UserAvatar } from "@/components/common/user-avatar";
+import { userAvatarSource } from "@/clients/profile";
+import { useUserProfile } from "@/hooks/use-user-profile";
 import { useSidebarStore } from "@/stores/sidebar";
+import {
+  FeatureNavigationLink,
+  useFeatureAvailability,
+} from "@/components/common/feature-availability-provider";
+import { isUnavailableFeatureHref } from "@/lib/feature-availability";
 import { Logo } from "./logo";
 import { SettingsMenu } from "./settings-menu";
 import { SidebarChatHistory } from "./sidebar-chat-history";
@@ -192,27 +200,41 @@ function ExpandableNav({
   const stored = useSidebarStore((s) => s.expanded[href]);
   const setExpanded = useSidebarStore((s) => s.setExpanded);
   const setCollapsed = useSidebarStore((s) => s.setCollapsed);
+  const { showComingSoon } = useFeatureAvailability();
   const open = stored ?? routeActive;
   /** 主页是否独立于副标题(如 AI 助手:/agents 不是任何副标题页) */
   const hasOwnPage = !subNav.some((s) => s.href === href);
   /** 跳转目标:有主标题页跳主标题页,没有则跳第一个副标题页 */
   const dest = hasOwnPage ? href : subNav[0].href;
 
+  const navigate = (target: string) => {
+    if (isUnavailableFeatureHref(target)) {
+      showComingSoon();
+      return false;
+    }
+    router.push(target, { scroll: false });
+    return true;
+  };
+
   const handleMainClick = () => {
+    if (isUnavailableFeatureHref(dest)) {
+      showComingSoon();
+      return;
+    }
     if (!open) {
       // 副标题折叠:展开副标题并跳转
       setExpanded(href, true);
-      if (pathname !== dest) router.push(dest, { scroll: false });
+      if (pathname !== dest) navigate(dest);
     } else if (routeActive) {
       // Knowledge 子页面点击主标题返回总览;其他栏目保持原有折叠行为
       if (href === "/knowledge" && pathname !== href) {
-        router.push(href, { scroll: false });
+        navigate(href);
       } else {
         setCollapsed(true);
       }
     } else if (pathname !== dest) {
       // 副标题展开但处于其他栏目:仅跳转
-      router.push(dest, { scroll: false });
+      navigate(dest);
     }
   };
 
@@ -222,6 +244,10 @@ function ExpandableNav({
         type="button"
         title={label}
         onClick={() => {
+          if (isUnavailableFeatureHref(dest)) {
+            showComingSoon();
+            return;
+          }
           if (routeActive) {
             // Knowledge 图标从子页面返回总览;其他栏目保持原有展开行为
             setCollapsed(false);
@@ -231,7 +257,7 @@ function ExpandableNav({
             }
           } else {
             // 先跳转,保持图标栏
-            router.push(dest, { scroll: false });
+            navigate(dest);
           }
         }}
         className={cn(
@@ -282,7 +308,7 @@ function ExpandableNav({
           {subNav.map((sub) => {
             const active = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
             return (
-              <Link
+              <FeatureNavigationLink
                 key={sub.href}
                 href={sub.href}
                 scroll={false}
@@ -295,7 +321,7 @@ function ExpandableNav({
                 )}
               >
                 {sub.label}
-              </Link>
+              </FeatureNavigationLink>
             );
           })}
           {footer}
@@ -382,6 +408,7 @@ export function AppSidebar() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
   const setNavScrollTop = useSidebarStore((s) => s.setNavScrollTop);
+  const { showComingSoon } = useFeatureAvailability();
   const pathname = usePathname();
   const navRef = React.useRef<HTMLElement>(null);
   const navScrollTopRef = React.useRef(useSidebarStore.getState().navScrollTop);
@@ -398,6 +425,10 @@ export function AppSidebar() {
   const userName = !sessionReady || sessionPending
     ? null
     : session?.user.name?.trim() || session?.user.email || null;
+  const { profile } = useUserProfile();
+  const avatarSrc = userName
+    ? userAvatarSource(profile, session?.user.image)
+    : null;
   const [logoutOpen, setLogoutOpen] = React.useState(false);
   const handleLoggedOut = () => {
     setLogoutOpen(false);
@@ -503,6 +534,7 @@ export function AppSidebar() {
             <button
               type="button"
               title="新建项目(演示)"
+              onClick={showComingSoon}
               className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm text-faint transition-colors hover:bg-card hover:text-ink-2"
             >
               <Plus className="size-3.5" />
@@ -537,9 +569,12 @@ export function AppSidebar() {
             }
           >
             {userName ? (
-              <span className="text-[13px] font-semibold text-primary">
-                {userName.slice(0, 1)}
-              </span>
+              <UserAvatar
+                src={avatarSrc}
+                name={userName}
+                alt={`${userName}的头像`}
+                className="size-9 text-[13px]"
+              />
             ) : (
               <User className="size-4.5 text-primary" />
             )}
@@ -555,9 +590,12 @@ export function AppSidebar() {
       ) : userName ? (
         <div className="relative mt-2">
           <div className="flex items-center gap-2.5 rounded-xl bg-card p-2.5 shadow-card">
-            <span className="flex size-9 items-center justify-center rounded-full bg-primary-soft text-[13px] font-semibold text-primary">
-              {userName.slice(0, 1)}
-            </span>
+            <UserAvatar
+              src={avatarSrc}
+              name={userName}
+              alt={`${userName}的头像`}
+              className="size-9 text-[13px]"
+            />
             <span className="flex min-w-0 flex-1 flex-col leading-tight">
               <span className="truncate text-[13px] font-semibold text-ink">
                 {userName}

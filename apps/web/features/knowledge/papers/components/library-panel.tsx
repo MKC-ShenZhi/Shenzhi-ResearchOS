@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { History, LoaderCircle, Network, Square } from "lucide-react";
 import { ApiError } from "@/clients/backend/http";
@@ -8,6 +7,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCollections } from "@/stores/collections";
+import { FeatureNavigationLink } from "@/components/common/feature-availability-provider";
 import { FolderMoreButton } from "./collection-picker";
 
 /** 我的文献库面板 —— 文件夹树 + 标签(对应知识库页面 SVG 第二栏) */
@@ -116,10 +116,10 @@ export function LibraryPanel({
       </ul>
 
       <div className="mt-auto">
-        <Link href="/knowledge/graph" className="mb-3 flex items-center gap-2.5 rounded-lg bg-panel p-2.5 text-xs text-ink-2 transition-colors hover:bg-primary-soft">
+        <FeatureNavigationLink href="/knowledge/graph" className="mb-3 flex items-center gap-2.5 rounded-lg bg-panel p-2.5 text-xs text-ink-2 transition-colors hover:bg-primary-soft">
           <Network className="size-4 text-primary" />
           关系图谱
-        </Link>
+        </FeatureNavigationLink>
         <hr className="mb-3 border-line" />
 
         <button

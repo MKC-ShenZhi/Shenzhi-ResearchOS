@@ -25,6 +25,7 @@ import {
 } from "@/clients/knowledge";
 import { loadKnowledgeOverview } from "@/features/knowledge/lib/overview-cache";
 import { paperHref } from "@/lib/navigation/paper";
+import { FeatureNavigationLink } from "@/components/common/feature-availability-provider";
 
 type SearchTab = { label: string; types: KnowledgeMixedSearchType[] };
 
@@ -84,7 +85,7 @@ function CardShell({
   const Icon = card.icon;
   return (
     <section className={`rounded-3xl bg-card p-6 shadow-card ${className}`}>
-      <Link href={card.href} className="group flex items-start gap-4">
+      <FeatureNavigationLink href={card.href} className="group flex items-start gap-4">
         <span className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${card.tone}`}>
           <Icon className="size-6" strokeWidth={1.8} />
         </span>
@@ -95,7 +96,7 @@ function CardShell({
           </span>
           <span className="mt-1 block text-sm leading-6 text-muted">{card.description}</span>
         </span>
-      </Link>
+      </FeatureNavigationLink>
       <div className={`mt-5 ${bodyClassName}`}>{children}</div>
     </section>
   );
@@ -181,14 +182,14 @@ function SearchResults({ response, query }: { response: KnowledgeMixedSearchResp
       {(unsupportedLabels || failedLabels) && <div className="rounded-xl bg-brand-gold/15 px-4 py-3 text-xs leading-5 text-muted">{unsupportedLabels && <p>{unsupportedLabels}当前未接入，以下仅展示已支持的检索结果。</p>}{failedLabels && <p className={unsupportedLabels ? "mt-1 text-danger" : "text-danger"}>{failedLabels}暂时不可用，请稍后重试。</p>}</div>}
       <div className="divide-y divide-border rounded-2xl bg-surface">
         {response.results.map((result) => (
-          <Link key={`${result.type}:${result.id}`} href={result.action ?? "/knowledge/search"} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-soft/50">
+          <FeatureNavigationLink key={`${result.type}:${result.id}`} href={result.action ?? "/knowledge/search"} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-soft/50">
             <span className="rounded-md bg-card px-2 py-1 text-[11px] font-medium text-primary">{resultLabel(result)}</span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-ink">{result.title}</span>
               {result.summary && <span className="mt-0.5 block truncate text-xs text-muted">{result.summary}</span>}
             </span>
             <ArrowRight className="size-4 shrink-0 text-muted" />
-          </Link>
+          </FeatureNavigationLink>
         ))}
       </div>
     </div>
@@ -259,7 +260,7 @@ export function KnowledgeDashboard() {
         </div>
         <div className="flex gap-3">
           <Link href="/knowledge/search" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"><Search className="size-4" /> 论文检索</Link>
-          <Link href="/knowledge/graph" className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-ink hover:bg-surface"><Network className="size-4" /> 打开关系图谱</Link>
+          <FeatureNavigationLink href="/knowledge/graph" className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-ink hover:bg-surface"><Network className="size-4" /> 打开关系图谱</FeatureNavigationLink>
         </div>
       </header>
 

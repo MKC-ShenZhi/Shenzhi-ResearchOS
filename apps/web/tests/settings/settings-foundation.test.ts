@@ -7,9 +7,11 @@ const profile = readFileSync("features/settings/components/profile-panel.tsx", "
 const notifications = readFileSync("features/settings/components/notifications-panel.tsx", "utf8");
 const bff = readFileSync("app/api/v1/[...path]/route.ts", "utf8");
 const profileEditor = readFileSync("features/settings/components/profile/profile-editor.tsx", "utf8");
-const profileHook = readFileSync("features/settings/hooks/use-user-profile.ts", "utf8");
+const profileHook = readFileSync("hooks/use-user-profile.ts", "utf8");
 const profileClient = readFileSync("clients/profile/index.ts", "utf8");
-const avatarOptions = readFileSync("features/settings/avatar-options.ts", "utf8");
+const avatarOptions = readFileSync("clients/profile/avatar.ts", "utf8");
+const sidebar = readFileSync("components/common/layout/app-sidebar.tsx", "utf8");
+const userAvatar = readFileSync("components/common/user-avatar.tsx", "utf8");
 
 test("settings keeps all deep links and falls back invalid values to profile", () => {
   for (const value of ["profile", "subscription", "usage", "agent", "mcp", "api", "notifications"]) {
@@ -37,7 +39,17 @@ test("profile uses five local avatars and the authenticated profile API", () => 
   assert.match(profileClient, /method: "PATCH"/);
   assert.doesNotMatch(profileClient, /user_id/);
   assert.match(profileHook, /session\?\.user\.id/);
-  assert.match(profileHook, /setProfile\(null\)/);
+  assert.match(profileHook, /queryKey: profileQueryKey\(userId\)/);
+});
+
+test("settings and sidebar share the profile query and avatar renderer", () => {
+  assert.match(profileHook, /setQueryData\(profileQueryKey\(savedUserId\), updated\)/);
+  assert.match(profileEditor, /userAvatarSource\(profile, user\.image\)/);
+  assert.match(profileEditor, /<UserAvatar/);
+  assert.match(sidebar, /useUserProfile\(\)/);
+  assert.match(sidebar, /userAvatarSource\(profile, session\?\.user\.image\)/);
+  assert.match(sidebar, /<UserAvatar/);
+  assert.match(userAvatar, /onError=\{\(\) => setFailedSrc\(src\)\}/);
 });
 
 test("profile editor covers the stage two editable scholar fields", () => {

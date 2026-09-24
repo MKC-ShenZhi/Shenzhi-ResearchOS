@@ -1,13 +1,10 @@
 # Default profile avatars
 
-The five WebP files in this directory are original fictional researcher avatars generated on 2026-09-16 with the built-in image generation tool. They are project assets for the personal-profile settings flow, not representations of real people.
+The five WebP files in this directory are the built-in avatars used by the
+personal-profile settings flow and the global sidebar.
 
-Shared prompt direction:
-
-- square, centered head-and-shoulders fictional researcher;
-- polished modern editorial illustration with clean shapes and gentle gradients;
-- muted pastel background with a subtle circular halo;
-- readable at 24–96 px;
-- no text, logo, university insignia, watermark, famous person, or photographic identity.
-
-The individual prompts varied appearance, hairstyle, glasses, clothing, and background color. Source generations were 1024 × 1024 PNG; accepted outputs were resized to 512 × 512 and encoded as WebP quality 86. The user paused further generation after the first five accepted images, so the current allowlist is `avatar-01` through `avatar-05`.
+The current assets were converted on 2026-09-24 from the supplied 1254 × 1254
+RGBA PNG sources. They were resized directly to 512 × 512 without cropping or
+visual redesign, then encoded as WebP quality 86 with lossless alpha at quality
+100. The allowlist remains `avatar-01` through `avatar-05`; no separate
+thumbnail assets are required.
