@@ -21,6 +21,9 @@ import { cn } from "@/lib/utils";
 import { SITE } from "@/lib/constants";
 import { projects } from "@/features/projects/data";
 import { useAuth } from "@/components/auth/auth-provider";
+import { UserAvatar } from "@/components/common/user-avatar";
+import { userAvatarSource } from "@/clients/profile";
+import { useUserProfile } from "@/hooks/use-user-profile";
 import { useSidebarStore } from "@/stores/sidebar";
 import {
   FeatureNavigationLink,
@@ -422,6 +425,10 @@ export function AppSidebar() {
   const userName = !sessionReady || sessionPending
     ? null
     : session?.user.name?.trim() || session?.user.email || null;
+  const { profile } = useUserProfile();
+  const avatarSrc = userName
+    ? userAvatarSource(profile, session?.user.image)
+    : null;
   const [logoutOpen, setLogoutOpen] = React.useState(false);
   const handleLoggedOut = () => {
     setLogoutOpen(false);
@@ -562,9 +569,12 @@ export function AppSidebar() {
             }
           >
             {userName ? (
-              <span className="text-[13px] font-semibold text-primary">
-                {userName.slice(0, 1)}
-              </span>
+              <UserAvatar
+                src={avatarSrc}
+                name={userName}
+                alt={`${userName}的头像`}
+                className="size-9 text-[13px]"
+              />
             ) : (
               <User className="size-4.5 text-primary" />
             )}
@@ -580,9 +590,12 @@ export function AppSidebar() {
       ) : userName ? (
         <div className="relative mt-2">
           <div className="flex items-center gap-2.5 rounded-xl bg-card p-2.5 shadow-card">
-            <span className="flex size-9 items-center justify-center rounded-full bg-primary-soft text-[13px] font-semibold text-primary">
-              {userName.slice(0, 1)}
-            </span>
+            <UserAvatar
+              src={avatarSrc}
+              name={userName}
+              alt={`${userName}的头像`}
+              className="size-9 text-[13px]"
+            />
             <span className="flex min-w-0 flex-1 flex-col leading-tight">
               <span className="truncate text-[13px] font-semibold text-ink">
                 {userName}

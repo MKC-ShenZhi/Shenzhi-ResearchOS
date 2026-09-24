@@ -1,6 +1,8 @@
 import { apiJson } from "@/clients/backend/http";
 import type { UserProfile, UserProfilePatch } from "./types";
 
+export { AVATAR_OPTIONS, avatarPath, userAvatarSource } from "./avatar";
+
 export type {
   Achievement,
   AvatarKey,

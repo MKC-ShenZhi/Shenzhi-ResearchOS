@@ -3,13 +3,17 @@
 import Image from "next/image";
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Pencil, Plus, Save, Trash2, X } from "lucide-react";
-import type { UserProfile } from "@/clients/profile";
+import {
+  AVATAR_OPTIONS,
+  userAvatarSource,
+  type UserProfile,
+} from "@/clients/profile";
 import type { SettingsLocale } from "@/clients/settings";
+import { UserAvatar } from "@/components/common/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useUserProfile } from "@/hooks/use-user-profile";
 import { cn } from "@/lib/utils";
-import { AVATAR_OPTIONS, avatarPath } from "../../avatar-options";
-import { useUserProfile } from "../../hooks/use-user-profile";
 
 type SessionUser = { name?: string | null; email?: string | null; image?: string | null };
 type Draft = Pick<UserProfile, "avatar_key" | "bio" | "achievements" | "educations" | "biography" | "institutions">;
@@ -63,8 +67,7 @@ export function ProfileEditor({ user, locale }: { user: SessionUser | null; loca
   if (loading && !profile) return <div className="mt-3 rounded-2xl bg-card p-6 text-sm text-muted shadow-card">{zh ? "正在加载个人资料…" : "Loading profile…"}</div>;
   if (!profile) return <div className="mt-3 rounded-2xl bg-card p-6 shadow-card"><p role="alert" className="text-sm text-danger">{zh ? "个人资料加载失败，请刷新页面重试。" : "Could not load your profile. Refresh to retry."}</p></div>;
 
-  const defaultAvatar = avatarPath(profile.avatar_key);
-  const displayAvatar = profile.avatar_selected ? defaultAvatar : (user.image || defaultAvatar);
+  const displayAvatar = userAvatarSource(profile, user.image);
   const draft = draftState ?? draftFrom(profile);
   const cancel = () => { setDraft(null); setEditing(false); };
   const submit = async () => {
@@ -74,8 +77,12 @@ export function ProfileEditor({ user, locale }: { user: SessionUser | null; loca
 
   return <div className="mt-3 space-y-6 rounded-2xl bg-card p-6 shadow-card">
     <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-      {/* eslint-disable-next-line @next/next/no-img-element -- may use an external Better Auth avatar URL. */}
-      <img src={displayAvatar} alt={zh ? "当前头像" : "Current avatar"} className="size-24 shrink-0 rounded-2xl object-cover" />
+      <UserAvatar
+        src={displayAvatar}
+        name={user.name || user.email || ""}
+        alt={zh ? "当前头像" : "Current avatar"}
+        className="size-24 rounded-2xl text-2xl"
+      />
       <div className="min-w-0 flex-1">
         <p className="font-semibold text-ink">{user.name || user.email}</p>
         <p className="mt-1 text-sm text-muted">{user.email}</p>
