@@ -88,7 +88,10 @@ export function PaperPdfViewer({
     const element = contentRef.current;
     if (!element || (state !== "loading" && state !== "rendering" && state !== "ready")) return;
 
-    const updateWidth = () => setContentWidth(element.clientWidth);
+    const updateWidth = () => {
+      const nextWidth = element.clientWidth;
+      if (nextWidth > 0) setContentWidth(nextWidth);
+    };
     updateWidth();
     const observer = new ResizeObserver(updateWidth);
     observer.observe(element);
@@ -127,6 +130,10 @@ export function PaperPdfViewer({
 
   const handleDocumentLoad = useCallback(({ numPages: loadedPages }: { numPages: number }) => {
     setNumPages(loadedPages);
+    updateState("rendering");
+  }, [updateState]);
+
+  const handleFirstPageReady = useCallback(() => {
     updateState("ready");
   }, [updateState]);
 
@@ -156,15 +163,19 @@ export function PaperPdfViewer({
               </span>
             </div>
           )}
-          <PdfDocumentView
-            key={`${paperId}-${retryKey}`}
-            file={pdfPath}
-            numPages={numPages}
-            width={pageWidth}
-            className={cn(zoom > 1 ? "items-start" : "items-center")}
-            onLoadSuccess={handleDocumentLoad}
-            onLoadError={handleDocumentError}
-          />
+          {contentWidth > 0 && (
+            <PdfDocumentView
+              key={`${paperId}-${retryKey}`}
+              file={pdfPath}
+              numPages={numPages}
+              width={pageWidth}
+              scrollRootRef={contentRef}
+              className={cn(zoom > 1 ? "items-start" : "items-center")}
+              onLoadSuccess={handleDocumentLoad}
+              onLoadError={handleDocumentError}
+              onFirstPageReady={handleFirstPageReady}
+            />
+          )}
         </div>
       )}
 
