@@ -8,6 +8,9 @@ from app.core.responses import ok
 from app.schemas.chat import AnonymousClaimResult, CreateSessionBody, FollowupBody, UpdateSessionBody
 from app.services.chat.service import prepare_message, stop_message, stream_events
 from app.services.chat.repository import repository
+from app.services.identity.anonymous_claim import (
+    claim_anonymous_sessions as claim_all_anonymous_sessions,
+)
 
 router = APIRouter(prefix='/api/v1/chat', tags=['chat'])
 
@@ -33,7 +36,7 @@ async def list_sessions(owner: str = Depends(request_owner)):
 
 @router.post('/anonymous-claim')
 async def claim_anonymous_sessions(identity: MigrationIdentity = Depends(migration_identity)):
-    result = await repository.claim_anonymous_sessions(
+    result = await claim_all_anonymous_sessions(
         identity.source_owner,
         identity.target_owner,
     )

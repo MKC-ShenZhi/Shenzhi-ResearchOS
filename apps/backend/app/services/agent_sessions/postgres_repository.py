@@ -256,8 +256,13 @@ class PostgresAgentSessionRepository:
                 .where(AgentSessionRow.owner == source_owner, ~running_exists)
                 .values(owner=target_owner, updated_at=func.now()).returning(AgentSessionRow.id)
             )
-            count = len(moved.all())
-        return {'moved_count': count, 'skipped_running_count': int(skipped or 0), 'durable': True}
+            moved_ids = [str(item) for item in moved.all()]
+        return {
+            'moved_count': len(moved_ids),
+            'skipped_running_count': int(skipped or 0),
+            'moved_session_ids': moved_ids,
+            'durable': True,
+        }
 
     async def purge_owner(self, owner: str) -> int:
         async with session_scope() as db:

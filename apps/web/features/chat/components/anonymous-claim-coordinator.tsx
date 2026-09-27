@@ -10,6 +10,7 @@ import {
   shouldRetryAnonymousClaim,
   shouldRefreshAfterAnonymousClaim,
 } from "../services/anonymous-claim";
+import { notifyAgentSessionsChanged } from "@/features/agent-chat/session-events";
 
 export function AnonymousClaimCoordinator() {
   const { session, isPending } = useAuth();
@@ -64,6 +65,7 @@ function ClaimPrompt({ account }: { account: string }) {
         if (shouldRefreshAfterAnonymousClaim(result)) {
           requestReset();
           bumpHistoryRefresh();
+          notifyAgentSessionsChanged();
         }
         if (shouldRetryAnonymousClaim(result, attempts)) {
           retryTimer.current = setTimeout(() => void attempt(), ANONYMOUS_CLAIM_RETRY_DELAY_MS);
