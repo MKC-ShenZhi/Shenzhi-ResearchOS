@@ -6,6 +6,7 @@ import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 import { useSidebarStore } from "@/stores/sidebar";
 import { cn } from "@/lib/utils";
+import { AnonymousClaimCoordinator } from "@/features/chat/components/anonymous-claim-coordinator";
 
 /**
  * 应用外壳 —— 固定左侧栏 + 内容区
@@ -23,6 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Logo />
         <ThemeToggle className="ml-auto" />
       </header>
+      <AnonymousClaimCoordinator />
       <main
         className={cn(
           "transition-[padding] duration-200",
