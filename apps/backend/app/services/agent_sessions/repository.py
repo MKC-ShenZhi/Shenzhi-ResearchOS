@@ -170,7 +170,10 @@ class MemoryAgentSessionRepository:
 
     async def claim_anonymous_sessions(self, source_owner: str, target_owner: str) -> dict:
         # Memory mode cannot promise a durable ownership migration.
-        return {'moved_count': 0, 'skipped_running_count': 0, 'durable': False}
+        return {
+            'moved_count': 0, 'skipped_running_count': 0,
+            'moved_session_ids': [], 'durable': False,
+        }
 
     async def purge_owner(self, owner: str) -> int:
         ids = [item.id for item in self.sessions.values() if item.owner == owner]

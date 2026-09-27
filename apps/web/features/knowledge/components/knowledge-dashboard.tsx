@@ -26,6 +26,7 @@ import {
 import { loadKnowledgeOverview } from "@/features/knowledge/lib/overview-cache";
 import { paperHref } from "@/lib/navigation/paper";
 import { FeatureNavigationLink } from "@/components/common/feature-availability-provider";
+import { useAuth } from "@/components/auth/auth-provider";
 
 type SearchTab = { label: string; types: KnowledgeMixedSearchType[] };
 
@@ -200,6 +201,8 @@ function SearchResults({ response, query }: { response: KnowledgeMixedSearchResp
 
 export function KnowledgeDashboard() {
   const client = useMemo(() => getKnowledgeClient(), []);
+  const { session, isPending } = useAuth();
+  const identityKey = isPending ? null : (session?.user?.id ?? null);
   const [overview, setOverview] = useState<KnowledgeOverviewResponse | null>(null);
   const [personal, setPersonal] = useState<KnowledgePersonalOverviewResponse | null>(null);
   const [overviewError, setOverviewError] = useState(false);
@@ -210,17 +213,26 @@ export function KnowledgeDashboard() {
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const loadOverview = useCallback(async () => {
+    const requestIdentity = identityKey;
     setOverviewError(false);
-    const [publicResult, personalResult] = await loadKnowledgeOverview(client);
+    const [publicResult, personalResult] = await loadKnowledgeOverview(client, requestIdentity);
+    if (requestIdentity !== identityKey) return;
     if (publicResult.status === "fulfilled") setOverview(publicResult.value);
     else setOverviewError(true);
     if (personalResult.status === "fulfilled") setPersonal(personalResult.value);
-  }, [client]);
+  }, [client, identityKey]);
 
   useEffect(() => {
-    const handle = window.setTimeout(() => { void loadOverview(); }, 0);
+    if (isPending) return;
+    const handle = window.setTimeout(() => {
+      setOverview(null);
+      setPersonal(null);
+      setSearchResponse(null);
+      setSearchError(null);
+      void loadOverview();
+    }, 0);
     return () => window.clearTimeout(handle);
-  }, [loadOverview]);
+  }, [isPending, loadOverview]);
 
   const submitSearch = async () => {
     const normalized = query.trim();
