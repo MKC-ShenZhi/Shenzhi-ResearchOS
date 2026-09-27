@@ -1,25 +1,21 @@
 "use client";
 
 import { Suspense, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
-import { KnowledgeFilterPanel, type KnowledgeFilters } from "./components/filter-panel";
+import { KnowledgeFilterPanel } from "./components/filter-panel";
 import { KnowledgeResultsSection } from "./components/results-section";
 import { KnowledgeSearchHero } from "./components/search-hero";
 import {
   KNOWLEDGE_SEARCH_PAGE_SIZE,
   knowledgeSearchOffset,
 } from "./pagination";
-
-const EMPTY_FILTERS: KnowledgeFilters = {
-  yearFrom: null,
-  yearTo: null,
-  venue: [],
-  author: [],
-  keyword: [],
-  subject: [],
-};
+import {
+  buildKnowledgeSearchUrl,
+  readKnowledgeSearchUrlState,
+  type KnowledgeFilters,
+} from "./search-url-state";
 
 /**
  * 论文库 `/knowledge/search` —— 保留知识底座论文搜索能力。
@@ -27,23 +23,24 @@ const EMPTY_FILTERS: KnowledgeFilters = {
  * 业务链路：页面 → KnowledgeClient 接口 → Next.js BFF → FastAPI。
  * 页面只依赖 clients/knowledge 的契约类型与 Client 工厂。
  */
-function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }) {
+function KnowledgeSearchContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const returnTo = useCurrentInternalPath();
-
-  const [query, setQuery] = useState(initialQuery);
-  const [committedQuery, setCommittedQuery] = useState(initialQuery);
-  const [filters, setFilters] = useState<KnowledgeFilters>(EMPTY_FILTERS);
-  const [page, setPage] = useState(1);
+  const { query: committedQuery, filters, page } = readKnowledgeSearchUrlState(searchParams);
+  const [queryDraft, setQueryDraft] = useState({
+    source: committedQuery,
+    value: committedQuery,
+  });
+  const query = queryDraft.source === committedQuery ? queryDraft.value : committedQuery;
+  const setQuery = (value: string) => setQueryDraft({ source: committedQuery, value });
 
   /** 提交搜索：更新查询词并同步 URL */
   const submitSearch = (q: string) => {
     const text = q.trim();
-    setCommittedQuery(text);
-    setPage(1);
-    const next = new URLSearchParams();
-    if (text) next.set("q", text);
-    router.replace(`/knowledge/search?${next.toString()}`);
+    router.replace(buildKnowledgeSearchUrl({ query: text, filters, page: 1 }), {
+      scroll: false,
+    });
   };
 
   const searchParamsForQuery: KnowledgeSearchParams | null = useMemo(() => {
@@ -62,8 +59,18 @@ function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }
   }, [committedQuery, filters, page]);
 
   const updateFilters = (nextFilters: KnowledgeFilters) => {
-    setFilters(nextFilters);
-    setPage(1);
+    router.replace(
+      buildKnowledgeSearchUrl({ query: committedQuery, filters: nextFilters, page: 1 }),
+      { scroll: false },
+    );
+  };
+
+  const updatePage = (nextPage: number) => {
+    router.replace(
+      buildKnowledgeSearchUrl({ query: committedQuery, filters, page: nextPage }),
+      { scroll: false },
+    );
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
@@ -91,7 +98,7 @@ function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }
                 params={searchParamsForQuery}
                 returnTo={returnTo}
                 page={page}
-                onPageChange={setPage}
+                onPageChange={updatePage}
               />
             ) : (
               <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-line bg-card/40 px-6 text-center shadow-card">
@@ -107,10 +114,10 @@ function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }
   );
 }
 
-export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: string }) {
+export function KnowledgeSearchPage() {
   return (
     <Suspense fallback={<p className="p-8 text-sm text-muted">正在加载论文库…</p>}>
-      <KnowledgeSearchContent initialQuery={initialQuery} />
+      <KnowledgeSearchContent />
     </Suspense>
   );
 }
