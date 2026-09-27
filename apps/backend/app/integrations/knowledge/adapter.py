@@ -45,6 +45,13 @@ from app.schemas.knowledge import (
 )
 
 
+# The replacement retrieval API accepts at most 100 hits per request.  It has
+# no offset parameter, so paginated callers are served by fetching through the
+# requested page and slicing locally.  Keep the limit explicit to avoid
+# sending a request that the upstream rejects with HTTP 400.
+UPSTREAM_SEARCH_MAX_TOP_K = 100
+
+
 def _retrieved_at(value: datetime | None) -> datetime:
     if value is None:
         return datetime.now(timezone.utc)
@@ -499,6 +506,8 @@ class KnowledgeAdapter:
         upstream_top_k = request.top_k
         if request.offset is not None:
             upstream_top_k = request.offset + request.top_k + 1
+            if upstream_top_k > UPSTREAM_SEARCH_MAX_TOP_K:
+                raise KnowledgeIntegrationError.invalid_argument()
         body = await self.client.search(
             _upstream_search_payload(request, top_k=upstream_top_k)
         )
@@ -640,26 +649,38 @@ class KnowledgeAdapter:
         )
 
     async def mixed_search(self, request: KnowledgeMixedSearchRequest) -> KnowledgeMixedSearchResponse:
+        """Aggregate the supported search sources without serial upstream waits.
+
+        The knowledge-base API has no query-based graph search endpoint.  A
+        graph can only be loaded after a concrete paper id is known, so
+        ``graph`` is reported as unsupported here instead of incorrectly
+        repeating the paper search and relabelling its results.
+        """
         supported: list[str] = []
         unsupported: list[str] = []
         failed: list[str] = []
         results: list[KnowledgeMixedSearchResult] = []
         runnable_types = [
-            kind for kind in request.types if kind not in ('project', 'patent')
+            kind for kind in request.types
+            if kind not in ('project', 'patent', 'graph')
         ]
         # A mixed query must leave space for every supported source. Individual
         # type tabs still receive the full requested limit.
         per_source_limit = max(1, (request.limit + len(runnable_types) - 1) // len(runnable_types)) if runnable_types else request.limit
 
-        async def run(kind: str, operation: Any) -> None:
-            nonlocal results
+        async def run(kind: str, operation: Any) -> Any:
             try:
-                value = await operation()
+                return await operation()
             except KnowledgeIntegrationError:
+                return None
+
+        async def collect(kind: str, value: Any) -> None:
+            """Map one completed source response in the requested order."""
+            if value is None:
                 failed.append(kind)
                 return
             supported.append(kind)
-            if kind == 'paper' or kind == 'graph':
+            if kind == 'paper':
                 papers = value.results
                 for paper in papers:
                     results.append(KnowledgeMixedSearchResult(
@@ -668,7 +689,7 @@ class KnowledgeAdapter:
                         title=paper.title,
                         summary=paper.abstract,
                         metadata={'year': paper.year, 'venue': paper.venue},
-                        action=f"/papers/{quote(paper.id, safe='')}" + ('/graph' if kind == 'graph' else ''),
+                        action=f"/papers/{quote(paper.id, safe='')}",
                     ))
             elif kind == 'scholar':
                 for scholar in value.results:
@@ -704,24 +725,30 @@ class KnowledgeAdapter:
                 unsupported.append(kind)
 
         requested = request.types
+        operations: list[tuple[str, Any]] = []
         for kind in requested:
-            if kind in ('project', 'patent'):
+            if kind in ('project', 'patent', 'graph'):
                 unsupported.append(kind)
                 continue
             if kind == 'paper':
-                await run(kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, topK=per_source_limit)))
-            elif kind == 'graph':
-                await run(kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, topK=per_source_limit)))
+                operations.append((kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, topK=per_source_limit))))
             elif kind == 'scholar':
-                await run(kind, lambda: self.search_scholars(ScholarSearchRequest(query=request.query, limit=per_source_limit)))
+                operations.append((kind, lambda: self.search_scholars(ScholarSearchRequest(query=request.query, limit=per_source_limit))))
             elif kind == 'topic':
-                await run(kind, lambda: self.search_by_subject(
+                operations.append((kind, lambda: self.search_by_subject(
                     request.query, offset=0, limit=per_source_limit
-                ))
+                )))
             elif kind == 'funding':
-                await run(kind, lambda: self._funding_highlights(
+                operations.append((kind, lambda: self._funding_highlights(
                     request.query, limit=per_source_limit
-                ))
+                )))
+
+        # All independent source requests run concurrently.  Results are
+        # collected in the user's requested order so response ordering stays
+        # deterministic even when an upstream source finishes earlier.
+        values = await asyncio.gather(*(run(kind, operation) for kind, operation in operations))
+        for (kind, _), value in zip(operations, values):
+            await collect(kind, value)
 
         deduped: list[KnowledgeMixedSearchResult] = []
         seen: set[tuple[str, str, str]] = set()

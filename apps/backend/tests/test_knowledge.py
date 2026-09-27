@@ -376,6 +376,21 @@ class KnowledgeContinuityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(third_page.results[-1].id, 'paper:45')
         self.assertFalse(third_page.has_more)
 
+    async def test_paginated_search_rejects_page_beyond_upstream_top_k_limit(self):
+        class UnexpectedClient(FixtureClient):
+            async def search(self, request):
+                self.fail('the adapter must not send top_k above the upstream limit')
+
+        with self.assertRaises(KnowledgeIntegrationError) as caught:
+            await KnowledgeAdapter(UnexpectedClient()).search(
+                KnowledgeSearchRequest.model_validate({
+                    'query': 'machine learning',
+                    'topK': 20,
+                    'offset': 80,
+                })
+            )
+        self.assertEqual(caught.exception.code, 'INVALID_ARGUMENT')
+
 
 class KnowledgeServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_service_delegates_domain_use_cases_to_adapter(self):

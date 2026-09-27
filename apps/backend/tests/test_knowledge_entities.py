@@ -241,12 +241,14 @@ class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
             limit=10,
         ))
 
-        self.assertEqual([payload['top_k'] for payload in client.search_payloads], [2, 2])
-        self.assertEqual(client.scholar_search, ('graph', 2, 0))
-        self.assertEqual(client.subject_search, ('graph', 0, 2))
-        self.assertEqual(client.funding_candidates, ('graph', 2, 0))
-        self.assertEqual(result.supported_types, ['paper', 'scholar', 'topic', 'funding', 'graph'])
-        self.assertEqual(result.unsupported_types, ['project', 'patent'])
+        # Graph has no query-based upstream endpoint; it must not duplicate
+        # the paper retrieval request.
+        self.assertEqual([payload['top_k'] for payload in client.search_payloads], [3])
+        self.assertEqual(client.scholar_search, ('graph', 3, 0))
+        self.assertEqual(client.subject_search, ('graph', 0, 3))
+        self.assertEqual(client.funding_candidates, ('graph', 3, 0))
+        self.assertEqual(result.supported_types, ['paper', 'scholar', 'topic', 'funding'])
+        self.assertEqual(result.unsupported_types, ['project', 'patent', 'graph'])
         self.assertIn('scholar', [item.type for item in result.results])
         self.assertIn('funding', [item.type for item in result.results])
         self.assertTrue(any(item.metadata.get('matchedBy') == 'topic' for item in result.results))

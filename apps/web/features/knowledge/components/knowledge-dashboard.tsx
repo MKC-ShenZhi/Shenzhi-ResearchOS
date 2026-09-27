@@ -30,7 +30,9 @@ import { FeatureNavigationLink } from "@/components/common/feature-availability-
 type SearchTab = { label: string; types: KnowledgeMixedSearchType[] };
 
 const SEARCH_TABS: SearchTab[] = [
-  { label: "全部", types: ["paper", "scholar", "topic", "project", "patent", "funding", "graph"] },
+  // The upstream graph API requires a concrete paperId; it cannot participate
+  // in keyword-based mixed search. Graphs remain available from paper detail.
+  { label: "全部", types: ["paper", "scholar", "topic", "project", "patent", "funding"] },
   { label: "论文", types: ["paper"] },
   { label: "学者", types: ["scholar"] },
   { label: "主题", types: ["topic"] },
