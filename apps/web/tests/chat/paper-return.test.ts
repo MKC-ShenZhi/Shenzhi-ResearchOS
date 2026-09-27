@@ -189,6 +189,13 @@ test("unified detail, graph and compatibility links preserve opaque IDs and safe
   assert.equal(paperDoiUrl("https://doi.org/10.1234/example"), "https://doi.org/10.1234/example");
 });
 
+test("Topic paper links preserve subject and page in returnTo", () => {
+  const returnTo = "/knowledge/topics?subject=Agent&page=4";
+  const href = paperHref("paper:agent", { mode: "create", source: returnTo });
+
+  assert.equal(new URL(href, "https://local.test").searchParams.get("returnTo"), returnTo);
+});
+
 test("paper journey uses one real detail and graph implementation with compatibility redirects", () => {
   const detailPage = readFileSync("features/papers/[id]/PaperDetailPage.tsx", "utf8");
   const assistant = readFileSync("features/papers/[id]/components/paper-assistant-panel.tsx", "utf8");

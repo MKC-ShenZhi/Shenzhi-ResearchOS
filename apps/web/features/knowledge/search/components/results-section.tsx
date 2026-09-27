@@ -30,7 +30,7 @@ export function KnowledgeResultsSection({
   onPageChange: (page: number) => void;
 }) {
   const query = params.query.trim();
-  const { data, isPending, isFetching, isError, error, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["knowledge", "search", params],
     queryFn: () => fetchSearch(params),
     enabled: query.length > 0,
@@ -45,11 +45,11 @@ export function KnowledgeResultsSection({
     );
   }
 
-  if (isPending || isFetching) {
+  if (isPending && !data) {
     return <KnowledgeSearchSkeleton count={4} />;
   }
 
-  if (isError) {
+  if (isError && !data) {
     const knowledgeError =
       error instanceof KnowledgeClientError
         ? error

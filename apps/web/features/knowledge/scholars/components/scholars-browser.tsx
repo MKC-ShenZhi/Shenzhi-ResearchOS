@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { getKnowledgeClient, KnowledgeClientError } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { knowledgeQueryRetry } from "@/features/knowledge/retry";
 import {
   KnowledgeSearchError,
@@ -14,9 +16,17 @@ import { ScholarCard } from "./scholar-card";
 
 /** Scholar Search 正式入口；不读取原型学者数据。 */
 export function ScholarsBrowser() {
-  const [query, setQuery] = useState("");
-  const [committedQuery, setCommittedQuery] = useState("");
-  const { data, isPending, isFetching, isError, error, refetch } = useQuery({
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const committedQuery = searchParams.get("q")?.trim() ?? "";
+  const returnTo = useCurrentInternalPath();
+  const [queryDraft, setQueryDraft] = useState({
+    source: committedQuery,
+    value: committedQuery,
+  });
+  const query = queryDraft.source === committedQuery ? queryDraft.value : committedQuery;
+  const setQuery = (value: string) => setQueryDraft({ source: committedQuery, value });
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["knowledge", "scholars", "search", committedQuery],
     queryFn: () => getKnowledgeClient().searchScholars({ query: committedQuery }),
     enabled: committedQuery.length > 0,
@@ -25,7 +35,13 @@ export function ScholarsBrowser() {
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setCommittedQuery(query.trim());
+    const next = new URLSearchParams();
+    const normalizedQuery = query.trim();
+    if (normalizedQuery) next.set("q", normalizedQuery);
+    const serialized = next.toString();
+    router.replace(`/knowledge/scholars${serialized ? `?${serialized}` : ""}`, {
+      scroll: false,
+    });
   };
 
   const results = data?.results ?? [];
@@ -59,9 +75,9 @@ export function ScholarsBrowser() {
           <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-line bg-card/40 px-6 text-center text-sm text-muted">
             输入学者姓名开始搜索
           </div>
-        ) : isPending || isFetching ? (
+        ) : isPending && !data ? (
           <KnowledgeSearchSkeleton count={4} />
-        ) : isError ? (
+        ) : isError && !data ? (
           <KnowledgeSearchError
             error={error instanceof KnowledgeClientError
               ? error
@@ -80,7 +96,7 @@ export function ScholarsBrowser() {
             </p>
             <div className="grid gap-4 md:grid-cols-2">
               {results.map((scholar) => (
-                <ScholarCard key={scholar.id} scholar={scholar} />
+                <ScholarCard key={scholar.id} scholar={scholar} returnTo={returnTo} />
               ))}
             </div>
           </div>
