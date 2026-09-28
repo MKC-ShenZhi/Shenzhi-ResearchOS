@@ -1,3 +1,4 @@
+import asyncio
 import json
 import unittest
 from unittest.mock import patch
@@ -198,16 +199,24 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
         username: str = 'researcher@example.com',
         password: str = 'secret',
         max_size_bytes: int = 10 * 1024 * 1024,
+        api_base_url: str = 'https://api2.openreview.net',
+        login_failure_cooldown_seconds: float = 60.0,
+        monotonic=None,
     ) -> OpenReviewProvider:
+        kwargs = {}
+        if monotonic is not None:
+            kwargs['monotonic'] = monotonic
         return OpenReviewProvider(
             HTTPProvider(
                 timeout=30,
                 max_size_bytes=max_size_bytes,
                 transport=httpx.MockTransport(handler),
             ),
-            api_base_url='https://api2.openreview.net',
+            api_base_url=api_base_url,
             username=username,
             password=password,
+            login_failure_cooldown_seconds=login_failure_cooldown_seconds,
+            **kwargs,
         )
 
     def test_extracts_note_id_from_supported_openreview_urls(self):
@@ -378,6 +387,61 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('authorization', requests[1].headers)
         await fetch.close()
 
+    async def test_login_failure_enters_cooldown_for_later_ranges(self):
+        login_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal login_count
+            if request.url.path == '/login':
+                login_count += 1
+                return httpx.Response(401)
+            return httpx.Response(206, headers={'content-type': 'application/pdf'})
+
+        provider = self.provider(handler)
+        first = await provider.open(
+            'https://openreview.net/pdf?id=note-123',
+            range_header='bytes=0-9',
+        )
+        second = await provider.open(
+            'https://openreview.net/pdf?id=note-123',
+            range_header='bytes=10-19',
+        )
+
+        self.assertEqual(login_count, 1)
+        await first.close()
+        await second.close()
+
+    async def test_login_retries_after_cooldown_expires(self):
+        login_count = 0
+        clock = [100.0]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal login_count
+            if request.url.path == '/login':
+                login_count += 1
+                if login_count == 2:
+                    return httpx.Response(200, json={'token': 'token-2'})
+                return httpx.Response(503)
+            return httpx.Response(206, headers={'content-type': 'application/pdf'})
+
+        provider = self.provider(
+            handler,
+            login_failure_cooldown_seconds=10.0,
+            monotonic=lambda: clock[0],
+        )
+        first = await provider.open('https://openreview.net/pdf?id=note-123')
+        clock[0] += 10.1
+        second = await provider.open('https://openreview.net/pdf?id=note-123')
+        third = await provider.open(
+            'https://openreview.net/pdf?id=note-123',
+            range_header='bytes=10-19',
+        )
+
+        self.assertEqual(login_count, 2)
+        await first.close()
+        await second.close()
+        await third.close()
+
     async def test_missing_credentials_skips_login_and_uses_public_pdf(self):
         requests = []
 
@@ -406,14 +470,80 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
                 })
             return httpx.Response(200, headers={'content-type': 'application/pdf'})
 
-        fetch = await self.provider(handler).open(
+        provider = self.provider(handler)
+        first = await provider.open(
             'https://openreview.net/forum?id=note-123'
         )
+        second = await provider.open(
+            'https://openreview.net/forum?id=note-123',
+            range_header='bytes=10-19',
+        )
 
-        self.assertTrue(fetch.validation.available)
-        self.assertEqual([request.url.path for request in requests], ['/login', '/pdf'])
-        self.assertEqual(requests[1].url.host, 'openreview.net')
-        await fetch.close()
+        self.assertTrue(first.validation.available)
+        self.assertTrue(second.validation.available)
+        self.assertEqual(
+            [request.url.path for request in requests],
+            ['/login', '/pdf', '/pdf'],
+        )
+        self.assertTrue(all(
+            request.url.host == 'openreview.net'
+            for request in requests[1:]
+        ))
+        await first.close()
+        await second.close()
+
+    async def test_failed_refresh_enters_login_cooldown(self):
+        login_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal login_count
+            if request.url.path == '/login':
+                login_count += 1
+                if login_count == 1:
+                    return httpx.Response(200, json={'token': 'token-1'})
+                return httpx.Response(503)
+            if request.url.host == 'api2.openreview.net':
+                return httpx.Response(401)
+            return httpx.Response(206, headers={'content-type': 'application/pdf'})
+
+        provider = self.provider(handler)
+        first = await provider.open('https://openreview.net/pdf?id=note-123')
+        second = await provider.open(
+            'https://openreview.net/pdf?id=note-123',
+            range_header='bytes=10-19',
+        )
+
+        self.assertEqual(login_count, 2)
+        self.assertTrue(first.validation.available)
+        self.assertTrue(second.validation.available)
+        await first.close()
+        await second.close()
+
+    async def test_concurrent_login_failure_is_deduplicated(self):
+        login_count = 0
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal login_count
+            if request.url.path == '/login':
+                login_count += 1
+                await asyncio.sleep(0)
+                return httpx.Response(503)
+            return httpx.Response(206, headers={'content-type': 'application/pdf'})
+
+        provider = self.provider(handler)
+        first, second = await asyncio.gather(
+            provider.open('https://openreview.net/pdf?id=note-123'),
+            provider.open(
+                'https://openreview.net/pdf?id=note-123',
+                range_header='bytes=10-19',
+            ),
+        )
+
+        self.assertEqual(login_count, 1)
+        self.assertTrue(first.validation.available)
+        self.assertTrue(second.validation.available)
+        await first.close()
+        await second.close()
 
     async def test_authenticated_range_failure_is_not_replaced_by_fallback(self):
         requests = []
@@ -500,12 +630,12 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
         await fetch.close()
 
 
-class PaperResourceConfigTests(unittest.TestCase):
+class PaperResourceConfigTests(unittest.IsolatedAsyncioTestCase):
     def test_configuration_reads_timeout_and_max_megabytes(self):
         with patch.dict('os.environ', {
             'PAPER_RESOURCE_TIMEOUT': '12.5',
             'PAPER_MAX_SIZE_MB': '2',
-            'OPENREVIEW_API_BASE_URL': 'https://openreview-api.example/',
+            'OPENREVIEW_API_BASE_URL': 'https://api.openreview.net/',
             'OPENREVIEW_USERNAME': ' researcher@example.com ',
             'OPENREVIEW_PASSWORD': 'secret',
         }):
@@ -515,7 +645,7 @@ class PaperResourceConfigTests(unittest.TestCase):
         self.assertEqual(config.max_size_bytes, 2 * 1024 * 1024)
         self.assertEqual(
             config.openreview_api_base_url,
-            'https://openreview-api.example',
+            'https://api.openreview.net',
         )
         self.assertEqual(config.openreview_username, 'researcher@example.com')
         self.assertEqual(config.openreview_password, 'secret')
@@ -538,6 +668,60 @@ class PaperResourceConfigTests(unittest.TestCase):
         )
         self.assertEqual(config.openreview_username, '')
         self.assertEqual(config.openreview_password, '')
+
+    def test_openreview_api_base_url_normalizes_trusted_https_origins(self):
+        for configured, expected in (
+            ('https://api2.openreview.net/', 'https://api2.openreview.net'),
+            ('https://api.openreview.net', 'https://api.openreview.net'),
+            ('https://reviews.openreview.net:443/', 'https://reviews.openreview.net'),
+        ):
+            with self.subTest(configured=configured):
+                with patch.dict('os.environ', {
+                    'OPENREVIEW_API_BASE_URL': configured,
+                }):
+                    config = paper_resource_config()
+                self.assertEqual(config.openreview_api_base_url, expected)
+
+    def test_untrusted_openreview_api_base_urls_fall_back_to_default(self):
+        untrusted_urls = (
+            'http://api2.openreview.net',
+            'https://evil.com',
+            'https://openreview.net.evil.com',
+            'https://evilopenreview.net',
+            'https://user:pass@api2.openreview.net',
+            'https://api2.openreview.net/login',
+            'https://api2.openreview.net?x=1',
+            'https://127.0.0.1',
+            'https://api2.openreview.net:8443',
+        )
+        for configured in untrusted_urls:
+            with self.subTest(configured=configured):
+                with patch.dict('os.environ', {
+                    'OPENREVIEW_API_BASE_URL': configured,
+                }):
+                    config = paper_resource_config()
+                self.assertEqual(
+                    config.openreview_api_base_url,
+                    'https://api2.openreview.net',
+                )
+
+    async def test_provider_never_sends_credentials_to_untrusted_api_base(self):
+        requests = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if request.url.path == '/login':
+                return httpx.Response(401)
+            return httpx.Response(200, headers={'content-type': 'application/pdf'})
+
+        fetch = await OpenReviewProviderTests.provider(
+            handler,
+            api_base_url='https://evil.com',
+        ).open('https://openreview.net/pdf?id=note-123')
+
+        self.assertEqual(requests[0].url.host, 'api2.openreview.net')
+        self.assertNotIn('evil.com', [request.url.host for request in requests])
+        await fetch.close()
 
 
 if __name__ == '__main__':

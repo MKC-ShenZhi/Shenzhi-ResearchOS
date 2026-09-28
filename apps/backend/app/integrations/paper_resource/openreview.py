@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from urllib.parse import parse_qsl, unquote, urlencode, urlsplit
 
 import httpx
 
+from app.core.config import normalize_openreview_api_base_url
 from app.integrations.paper_resource.base import (
     PDFProvider,
     ProviderFetch,
     ProviderValidation,
 )
 from app.integrations.paper_resource.http import HTTPProvider
+
+
+DEFAULT_LOGIN_FAILURE_COOLDOWN_SECONDS = 60.0
 
 
 class OpenReviewProvider(PDFProvider):
@@ -26,12 +31,22 @@ class OpenReviewProvider(PDFProvider):
         api_base_url: str = 'https://api2.openreview.net',
         username: str = '',
         password: str = '',
+        login_failure_cooldown_seconds: float = (
+            DEFAULT_LOGIN_FAILURE_COOLDOWN_SECONDS
+        ),
+        monotonic: Callable[[], float] = time.monotonic,
     ):
         self.http_provider = http_provider
-        self.api_base_url = api_base_url.strip().rstrip('/')
+        self.api_base_url = normalize_openreview_api_base_url(api_base_url)
         self.username = username.strip()
         self.password = password
+        self._login_failure_cooldown_seconds = max(
+            0.0,
+            float(login_failure_cooldown_seconds),
+        )
+        self._monotonic = monotonic
         self._token: str | None = None
+        self._login_retry_after = 0.0
         self._login_lock = asyncio.Lock()
 
     def match(self, url: str) -> bool:
@@ -98,23 +113,42 @@ class OpenReviewProvider(PDFProvider):
     async def _get_token(self) -> str | None:
         if self._token is not None:
             return self._token
+        if self._login_is_cooling_down():
+            return None
         async with self._login_lock:
-            if self._token is None:
-                self._token = await self._login()
-            return self._token
+            if self._token is not None:
+                return self._token
+            if self._login_is_cooling_down():
+                return None
+            return await self._login_and_cache_result()
 
     async def _refresh_token(self, rejected_token: str) -> str | None:
         async with self._login_lock:
             if self._token is not None and self._token != rejected_token:
                 return self._token
             self._token = None
-            self._token = await self._login()
-            return self._token
+            if self._login_is_cooling_down():
+                return None
+            return await self._login_and_cache_result()
 
     async def _clear_token(self, rejected_token: str) -> None:
         async with self._login_lock:
             if self._token == rejected_token:
                 self._token = None
+
+    def _login_is_cooling_down(self) -> bool:
+        return self._monotonic() < self._login_retry_after
+
+    async def _login_and_cache_result(self) -> str | None:
+        token = await self._login()
+        self._token = token
+        if token is None:
+            self._login_retry_after = (
+                self._monotonic() + self._login_failure_cooldown_seconds
+            )
+        else:
+            self._login_retry_after = 0.0
+        return token
 
     async def _login(self) -> str | None:
         if not self.api_base_url:
