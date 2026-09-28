@@ -548,6 +548,31 @@ def ensure_session_workspace(owner: str, session_id: str) -> Path:
     return root
 
 
+def copy_session_workspace(source_owner: str, target_owner: str, session_id: str) -> bool:
+    """Prepare an idempotent session-workspace copy without removing source files."""
+    if not SESSION_ID_PATTERN.match(session_id):
+        raise BusinessError(20001, '非法的会话标识')
+    source = _owner_dir(source_owner) / session_id
+    if not source.exists():
+        return False
+    target = _owner_dir(target_owner) / session_id
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Preserve links instead of dereferencing paths outside the owner tree.
+    shutil.copytree(source, target, symlinks=True, dirs_exist_ok=True)
+    return True
+
+
+def cleanup_session_workspace(owner: str, session_id: str) -> bool:
+    """Remove a committed session's old owner copy; callers treat this as best-effort."""
+    if not SESSION_ID_PATTERN.match(session_id):
+        raise BusinessError(20001, '非法的会话标识')
+    source = _owner_dir(owner) / session_id
+    if not source.exists():
+        return False
+    shutil.rmtree(source)
+    return True
+
+
 def mount_workspace_into(target_root: Path, workspace_id: str, owner: str) -> int:
     """把上传工作区的文件同步进目标工作区，返回同步的文件数。
 

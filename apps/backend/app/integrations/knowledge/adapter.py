@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import asyncio
+import os
 from datetime import datetime, timezone
 from typing import Any, Callable
 from urllib.parse import quote
@@ -45,11 +46,22 @@ from app.schemas.knowledge import (
 )
 
 
-# The replacement retrieval API accepts at most 100 hits per request.  It has
-# no offset parameter, so paginated callers are served by fetching through the
-# requested page and slicing locally.  Keep the limit explicit to avoid
-# sending a request that the upstream rejects with HTTP 400.
-UPSTREAM_SEARCH_MAX_TOP_K = 100
+# The retrieval API has no offset parameter, so paginated callers are served
+# by fetching through the requested page and slicing locally. Deployments may
+# raise the upstream result window without changing ShenZhi's public request.
+DEFAULT_UPSTREAM_SEARCH_MAX_TOP_K = 100
+
+
+def _configured_search_max_top_k() -> int:
+    raw = os.getenv(
+        'KNOWLEDGE_BASE_SEARCH_MAX_TOP_K',
+        str(DEFAULT_UPSTREAM_SEARCH_MAX_TOP_K),
+    ).strip()
+    try:
+        value = int(raw)
+    except (TypeError, ValueError, OverflowError):
+        return DEFAULT_UPSTREAM_SEARCH_MAX_TOP_K
+    return value if value > 0 else DEFAULT_UPSTREAM_SEARCH_MAX_TOP_K
 
 
 def _retrieved_at(value: datetime | None) -> datetime:
@@ -504,10 +516,13 @@ class KnowledgeAdapter:
         # slices at this backend boundary. Callers that omit offset retain the
         # original top_k request (Knowledge2Chat relies on that behavior).
         upstream_top_k = request.top_k
+        page_end: int | None = None
         if request.offset is not None:
-            upstream_top_k = request.offset + request.top_k + 1
-            if upstream_top_k > UPSTREAM_SEARCH_MAX_TOP_K:
+            max_top_k = _configured_search_max_top_k()
+            if request.offset >= max_top_k:
                 raise KnowledgeIntegrationError.invalid_argument()
+            page_end = min(request.offset + request.top_k, max_top_k)
+            upstream_top_k = min(page_end + 1, max_top_k)
         body = await self.client.search(
             _upstream_search_payload(request, top_k=upstream_top_k)
         )
@@ -518,7 +533,7 @@ class KnowledgeAdapter:
         mapped = [map_search_result(item, retrieved_at=retrieved_at) for item in results]
         if request.offset is None:
             return KnowledgeSearchResponse(results=mapped)
-        page_end = request.offset + request.top_k
+        assert page_end is not None
         return KnowledgeSearchResponse(
             results=mapped[request.offset:page_end],
             has_more=len(mapped) > page_end,

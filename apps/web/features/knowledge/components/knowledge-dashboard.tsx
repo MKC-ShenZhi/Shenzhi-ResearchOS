@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -23,7 +23,7 @@ import {
   type KnowledgeOverviewResponse,
   type KnowledgePersonalOverviewResponse,
 } from "@/clients/knowledge";
-import { loadKnowledgeOverview } from "@/features/knowledge/lib/overview-cache";
+import { loadKnowledgeOverviewForGeneration } from "@/features/knowledge/lib/overview-cache";
 import { paperHref } from "@/lib/navigation/paper";
 import { FeatureNavigationLink } from "@/components/common/feature-availability-provider";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -206,6 +206,7 @@ export function KnowledgeDashboard() {
   const [overview, setOverview] = useState<KnowledgeOverviewResponse | null>(null);
   const [personal, setPersonal] = useState<KnowledgePersonalOverviewResponse | null>(null);
   const [overviewError, setOverviewError] = useState(false);
+  const overviewGenerationRef = useRef(0);
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState(0);
   const [searching, setSearching] = useState(false);
@@ -213,10 +214,16 @@ export function KnowledgeDashboard() {
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const loadOverview = useCallback(async () => {
-    const requestIdentity = identityKey;
+    const generation = ++overviewGenerationRef.current;
     setOverviewError(false);
-    const [publicResult, personalResult] = await loadKnowledgeOverview(client, requestIdentity);
-    if (requestIdentity !== identityKey) return;
+    const result = await loadKnowledgeOverviewForGeneration(
+      client,
+      identityKey,
+      generation,
+      () => overviewGenerationRef.current,
+    );
+    if (!result) return;
+    const [publicResult, personalResult] = result;
     if (publicResult.status === "fulfilled") setOverview(publicResult.value);
     else setOverviewError(true);
     if (personalResult.status === "fulfilled") setPersonal(personalResult.value);
@@ -231,7 +238,10 @@ export function KnowledgeDashboard() {
       setSearchError(null);
       void loadOverview();
     }, 0);
-    return () => window.clearTimeout(handle);
+    return () => {
+      overviewGenerationRef.current += 1;
+      window.clearTimeout(handle);
+    };
   }, [isPending, loadOverview]);
 
   const submitSearch = async () => {

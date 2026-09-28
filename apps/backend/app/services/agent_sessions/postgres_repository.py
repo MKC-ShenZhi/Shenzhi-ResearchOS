@@ -243,20 +243,40 @@ class PostgresAgentSessionRepository:
             return _session_from_row(existing)
         return session
 
-    async def claim_anonymous_sessions(self, source_owner: str, target_owner: str) -> dict:
+    async def claimable_session_ids(self, source_owner: str) -> list[str]:
         running_exists = exists(select(AgentTurnRow.id).where(
             AgentTurnRow.session_id == AgentSessionRow.id, AgentTurnRow.status == 'running',
         ))
+        async with get_session_factory()() as db:
+            ids = await db.scalars(select(AgentSessionRow.id).where(
+                AgentSessionRow.owner == source_owner, ~running_exists,
+            ))
+            return [str(item) for item in ids.all()]
+
+    async def claim_anonymous_sessions(
+        self, source_owner: str, target_owner: str, *, session_ids: list[str]
+    ) -> dict:
+        running_exists = exists(select(AgentTurnRow.id).where(
+            AgentTurnRow.session_id == AgentSessionRow.id, AgentTurnRow.status == 'running',
+        ))
+        prepared_ids = list(dict.fromkeys(str(item) for item in session_ids))
         async with session_scope() as db:
             skipped = await db.scalar(select(func.count()).select_from(AgentSessionRow).where(
                 AgentSessionRow.owner == source_owner, running_exists,
             ))
-            moved = await db.scalars(
-                update(AgentSessionRow)
-                .where(AgentSessionRow.owner == source_owner, ~running_exists)
-                .values(owner=target_owner, updated_at=func.now()).returning(AgentSessionRow.id)
-            )
-            moved_ids = [str(item) for item in moved.all()]
+            moved_ids: list[str] = []
+            if prepared_ids:
+                moved = await db.scalars(
+                    update(AgentSessionRow)
+                    .where(
+                        AgentSessionRow.owner == source_owner,
+                        AgentSessionRow.id.in_(prepared_ids),
+                        ~running_exists,
+                    )
+                    .values(owner=target_owner, updated_at=func.now())
+                    .returning(AgentSessionRow.id)
+                )
+                moved_ids = [str(item) for item in moved.all()]
         return {
             'moved_count': len(moved_ids),
             'skipped_running_count': int(skipped or 0),

@@ -11,6 +11,7 @@ from app.core.identity import require_bff
 from app.schemas.knowledge import KnowledgeSearchRequest, PaperDetail, Provenance
 from app.integrations.knowledge.adapter import (
     KnowledgeAdapter,
+    _configured_search_max_top_k,
     map_graph,
     map_paper_detail,
     map_search_result,
@@ -377,20 +378,98 @@ class KnowledgeContinuityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(third_page.results[-1].id, 'paper:45')
         self.assertFalse(third_page.has_more)
 
-    async def test_paginated_search_rejects_page_beyond_upstream_top_k_limit(self):
-        class UnexpectedClient(FixtureClient):
-            async def search(self, request):
-                self.fail('the adapter must not send top_k above the upstream limit')
+    async def test_paginated_search_returns_last_page_with_capped_look_ahead(self):
+        many_results = []
+        for index in range(100):
+            item = copy.deepcopy(SEARCH_RESPONSE['results'][0])
+            item.update({
+                'paper_id': f'paper:{index + 1}',
+                'title': f'Paper {index + 1}',
+                'rank': index + 1,
+            })
+            many_results.append(item)
 
-        with self.assertRaises(KnowledgeIntegrationError) as caught:
-            await KnowledgeAdapter(UnexpectedClient()).search(
+        class LastPageClient(FixtureClient):
+            def __init__(self):
+                self.search_requests = []
+
+            async def search(self, request):
+                self.search_requests.append(request)
+                return {'results': many_results[:request['top_k']]}
+
+        client = LastPageClient()
+        with patch.dict('os.environ', {'KNOWLEDGE_BASE_SEARCH_MAX_TOP_K': '100'}):
+            response = await KnowledgeAdapter(client).search(
                 KnowledgeSearchRequest.model_validate({
                     'query': 'machine learning',
                     'topK': 20,
                     'offset': 80,
                 })
             )
+        self.assertEqual(client.search_requests[0]['top_k'], 100)
+        self.assertEqual(len(response.results), 20)
+        self.assertEqual(response.results[0].id, 'paper:81')
+        self.assertEqual(response.results[-1].id, 'paper:100')
+        self.assertFalse(response.has_more)
+
+    async def test_paginated_search_rejects_offset_outside_upstream_window(self):
+        class UnexpectedClient(FixtureClient):
+            async def search(self, request):
+                self.fail('the adapter must not call upstream outside the result window')
+
+        with patch.dict('os.environ', {'KNOWLEDGE_BASE_SEARCH_MAX_TOP_K': '100'}):
+            with self.assertRaises(KnowledgeIntegrationError) as caught:
+                await KnowledgeAdapter(UnexpectedClient()).search(
+                    KnowledgeSearchRequest.model_validate({
+                        'query': 'machine learning',
+                        'topK': 20,
+                        'offset': 100,
+                    })
+                )
         self.assertEqual(caught.exception.code, 'INVALID_ARGUMENT')
+
+    async def test_paginated_search_uses_configured_upstream_window(self):
+        class ConfiguredWindowClient(FixtureClient):
+            def __init__(self):
+                self.search_requests = []
+
+            async def search(self, request):
+                self.search_requests.append(request)
+                return {'results': []}
+
+        client = ConfiguredWindowClient()
+        with patch.dict('os.environ', {'KNOWLEDGE_BASE_SEARCH_MAX_TOP_K': '200'}):
+            response = await KnowledgeAdapter(client).search(
+                KnowledgeSearchRequest.model_validate({
+                    'query': 'machine learning',
+                    'topK': 20,
+                    'offset': 120,
+                })
+            )
+        self.assertEqual(client.search_requests[0]['top_k'], 141)
+        self.assertFalse(response.has_more)
+
+    async def test_paginated_search_invalid_window_configuration_uses_default(self):
+        with patch.dict('os.environ', {}, clear=True):
+            self.assertEqual(_configured_search_max_top_k(), 100)
+        for configured in ('invalid', '0', '-1'):
+            with self.subTest(configured=configured):
+                class UnexpectedClient(FixtureClient):
+                    async def search(self, request):
+                        self.fail('invalid configuration must fall back to the default window')
+
+                with patch.dict(
+                    'os.environ', {'KNOWLEDGE_BASE_SEARCH_MAX_TOP_K': configured}
+                ):
+                    with self.assertRaises(KnowledgeIntegrationError) as caught:
+                        await KnowledgeAdapter(UnexpectedClient()).search(
+                            KnowledgeSearchRequest.model_validate({
+                                'query': 'machine learning',
+                                'topK': 20,
+                                'offset': 100,
+                            })
+                        )
+                self.assertEqual(caught.exception.code, 'INVALID_ARGUMENT')
 
 
 class KnowledgeServiceTests(unittest.IsolatedAsyncioTestCase):

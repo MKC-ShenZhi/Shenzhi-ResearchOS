@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app.core.errors import BusinessError
 from app.core.database import session_scope
 from app.models.chat import ChatMessageRow, ChatSessionRow
+from app.services.agent_sessions.postgres_repository import PostgresAgentSessionRepository
 from app.services.chat.postgres_repository import PostgresSessionRepository
 from app.services.chat.repository import MemorySessionRepository
 
@@ -203,6 +204,52 @@ class MemoryRepositoryAsyncTests(unittest.IsolatedAsyncioTestCase):
     async def test_memory_cleanup_is_explicit_noop(self):
         repo = MemorySessionRepository()
         self.assertEqual(await repo.purge_expired_anonymous_sessions(datetime.now(timezone.utc)), 0)
+
+
+@unittest.skipUnless(os.getenv('CHAT_DATABASE_URL'), 'CHAT_DATABASE_URL not set')
+class PostgresAgentClaimTests(unittest.IsolatedAsyncioTestCase):
+    SOURCE = 'anon:00000000-0000-4000-8000-000000000001'
+    TARGET = 'user:a'
+
+    async def asyncSetUp(self):
+        from app.core.database import dispose_engine
+        await dispose_engine()
+        self.repo = PostgresAgentSessionRepository()
+        await self.repo.purge_owner(self.SOURCE)
+        await self.repo.purge_owner(self.TARGET)
+
+    async def asyncTearDown(self):
+        await self.repo.purge_owner(self.SOURCE)
+        await self.repo.purge_owner(self.TARGET)
+        await self.repo.close()
+
+    async def test_claim_is_restricted_to_prepared_session_ids(self):
+        prepared = await self.repo.create(self.SOURCE, 'prepared', {})
+        not_prepared = await self.repo.create(self.SOURCE, 'not prepared', {})
+
+        result = await self.repo.claim_anonymous_sessions(
+            self.SOURCE, self.TARGET, session_ids=[prepared.id]
+        )
+
+        self.assertEqual(result['moved_session_ids'], [prepared.id])
+        self.assertEqual((await self.repo.get(prepared.id, self.TARGET)).owner, self.TARGET)
+        self.assertEqual(
+            (await self.repo.get(not_prepared.id, self.SOURCE)).owner, self.SOURCE
+        )
+
+    async def test_claim_rechecks_running_state_after_prepare(self):
+        session = await self.repo.create(self.SOURCE, 'becomes running', {})
+        prepared_ids = await self.repo.claimable_session_ids(self.SOURCE)
+        self.assertIn(session.id, prepared_ids)
+        await self.repo.start_turn(session.id, self.SOURCE, 'run', {}, [])
+
+        result = await self.repo.claim_anonymous_sessions(
+            self.SOURCE, self.TARGET, session_ids=prepared_ids
+        )
+
+        self.assertEqual(result['moved_session_ids'], [])
+        self.assertEqual(result['skipped_running_count'], 1)
+        self.assertEqual((await self.repo.get(session.id, self.SOURCE)).owner, self.SOURCE)
 
 
 if __name__ == '__main__':

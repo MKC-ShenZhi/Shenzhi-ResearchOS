@@ -60,7 +60,10 @@ class AgentSessionRepository(Protocol):
     async def finish_turn(self, session_id: str, owner: str, turn_id: str,
                           payload: dict[str, Any]) -> AgentTurn: ...
     async def import_legacy(self, owner: str, payload: dict[str, Any]) -> AgentSession: ...
-    async def claim_anonymous_sessions(self, source_owner: str, target_owner: str) -> dict: ...
+    async def claimable_session_ids(self, source_owner: str) -> list[str]: ...
+    async def claim_anonymous_sessions(
+        self, source_owner: str, target_owner: str, *, session_ids: list[str]
+    ) -> dict: ...
     async def purge_owner(self, owner: str) -> int: ...
     async def close(self) -> None: ...
 
@@ -168,7 +171,14 @@ class MemoryAgentSessionRepository:
         _populate_legacy_turns(session, payload.get('turns') or [])
         return session
 
-    async def claim_anonymous_sessions(self, source_owner: str, target_owner: str) -> dict:
+    async def claimable_session_ids(self, source_owner: str) -> list[str]:
+        # Memory mode cannot promise a durable ownership migration, so no
+        # workspace should be prepared as though a commit could follow.
+        return []
+
+    async def claim_anonymous_sessions(
+        self, source_owner: str, target_owner: str, *, session_ids: list[str]
+    ) -> dict:
         # Memory mode cannot promise a durable ownership migration.
         return {
             'moved_count': 0, 'skipped_running_count': 0,

@@ -62,6 +62,16 @@ export function loadKnowledgeOverview(client: KnowledgeClient, identityKey: stri
   return Promise.allSettled([publicRequest.promise, personalRequest.promise]);
 }
 
+export async function loadKnowledgeOverviewForGeneration(
+  client: KnowledgeClient,
+  identityKey: string | null,
+  generation: number,
+  currentGeneration: () => number,
+) {
+  const result = await loadKnowledgeOverview(client, identityKey);
+  return generation === currentGeneration() ? result : null;
+}
+
 /** Call after a mutation that changes overview or personal-library data. */
 export function invalidateKnowledgeOverviewCache() {
   publicOverview = null;

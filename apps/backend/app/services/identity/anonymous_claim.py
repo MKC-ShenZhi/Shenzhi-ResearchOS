@@ -2,42 +2,51 @@
 
 The browser presents one migration decision, so the backend must apply the same
 trusted anonymous-owner identity to both products.  Agent session directories
-are moved together with their database owner; otherwise a claimed session would
-lose its report files when the owner hash changes.
+are copied before their database owner changes; otherwise a failed filesystem
+operation could leave a claimed session unable to reach its report files.
 """
 from __future__ import annotations
 
-import os
-import shutil
+import logging
 
 from app.services.agent import workspace as agent_workspace
 from app.services.agent_sessions.repository import agent_session_repository
 from app.services.chat.repository import repository as chat_repository
 
-
-def _move_session_workspace(source_owner: str, target_owner: str, session_id: str) -> None:
-    source = agent_workspace._owner_dir(source_owner) / session_id
-    target = agent_workspace._owner_dir(target_owner) / session_id
-    if not source.exists():
-        return
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if not target.exists():
-        os.replace(source, target)
-        return
-    # A retry or a previous partial migration must not discard either tree.
-    shutil.copytree(source, target, dirs_exist_ok=True)
-    shutil.rmtree(source)
+logger = logging.getLogger(__name__)
 
 
 async def claim_anonymous_sessions(source_owner: str, target_owner: str) -> dict:
+    prepared_ids = await agent_session_repository.claimable_session_ids(source_owner)
+    for session_id in prepared_ids:
+        # Copy/merge is intentionally non-destructive. A failed copy or DB
+        # commit leaves the anonymous workspace available for a safe retry.
+        agent_workspace.copy_session_workspace(source_owner, target_owner, session_id)
+
     chat_result = await chat_repository.claim_anonymous_sessions(source_owner, target_owner)
     agent_result = await agent_session_repository.claim_anonymous_sessions(
-        source_owner, target_owner,
+        source_owner, target_owner, session_ids=prepared_ids,
     )
-    agent_workspace.migrate_owner_workspaces(source_owner, target_owner)
     moved_ids = [str(item) for item in agent_result.get('moved_session_ids', [])]
     for session_id in moved_ids:
-        _move_session_workspace(source_owner, target_owner, session_id)
+        try:
+            agent_workspace.cleanup_session_workspace(source_owner, session_id)
+        except Exception:
+            # Ownership and the target copy are already committed. Retaining an
+            # old anonymous directory is safer than reporting a false failure.
+            logger.warning(
+                'failed to clean claimed Agent session workspace %s',
+                session_id,
+                exc_info=True,
+            )
+
+    # Uploaded workspaces have a process-local registration lifecycle distinct
+    # from session-id workspaces. Preserve their existing owner migration, but
+    # do not turn a committed DB migration into a failed claim if cleanup fails.
+    try:
+        agent_workspace.migrate_owner_workspaces(source_owner, target_owner)
+    except Exception:
+        logger.warning('failed to migrate process-local uploaded workspaces', exc_info=True)
     return {
         'moved_count': int(chat_result.get('moved_count', 0))
         + int(agent_result.get('moved_count', 0)),
