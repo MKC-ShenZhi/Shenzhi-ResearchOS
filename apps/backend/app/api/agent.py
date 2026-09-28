@@ -64,7 +64,7 @@ async def run(body: AgentRunBody, owner: str = Depends(request_owner)):
     runtime = agent_service.build_run_runtime(
         owner=owner, model=body.model, mode=body.mode,
         workspace_id=body.workspace_id,
-        forced_skills=body.skills, session_id=body.session_id)
+        forced_skills=body.skills, session_id=body.session_id, allow_shell=False)
     history = agent_service.decode_history(body.history)
     attachments, warnings = agent_service.resolve_attachments(body.attachments, owner)
     meta = {'warnings': warnings} if warnings else None
@@ -156,7 +156,7 @@ async def run_agent_session(
     events = await start_session_run(
         owner=owner, session_id=session_id, prompt=body.prompt, model=body.model,
         mode=body.mode, attachments=body.attachments, workspace_id=body.workspace_id,
-        skills=body.skills,
+        skills=body.skills, allow_shell=False,
     )
 
     async def generate():
@@ -169,19 +169,27 @@ async def run_agent_session(
 
 
 @router.get('/session/{session_id}/file')
-def session_file(session_id: str, path: str, download: bool = False,
-                 owner: str = Depends(request_owner)):
+async def session_file(session_id: str, path: str, download: bool = False,
+                       owner: str = Depends(request_owner)):
     """会话工作区文件（agent 产物）：inline 预览或 attachment 下载。"""
+    # Do not let a retained workspace directory recreate access after its DB
+    # session has been deleted.  The existence/owner check is deliberately at
+    # the HTTP boundary, before resolving the physical path.
+    await agent_session_repository.get(session_id, owner)
     content, media_type = agent_service.read_session_file(owner, session_id, path)
     filename = PurePosixPath(path).name or 'file'
     disposition = 'attachment' if download else 'inline'
     return Response(
         content, media_type=media_type,
-        headers={'Content-Disposition': f"{disposition}; filename*=UTF-8''{quote(filename)}"})
+        headers={
+            'Content-Disposition': f"{disposition}; filename*=UTF-8''{quote(filename)}",
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
+        })
 
 
 @router.get('/assets/{session_id}/{path:path}')
-def session_asset(session_id: str, path: str, owner: str = Depends(request_owner)):
+async def session_asset(session_id: str, path: str, owner: str = Depends(request_owner)):
     """会话工作区图片产物（报告内嵌图）：稳定 URL，供报告 markdown 直接 <img src> 引用。
 
     与 /session/{id}/file 的差别只在 URL 形态：产物路径进 path 段而非 query，同一张图恒定
@@ -196,10 +204,13 @@ def session_asset(session_id: str, path: str, owner: str = Depends(request_owner
     报告缩略图/预览链路失效），同时附 CSP `default-src 'none'` 关掉脚本与外部请求，
     只放行内联样式（图形本身的 fill/stroke/<style> 需要）；其余图片类型无活动内容，不加 CSP。
     """
+    await agent_session_repository.get(session_id, owner)
     content, media_type = agent_service.read_session_file(owner, session_id, path)
     filename = PurePosixPath(path).name or 'asset'
     headers = {
-        'Cache-Control': 'private, max-age=300',  # 会话私有产物：共享缓存不得留存
+        # Deletion must take effect for a previously copied URL as well; a
+        # browser cache must not keep serving a retained session artifact.
+        'Cache-Control': 'private, no-store',
         'Content-Disposition': f"inline; filename*=UTF-8''{quote(filename)}",
         # media_type 只看后缀（read_session_file 不做字节嗅探），禁掉嗅探避免伪装后缀被当活动内容执行
         'X-Content-Type-Options': 'nosniff',

@@ -10,6 +10,10 @@ import {
   navigateBackFromPaper,
   PAPER_DETAIL_FALLBACK_ROUTE,
 } from "../../features/papers/[id]/paper-back-navigation";
+import {
+  initialRenderedPageCount,
+  nextRenderedPageCount,
+} from "../../features/papers/[id]/components/pdf-pagination.js";
 import type { ChatReference } from "../../types/ai-search";
 
 const paper: ChatReference = {
@@ -189,6 +193,13 @@ test("unified detail, graph and compatibility links preserve opaque IDs and safe
   assert.equal(paperDoiUrl("https://doi.org/10.1234/example"), "https://doi.org/10.1234/example");
 });
 
+test("Topic paper links preserve subject and page in returnTo", () => {
+  const returnTo = "/knowledge/topics?subject=Agent&page=4";
+  const href = paperHref("paper:agent", { mode: "create", source: returnTo });
+
+  assert.equal(new URL(href, "https://local.test").searchParams.get("returnTo"), returnTo);
+});
+
 test("paper journey uses one real detail and graph implementation with compatibility redirects", () => {
   const detailPage = readFileSync("features/papers/[id]/PaperDetailPage.tsx", "utf8");
   const assistant = readFileSync("features/papers/[id]/components/paper-assistant-panel.tsx", "utf8");
@@ -263,7 +274,21 @@ test("PDF reader keeps only zoom and download controls without a hidden header s
   assert.match(documentView, /react-pdf\/dist\/Page\/TextLayer\.css/);
   assert.match(documentView, /renderTextLayer=\{true\}/);
   assert.match(documentView, /renderAnnotationLayer=\{false\}/);
+  assert.match(documentView, /IntersectionObserver/);
+  assert.match(documentView, /rootMargin: "1000px 0px"/);
+  assert.match(documentView, /onFirstPageReady/);
+  assert.match(documentView, /pageNumber === 1/);
+  assert.match(pdf, /contentWidth > 0/);
+  assert.match(pdf, /updateState\("rendering"\)/);
   assert.doesNotMatch(documentView, /PdfHighlight|pdfTextRangeToRects|highlightRects|ResizeObserver/);
+});
+
+test("PDF reader pagination starts small and grows in bounded batches", () => {
+  assert.equal(initialRenderedPageCount(2), 2);
+  assert.equal(initialRenderedPageCount(20), 3);
+  assert.equal(nextRenderedPageCount(3, 20), 6);
+  assert.equal(nextRenderedPageCount(6, 8), 8);
+  assert.equal(nextRenderedPageCount(8, 8), 8);
 });
 
 test("Paper Detail uses a slim reader header and a proportional dual workspace", () => {

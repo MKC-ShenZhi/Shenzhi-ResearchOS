@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, FileText, RotateCw, UserRound } from "lucide-react";
 import { getKnowledgeClient, KnowledgeClientError } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { normalizeInternalReturnTo } from "@/lib/navigation/internal-return-to";
 import { paperHref } from "@/lib/navigation/paper";
 import { scholarHref } from "@/lib/navigation/scholar";
 import { knowledgeQueryRetry } from "@/features/knowledge/retry";
@@ -26,8 +27,15 @@ function TagSection({ title, values }: { title: string; values: string[] }) {
   );
 }
 
-export function ScholarDetailPage({ scholarId }: { scholarId: string }) {
-  const returnTo = usePathname();
+export function ScholarDetailPage({
+  scholarId,
+  returnTo,
+}: {
+  scholarId: string;
+  returnTo?: string | null;
+}) {
+  const currentPath = useCurrentInternalPath();
+  const safeReturnTo = normalizeInternalReturnTo(returnTo) ?? "/knowledge/scholars";
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["knowledge", "scholars", scholarId],
     queryFn: () => getKnowledgeClient().scholar(scholarId),
@@ -56,7 +64,7 @@ export function ScholarDetailPage({ scholarId }: { scholarId: string }) {
         <p className="text-base font-semibold text-ink">无法加载学者详情</p>
         <p className="mt-2 max-w-md text-sm text-muted">{knowledgeError.message}</p>
         <div className="mt-5 flex gap-3">
-          <Link href="/knowledge/scholars">
+          <Link href={safeReturnTo}>
             <Button variant="outline"><ArrowLeft />返回学者库</Button>
           </Link>
           <Button onClick={() => void refetch()}><RotateCw />重试</Button>
@@ -69,7 +77,7 @@ export function ScholarDetailPage({ scholarId }: { scholarId: string }) {
 
   return (
     <div className="mx-auto max-w-[1040px] space-y-5 px-6 py-8 lg:px-8">
-      <Link href="/knowledge/scholars" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-primary">
+      <Link href={safeReturnTo} className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-primary">
         <ArrowLeft className="size-4" />
         返回学者库
       </Link>
@@ -101,7 +109,7 @@ export function ScholarDetailPage({ scholarId }: { scholarId: string }) {
                 {data.papers.map((paper) => (
                   <Link
                     key={paper.id}
-                    href={paperHref(paper.id, { mode: "create", source: returnTo })}
+                    href={paperHref(paper.id, { mode: "create", source: currentPath })}
                     className="group flex items-start gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <FileText className="mt-0.5 size-4 shrink-0 text-primary" />
@@ -127,7 +135,7 @@ export function ScholarDetailPage({ scholarId }: { scholarId: string }) {
                 {data.coauthors.map((coauthor) => (
                   <Link
                     key={coauthor.id}
-                    href={scholarHref(coauthor.id)}
+                    href={scholarHref(coauthor.id, safeReturnTo)}
                     className="rounded-lg bg-panel px-3 py-2 text-sm text-ink-2 hover:bg-primary-soft hover:text-primary"
                   >
                     {coauthor.name}

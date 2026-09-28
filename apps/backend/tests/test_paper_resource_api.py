@@ -40,6 +40,7 @@ class PaperResourceApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_streams_trusted_pdf_by_paper_id_with_range(self):
         requests = []
+        diagnostics = []
 
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append(request)
@@ -48,7 +49,9 @@ class PaperResourceApiTests(unittest.IsolatedAsyncioTestCase):
                 headers={
                     'content-type': 'application/pdf',
                     'content-range': 'bytes 0-7/1024',
-                    'content-length': '8',
+                    # Some upstreams incorrectly report the full PDF length for
+                    # a partial body. The proxy must not repeat that promise.
+                    'content-length': '1024',
                     'accept-ranges': 'bytes',
                 },
                 content=b'%PDF-1.7',
@@ -65,6 +68,14 @@ class PaperResourceApiTests(unittest.IsolatedAsyncioTestCase):
                 'paper_resource_service',
                 PaperResourceService(transport=httpx.MockTransport(handler)),
             ),
+            patch.object(
+                paper_resource_api,
+                'log_event',
+                side_effect=lambda _logger, _level, event, fields: (
+                    diagnostics.append((event, fields))
+                ),
+            ),
+            patch.dict('os.environ', {'ENVIRONMENT': 'development'}),
         ):
             response = await self.client.get(
                 '/api/v1/paper-resource/pdf',
@@ -76,8 +87,21 @@ class PaperResourceApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.headers['content-type'], 'application/pdf')
         self.assertEqual(response.headers['content-range'], 'bytes 0-7/1024')
         self.assertEqual(response.headers['content-disposition'], 'inline')
+        self.assertNotIn('content-length', response.headers)
         self.assertEqual(response.content, b'%PDF-1.7')
         self.assertEqual(requests[0].headers['range'], 'bytes=0-7')
+        self.assertEqual(len(diagnostics), 1)
+        event, fields = diagnostics[0]
+        self.assertEqual(event, 'paper_resource.upstream_response')
+        self.assertEqual(fields, {
+            'paper_id': PAPER_ID,
+            'provider': 'http',
+            'incoming_range': 'bytes=0-7',
+            'upstream_status': 206,
+            'upstream_content_length': '1024',
+            'upstream_content_range': 'bytes 0-7/1024',
+            'upstream_accept_ranges': 'bytes',
+        })
 
     async def test_does_not_accept_an_arbitrary_proxy_url(self):
         with patch.object(

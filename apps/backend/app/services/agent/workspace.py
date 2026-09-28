@@ -18,6 +18,7 @@ import hashlib
 import os
 import re
 import shutil
+import signal
 import subprocess
 
 import uuid
@@ -262,40 +263,134 @@ class Workspace:
         changed = sum(1 for item in edits if item.get('old_text') != item.get('new_text'))
         return f'已完成 {len(edits)} 处替换（{changed} 处实际变更）: {path}'
 
-    def exec(self, command: str, timeout_s: float = 180.0) -> str:
+    def _validate_command(self, command: str, timeout_s: float) -> float:
         _reject_destructive(command)
         if not timeout_s or timeout_s <= 0 or timeout_s != timeout_s:  # 0/负/NaN
             raise BusinessError(20001, f'无效的超时: {timeout_s}（须为正数秒）')
-        timeout_s = min(timeout_s, MAX_COMMAND_TIMEOUT_S)
+        return min(timeout_s, MAX_COMMAND_TIMEOUT_S)
+
+    @staticmethod
+    async def _terminate_process(process: asyncio.subprocess.Process) -> None:
+        """Stop the shell and its process group where the platform supports it."""
+        if process.returncode is not None:
+            return
+        if os.name != 'nt' and process.pid:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                pass
+        else:
+            process.terminate()
         try:
-            completed = subprocess.run(command, shell=True, cwd=self.root, capture_output=True,
-                                       text=True, timeout=timeout_s, encoding='utf-8', errors='replace',
-                                       env={**_child_env(), 'SHENZHI_WORKSPACE': str(self.root)})
-        except subprocess.TimeoutExpired:
-            raise BusinessError(20004, f'命令超时（{timeout_s:.0f}s）: {command[:100]}') from None
-        output = (completed.stdout or '') + (completed.stderr or '')
-        output = output.rstrip('\n') or '(无输出)'
+            await asyncio.wait_for(process.wait(), timeout=1.0)
+        except (TimeoutError, asyncio.TimeoutError):
+            process.kill()
+            await process.wait()
+        # ``communicate`` owns the platform pipe transports.  Draining after a
+        # cancelled wait_for prevents leaked Proactor handles on Windows.
+        try:
+            await process.communicate()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    @staticmethod
+    def _format_exec_output(root: Path, stdout: str, returncode: int, spill_seq: int) -> tuple[str, int]:
+        output = stdout.rstrip('\n') or '(无输出)'
         lines = output.split('\n')
         if len(lines) > MAX_OUTPUT_LINES or len(output.encode('utf-8')) > MAX_OUTPUT_BYTES:
-            self._spill_seq += 1
-            spill = self.root / SPILL_DIR / f'output_{self._spill_seq}.txt'
+            spill_seq += 1
+            spill = root / SPILL_DIR / f'output_{spill_seq}.txt'
             spill.parent.mkdir(exist_ok=True)
             spill.write_text(output, encoding='utf-8')
             tail = '\n'.join(lines[-MAX_OUTPUT_LINES:])
             if len(tail.encode('utf-8')) > MAX_OUTPUT_BYTES:
                 tail = tail.encode('utf-8')[-MAX_OUTPUT_BYTES:].decode('utf-8', errors='ignore')
-            output = tail + OUTPUT_CONTINUATION.format(spill_path=spill.relative_to(self.root))
-        status = '' if completed.returncode == 0 else f'\n[退出码: {completed.returncode}]'
-        return output + status
+            output = tail + OUTPUT_CONTINUATION.format(spill_path=spill.relative_to(root))
+        status = '' if returncode == 0 else f'\n[退出码: {returncode}]'
+        return output + status, spill_seq
+
+    def exec(self, command: str, timeout_s: float = 180.0) -> str:
+        """Synchronous compatibility path for the CLI; API tools use exec_async."""
+        timeout_s = self._validate_command(command, timeout_s)
+        try:
+            completed = subprocess.run(command, shell=True, cwd=self.root, capture_output=True,
+                                       text=True, timeout=timeout_s, encoding='utf-8', errors='replace',
+                                       env=_child_env(self.root))
+        except subprocess.TimeoutExpired:
+            raise BusinessError(20004, f'命令超时（{timeout_s:.0f}s）: {command[:100]}') from None
+        output, self._spill_seq = self._format_exec_output(
+            self.root, (completed.stdout or '') + (completed.stderr or ''),
+            completed.returncode, self._spill_seq,
+        )
+        return output
+
+    async def exec_async(self, command: str, timeout_s: float = 180.0) -> str:
+        """Run a workspace command without blocking FastAPI's event loop.
+
+        The subprocess is created in a new process group (or Windows process group),
+        receives only the workspace-safe environment, and is terminated on timeout.
+        """
+        timeout_s = self._validate_command(command, timeout_s)
+        kwargs: dict = {
+            'cwd': self.root,
+            'env': _child_env(self.root),
+            'stdout': asyncio.subprocess.PIPE,
+            'stderr': asyncio.subprocess.STDOUT,
+        }
+        if os.name == 'nt':
+            kwargs['creationflags'] = getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+        else:
+            kwargs['start_new_session'] = True
+        process = await asyncio.create_subprocess_shell(command, **kwargs)
+        try:
+            raw, _ = await asyncio.wait_for(process.communicate(), timeout=timeout_s)
+        except (TimeoutError, asyncio.TimeoutError):
+            await self._terminate_process(process)
+            raise BusinessError(20004, f'命令超时（{timeout_s:.0f}s）: {command[:100]}') from None
+        output, self._spill_seq = self._format_exec_output(
+            self.root, (raw or b'').decode('utf-8', errors='replace'),
+            process.returncode or 0, self._spill_seq,
+        )
+        return output
 
 
-def _child_env() -> dict[str, str]:
-    """子进程环境：继承当前环境（PATH 必需），不在其中注入任何密钥类变量。"""
-    return dict(os.environ)
+def _child_env(root: Path | None = None) -> dict[str, str]:
+    """构造最小子进程环境，不把后端 API key/数据库连接串传给 shell。
+
+    PATH 和平台 shell 变量保留是为了兼容本地工具；HOME/TEMP 等可写目录则
+    重定向到当前工作区。这样 Agent 命令不会默认继承后端身份、密钥或配置目录。
+    """
+    source = os.environ
+    allowed = (
+        'PATH', 'SystemRoot', 'SYSTEMROOT', 'ComSpec', 'COMSPEC', 'PATHEXT',
+        'LANG', 'LC_ALL', 'LC_CTYPE', 'TERM', 'TERM_PROGRAM', 'NUMBER_OF_PROCESSORS',
+    )
+    env = {key: source[key] for key in allowed if source.get(key)}
+    if root is not None:
+        root = Path(root).resolve()
+        temp = root / '.tmp'
+        temp.mkdir(parents=True, exist_ok=True)
+        env.update({
+            'SHENZHI_WORKSPACE': str(root),
+            'HOME': str(root),
+            'USERPROFILE': str(root),
+            'TMP': str(temp),
+            'TEMP': str(temp),
+            'TMPDIR': str(temp),
+            'XDG_CONFIG_HOME': str(root / '.config'),
+            'XDG_CACHE_HOME': str(root / '.cache'),
+            'XDG_DATA_HOME': str(root / '.local' / 'share'),
+        })
+    return env
 
 
-def build_workspace_tools(workspace: Workspace) -> list[Tool]:
-    """挂载工作区后暴露给模型的工具组；未挂载时整个函数不被调用（schema 不可见）。"""
+def build_workspace_tools(workspace: Workspace, *, allow_shell: bool = True) -> list[Tool]:
+    """挂载工作区后暴露给模型的工具组。
+
+    ``allow_shell`` is deliberately explicit: the local CLI can opt into the
+    shell, while Web Agent runs default to file tools until a real OS sandbox is
+    configured.  Merely setting ``cwd`` is not an isolation boundary.
+    """
 
     class ReadArgs(BaseModel):
         path: str
@@ -355,19 +450,22 @@ def build_workspace_tools(workspace: Workspace) -> list[Tool]:
     async def edit_file(args: EditArgs) -> str:
         return await workspace.edit(args.path, [item.model_dump() for item in args.edits])
 
-    @tool(name='run_command',
-          description='在工作区根目录执行 shell 命令，返回合并的 stdout/stderr（超长保留尾部并'
-                      '落盘完整输出）。非零退出码会在结果中标注。',
-          params=CommandArgs, timeout_s=360.0,
-          snippet='在工作区根目录执行 shell 命令（超长保留尾部并落盘完整输出）',
-          prompt_guidelines=(
-              '文件操作优先用专用工具（read_file / write_file / edit_file），run_command 留给构建、脚本与数据处理',
-              '需要 ls/find/grep 类目录检索时才用 run_command',
-          ))
-    async def run_command(args: CommandArgs) -> str:
-        return workspace.exec(args.command, args.timeout_s)
+    tools: list[Tool] = [read_file, write_file, edit_file]
+    if allow_shell:
+        @tool(name='run_command',
+              description='在工作区根目录执行 shell 命令，返回合并的 stdout/stderr（超长保留尾部并'
+                          '落盘完整输出）。非零退出码会在结果中标注。',
+              params=CommandArgs, timeout_s=360.0,
+              snippet='在工作区根目录执行 shell 命令（超长保留尾部并落盘完整输出）',
+              prompt_guidelines=(
+                  '文件操作优先用专用工具（read_file / write_file / edit_file），run_command 留给构建、脚本与数据处理',
+                  '需要 ls/find/grep 类目录检索时才用 run_command',
+              ))
+        async def run_command(args: CommandArgs) -> str:
+            return await workspace.exec_async(args.command, args.timeout_s)
 
-    return [read_file, write_file, edit_file, run_command]
+        tools.append(run_command)
+    return tools
 
 
 # ---- 平台目录注册（pi：文件能力归产品层；service 只组装不管理目录）----
@@ -411,6 +509,31 @@ def _workspace_root(workspace_id: str, owner: str) -> Path:
     return entry[1]
 
 
+def migrate_owner_workspaces(source_owner: str, target_owner: str) -> int:
+    """Move process-local uploaded workspaces during anonymous claim.
+
+    Session directories are migrated separately because they are addressable by
+    session id.  Uploaded workspace registrations also carry an owner check, so
+    changing only the session row would otherwise make the claimed workspace
+    unusable in the same process.
+    """
+    moved = 0
+    for workspace_id, (owner, source) in list(_workspaces.items()):
+        if owner != source_owner:
+            continue
+        target = _owner_dir(target_owner) / workspace_id
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if source.exists():
+            if target.exists():
+                shutil.copytree(source, target, dirs_exist_ok=True)
+                shutil.rmtree(source)
+            else:
+                os.replace(source, target)
+        _workspaces[workspace_id] = (target_owner, target)
+        moved += 1
+    return moved
+
+
 def mount_workspace(workspace_id: str, owner: str) -> Workspace:
     """按注册表挂载已上传的工作区（owner 校验 + 路径禁闭）。"""
     return Workspace(_workspace_root(workspace_id, owner))
@@ -423,6 +546,31 @@ def ensure_session_workspace(owner: str, session_id: str) -> Path:
     root = _owner_dir(owner) / session_id
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def copy_session_workspace(source_owner: str, target_owner: str, session_id: str) -> bool:
+    """Prepare an idempotent session-workspace copy without removing source files."""
+    if not SESSION_ID_PATTERN.match(session_id):
+        raise BusinessError(20001, '非法的会话标识')
+    source = _owner_dir(source_owner) / session_id
+    if not source.exists():
+        return False
+    target = _owner_dir(target_owner) / session_id
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Preserve links instead of dereferencing paths outside the owner tree.
+    shutil.copytree(source, target, symlinks=True, dirs_exist_ok=True)
+    return True
+
+
+def cleanup_session_workspace(owner: str, session_id: str) -> bool:
+    """Remove a committed session's old owner copy; callers treat this as best-effort."""
+    if not SESSION_ID_PATTERN.match(session_id):
+        raise BusinessError(20001, '非法的会话标识')
+    source = _owner_dir(owner) / session_id
+    if not source.exists():
+        return False
+    shutil.rmtree(source)
+    return True
 
 
 def mount_workspace_into(target_root: Path, workspace_id: str, owner: str) -> int:

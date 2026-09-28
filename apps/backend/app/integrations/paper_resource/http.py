@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -52,6 +53,16 @@ class HTTPProvider(PDFProvider):
         *,
         range_header: str | None = None,
     ) -> ProviderFetch:
+        return await self.open_with_headers(url, range_header=range_header)
+
+    async def open_with_headers(
+        self,
+        url: str,
+        *,
+        range_header: str | None = None,
+        extra_headers: Mapping[str, str] | None = None,
+    ) -> ProviderFetch:
+        """Open a PDF while adding trusted server-side request headers."""
         normalized = normalize_public_http_url(url)
         if normalized is None:
             return ProviderFetch(ProviderValidation(
@@ -70,6 +81,7 @@ class HTTPProvider(PDFProvider):
                 client,
                 normalized,
                 range_header=range_header,
+                extra_headers=extra_headers,
             )
             if response is None:
                 await client.aclose()
@@ -106,12 +118,14 @@ class HTTPProvider(PDFProvider):
         url: str,
         *,
         range_header: str | None,
+        extra_headers: Mapping[str, str] | None,
     ) -> tuple[httpx.Response | None, str]:
         current_url = url
-        headers = {
+        headers = dict(extra_headers or {})
+        headers.update({
             'Accept': 'application/pdf',
             'Accept-Encoding': 'identity',
-        }
+        })
         if range_header is not None:
             headers['Range'] = _validate_pdf_range(range_header)
         for redirect_count in range(MAX_REDIRECTS + 1):
@@ -129,6 +143,13 @@ class HTTPProvider(PDFProvider):
             await response.aclose()
             if next_url is None:
                 return None, current_url
+            if _origin(next_url) != _origin(current_url):
+                headers = {
+                    name: value
+                    for name, value in headers.items()
+                    if name.lower() not in {'authorization', 'cookie'}
+                }
+                client.cookies.clear()
             current_url = next_url
         return None, current_url
 
@@ -185,6 +206,18 @@ def _validate_pdf_range(value: str) -> str:
     if not valid:
         raise ValueError('invalid PDF range')
     return value
+
+
+def _origin(url: str) -> tuple[str, str, int | None]:
+    parsed = urlsplit(url)
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme.lower() == 'https' else 80
+    return (
+        parsed.scheme.lower(),
+        (parsed.hostname or '').lower().rstrip('.'),
+        port,
+    )
 
 
 def _content_type(value: str | None) -> str | None:

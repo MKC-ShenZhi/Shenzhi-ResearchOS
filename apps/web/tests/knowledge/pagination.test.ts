@@ -41,7 +41,14 @@ test("submitting another query or changing filters resets paper search to page o
     /const updateFilters = \(nextFilters: KnowledgeFilters\) => \{([\s\S]*?)\n\s*\};/,
   )?.[1] ?? "";
 
-  assert.match(submitSearch, /setCommittedQuery\(text\);[\s\S]*setPage\(1\)/);
-  assert.match(updateFilters, /setFilters\(nextFilters\);[\s\S]*setPage\(1\)/);
+  assert.match(submitSearch, /buildKnowledgeSearchUrl\(\{ query: text, filters, page: 1 \}\)/);
+  assert.match(updateFilters, /filters: nextFilters, page: 1/);
   assert.match(PAGE_SOURCE, /onChange=\{updateFilters\}/);
+});
+
+test("paper search pagination is URL-backed and cached results survive background fetching", () => {
+  assert.match(PAGE_SOURCE, /readKnowledgeSearchUrlState\(searchParams\)/);
+  assert.match(PAGE_SOURCE, /filters, page: nextPage/);
+  assert.match(RESULTS_SOURCE, /isPending && !data/);
+  assert.doesNotMatch(RESULTS_SOURCE, /isPending \|\| isFetching/);
 });

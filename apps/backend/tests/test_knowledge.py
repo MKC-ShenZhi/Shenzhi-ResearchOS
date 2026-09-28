@@ -8,9 +8,10 @@ import httpx
 
 from app.main import app
 from app.core.identity import require_bff
-from app.schemas.knowledge import KnowledgeSearchRequest
+from app.schemas.knowledge import KnowledgeSearchRequest, PaperDetail, Provenance
 from app.integrations.knowledge.adapter import (
     KnowledgeAdapter,
+    _configured_search_max_top_k,
     map_graph,
     map_paper_detail,
     map_search_result,
@@ -18,6 +19,7 @@ from app.integrations.knowledge.adapter import (
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
+from app.services.knowledge.cache import PaperDetailTTLCache
 from app.services.paper_resource import PaperResourceService
 
 
@@ -376,8 +378,109 @@ class KnowledgeContinuityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(third_page.results[-1].id, 'paper:45')
         self.assertFalse(third_page.has_more)
 
+    async def test_paginated_search_returns_last_page_with_capped_look_ahead(self):
+        many_results = []
+        for index in range(100):
+            item = copy.deepcopy(SEARCH_RESPONSE['results'][0])
+            item.update({
+                'paper_id': f'paper:{index + 1}',
+                'title': f'Paper {index + 1}',
+                'rank': index + 1,
+            })
+            many_results.append(item)
+
+        class LastPageClient(FixtureClient):
+            def __init__(self):
+                self.search_requests = []
+
+            async def search(self, request):
+                self.search_requests.append(request)
+                return {'results': many_results[:request['top_k']]}
+
+        client = LastPageClient()
+        with patch.dict('os.environ', {'KNOWLEDGE_BASE_SEARCH_MAX_TOP_K': '100'}):
+            response = await KnowledgeAdapter(client).search(
+                KnowledgeSearchRequest.model_validate({
+                    'query': 'machine learning',
+                    'topK': 20,
+                    'offset': 80,
+                })
+            )
+        self.assertEqual(client.search_requests[0]['top_k'], 100)
+        self.assertEqual(len(response.results), 20)
+        self.assertEqual(response.results[0].id, 'paper:81')
+        self.assertEqual(response.results[-1].id, 'paper:100')
+        self.assertFalse(response.has_more)
+
+    async def test_paginated_search_rejects_offset_outside_upstream_window(self):
+        class UnexpectedClient(FixtureClient):
+            async def search(self, request):
+                self.fail('the adapter must not call upstream outside the result window')
+
+        with patch.dict('os.environ', {'KNOWLEDGE_BASE_SEARCH_MAX_TOP_K': '100'}):
+            with self.assertRaises(KnowledgeIntegrationError) as caught:
+                await KnowledgeAdapter(UnexpectedClient()).search(
+                    KnowledgeSearchRequest.model_validate({
+                        'query': 'machine learning',
+                        'topK': 20,
+                        'offset': 100,
+                    })
+                )
+        self.assertEqual(caught.exception.code, 'INVALID_ARGUMENT')
+
+    async def test_paginated_search_uses_configured_upstream_window(self):
+        class ConfiguredWindowClient(FixtureClient):
+            def __init__(self):
+                self.search_requests = []
+
+            async def search(self, request):
+                self.search_requests.append(request)
+                return {'results': []}
+
+        client = ConfiguredWindowClient()
+        with patch.dict('os.environ', {'KNOWLEDGE_BASE_SEARCH_MAX_TOP_K': '200'}):
+            response = await KnowledgeAdapter(client).search(
+                KnowledgeSearchRequest.model_validate({
+                    'query': 'machine learning',
+                    'topK': 20,
+                    'offset': 120,
+                })
+            )
+        self.assertEqual(client.search_requests[0]['top_k'], 141)
+        self.assertFalse(response.has_more)
+
+    async def test_paginated_search_invalid_window_configuration_uses_default(self):
+        with patch.dict('os.environ', {}, clear=True):
+            self.assertEqual(_configured_search_max_top_k(), 100)
+        for configured in ('invalid', '0', '-1'):
+            with self.subTest(configured=configured):
+                class UnexpectedClient(FixtureClient):
+                    async def search(self, request):
+                        self.fail('invalid configuration must fall back to the default window')
+
+                with patch.dict(
+                    'os.environ', {'KNOWLEDGE_BASE_SEARCH_MAX_TOP_K': configured}
+                ):
+                    with self.assertRaises(KnowledgeIntegrationError) as caught:
+                        await KnowledgeAdapter(UnexpectedClient()).search(
+                            KnowledgeSearchRequest.model_validate({
+                                'query': 'machine learning',
+                                'topK': 20,
+                                'offset': 100,
+                            })
+                        )
+                self.assertEqual(caught.exception.code, 'INVALID_ARGUMENT')
+
 
 class KnowledgeServiceTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def paper_detail(paper_id: str) -> PaperDetail:
+        return PaperDetail(
+            id=paper_id,
+            title=f'Title {paper_id}',
+            provenance=Provenance(),
+        )
+
     async def test_service_delegates_domain_use_cases_to_adapter(self):
         search_response = object()
         paper_response = object()
@@ -409,6 +512,12 @@ class KnowledgeServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(adapter.graph_id, PAPER_ID)
         self.assertEqual(adapter.depth, 2)
 
+    def test_default_services_share_the_process_paper_detail_cache(self):
+        first = KnowledgeService()
+        second = KnowledgeService()
+
+        self.assertIs(first.paper_detail_cache, second.paper_detail_cache)
+
     async def test_service_converts_integration_error_to_domain_error(self):
         class FailingAdapter:
             async def search(self, request):
@@ -424,6 +533,104 @@ class KnowledgeServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(caught.exception.error.retryable)
         self.assertEqual(caught.exception.error.request_id, '')
         self.assertEqual(caught.exception.status_code, 504)
+
+    async def test_paper_detail_cache_miss_then_hit_skips_upstream(self):
+        class CountingAdapter:
+            def __init__(self):
+                self.paper_calls = []
+
+            async def paper(self, paper_id):
+                self.paper_calls.append(paper_id)
+                return self_outer.paper_detail(paper_id)
+
+        self_outer = self
+        adapter = CountingAdapter()
+        cache = PaperDetailTTLCache()
+        first_service = KnowledgeService(adapter, paper_detail_cache=cache)
+        second_service = KnowledgeService(adapter, paper_detail_cache=cache)
+
+        first = await first_service.get_paper(PAPER_ID)
+        second = await second_service.get_paper(PAPER_ID)
+
+        self.assertIs(first, second)
+        self.assertEqual(adapter.paper_calls, [PAPER_ID])
+
+    async def test_paper_detail_cache_keeps_paper_ids_independent(self):
+        class CountingAdapter:
+            def __init__(self):
+                self.paper_calls = []
+
+            async def paper(self, paper_id):
+                self.paper_calls.append(paper_id)
+                return self_outer.paper_detail(paper_id)
+
+        self_outer = self
+        adapter = CountingAdapter()
+        service = KnowledgeService(adapter, paper_detail_cache=PaperDetailTTLCache())
+
+        first = await service.get_paper('paper:first')
+        second = await service.get_paper('paper:second')
+        cached_first = await service.get_paper('paper:first')
+
+        self.assertEqual(first.id, 'paper:first')
+        self.assertEqual(second.id, 'paper:second')
+        self.assertIs(first, cached_first)
+        self.assertEqual(adapter.paper_calls, ['paper:first', 'paper:second'])
+
+    async def test_paper_detail_cache_does_not_store_upstream_errors(self):
+        for upstream_error in (
+            KnowledgeIntegrationError.not_found(),
+            KnowledgeIntegrationError.timeout(),
+            KnowledgeIntegrationError.connection_unavailable(),
+        ):
+            with self.subTest(code=upstream_error.code):
+                class FailingThenHealthyAdapter:
+                    def __init__(self):
+                        self.paper_calls = 0
+
+                    async def paper(self, paper_id):
+                        self.paper_calls += 1
+                        if self.paper_calls == 1:
+                            raise upstream_error
+                        return self_outer.paper_detail(paper_id)
+
+                self_outer = self
+                adapter = FailingThenHealthyAdapter()
+                service = KnowledgeService(
+                    adapter,
+                    paper_detail_cache=PaperDetailTTLCache(),
+                )
+
+                with self.assertRaises(KnowledgeServiceError):
+                    await service.get_paper(PAPER_ID)
+                detail = await service.get_paper(PAPER_ID)
+
+                self.assertEqual(detail.id, PAPER_ID)
+                self.assertEqual(adapter.paper_calls, 2)
+
+    async def test_paper_detail_cache_refetches_after_ttl(self):
+        now = [100.0]
+
+        class CountingAdapter:
+            def __init__(self):
+                self.paper_calls = 0
+
+            async def paper(self, paper_id):
+                self.paper_calls += 1
+                return self_outer.paper_detail(paper_id)
+
+        self_outer = self
+        adapter = CountingAdapter()
+        cache = PaperDetailTTLCache(ttl_seconds=600, clock=lambda: now[0])
+        service = KnowledgeService(adapter, paper_detail_cache=cache)
+
+        await service.get_paper(PAPER_ID)
+        now[0] = 699.9
+        await service.get_paper(PAPER_ID)
+        now[0] = 700.0
+        await service.get_paper(PAPER_ID)
+
+        self.assertEqual(adapter.paper_calls, 2)
 
 
 class KnowledgeClientTests(unittest.IsolatedAsyncioTestCase):

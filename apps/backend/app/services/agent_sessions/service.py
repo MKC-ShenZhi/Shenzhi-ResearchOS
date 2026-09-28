@@ -75,6 +75,7 @@ class TimelineCapture:
 async def start_session_run(
     *, owner: str, session_id: str, prompt: str, model: str | None, mode: str,
     attachments: list[dict], workspace_id: str | None, skills: list[str],
+    allow_shell: bool = True,
 ) -> AsyncIterator[tuple[str, dict]]:
     """Validate ownership and concurrency before returning the live SSE iterator."""
     session = await agent_session_repository.get(session_id, owner)
@@ -86,7 +87,7 @@ async def start_session_run(
     }
     runtime = agent_runtime.build_run_runtime(
         owner=owner, model=model, mode=mode, workspace_id=workspace_id,
-        forced_skills=skills, session_id=session_id,
+        forced_skills=skills, session_id=session_id, allow_shell=allow_shell,
     )
     turn = await agent_session_repository.start_turn(
         session_id, owner, prompt, settings, warnings,

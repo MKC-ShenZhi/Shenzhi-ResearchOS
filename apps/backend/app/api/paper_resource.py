@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
+import logging
+import os
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.core.identity import require_bff
+from app.core.logging import log_event
 from app.core.request_context import get_request_id, new_request_id
 from app.schemas.knowledge import KnowledgeError
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
@@ -18,6 +21,7 @@ from app.services.paper_resource.service import PaperResourceFetch
 router = APIRouter(prefix='/api/v1/paper-resource', tags=['paper-resource'])
 knowledge_service = KnowledgeService()
 paper_resource_service = PaperResourceService()
+logger = logging.getLogger(__name__)
 
 
 def _request_id() -> str:
@@ -47,7 +51,6 @@ def _error(
 def _response_headers(source_headers: Mapping[str, str]) -> dict[str, str]:
     headers = {'Content-Type': 'application/pdf'}
     for name in (
-        'content-length',
         'content-disposition',
         'accept-ranges',
         'content-range',
@@ -57,6 +60,30 @@ def _response_headers(source_headers: Mapping[str, str]) -> dict[str, str]:
             headers[name] = value
     headers.setdefault('content-disposition', 'inline')
     return headers
+
+
+def _log_upstream_diagnostics(
+    *,
+    paper_id: str,
+    incoming_range: str | None,
+    fetch: PaperResourceFetch,
+) -> None:
+    if (os.getenv('ENVIRONMENT') or 'development').strip().lower() != 'development':
+        return
+    log_event(
+        logger,
+        logging.INFO,
+        'paper_resource.upstream_response',
+        {
+            'paper_id': paper_id,
+            'provider': fetch.resource.provider,
+            'incoming_range': incoming_range or '',
+            'upstream_status': fetch.status_code,
+            'upstream_content_length': fetch.headers.get('content-length') or '',
+            'upstream_content_range': fetch.headers.get('content-range') or '',
+            'upstream_accept_ranges': fetch.headers.get('accept-ranges') or '',
+        },
+    )
 
 
 async def _stream(fetch: PaperResourceFetch) -> AsyncIterator[bytes]:
@@ -98,9 +125,15 @@ async def paper_pdf(
             content=safe.model_dump(mode='json', by_alias=True),
         )
 
+    incoming_range = request.headers.get('range')
     fetch = await paper_resource_service.open_paper_resource(
         detail.pdf_url,
-        range_header=request.headers.get('range'),
+        range_header=incoming_range,
+    )
+    _log_upstream_diagnostics(
+        paper_id=paper_id,
+        incoming_range=incoming_range,
+        fetch=fetch,
     )
     if fetch.resource.status != 'available':
         await fetch.close()

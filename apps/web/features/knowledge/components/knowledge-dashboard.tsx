@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -23,14 +23,17 @@ import {
   type KnowledgeOverviewResponse,
   type KnowledgePersonalOverviewResponse,
 } from "@/clients/knowledge";
-import { loadKnowledgeOverview } from "@/features/knowledge/lib/overview-cache";
+import { loadKnowledgeOverviewForGeneration } from "@/features/knowledge/lib/overview-cache";
 import { paperHref } from "@/lib/navigation/paper";
 import { FeatureNavigationLink } from "@/components/common/feature-availability-provider";
+import { useAuth } from "@/components/auth/auth-provider";
 
 type SearchTab = { label: string; types: KnowledgeMixedSearchType[] };
 
 const SEARCH_TABS: SearchTab[] = [
-  { label: "全部", types: ["paper", "scholar", "topic", "project", "patent", "funding", "graph"] },
+  // The upstream graph API requires a concrete paperId; it cannot participate
+  // in keyword-based mixed search. Graphs remain available from paper detail.
+  { label: "全部", types: ["paper", "scholar", "topic", "project", "patent", "funding"] },
   { label: "论文", types: ["paper"] },
   { label: "学者", types: ["scholar"] },
   { label: "主题", types: ["topic"] },
@@ -198,9 +201,12 @@ function SearchResults({ response, query }: { response: KnowledgeMixedSearchResp
 
 export function KnowledgeDashboard() {
   const client = useMemo(() => getKnowledgeClient(), []);
+  const { session, isPending } = useAuth();
+  const identityKey = isPending ? null : (session?.user?.id ?? null);
   const [overview, setOverview] = useState<KnowledgeOverviewResponse | null>(null);
   const [personal, setPersonal] = useState<KnowledgePersonalOverviewResponse | null>(null);
   const [overviewError, setOverviewError] = useState(false);
+  const overviewGenerationRef = useRef(0);
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState(0);
   const [searching, setSearching] = useState(false);
@@ -208,17 +214,35 @@ export function KnowledgeDashboard() {
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const loadOverview = useCallback(async () => {
+    const generation = ++overviewGenerationRef.current;
     setOverviewError(false);
-    const [publicResult, personalResult] = await loadKnowledgeOverview(client);
+    const result = await loadKnowledgeOverviewForGeneration(
+      client,
+      identityKey,
+      generation,
+      () => overviewGenerationRef.current,
+    );
+    if (!result) return;
+    const [publicResult, personalResult] = result;
     if (publicResult.status === "fulfilled") setOverview(publicResult.value);
     else setOverviewError(true);
     if (personalResult.status === "fulfilled") setPersonal(personalResult.value);
-  }, [client]);
+  }, [client, identityKey]);
 
   useEffect(() => {
-    const handle = window.setTimeout(() => { void loadOverview(); }, 0);
-    return () => window.clearTimeout(handle);
-  }, [loadOverview]);
+    if (isPending) return;
+    const handle = window.setTimeout(() => {
+      setOverview(null);
+      setPersonal(null);
+      setSearchResponse(null);
+      setSearchError(null);
+      void loadOverview();
+    }, 0);
+    return () => {
+      overviewGenerationRef.current += 1;
+      window.clearTimeout(handle);
+    };
+  }, [isPending, loadOverview]);
 
   const submitSearch = async () => {
     const normalized = query.trim();

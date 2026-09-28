@@ -37,7 +37,15 @@ class PaperResourceService:
             max_size_bytes=config.max_size_bytes,
             transport=transport,
         )
-        self.providers = (OpenReviewProvider(http_provider), http_provider)
+        self.providers = (
+            OpenReviewProvider(
+                http_provider,
+                api_base_url=config.openreview_api_base_url,
+                username=config.openreview_username,
+                password=config.openreview_password,
+            ),
+            http_provider,
+        )
 
     async def resolve_paper_resource(self, pdf_url: str | None) -> PaperResource:
         normalized = normalize_public_http_url(pdf_url or '')

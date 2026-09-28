@@ -40,15 +40,30 @@ export async function GET(request: NextRequest) {
     const headers = new Headers({ "X-ShenZhi-Anonymous-Id": anonymousId });
     headers.set(REQUEST_ID_HEADER, requestId);
     if (backendConfig.secret) headers.set("X-ShenZhi-Bff-Secret", backendConfig.secret);
-    const upstream = await fetch(`${backendConfig.url.replace(/\/$/, "")}/api/v1/chat/sessions`, {
-      headers, cache: "no-store", signal: request.signal,
-    });
-    const body = await upstream.json();
-    if (!upstream.ok || body.code !== 0 || !Array.isArray(body.data?.sessions)) {
-      throw new Error("Invalid history response");
+    const baseUrl = backendConfig.url.replace(/\/$/, "");
+    const [chatResponse, agentResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/v1/chat/sessions`, {
+        headers, cache: "no-store", signal: request.signal,
+      }),
+      fetch(`${baseUrl}/api/v1/agent/sessions?limit=50`, {
+        headers, cache: "no-store", signal: request.signal,
+      }),
+    ]);
+    const [chatBody, agentBody] = await Promise.all([
+      chatResponse.json(), agentResponse.json(),
+    ]);
+    if (!chatResponse.ok || chatBody.code !== 0 || !Array.isArray(chatBody.data?.sessions)) {
+      throw new Error("Invalid chat history response");
     }
+    if (!agentResponse.ok || agentBody.code !== 0 || !Array.isArray(agentBody.data?.sessions)) {
+      throw new Error("Invalid agent history response");
+    }
+    const chatCount = chatBody.data.ephemeral === false ? chatBody.data.sessions.length : 0;
+    const agentCount = agentBody.data.ephemeral === false ? agentBody.data.sessions.length : 0;
     return withRequestId(NextResponse.json({ code: 0, data: {
-      count: body.data.ephemeral === false ? body.data.sessions.length : 0,
+      count: chatCount + agentCount,
+      chat_count: chatCount,
+      agent_count: agentCount,
     } }), requestId);
   } catch {
     return withRequestId(NextResponse.json({ code: 20004, message: "暂时无法检查匿名历史" }, { status: 503 }), requestId);

@@ -123,6 +123,8 @@ test("Funding URL-dependent state is isolated and restoration failures stay visi
   assert.match(fundingPage, /Suspense/);
   assert.match(fundingBrowser, /fundingQuery\.isSuccess/);
   assert.match(fundingBrowser, /fundingRestoreQuery\.isError/);
+  assert.match(fundingBrowser, /returnTo=\{returnTo\}/);
+  assert.doesNotMatch(fundingBrowser, /isPending \|\| .*isFetching/);
 });
 
 test("Patent compatibility route is unavailable and does not render mock data", () => {
@@ -142,4 +144,9 @@ test("Topic keeps the real paper result presentation", () => {
   assert.match(relatedSearch, /KnowledgeSearchSkeleton/);
   assert.match(relatedSearch, /KnowledgeSearchError/);
   assert.match(relatedSearch, /KnowledgeSearchEmpty/);
+  assert.match(relatedSearch, /useCurrentInternalPath/);
+  assert.match(relatedSearch, /returnTo=\{returnTo\}/);
+  assert.match(relatedSearch, /source: subjectFromUrl/);
+  assert.match(relatedSearch, /isPending && !data/);
+  assert.doesNotMatch(relatedSearch, /isPending \|\| isFetching/);
 });
