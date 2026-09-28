@@ -17,6 +17,9 @@ class ModelConfig:
 class PaperResourceConfig:
     timeout_seconds: float
     max_size_bytes: int
+    openreview_api_base_url: str
+    openreview_username: str
+    openreview_password: str
 
 
 def model_config() -> ModelConfig:
@@ -44,9 +47,18 @@ def _positive_float(name: str, default: float) -> float:
 def paper_resource_config() -> PaperResourceConfig:
     timeout = _positive_float('PAPER_RESOURCE_TIMEOUT', 30.0)
     max_size_mb = _positive_float('PAPER_MAX_SIZE_MB', 150.0)
+    openreview_api_base_url = (
+        os.getenv('OPENREVIEW_API_BASE_URL', 'https://api2.openreview.net')
+        .strip()
+        .rstrip('/')
+        or 'https://api2.openreview.net'
+    )
     return PaperResourceConfig(
         timeout_seconds=timeout,
         max_size_bytes=int(max_size_mb * 1024 * 1024),
+        openreview_api_base_url=openreview_api_base_url,
+        openreview_username=os.getenv('OPENREVIEW_USERNAME', '').strip(),
+        openreview_password=os.getenv('OPENREVIEW_PASSWORD', ''),
     )
 
 
