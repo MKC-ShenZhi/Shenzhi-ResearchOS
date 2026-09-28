@@ -1,15 +1,17 @@
-"""OpenReview authenticated PDF access with a public endpoint fallback."""
+"""OpenReview authenticated PDF access with API v2-to-v1 fallback."""
 
 from __future__ import annotations
 
 import asyncio
-import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
+import logging
+import os
 from urllib.parse import parse_qsl, unquote, urlencode, urlsplit
 
-import httpx
+from openreview.api import OpenReviewClient
 
 from app.core.config import normalize_openreview_api_base_url
+from app.core.logging import log_event
 from app.integrations.paper_resource.base import (
     PDFProvider,
     ProviderFetch,
@@ -18,7 +20,11 @@ from app.integrations.paper_resource.base import (
 from app.integrations.paper_resource.http import HTTPProvider
 
 
-DEFAULT_LOGIN_FAILURE_COOLDOWN_SECONDS = 60.0
+LEGACY_API_BASE_URL = 'https://api.openreview.net'
+AUTH_FAILURE_STATUSES = {401, 403}
+ClientFactory = Callable[..., object]
+
+logger = logging.getLogger(__name__)
 
 
 class OpenReviewProvider(PDFProvider):
@@ -31,23 +37,15 @@ class OpenReviewProvider(PDFProvider):
         api_base_url: str = 'https://api2.openreview.net',
         username: str = '',
         password: str = '',
-        login_failure_cooldown_seconds: float = (
-            DEFAULT_LOGIN_FAILURE_COOLDOWN_SECONDS
-        ),
-        monotonic: Callable[[], float] = time.monotonic,
+        client_factory: ClientFactory = OpenReviewClient,
     ):
         self.http_provider = http_provider
         self.api_base_url = normalize_openreview_api_base_url(api_base_url)
         self.username = username.strip()
         self.password = password
-        self._login_failure_cooldown_seconds = max(
-            0.0,
-            float(login_failure_cooldown_seconds),
-        )
-        self._monotonic = monotonic
-        self._token: str | None = None
-        self._login_retry_after = 0.0
-        self._login_lock = asyncio.Lock()
+        self._client_factory = client_factory
+        self._client: object | None = None
+        self._client_lock = asyncio.Lock()
 
     def match(self, url: str) -> bool:
         try:
@@ -73,115 +71,174 @@ class OpenReviewProvider(PDFProvider):
         if note_id is None:
             return await self.http_provider.open(url, range_header=range_header)
 
-        public_url = _public_pdf_url(note_id)
-        if not self.username or not self.password:
-            return await self.http_provider.open(public_url, range_header=range_header)
-
         token = await self._get_token()
-        if token is None:
-            return await self.http_provider.open(public_url, range_header=range_header)
+        if (self.username or self.password) and token is None:
+            return ProviderFetch(ProviderValidation(
+                url=_api_pdf_url(self.api_base_url, note_id),
+                reason='resource_unavailable',
+            ))
 
-        fetch = await self._open_authenticated(note_id, token, range_header)
+        fetch, token, auth_retried = await self._open_api_with_auth_retry(
+            note_id,
+            api_version='v2',
+            api_base_url=self.api_base_url,
+            token=token,
+            range_header=range_header,
+            allow_auth_retry=True,
+        )
         if fetch.validation.available or _preserve_failure(fetch.validation):
             return fetch
-
-        if fetch.validation.status_code in (401, 403):
-            await fetch.close()
-            token = await self._refresh_token(token)
-            if token is not None:
-                fetch = await self._open_authenticated(note_id, token, range_header)
-                if fetch.validation.available or _preserve_failure(fetch.validation):
-                    return fetch
-                if fetch.validation.status_code in (401, 403):
-                    await self._clear_token(token)
+        if fetch.validation.status_code != 404:
+            return fetch
 
         await fetch.close()
-        return await self.http_provider.open(public_url, range_header=range_header)
+        fetch, _, _ = await self._open_api_with_auth_retry(
+            note_id,
+            api_version='v1',
+            api_base_url=LEGACY_API_BASE_URL,
+            token=token,
+            range_header=range_header,
+            allow_auth_retry=not auth_retried,
+        )
+        return fetch
 
-    async def _open_authenticated(
+    async def _open_api_with_auth_retry(
         self,
         note_id: str,
-        token: str,
+        *,
+        api_version: str,
+        api_base_url: str,
+        token: str | None,
+        range_header: str | None,
+        allow_auth_retry: bool,
+    ) -> tuple[ProviderFetch, str | None, bool]:
+        fetch = await self._open_api(
+            note_id,
+            api_version=api_version,
+            api_base_url=api_base_url,
+            token=token,
+            range_header=range_header,
+        )
+        if (
+            fetch.validation.status_code not in AUTH_FAILURE_STATUSES
+            or not allow_auth_retry
+            or not (self.username or self.password)
+        ):
+            return fetch, token, False
+
+        await fetch.close()
+        refreshed_token = await self._refresh_token(token)
+        if refreshed_token is None:
+            return fetch, token, True
+
+        fetch = await self._open_api(
+            note_id,
+            api_version=api_version,
+            api_base_url=api_base_url,
+            token=refreshed_token,
+            range_header=range_header,
+        )
+        if fetch.validation.status_code in AUTH_FAILURE_STATUSES:
+            await self._clear_client(refreshed_token)
+        return fetch, refreshed_token, True
+
+    async def _open_api(
+        self,
+        note_id: str,
+        *,
+        api_version: str,
+        api_base_url: str,
+        token: str | None,
         range_header: str | None,
     ) -> ProviderFetch:
-        return await self.http_provider.open_with_headers(
-            _api_pdf_url(self.api_base_url, note_id),
+        headers = {'Authorization': f'Bearer {token}'} if token else None
+        fetch = await self.http_provider.open_with_headers(
+            _api_pdf_url(api_base_url, note_id),
             range_header=range_header,
-            extra_headers={'Authorization': f'Bearer {token}'},
+            extra_headers=headers,
         )
+        _log_attempt(
+            note_id=note_id,
+            api_version=api_version,
+            authenticated=token is not None,
+            status_code=fetch.validation.status_code,
+        )
+        return fetch
 
     async def _get_token(self) -> str | None:
-        if self._token is not None:
-            return self._token
-        if self._login_is_cooling_down():
+        if not (self.username or self.password):
             return None
-        async with self._login_lock:
-            if self._token is not None:
-                return self._token
-            if self._login_is_cooling_down():
-                return None
-            return await self._login_and_cache_result()
+        async with self._client_lock:
+            if self._client is not None:
+                return _client_token(self._client)
+            return await self._create_client()
 
-    async def _refresh_token(self, rejected_token: str) -> str | None:
-        async with self._login_lock:
-            if self._token is not None and self._token != rejected_token:
-                return self._token
-            self._token = None
-            if self._login_is_cooling_down():
-                return None
-            return await self._login_and_cache_result()
+    async def _refresh_token(self, rejected_token: str | None) -> str | None:
+        async with self._client_lock:
+            current_token = _client_token(self._client)
+            if current_token is not None and current_token != rejected_token:
+                return current_token
+            self._client = None
+            return await self._create_client()
 
-    async def _clear_token(self, rejected_token: str) -> None:
-        async with self._login_lock:
-            if self._token == rejected_token:
-                self._token = None
+    async def _clear_client(self, rejected_token: str) -> None:
+        async with self._client_lock:
+            if _client_token(self._client) == rejected_token:
+                self._client = None
 
-    def _login_is_cooling_down(self) -> bool:
-        return self._monotonic() < self._login_retry_after
-
-    async def _login_and_cache_result(self) -> str | None:
-        token = await self._login()
-        self._token = token
-        if token is None:
-            self._login_retry_after = (
-                self._monotonic() + self._login_failure_cooldown_seconds
-            )
-        else:
-            self._login_retry_after = 0.0
-        return token
-
-    async def _login(self) -> str | None:
-        if not self.api_base_url:
-            return None
+    async def _create_client(self) -> str | None:
         try:
-            async with httpx.AsyncClient(
-                timeout=self.http_provider.timeout,
-                transport=self.http_provider.transport,
-                follow_redirects=False,
-            ) as client:
-                response = await client.post(
-                    f'{self.api_base_url}/login',
-                    json={
-                        'id': self.username,
-                        'password': self.password,
-                        'expiresIn': None,
-                    },
-                    headers={'Accept': 'application/json'},
-                )
-            if not 200 <= response.status_code < 300:
-                return None
-            payload = response.json()
-        except (httpx.HTTPError, ValueError):
+            client = await asyncio.to_thread(
+                self._client_factory,
+                baseurl=self.api_base_url,
+                username=self.username,
+                password=self.password,
+            )
+        except Exception as error:
+            _log_auth_failure(error)
             return None
+        self._client = client
+        return _client_token(client)
 
-        if not isinstance(payload, Mapping):
-            return None
-        token = payload.get('token')
-        if isinstance(token, str) and token.strip():
-            return token.strip()
-        # OpenReview's current client starts an interactive MFA flow when
-        # mfaPending is present. A backend request cannot complete that flow.
+
+def _client_token(client: object | None) -> str | None:
+    token = getattr(client, 'token', None)
+    if not isinstance(token, str) or not token.strip():
         return None
+    return token.removeprefix('Bearer ').strip() or None
+
+
+def _log_attempt(
+    *,
+    note_id: str,
+    api_version: str,
+    authenticated: bool,
+    status_code: int | None,
+) -> None:
+    if (os.getenv('ENVIRONMENT') or 'development').strip().lower() != 'development':
+        return
+    log_event(
+        logger,
+        logging.INFO,
+        'paper_resource.openreview_attempt',
+        {
+            'note_id': note_id,
+            'api_version': api_version,
+            'authenticated': authenticated,
+            'status_code': status_code,
+        },
+    )
+
+
+def _log_auth_failure(error: Exception) -> None:
+    if (os.getenv('ENVIRONMENT') or 'development').strip().lower() != 'development':
+        return
+    log_event(
+        logger,
+        logging.INFO,
+        'paper_resource.openreview_auth_failed',
+        {'error_type': type(error).__name__},
+    )
 
 
 def _note_id(url: str) -> str | None:
@@ -213,10 +270,6 @@ def _clean_note_id(value: str | None, *, path_value: bool = False) -> str | None
     if path_value and '/' in value:
         return None
     return value
-
-
-def _public_pdf_url(note_id: str) -> str:
-    return f'https://openreview.net/pdf?{urlencode({"id": note_id})}'
 
 
 def _api_pdf_url(api_base_url: str, note_id: str) -> str:

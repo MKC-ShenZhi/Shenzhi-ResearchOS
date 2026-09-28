@@ -1,7 +1,7 @@
 import asyncio
-import json
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import httpx
 
@@ -40,7 +40,7 @@ class PaperResourceServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(requests[0].headers['range'], 'bytes=0-0')
         self.assertEqual(requests[0].headers['accept-encoding'], 'identity')
 
-    async def test_openreview_forum_url_is_selected_and_normalized_to_pdf(self):
+    async def test_openreview_forum_url_is_selected_and_uses_api_pdf(self):
         requests = []
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -65,7 +65,7 @@ class PaperResourceServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.status, 'available')
         self.assertEqual(result.provider, 'openreview')
-        self.assertEqual(result.url, 'https://openreview.net/pdf?id=note-123')
+        self.assertEqual(result.url, 'https://api2.openreview.net/pdf?id=note-123')
         self.assertEqual(str(requests[0].url), result.url)
 
     async def test_explicit_non_pdf_content_type_is_unavailable(self):
@@ -200,12 +200,11 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
         password: str = 'secret',
         max_size_bytes: int = 10 * 1024 * 1024,
         api_base_url: str = 'https://api2.openreview.net',
-        login_failure_cooldown_seconds: float = 60.0,
-        monotonic=None,
+        client_factory=None,
     ) -> OpenReviewProvider:
-        kwargs = {}
-        if monotonic is not None:
-            kwargs['monotonic'] = monotonic
+        client_factory = client_factory or Mock(
+            return_value=SimpleNamespace(token='token-1')
+        )
         return OpenReviewProvider(
             HTTPProvider(
                 timeout=30,
@@ -215,8 +214,7 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
             api_base_url=api_base_url,
             username=username,
             password=password,
-            login_failure_cooldown_seconds=login_failure_cooldown_seconds,
-            **kwargs,
+            client_factory=client_factory,
         )
 
     def test_extracts_note_id_from_supported_openreview_urls(self):
@@ -234,18 +232,12 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNone(_note_id('https://openreview.net/group?id=not-a-note'))
 
-    async def test_authenticated_pdf_uses_token_and_preserves_range(self):
+    async def test_v2_pdf_uses_sdk_token_and_preserves_range(self):
         requests = []
+        client_factory = Mock(return_value=SimpleNamespace(token='token-1'))
 
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append(request)
-            if request.url.path == '/login':
-                self.assertEqual(json.loads(request.content), {
-                    'id': 'researcher@example.com',
-                    'password': 'secret',
-                    'expiresIn': None,
-                })
-                return httpx.Response(200, json={'token': 'token-1', 'user': {}})
             return httpx.Response(
                 206,
                 headers={
@@ -255,33 +247,37 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
                 content=b'%PDF-authenticated',
             )
 
-        fetch = await self.provider(handler).open(
+        fetch = await self.provider(
+            handler,
+            client_factory=client_factory,
+        ).open(
             'https://openreview.net/forum?id=note-123',
             range_header='bytes=10-19',
         )
 
         self.assertTrue(fetch.validation.available)
-        self.assertEqual([request.url.path for request in requests], ['/login', '/pdf'])
-        self.assertEqual(str(requests[1].url), 'https://api2.openreview.net/pdf?id=note-123')
-        self.assertEqual(requests[1].headers['authorization'], 'Bearer token-1')
-        self.assertEqual(requests[1].headers['range'], 'bytes=10-19')
-        self.assertEqual(requests[1].headers['accept'], 'application/pdf')
-        self.assertEqual(requests[1].headers['accept-encoding'], 'identity')
+        client_factory.assert_called_once_with(
+            baseurl='https://api2.openreview.net',
+            username='researcher@example.com',
+            password='secret',
+        )
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(str(requests[0].url), 'https://api2.openreview.net/pdf?id=note-123')
+        self.assertEqual(requests[0].headers['authorization'], 'Bearer token-1')
+        self.assertEqual(requests[0].headers['range'], 'bytes=10-19')
+        self.assertEqual(requests[0].headers['accept'], 'application/pdf')
+        self.assertEqual(requests[0].headers['accept-encoding'], 'identity')
         await fetch.close()
 
     async def test_token_is_reused_across_multiple_range_requests(self):
-        login_count = 0
         pdf_requests = []
+        client_factory = Mock(return_value=SimpleNamespace(token='cached-token'))
 
         def handler(request: httpx.Request) -> httpx.Response:
-            nonlocal login_count
-            if request.url.path == '/login':
-                login_count += 1
-                return httpx.Response(200, json={'token': 'cached-token', 'user': {}})
             pdf_requests.append(request)
             return httpx.Response(206, headers={'content-type': 'application/pdf'})
 
-        provider = self.provider(handler)
+        provider = self.provider(handler, client_factory=client_factory)
         first = await provider.open(
             'https://openreview.net/pdf?id=note-123',
             range_header='bytes=0-9',
@@ -291,7 +287,7 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
             range_header='bytes=10-19',
         )
 
-        self.assertEqual(login_count, 1)
+        self.assertEqual(client_factory.call_count, 1)
         self.assertEqual(
             [request.headers['range'] for request in pdf_requests],
             ['bytes=0-9', 'bytes=10-19'],
@@ -299,238 +295,215 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
         await first.close()
         await second.close()
 
-    async def test_unauthorized_pdf_refreshes_token_and_retries_once(self):
-        login_count = 0
-        pdf_tokens = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            nonlocal login_count
-            if request.url.path == '/login':
-                login_count += 1
-                return httpx.Response(200, json={
-                    'token': f'token-{login_count}',
-                    'user': {},
-                })
-            pdf_tokens.append(request.headers.get('authorization'))
-            if len(pdf_tokens) == 1:
-                return httpx.Response(401)
-            return httpx.Response(200, headers={'content-type': 'application/pdf'})
-
-        fetch = await self.provider(handler).open(
-            'https://openreview.net/forum?id=note-123'
-        )
-
-        self.assertTrue(fetch.validation.available)
-        self.assertEqual(login_count, 2)
-        self.assertEqual(pdf_tokens, ['Bearer token-1', 'Bearer token-2'])
-        await fetch.close()
-
-    async def test_repeated_unauthorized_pdf_falls_back_after_one_retry(self):
+    async def test_v2_404_falls_back_to_v1_with_same_token_and_range(self):
         requests = []
-        login_count = 0
+        attempts = []
+        client_factory = Mock(return_value=SimpleNamespace(token='shared-token'))
 
         def handler(request: httpx.Request) -> httpx.Response:
-            nonlocal login_count
             requests.append(request)
-            if request.url.path == '/login':
-                login_count += 1
-                return httpx.Response(200, json={
-                    'token': f'token-{login_count}',
-                    'user': {},
-                })
             if request.url.host == 'api2.openreview.net':
-                return httpx.Response(401)
-            return httpx.Response(200, headers={'content-type': 'application/pdf'})
+                return httpx.Response(404)
+            return httpx.Response(
+                206,
+                headers={
+                    'content-type': 'application/pdf',
+                    'content-range': 'bytes 0-7/1024',
+                },
+                content=b'%PDF-1.7',
+            )
 
-        provider = self.provider(handler)
-        fetch = await provider.open('https://openreview.net/forum?id=note-123')
+        with patch(
+            'app.integrations.paper_resource.openreview.log_event',
+            side_effect=lambda _logger, _level, event, fields: (
+                attempts.append((event, fields))
+            ),
+        ):
+            fetch = await self.provider(
+                handler,
+                client_factory=client_factory,
+            ).open(
+                'https://openreview.net/forum?id=GcM7qfl5zY',
+                range_header='bytes=0-7',
+            )
 
         self.assertTrue(fetch.validation.available)
-        self.assertEqual(login_count, 2)
+        self.assertEqual(fetch.validation.status_code, 206)
         self.assertEqual(
-            [
-                (request.url.host, request.url.path)
-                for request in requests
-            ],
-            [
-                ('api2.openreview.net', '/login'),
-                ('api2.openreview.net', '/pdf'),
-                ('api2.openreview.net', '/login'),
-                ('api2.openreview.net', '/pdf'),
-                ('openreview.net', '/pdf'),
-            ],
+            b''.join([chunk async for chunk in fetch.iter_bytes()]),
+            b'%PDF-1.7',
         )
-        self.assertIsNone(provider._token)
-        await fetch.close()
-
-    async def test_login_failure_falls_back_to_public_pdf(self):
-        requests = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            requests.append(request)
-            if request.url.path == '/login':
-                return httpx.Response(401, json={'name': 'InvalidCredentialsError'})
-            return httpx.Response(200, headers={'content-type': 'application/pdf'})
-
-        fetch = await self.provider(handler).open(
-            'https://openreview.net/forum?id=note-123'
-        )
-
-        self.assertTrue(fetch.validation.available)
+        self.assertEqual(client_factory.call_count, 1)
         self.assertEqual(
             [str(request.url) for request in requests],
             [
-                'https://api2.openreview.net/login',
-                'https://openreview.net/pdf?id=note-123',
+                'https://api2.openreview.net/pdf?id=GcM7qfl5zY',
+                'https://api.openreview.net/pdf?id=GcM7qfl5zY',
             ],
         )
-        self.assertNotIn('authorization', requests[1].headers)
+        self.assertTrue(all(
+            request.headers['authorization'] == 'Bearer shared-token'
+            for request in requests
+        ))
+        self.assertTrue(all(
+            request.headers['range'] == 'bytes=0-7'
+            for request in requests
+        ))
+        self.assertEqual(
+            [
+                (event, fields['api_version'], fields['status_code'])
+                for event, fields in attempts
+            ],
+            [
+                ('paper_resource.openreview_attempt', 'v2', 404),
+                ('paper_resource.openreview_attempt', 'v1', 206),
+            ],
+        )
+        self.assertTrue(all(
+            'token' not in fields and 'authorization' not in fields
+            for _, fields in attempts
+        ))
         await fetch.close()
 
-    async def test_login_failure_enters_cooldown_for_later_ranges(self):
-        login_count = 0
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            nonlocal login_count
-            if request.url.path == '/login':
-                login_count += 1
-                return httpx.Response(401)
-            return httpx.Response(206, headers={'content-type': 'application/pdf'})
-
-        provider = self.provider(handler)
-        first = await provider.open(
-            'https://openreview.net/pdf?id=note-123',
-            range_header='bytes=0-9',
-        )
-        second = await provider.open(
-            'https://openreview.net/pdf?id=note-123',
-            range_header='bytes=10-19',
-        )
-
-        self.assertEqual(login_count, 1)
-        await first.close()
-        await second.close()
-
-    async def test_login_retries_after_cooldown_expires(self):
-        login_count = 0
-        clock = [100.0]
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            nonlocal login_count
-            if request.url.path == '/login':
-                login_count += 1
-                if login_count == 2:
-                    return httpx.Response(200, json={'token': 'token-2'})
-                return httpx.Response(503)
-            return httpx.Response(206, headers={'content-type': 'application/pdf'})
-
-        provider = self.provider(
-            handler,
-            login_failure_cooldown_seconds=10.0,
-            monotonic=lambda: clock[0],
-        )
-        first = await provider.open('https://openreview.net/pdf?id=note-123')
-        clock[0] += 10.1
-        second = await provider.open('https://openreview.net/pdf?id=note-123')
-        third = await provider.open(
-            'https://openreview.net/pdf?id=note-123',
-            range_header='bytes=10-19',
-        )
-
-        self.assertEqual(login_count, 2)
-        await first.close()
-        await second.close()
-        await third.close()
-
-    async def test_missing_credentials_skips_login_and_uses_public_pdf(self):
+    async def test_v2_and_v1_404_preserve_not_found_without_web_fallback(self):
         requests = []
 
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append(request)
+            return httpx.Response(404)
+
+        fetch = await self.provider(handler).open(
+            'https://openreview.net/forum?id=missing-note'
+        )
+
+        self.assertFalse(fetch.validation.available)
+        self.assertEqual(fetch.validation.status_code, 404)
+        self.assertEqual(
+            [request.url.host for request in requests],
+            [
+                'api2.openreview.net',
+                'api.openreview.net',
+            ],
+        )
+        await fetch.close()
+
+    async def test_auth_failure_refreshes_sdk_client_and_retries_once(self):
+        pdf_tokens = []
+        ranges = []
+        client_factory = Mock(side_effect=[
+            SimpleNamespace(token='token-1'),
+            SimpleNamespace(token='token-2'),
+        ])
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            pdf_tokens.append(request.headers.get('authorization'))
+            ranges.append(request.headers.get('range'))
+            if len(pdf_tokens) == 1:
+                return httpx.Response(403)
+            return httpx.Response(206, headers={'content-type': 'application/pdf'})
+
+        fetch = await self.provider(
+            handler,
+            client_factory=client_factory,
+        ).open(
+            'https://openreview.net/forum?id=note-123',
+            range_header='bytes=20-29',
+        )
+
+        self.assertTrue(fetch.validation.available)
+        self.assertEqual(client_factory.call_count, 2)
+        self.assertEqual(pdf_tokens, ['Bearer token-1', 'Bearer token-2'])
+        self.assertEqual(ranges, ['bytes=20-29', 'bytes=20-29'])
+        await fetch.close()
+
+    async def test_v1_auth_failure_refreshes_once_after_v2_404(self):
+        requests = []
+        client_factory = Mock(side_effect=[
+            SimpleNamespace(token='token-1'),
+            SimpleNamespace(token='token-2'),
+        ])
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if request.url.host == 'api2.openreview.net':
+                return httpx.Response(404)
+            if request.headers['authorization'] == 'Bearer token-1':
+                return httpx.Response(401)
+            return httpx.Response(200, headers={'content-type': 'application/pdf'})
+
+        fetch = await self.provider(
+            handler,
+            client_factory=client_factory,
+        ).open(
+            'https://openreview.net/pdf?id=note-123'
+        )
+
+        self.assertTrue(fetch.validation.available)
+        self.assertEqual(client_factory.call_count, 2)
+        self.assertEqual(
+            [
+                (request.url.host, request.headers['authorization'])
+                for request in requests
+            ],
+            [
+                ('api2.openreview.net', 'Bearer token-1'),
+                ('api.openreview.net', 'Bearer token-1'),
+                ('api.openreview.net', 'Bearer token-2'),
+            ],
+        )
+        await fetch.close()
+
+    async def test_sdk_login_failure_does_not_use_web_pdf_fallback(self):
+        requests = []
+        client_factory = Mock(side_effect=RuntimeError('login failed'))
+
+        fetch = await self.provider(
+            lambda request: requests.append(request),
+            client_factory=client_factory,
+        ).open('https://openreview.net/forum?id=note-123')
+
+        self.assertFalse(fetch.validation.available)
+        self.assertEqual(fetch.validation.reason, 'resource_unavailable')
+        self.assertEqual(requests, [])
+        self.assertEqual(
+            fetch.validation.url,
+            'https://api2.openreview.net/pdf?id=note-123',
+        )
+        await fetch.close()
+
+    async def test_missing_credentials_uses_openreview_apis_without_auth(self):
+        requests = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if request.url.host == 'api2.openreview.net':
+                return httpx.Response(404)
             return httpx.Response(200, headers={'content-type': 'application/pdf'})
 
         fetch = await self.provider(handler, username='', password='').open(
             'https://api2.openreview.net/pdf?id=note-123'
         )
 
-        self.assertEqual(len(requests), 1)
-        self.assertEqual(str(requests[0].url), 'https://openreview.net/pdf?id=note-123')
-        await fetch.close()
-
-    async def test_mfa_pending_without_token_falls_back_to_public_pdf(self):
-        requests = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            requests.append(request)
-            if request.url.path == '/login':
-                return httpx.Response(200, json={
-                    'mfaPending': True,
-                    'mfaPendingToken': 'pending-token',
-                    'mfaMethods': ['totp'],
-                })
-            return httpx.Response(200, headers={'content-type': 'application/pdf'})
-
-        provider = self.provider(handler)
-        first = await provider.open(
-            'https://openreview.net/forum?id=note-123'
-        )
-        second = await provider.open(
-            'https://openreview.net/forum?id=note-123',
-            range_header='bytes=10-19',
-        )
-
-        self.assertTrue(first.validation.available)
-        self.assertTrue(second.validation.available)
+        self.assertTrue(fetch.validation.available)
         self.assertEqual(
-            [request.url.path for request in requests],
-            ['/login', '/pdf', '/pdf'],
+            [request.url.host for request in requests],
+            ['api2.openreview.net', 'api.openreview.net'],
         )
         self.assertTrue(all(
-            request.url.host == 'openreview.net'
-            for request in requests[1:]
+            'authorization' not in request.headers
+            for request in requests
         ))
-        await first.close()
-        await second.close()
+        await fetch.close()
 
-    async def test_failed_refresh_enters_login_cooldown(self):
-        login_count = 0
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            nonlocal login_count
-            if request.url.path == '/login':
-                login_count += 1
-                if login_count == 1:
-                    return httpx.Response(200, json={'token': 'token-1'})
-                return httpx.Response(503)
-            if request.url.host == 'api2.openreview.net':
-                return httpx.Response(401)
-            return httpx.Response(206, headers={'content-type': 'application/pdf'})
-
-        provider = self.provider(handler)
-        first = await provider.open('https://openreview.net/pdf?id=note-123')
-        second = await provider.open(
-            'https://openreview.net/pdf?id=note-123',
-            range_header='bytes=10-19',
+    async def test_concurrent_requests_share_one_sdk_client(self):
+        client_factory = Mock(return_value=SimpleNamespace(token='shared-token'))
+        provider = self.provider(
+            lambda request: httpx.Response(
+                206,
+                headers={'content-type': 'application/pdf'},
+            ),
+            client_factory=client_factory,
         )
-
-        self.assertEqual(login_count, 2)
-        self.assertTrue(first.validation.available)
-        self.assertTrue(second.validation.available)
-        await first.close()
-        await second.close()
-
-    async def test_concurrent_login_failure_is_deduplicated(self):
-        login_count = 0
-
-        async def handler(request: httpx.Request) -> httpx.Response:
-            nonlocal login_count
-            if request.url.path == '/login':
-                login_count += 1
-                await asyncio.sleep(0)
-                return httpx.Response(503)
-            return httpx.Response(206, headers={'content-type': 'application/pdf'})
-
-        provider = self.provider(handler)
         first, second = await asyncio.gather(
             provider.open('https://openreview.net/pdf?id=note-123'),
             provider.open(
@@ -539,7 +512,7 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
 
-        self.assertEqual(login_count, 1)
+        self.assertEqual(client_factory.call_count, 1)
         self.assertTrue(first.validation.available)
         self.assertTrue(second.validation.available)
         await first.close()
@@ -550,8 +523,6 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
 
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append(request)
-            if request.url.path == '/login':
-                return httpx.Response(200, json={'token': 'token-1', 'user': {}})
             return httpx.Response(416, headers={'content-range': 'bytes */100'})
 
         fetch = await self.provider(handler).open(
@@ -561,7 +532,7 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(fetch.validation.available)
         self.assertEqual(fetch.validation.status_code, 416)
-        self.assertEqual(len(requests), 2)
+        self.assertEqual(len(requests), 1)
         await fetch.close()
 
     async def test_authenticated_size_failure_is_not_replaced_by_fallback(self):
@@ -569,8 +540,6 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
 
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append(request)
-            if request.url.path == '/login':
-                return httpx.Response(200, json={'token': 'token-1', 'user': {}})
             return httpx.Response(
                 206,
                 headers={
@@ -585,7 +554,7 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(fetch.validation.reason, 'pdf_too_large')
-        self.assertEqual(len(requests), 2)
+        self.assertEqual(len(requests), 1)
         await fetch.close()
 
     async def test_cross_origin_redirect_strips_credentials(self):
