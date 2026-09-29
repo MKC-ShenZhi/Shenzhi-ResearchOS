@@ -201,11 +201,14 @@ function ExpandableNav({
   const setExpanded = useSidebarStore((s) => s.setExpanded);
   const setCollapsed = useSidebarStore((s) => s.setCollapsed);
   const { showComingSoon } = useFeatureAvailability();
+  const availableSubNav = subNav.filter(
+    (item) => !isUnavailableFeatureHref(item.href),
+  );
   const open = stored ?? routeActive;
   /** 主页是否独立于副标题(如 AI 助手:/agents 不是任何副标题页) */
-  const hasOwnPage = !subNav.some((s) => s.href === href);
+  const hasOwnPage = !availableSubNav.some((s) => s.href === href);
   /** 跳转目标:有主标题页跳主标题页,没有则跳第一个副标题页 */
-  const dest = hasOwnPage ? href : subNav[0].href;
+  const dest = hasOwnPage ? href : availableSubNav[0].href;
 
   const navigate = (target: string) => {
     if (isUnavailableFeatureHref(target)) {
@@ -237,6 +240,8 @@ function ExpandableNav({
       navigate(dest);
     }
   };
+
+  if (isUnavailableFeatureHref(href)) return null;
 
   if (collapsed) {
     return (
@@ -305,7 +310,7 @@ function ExpandableNav({
 
       {open && (
         <div className="mt-0.5 flex flex-col gap-0.5 pl-6">
-          {subNav.map((sub) => {
+          {availableSubNav.map((sub) => {
             const active = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
             return (
               <FeatureNavigationLink
