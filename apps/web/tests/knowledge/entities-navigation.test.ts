@@ -39,17 +39,17 @@ const relatedSearch = readFileSync(
   "utf8",
 );
 
-test("Knowledge sidebar exposes exactly the six V1 capability entries", () => {
+test("Knowledge sidebar exposes five capability entries and papers separately", () => {
   const block = sidebar.match(/const KNOWLEDGE_SUB_NAV = \[([\s\S]*?)\];/)?.[1] ?? "";
   const labels = [...block.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(labels, [
     "论文库",
-    "我的文献",
     "学者库",
     "主题库",
     "项目基金库",
     "关系图谱",
   ]);
+  assert.match(sidebar, /const MY_PAPERS_NAV:[\s\S]*?label: "我的文献"/);
   assert.doesNotMatch(block, /专利库|研究机构/);
 });
 
