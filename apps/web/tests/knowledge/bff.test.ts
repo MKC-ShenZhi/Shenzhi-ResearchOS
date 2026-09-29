@@ -65,6 +65,23 @@ test("BFF client unwraps the Search success envelope and preserves the request c
   }]);
 });
 
+test("BFF paper search forwards AbortSignal and preserves cancellation as AbortError", async () => {
+  const controller = new AbortController();
+  await withFetch((_input, init) => new Promise((_resolve, reject) => {
+    assert.equal(init?.signal, controller.signal);
+    if (init?.signal?.aborted) {
+      reject(init.signal.reason);
+      return;
+    }
+    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+  }), async () => {
+    const request = new BffKnowledgeClient().search(SEARCH_PARAMS, controller.signal);
+    controller.abort();
+    await assert.rejects(request, (error: unknown) =>
+      error instanceof Error && error.name === "AbortError");
+  });
+});
+
 test("BFF client requests Detail and Graph through same-origin routes", async () => {
   const requests: string[] = [];
   const rawPaperId = "paper:2025_findings_acl_1253_acl:012e17bab23d";

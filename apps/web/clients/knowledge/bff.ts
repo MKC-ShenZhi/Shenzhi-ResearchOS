@@ -74,6 +74,10 @@ function toKnowledgeError(error: unknown): KnowledgeClientError {
   );
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 export class BffKnowledgeClient implements KnowledgeClient {
   async overview(): Promise<KnowledgeOverviewResponse> {
     try {
@@ -102,10 +106,14 @@ export class BffKnowledgeClient implements KnowledgeClient {
     }
   }
 
-  async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {
+  async search(
+    params: KnowledgeSearchParams,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchResponse> {
     try {
       return await apiJson<KnowledgeSearchResponse>("/knowledge/search", {
         method: "POST",
+        signal,
         body: JSON.stringify({
           query: params.query,
           topK: params.topK,
@@ -119,6 +127,8 @@ export class BffKnowledgeClient implements KnowledgeClient {
         }),
       });
     } catch (error) {
+      // TanStack Query 需要保留原始 AbortError，才能把主动取消恢复为非错误状态。
+      if (isAbortError(error)) throw error;
       throw toKnowledgeError(error);
     }
   }

@@ -1,21 +1,15 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { getKnowledgeClient } from "@/clients/knowledge";
 import { KnowledgeClientError } from "@/clients/knowledge";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
+import { useKnowledgeSearch } from "../use-knowledge-search";
 import { KnowledgeResultCard } from "./result-card";
-import { knowledgeQueryRetry } from "../../retry";
 import { KnowledgeSearchPagination } from "./search-pagination";
 import {
   KnowledgeSearchEmpty,
   KnowledgeSearchError,
   KnowledgeSearchSkeleton,
 } from "./search-states";
-
-async function fetchSearch(params: KnowledgeSearchParams) {
-  return getKnowledgeClient().search(params);
-}
 
 /** 论文搜索结果区 —— 负责 loading / empty / error 三种状态的区分 */
 export function KnowledgeResultsSection({
@@ -30,12 +24,7 @@ export function KnowledgeResultsSection({
   onPageChange: (page: number) => void;
 }) {
   const query = params.query.trim();
-  const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: ["knowledge", "search", params],
-    queryFn: () => fetchSearch(params),
-    enabled: query.length > 0,
-    retry: knowledgeQueryRetry,
-  });
+  const { data, isPending, isError, error, refetch } = useKnowledgeSearch(params);
 
   if (query.length === 0) {
     return (
