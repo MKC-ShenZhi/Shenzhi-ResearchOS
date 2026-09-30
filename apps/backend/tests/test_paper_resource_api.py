@@ -1,11 +1,14 @@
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import httpx
 
 from app.api import paper_resource as paper_resource_api
 from app.core.identity import require_bff
 from app.main import app
+from app.integrations.paper_resource.http import HTTPProvider
+from app.integrations.paper_resource.openreview import OpenReviewProvider
 from app.schemas.knowledge import PaperDetail, Provenance
 from app.services.paper_resource import PaperResourceService
 
@@ -119,6 +122,121 @@ class PaperResourceApiTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()['code'], 'INVALID_ARGUMENT')
+
+    async def test_streams_legacy_openreview_pdf_with_range_from_v1(self):
+        requests = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if request.url.host == 'api2.openreview.net':
+                return httpx.Response(404)
+            return httpx.Response(
+                206,
+                headers={
+                    'content-type': 'application/pdf',
+                    'content-range': 'bytes 0-7/1024',
+                    'accept-ranges': 'bytes',
+                },
+                content=b'%PDF-1.7',
+            )
+
+        http_provider = HTTPProvider(
+            timeout=30,
+            max_size_bytes=10 * 1024 * 1024,
+            transport=httpx.MockTransport(handler),
+        )
+        openreview_provider = OpenReviewProvider(
+            http_provider,
+            username='researcher@example.com',
+            password='secret',
+            client_factory=Mock(
+                return_value=SimpleNamespace(token='shared-token')
+            ),
+        )
+        with (
+            patch.object(
+                paper_resource_api,
+                'knowledge_service',
+                StubKnowledgeService(
+                    'https://openreview.net/forum?id=GcM7qfl5zY'
+                ),
+            ),
+            patch.object(
+                paper_resource_api,
+                'paper_resource_service',
+                PaperResourceService(providers=[openreview_provider, http_provider]),
+            ),
+        ):
+            response = await self.client.get(
+                '/api/v1/paper-resource/pdf',
+                params={'paperId': PAPER_ID},
+                headers={'Range': 'bytes=0-7'},
+            )
+
+        self.assertEqual(response.status_code, 206, response.text)
+        self.assertEqual(response.content, b'%PDF-1.7')
+        self.assertEqual(response.headers['content-range'], 'bytes 0-7/1024')
+        self.assertEqual(
+            [request.url.host for request in requests],
+            ['api2.openreview.net', 'api.openreview.net'],
+        )
+        self.assertTrue(all(
+            request.headers['authorization'] == 'Bearer shared-token'
+            for request in requests
+        ))
+        self.assertTrue(all(
+            request.headers['range'] == 'bytes=0-7'
+            for request in requests
+        ))
+
+    async def test_openreview_missing_in_both_apis_is_not_found(self):
+        requests = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(404)
+
+        http_provider = HTTPProvider(
+            timeout=30,
+            max_size_bytes=10 * 1024 * 1024,
+            transport=httpx.MockTransport(handler),
+        )
+        openreview_provider = OpenReviewProvider(
+            http_provider,
+            username='researcher@example.com',
+            password='secret',
+            client_factory=Mock(
+                return_value=SimpleNamespace(token='shared-token')
+            ),
+        )
+        with (
+            patch.object(
+                paper_resource_api,
+                'knowledge_service',
+                StubKnowledgeService(
+                    'https://openreview.net/forum?id=missing-note'
+                ),
+            ),
+            patch.object(
+                paper_resource_api,
+                'paper_resource_service',
+                PaperResourceService(providers=[openreview_provider, http_provider]),
+            ),
+        ):
+            response = await self.client.get(
+                '/api/v1/paper-resource/pdf',
+                params={'paperId': PAPER_ID},
+            )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()['code'], 'NOT_FOUND')
+        self.assertEqual(
+            [request.url.host for request in requests],
+            ['api2.openreview.net', 'api.openreview.net'],
+        )
+        self.assertNotIn('openreview.net', [
+            request.url.host for request in requests
+        ])
 
     async def test_missing_pdf_is_a_non_retryable_not_found(self):
         with patch.object(

@@ -82,8 +82,18 @@ function scenarioFromQuery(query: string): MockScenario | null {
   return null;
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timeout = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timeout);
+      reject(signal.reason);
+    }, { once: true });
+  });
 }
 
 /**
@@ -101,8 +111,8 @@ export class MockKnowledgeClient implements KnowledgeClient {
     this.latencyMs = options.latencyMs ?? 400;
   }
 
-  private async wait(): Promise<void> {
-    if (this.latencyMs > 0) await delay(this.latencyMs);
+  private async wait(signal?: AbortSignal): Promise<void> {
+    if (this.latencyMs > 0) await delay(this.latencyMs, signal);
   }
 
   private throwIfNeeded(query = ""): MockScenario | null {
@@ -185,8 +195,11 @@ export class MockKnowledgeClient implements KnowledgeClient {
     };
   }
 
-  async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {
-    await this.wait();
+  async search(
+    params: KnowledgeSearchParams,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchResponse> {
+    await this.wait(signal);
     const scenario = this.throwIfNeeded(params.query);
 
     const text = params.query.trim().toLowerCase();

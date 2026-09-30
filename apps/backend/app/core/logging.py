@@ -35,6 +35,9 @@ ALLOWED_LOG_FIELDS = frozenset({
     'upstream_content_length',
     'upstream_content_range',
     'upstream_accept_ranges',
+    'note_id',
+    'api_version',
+    'authenticated',
     'session_id',
     'message_id',
 })

@@ -35,7 +35,10 @@ export interface KnowledgeClient {
   /** 总览页跨实体混合搜索 */
   overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse>;
   /** 论文搜索；无匹配返回空 results（不是错误） */
-  search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse>;
+  search(
+    params: KnowledgeSearchParams,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchResponse>;
   /** 论文详情；id 作为 opaque string 使用 */
   paper(paperId: string): Promise<KnowledgePaperDetail>;
   /** 按姓名搜索学者；无匹配返回空 results */

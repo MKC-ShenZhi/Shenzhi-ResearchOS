@@ -2,11 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { knowledgeQueryRetry } from "@/features/knowledge/retry";
+import { useAuth } from "@/components/auth/auth-provider";
+import { recommendationQueryRetry } from "@/clients/backend/recommendations";
 import {
-  fetchMvpRandomDiscoveryFeed,
+  fetchDailyRecommendationFeed,
+  readCachedRecommendationFeed,
+  recommendationDate,
   type DiscoveryFeedTab,
-} from "../services/mvp-random-discovery-feed";
+} from "../services/daily-recommendation-feed";
 import { PaperCard } from "./paper-card";
 
 function FeedLoading() {
@@ -22,23 +25,34 @@ function FeedLoading() {
   );
 }
 
-/** 发现 Feed —— 真实 Knowledge 搜索结果及 loading / error / empty 状态 */
+/** 发现 Feed —— ShenZhi 每日推荐及 localStorage stale-while-revalidate。 */
 export function FeedList({ tab }: { tab: DiscoveryFeedTab }) {
+  const { session, isPending: isIdentityPending } = useAuth();
+  const identityKey = isIdentityPending
+    ? "pending"
+    : session?.user?.id
+      ? `user:${session.user.id}`
+      : "anonymous";
+  const date = recommendationDate();
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["discovery-feed", tab],
-    // TODO(MVP-RANDOM-DISCOVERY-FEED): Replace this queryFn with the real discovery service.
-    queryFn: () => fetchMvpRandomDiscoveryFeed(tab),
-    staleTime: 5 * 60_000,
-    retry: knowledgeQueryRetry,
+    queryKey: ["discovery-feed", identityKey, date, tab],
+    queryFn: () => fetchDailyRecommendationFeed(tab, identityKey),
+    enabled: !isIdentityPending,
+    initialData: () => isIdentityPending
+      ? undefined
+      : readCachedRecommendationFeed(identityKey, tab, date),
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: recommendationQueryRetry,
   });
 
-  if (isPending) return <FeedLoading />;
+  if (isIdentityPending || isPending) return <FeedLoading />;
 
-  if (isError) {
+  if (isError && !data) {
     return (
       <div className="rounded-2xl bg-card px-6 py-12 text-center shadow-card" role="alert">
         <p className="text-sm font-medium text-ink">发现论文加载失败</p>
-        <p className="mt-2 text-sm text-muted">知识底座暂时不可用，请稍后重试。</p>
+        <p className="mt-2 text-sm text-muted">推荐服务暂时不可用，请稍后重试。</p>
         <Button variant="outline" size="sm" className="mt-4" onClick={() => void refetch()}>
           重新加载
         </Button>
@@ -49,7 +63,7 @@ export function FeedList({ tab }: { tab: DiscoveryFeedTab }) {
   if (!data || data.length === 0) {
     return (
       <div className="rounded-2xl bg-card px-6 py-12 text-center text-sm text-muted shadow-card">
-        当前分类暂未检索到论文，请稍后再试。
+        当前分类暂无推荐论文，请稍后再试。
       </div>
     );
   }

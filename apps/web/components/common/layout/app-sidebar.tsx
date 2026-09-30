@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import {
+  Bookmark,
   ChevronDown,
   Compass,
   Layers,
@@ -48,6 +49,13 @@ const RESEARCH_NAV: NavItem[] = [
   { href: "/", label: "发现", icon: Compass, badge: "新" },
 ];
 
+const MY_PAPERS_NAV: NavItem = {
+  href: "/knowledge/papers",
+  label: "我的文献",
+  icon: Bookmark,
+  matchPrefix: "/knowledge/papers",
+};
+
 /** 「投稿」的子栏目:会议即原投稿页面,点击投稿默认打开 */
 const SUBMIT_SUB_NAV = [
   { href: "/submit", label: "会议" },
@@ -57,7 +65,6 @@ const SUBMIT_SUB_NAV = [
 /** 「知识库」的子栏目 */
 const KNOWLEDGE_SUB_NAV = [
   { href: "/knowledge/search", label: "论文库" },
-  { href: "/knowledge/papers", label: "我的文献" },
   { href: "/knowledge/scholars", label: "学者库" },
   { href: "/knowledge/topics", label: "主题库" },
   { href: "/knowledge/funding", label: "项目基金库" },
@@ -196,16 +203,20 @@ function ExpandableNav({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const routeActive = pathname.startsWith(href);
+  const routeActive =
+    pathname.startsWith(href) && !pathname.startsWith(MY_PAPERS_NAV.href);
   const stored = useSidebarStore((s) => s.expanded[href]);
   const setExpanded = useSidebarStore((s) => s.setExpanded);
   const setCollapsed = useSidebarStore((s) => s.setCollapsed);
   const { showComingSoon } = useFeatureAvailability();
+  const availableSubNav = subNav.filter(
+    (item) => !isUnavailableFeatureHref(item.href),
+  );
   const open = stored ?? routeActive;
   /** 主页是否独立于副标题(如 AI 助手:/agents 不是任何副标题页) */
-  const hasOwnPage = !subNav.some((s) => s.href === href);
+  const hasOwnPage = !availableSubNav.some((s) => s.href === href);
   /** 跳转目标:有主标题页跳主标题页,没有则跳第一个副标题页 */
-  const dest = hasOwnPage ? href : subNav[0].href;
+  const dest = hasOwnPage ? href : availableSubNav[0].href;
 
   const navigate = (target: string) => {
     if (isUnavailableFeatureHref(target)) {
@@ -237,6 +248,8 @@ function ExpandableNav({
       navigate(dest);
     }
   };
+
+  if (isUnavailableFeatureHref(href)) return null;
 
   if (collapsed) {
     return (
@@ -305,7 +318,7 @@ function ExpandableNav({
 
       {open && (
         <div className="mt-0.5 flex flex-col gap-0.5 pl-6">
-          {subNav.map((sub) => {
+          {availableSubNav.map((sub) => {
             const active = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
             return (
               <FeatureNavigationLink
@@ -554,8 +567,14 @@ export function AppSidebar() {
         </React.Suspense>
       </nav>
 
-      {/* 设置(悬停显示选项栏) */}
-      <SettingsMenu collapsed={collapsed} />
+      <div className="mt-4 flex shrink-0 flex-col gap-0.5 [&>div]:mt-0">
+        {!isUnavailableFeatureHref(MY_PAPERS_NAV.href) && (
+          <NavLink item={MY_PAPERS_NAV} collapsed={collapsed} />
+        )}
+
+        {/* 设置(悬停显示选项栏) */}
+        <SettingsMenu collapsed={collapsed} />
+      </div>
 
       {/* 用户卡片:未登录点击弹出登录弹窗;登录后「···」向上弹出「登出」 */}
       {collapsed ? (
