@@ -5,7 +5,7 @@ import { AppShell } from "@/components/common/layout/app-shell";
 import { SearchHero } from "@/features/search/components/search-hero";
 import { FeedTabs } from "@/features/search/components/feed-tabs";
 import { FeedList } from "@/features/search/components/feed-list";
-import type { DiscoveryFeedTab } from "@/features/search/services/mvp-random-discovery-feed";
+import type { DiscoveryFeedTab } from "@/features/search/services/daily-recommendation-feed";
 
 /** 主发现页 `/` —— 对应「深知-主发现页.svg」 */
 export function HomePage() {

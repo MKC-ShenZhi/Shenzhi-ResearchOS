@@ -97,4 +97,28 @@ uv add <package>
 uv add --dev <package>
 ```
 
+## 首页每日推荐池
+
+首页推荐由 ShenZhi PostgreSQL 的 `daily_recommendations` 表提供，普通首页请求不会在缓存缺失时同步访问知识底座。部署新版本后先执行迁移：
+
+```bash
+cd apps/backend
+uv run --locked --env-file .env alembic upgrade head
+```
+
+每天通过显式维护命令生成一次候选池：
+
+```bash
+cd apps/backend
+uv run --locked --env-file .env python -m app.services.daily_recommendations
+```
+
+服务器可使用 Linux cron 在 UTC `00:05` 执行，例如：
+
+```cron
+5 0 * * * cd /opt/shenzhi/apps/backend && uv run --locked --env-file .env python -m app.services.daily_recommendations >> /var/log/shenzhi-daily-recommendations.log 2>&1
+```
+
+命令先通过现有 Knowledge Service 获取并校验完整候选池，再以单次事务 upsert 当天记录。知识底座请求失败或返回空池时命令以非零状态退出，不会覆盖数据库中已有推荐；读取接口会自动使用不晚于当天的最近一份候选池。
+
 维护说明：[Chat 架构、协议与配置](../../docs/chat/README.md)。

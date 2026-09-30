@@ -3,7 +3,7 @@
 import { Flame, Search, Settings2, Star, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { DiscoveryFeedTab } from "../services/mvp-random-discovery-feed";
+import type { DiscoveryFeedTab } from "../services/daily-recommendation-feed";
 
 const TABS: Array<{ key: DiscoveryFeedTab; label: string; icon: typeof Flame }> = [
   { key: "recommend", label: "推荐", icon: Flame },
