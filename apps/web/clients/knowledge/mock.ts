@@ -4,6 +4,7 @@ import { KnowledgeClientError, type KnowledgeClient } from "./client";
 import {
   buildMockGraph,
   MOCK_PAPERS,
+  MOCK_TOPICS,
   mockPaperDetail,
 } from "./mock-data";
 import type {
@@ -23,6 +24,8 @@ import type {
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
   KnowledgeSubjectSearchResponse,
+  KnowledgeTopic,
+  KnowledgeTopicListResponse,
 } from "./types";
 
 const MOCK_SCHOLAR: KnowledgeScholarDetail = {
@@ -161,6 +164,27 @@ export class MockKnowledgeClient implements KnowledgeClient {
     await this.wait();
     this.throwIfNeeded();
     return { authRequired: false, folders: [], recentPapers: [] };
+  }
+
+  async topics(signal?: AbortSignal): Promise<KnowledgeTopicListResponse> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded();
+    if (scenario === "zero_results") return { items: [], total: 0, categories: [] };
+    const items = MOCK_TOPICS.filter((topic) => topic.enabled);
+    return {
+      items,
+      total: items.length,
+      categories: [...new Set(items.map((topic) => topic.category))],
+    };
+  }
+
+  async topic(topicId: string, signal?: AbortSignal): Promise<KnowledgeTopic> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded(topicId);
+    if (scenario === "zero_results") throw KnowledgeClientError.notFound("未找到对应主题");
+    const topic = MOCK_TOPICS.find((item) => item.id === topicId && item.enabled);
+    if (!topic) throw KnowledgeClientError.notFound("未找到对应主题");
+    return topic;
   }
 
   async overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse> {

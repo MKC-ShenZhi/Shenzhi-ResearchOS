@@ -40,6 +40,28 @@ export interface KnowledgeSubjectSearchResponse {
   total: number;
 }
 
+/** 主题广场卡片；imagePath 使用前端可直接访问的 public 路径。 */
+export interface KnowledgeTopic {
+  id: string;
+  imagePath: string | null;
+  nameZh: string;
+  nameEn: string;
+  author: string;
+  descriptionZh: string;
+  descriptionEn: string;
+  followersCount: number;
+  category: string;
+  subjectQuery: string;
+  paperCount: number;
+  enabled: boolean;
+}
+
+export interface KnowledgeTopicListResponse {
+  items: KnowledgeTopic[];
+  total: number;
+  categories: string[];
+}
+
 export interface KnowledgeScholarSearchParams {
   query: string;
   limit?: number;

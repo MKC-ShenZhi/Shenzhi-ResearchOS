@@ -12,6 +12,8 @@ import type {
   KnowledgeOverviewResponse,
   KnowledgePersonalOverviewResponse,
   KnowledgePaperDetail,
+  KnowledgeTopic,
+  KnowledgeTopicListResponse,
   KnowledgeScholarDetail,
   KnowledgeScholarSearchParams,
   KnowledgeScholarSearchResponse,
@@ -32,6 +34,10 @@ export interface KnowledgeClient {
   overview(): Promise<KnowledgeOverviewResponse>;
   /** 总览页个人文献统计；匿名会话返回 authRequired */
   personalOverview(): Promise<KnowledgePersonalOverviewResponse>;
+  /** 主题广场列表；详情页可复用同一主题契约 */
+  topics(signal?: AbortSignal): Promise<KnowledgeTopicListResponse>;
+  /** 主题详情；topicId 作为 opaque string 使用 */
+  topic(topicId: string, signal?: AbortSignal): Promise<KnowledgeTopic>;
   /** 总览页跨实体混合搜索 */
   overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse>;
   /** 论文搜索；无匹配返回空 results（不是错误） */
