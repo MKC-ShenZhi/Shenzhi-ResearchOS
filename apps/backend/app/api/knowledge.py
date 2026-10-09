@@ -23,9 +23,11 @@ from app.schemas.knowledge import (
     RelatedPaperSearchRequest,
     ScholarSearchRequest,
 )
+from app.schemas.topic import KnowledgeTopicListResponse
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 from app.services.library.collections import CollectionService
 from app.services.library.reading_history import ReadingHistoryService
+from app.services.topics import TopicRegistry, TopicRegistryError
 from app.schemas.knowledge import PaperBatchRequest
 
 
@@ -34,6 +36,7 @@ papers_router = APIRouter(prefix='/api/v1', tags=['papers'])
 service = KnowledgeService()
 collection_service = CollectionService()
 reading_history_service = ReadingHistoryService()
+topic_registry = TopicRegistry()
 logger = logging.getLogger(__name__)
 
 
@@ -78,6 +81,18 @@ def unknown_error(request: Request, error: Exception) -> JSONResponse:
             'error_code': 'UNKNOWN',
         },
         error,
+    )
+
+
+def topic_not_found(request: Request) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content=KnowledgeError(
+            code='NOT_FOUND',
+            message='未找到对应主题',
+            retryable=False,
+            request_id=request_id(request),
+        ).model_dump(mode='json', by_alias=True),
     )
     return JSONResponse(
         status_code=500,
@@ -146,6 +161,35 @@ async def personal_overview(
         )
     except KnowledgeServiceError as error:
         return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/topics')
+async def topics(
+    request: Request,
+    _credential: None = Depends(require_bff),
+):
+    try:
+        response: KnowledgeTopicListResponse = topic_registry.list_topics()
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/topics/{topic_id:path}')
+async def topic(
+    topic_id: str,
+    request: Request,
+    _credential: None = Depends(require_bff),
+):
+    if not topic_id.strip():
+        return invalid_argument(request, 'topicId 不能为空')
+    try:
+        response = topic_registry.get_topic(topic_id)
+    except TopicRegistryError:
+        return topic_not_found(request)
     except Exception as error:
         return unknown_error(request, error)
     return ok(response.model_dump(mode='json', by_alias=True))
