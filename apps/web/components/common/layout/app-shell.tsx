@@ -16,7 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const collapsed = useSidebarStore((s) => s.collapsed);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="theme-page min-h-screen bg-background">
       <AppSidebar />
       {/* 移动端顶栏 */}
       <header className="sticky top-0 z-20 flex h-14 items-center border-b border-line bg-card px-4 lg:hidden">

@@ -44,6 +44,7 @@
 
   --shadow-card: 0 2px 6px 0 rgb(23 33 43 / 0.05);
   --shadow-pop: 0 8px 24px 0 rgb(23 33 43 / 0.08);
+  --page-wallpaper: none;
 }
 
 .dark {
@@ -81,6 +82,157 @@
   --shadow-pop: 0 8px 24px 0 rgb(0 0 0 / 0.4);
 }
 
+/*
+ * 视觉探索预设 —— 仅替换语义色与阴影，不改变布局、字号、间距或圆角。
+ * ShenZhi 使用上方基线；其余预设均可通过 html[data-theme] 整体替换。
+ */
+html[data-theme="gpt"] {
+  --color-background: #f7f7f8;
+  --color-sidebar: #efeff0;
+  --color-card: #ffffff;
+  --color-primary: #0d8f73;
+  --color-primary-deep: #08745d;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #e3f2ed;
+  --color-agent: #0d8f73;
+  --color-agent-soft: #e3f2ed;
+  --color-brand-violet: #6e62a6;
+  --color-brand-cyan: #0d8f73;
+  --color-brand-gold: #d9a521;
+  --color-ink: #202123;
+  --color-ink-2: #444654;
+  --color-muted: #6e6e80;
+  --color-faint: #a2a2ad;
+  --color-chip: #ececf1;
+  --color-panel: #f0f0f2;
+  --color-line: #dedee3;
+  --color-danger: #d84b4b;
+  --color-danger-soft: #fae7e7;
+  --color-success: #0d8f73;
+  --color-success-soft: #e3f2ed;
+  --shadow-card: 0 1px 3px rgb(32 33 35 / 0.06);
+  --shadow-pop: 0 10px 30px rgb(32 33 35 / 0.12);
+}
+
+html[data-theme="claude"] {
+  --color-background: #f7f5f2;
+  --color-sidebar: #eeeae4;
+  --color-card: #fdfcf9;
+  --color-primary: #b85637;
+  --color-primary-deep: #944229;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #f2e4dd;
+  --color-agent: #8d5f45;
+  --color-agent-soft: #eee5dc;
+  --color-brand-violet: #765b87;
+  --color-brand-cyan: #567c72;
+  --color-brand-gold: #c59a3d;
+  --color-ink: #2d2926;
+  --color-ink-2: #514b46;
+  --color-muted: #776f68;
+  --color-faint: #aaa098;
+  --color-chip: #ede9e3;
+  --color-panel: #f0ebe5;
+  --color-line: #dfd9d1;
+  --color-danger: #bd4841;
+  --color-danger-soft: #f5e4e1;
+  --color-success: #527963;
+  --color-success-soft: #e3ece6;
+  --shadow-card: 0 2px 7px rgb(65 52 43 / 0.06);
+  --shadow-pop: 0 12px 32px rgb(65 52 43 / 0.12);
+}
+
+html[data-theme="alphaxiv"] {
+  --color-background: #faf9f7;
+  --color-sidebar: #f2efed;
+  --color-card: #ffffff;
+  --color-primary: #8a2945;
+  --color-primary-deep: #6d1f35;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #f3e5e9;
+  --color-agent: #74425a;
+  --color-agent-soft: #efe5ea;
+  --color-brand-violet: #76516f;
+  --color-brand-cyan: #4d7772;
+  --color-brand-gold: #b89238;
+  --color-ink: #211f20;
+  --color-ink-2: #484345;
+  --color-muted: #746e70;
+  --color-faint: #aaa3a5;
+  --color-chip: #f0eded;
+  --color-panel: #f4eeee;
+  --color-line: #e1dcdd;
+  --color-danger: #bd3f4d;
+  --color-danger-soft: #f7e5e7;
+  --color-success: #477665;
+  --color-success-soft: #e4eee9;
+  --shadow-card: 0 1px 4px rgb(48 37 41 / 0.05);
+  --shadow-pop: 0 10px 28px rgb(48 37 41 / 0.11);
+}
+
+html[data-theme="apple-light"] {
+  --color-background: #f5f7fa;
+  --color-sidebar: #eaf0f7;
+  --color-card: #ffffff;
+  --color-primary: #1769d2;
+  --color-primary-deep: #0d54ae;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #e2efff;
+  --color-agent: #6556c7;
+  --color-agent-soft: #ece9ff;
+  --color-brand-violet: #765ce1;
+  --color-brand-cyan: #168da6;
+  --color-brand-gold: #d89f20;
+  --color-ink: #171a20;
+  --color-ink-2: #3d4552;
+  --color-muted: #697383;
+  --color-faint: #9ca7b5;
+  --color-chip: #edf1f6;
+  --color-panel: #e8f0fa;
+  --color-line: #dce3eb;
+  --color-danger: #d94848;
+  --color-danger-soft: #fce8e8;
+  --color-success: #23845f;
+  --color-success-soft: #e2f2eb;
+  --shadow-card: 0 3px 12px rgb(43 63 86 / 0.07);
+  --shadow-pop: 0 16px 38px rgb(43 63 86 / 0.14);
+  --page-wallpaper:
+    radial-gradient(circle at 88% 8%, rgb(120 105 255 / 0.11), transparent 24rem),
+    radial-gradient(circle at 70% 0%, rgb(68 202 226 / 0.12), transparent 30rem);
+}
+
+html[data-theme="apple-dark"] {
+  color-scheme: dark;
+  --color-background: #05070b;
+  --color-sidebar: #0c1119;
+  --color-card: #121823;
+  --color-primary: #76b9ff;
+  --color-primary-deep: #9e8cff;
+  --color-primary-foreground: #07101a;
+  --color-primary-soft: #142c47;
+  --color-agent: #9a8cff;
+  --color-agent-soft: #252143;
+  --color-brand-violet: #a28dff;
+  --color-brand-cyan: #55d4eb;
+  --color-brand-gold: #ffd05a;
+  --color-ink: #f4f7fb;
+  --color-ink-2: #c6cfdb;
+  --color-muted: #8e9aaa;
+  --color-faint: #596576;
+  --color-chip: #1a2230;
+  --color-panel: #111f32;
+  --color-line: #263141;
+  --color-danger: #ff7373;
+  --color-danger-soft: #3c2028;
+  --color-success: #55d5aa;
+  --color-success-soft: #16352f;
+  --shadow-card: 0 3px 14px rgb(0 0 0 / 0.38);
+  --shadow-pop: 0 18px 46px rgb(0 0 0 / 0.58);
+  --page-wallpaper:
+    radial-gradient(circle at 90% 5%, rgb(117 76 255 / 0.18), transparent 25rem),
+    radial-gradient(circle at 68% 0%, rgb(29 170 218 / 0.14), transparent 34rem);
+}
+
 @layer base {
   * {
     border-color: var(--color-line);
@@ -89,6 +241,10 @@
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  html:not([data-theme="apple-dark"]) {
+    color-scheme: light;
   }
 
   body {
@@ -104,6 +260,20 @@
 
   .dark ::selection {
     background: rgb(90 148 200 / 0.35);
+  }
+
+  .theme-page {
+    background-color: var(--color-background);
+    background-image: var(--page-wallpaper);
+    background-attachment: fixed;
+  }
+
+  html[data-theme="gpt"] ::selection,
+  html[data-theme="claude"] ::selection,
+  html[data-theme="alphaxiv"] ::selection,
+  html[data-theme="apple-light"] ::selection,
+  html[data-theme="apple-dark"] ::selection {
+    background: color-mix(in srgb, var(--color-primary) 28%, transparent);
   }
 }
 

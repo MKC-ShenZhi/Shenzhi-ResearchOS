@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 export function ThemeToggle({ className }: { className?: string }) {
   const mode = useThemeStore((s) => s.mode);
   const setMode = useThemeStore((s) => s.setMode);
+  const preset = useThemeStore((s) => s.preset);
+  const setPreset = useThemeStore((s) => s.setPreset);
   const mounted = useSyncExternalStore(
     () => () => undefined,
     () => true,
@@ -20,14 +22,24 @@ export function ThemeToggle({ className }: { className?: string }) {
 
   const dark =
     mounted &&
-    (mode === "dark" ||
-      (mode === "system" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches));
+    (preset === "apple-dark" ||
+      (preset === "shenzhi" &&
+        (mode === "dark" ||
+          (mode === "system" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches))));
+
+  const toggleAppearance = () => {
+    if (preset === "shenzhi") {
+      setMode(dark ? "light" : "dark");
+      return;
+    }
+    setPreset(preset === "apple-dark" ? "apple-light" : "apple-dark");
+  };
 
   return (
     <button
       type="button"
-      onClick={() => setMode(dark ? "light" : "dark")}
+      onClick={toggleAppearance}
       aria-label={dark ? "切换到日间模式" : "切换到夜间模式"}
       title={dark ? "切换到日间模式" : "切换到夜间模式"}
       className={cn(
