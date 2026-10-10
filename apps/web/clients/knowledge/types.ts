@@ -46,14 +46,27 @@ export interface KnowledgeTopic {
   imagePath: string | null;
   nameZh: string;
   nameEn: string;
-  author: string;
+  author: string | KnowledgeTopicAuthor;
   descriptionZh: string;
+  /** 详情页使用的完整介绍；缺省时回退到 descriptionZh。 */
+  descriptionDetail?: string | null;
   descriptionEn: string;
   followersCount: number;
+  /** 服务端登录态可返回；匿名或旧接口缺省时由本地偏好补足。 */
+  isFollowing?: boolean;
+  /** 可选的分类图标 key，未提供时按 category 使用默认图标。 */
+  iconKey?: string | null;
   category: string;
   subjectQuery: string;
   paperCount: number;
   enabled: boolean;
+}
+
+export interface KnowledgeTopicAuthor {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  isVerified?: boolean;
 }
 
 export interface KnowledgeTopicListResponse {

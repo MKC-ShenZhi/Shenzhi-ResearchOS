@@ -7,6 +7,13 @@ from pydantic import Field
 from app.schemas.knowledge import KnowledgeModel
 
 
+class KnowledgeTopicAuthor(KnowledgeModel):
+    id: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
+    avatar_url: str | None = Field(default=None, validation_alias='avatarUrl', serialization_alias='avatarUrl')
+    is_verified: bool = Field(default=False, validation_alias='isVerified', serialization_alias='isVerified')
+
+
 class KnowledgeTopic(KnowledgeModel):
     id: str = Field(min_length=1, max_length=200)
     image_path: str | None = Field(
@@ -26,12 +33,18 @@ class KnowledgeTopic(KnowledgeModel):
         validation_alias='nameEn',
         serialization_alias='nameEn',
     )
-    author: str = Field(min_length=1, max_length=200)
+    author: str | KnowledgeTopicAuthor
     description_zh: str = Field(
         min_length=1,
         max_length=2000,
         validation_alias='descriptionZh',
         serialization_alias='descriptionZh',
+    )
+    description_detail: str | None = Field(
+        default=None,
+        max_length=10000,
+        validation_alias='descriptionDetail',
+        serialization_alias='descriptionDetail',
     )
     description_en: str = Field(
         min_length=1,
@@ -45,6 +58,8 @@ class KnowledgeTopic(KnowledgeModel):
         validation_alias='followersCount',
         serialization_alias='followersCount',
     )
+    is_following: bool = Field(default=False, validation_alias='isFollowing', serialization_alias='isFollowing')
+    icon_key: str | None = Field(default=None, validation_alias='iconKey', serialization_alias='iconKey')
     category: str = Field(min_length=1, max_length=200)
     subject_query: str = Field(
         min_length=1,
