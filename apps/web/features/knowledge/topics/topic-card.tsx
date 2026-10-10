@@ -35,10 +35,19 @@ function CreatorLogo() {
   );
 }
 
-export function TopicCard({ topic, featured = false }: { topic: KnowledgeTopic; featured?: boolean }) {
+export function TopicCard({
+  topic,
+  featured = false,
+  onCreatorClick,
+}: {
+  topic: KnowledgeTopic;
+  featured?: boolean;
+  onCreatorClick?: (creatorId: string) => void;
+}) {
   const [imageFailed, setImageFailed] = useState(false);
   const { followedTopics, toggleTopicFollow } = useUserPreferences();
   const author = typeof topic.author === "string" ? { name: topic.author } : topic.author;
+  const authorId = typeof topic.author === "string" ? topic.author.trim().toLocaleLowerCase() : topic.author.id;
   const authorName = author.name.toLocaleLowerCase() === "shenzhi" ? "ShenZhi" : author.name;
   const following = followedTopics[topic.id] ?? topic.isFollowing ?? false;
 
@@ -52,7 +61,7 @@ export function TopicCard({ topic, featured = false }: { topic: KnowledgeTopic; 
       <div className="flex flex-1 flex-col p-3">
         <div className="mb-1.5 min-w-0"><Link href={`/knowledge/topics/${encodeURIComponent(topic.id)}`} className="block"><h3 className="truncate text-lg font-semibold leading-6 tracking-tight text-foreground transition group-hover:text-primary">{topic.nameZh}</h3><p className="mt-0.5 truncate text-[11px] font-medium leading-4 tracking-[0.02em] text-muted-foreground">{formatEnglishTitle(topic.nameEn)}</p></Link></div>
         <p className="mb-2 line-clamp-2 min-h-10 text-[13px] leading-5 text-muted-foreground" title={topic.descriptionZh}>{topic.descriptionZh}</p>
-        <div className="mb-2"><Button type="button" variant="soft" size="sm" className="h-7 px-2.5" title={`创作者：${authorName}`} aria-label={`查看创作者：${authorName}`}><CreatorLogo /><span>{authorName}</span>{typeof topic.author !== "string" && topic.author.isVerified ? <span className="text-primary" title="已认证作者">✓</span> : null}</Button></div>
+        <div className="mb-2"><Button type="button" variant="soft" size="sm" className="h-7 px-2.5" title={`创作者：${authorName}`} aria-label={`查看创作者：${authorName}`} onClick={() => onCreatorClick?.(authorId)}><CreatorLogo /><span>{authorName}</span>{typeof topic.author !== "string" && topic.author.isVerified ? <span className="text-primary" title="已认证作者">✓</span> : null}</Button></div>
         <div className="mt-auto flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5"><div className="flex min-w-0 items-center gap-2.5 text-xs text-muted-foreground"><span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="关联论文数量"><BookOpen className="size-3.5" />{topic.paperCount.toLocaleString()} 篇</span><span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="关注人数"><Users className="size-3.5" />{topic.followersCount.toLocaleString()} 人关注</span></div><Button type="button" variant={following ? "soft" : "default"} size="sm" aria-pressed={following} onClick={() => toggleTopicFollow(topic.id, topic.isFollowing)} title={following ? "取消关注主题" : "关注主题"}>{following ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}{following ? "已关注" : "关注"}</Button></div>
       </div>
     </article>
