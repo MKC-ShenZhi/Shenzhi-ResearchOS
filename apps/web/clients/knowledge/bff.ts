@@ -15,6 +15,7 @@ import type {
   KnowledgePaperDetail,
   KnowledgeTopic,
   KnowledgeTopicListResponse,
+  KnowledgeCreator,
   KnowledgeScholarDetail,
   KnowledgeScholarSearchParams,
   KnowledgeScholarSearchResponse,
@@ -111,6 +112,16 @@ export class BffKnowledgeClient implements KnowledgeClient {
       return await apiJson<KnowledgeTopic>(`/knowledge/topics/${encodeURIComponent(topicId)}`, { signal });
     } catch (error) {
       if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async creator(creatorId: string): Promise<KnowledgeCreator> {
+    try {
+      return await apiJson<KnowledgeCreator>(
+        `/knowledge/creators/${encodeURIComponent(creatorId)}`,
+      );
+    } catch (error) {
       throw toKnowledgeError(error);
     }
   }

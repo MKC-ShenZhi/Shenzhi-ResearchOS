@@ -14,6 +14,7 @@ import type {
   KnowledgePaperDetail,
   KnowledgeTopic,
   KnowledgeTopicListResponse,
+  KnowledgeCreator,
   KnowledgeScholarDetail,
   KnowledgeScholarSearchParams,
   KnowledgeScholarSearchResponse,
@@ -38,6 +39,8 @@ export interface KnowledgeClient {
   topics(signal?: AbortSignal): Promise<KnowledgeTopicListResponse>;
   /** 主题详情；topicId 作为 opaque string 使用 */
   topic(topicId: string, signal?: AbortSignal): Promise<KnowledgeTopic>;
+  /** 主题创作者信息；按需加载，creatorId 作为 opaque string 使用 */
+  creator(creatorId: string): Promise<KnowledgeCreator>;
   /** 总览页跨实体混合搜索 */
   overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse>;
   /** 论文搜索；无匹配返回空 results（不是错误） */

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { BookOpen, BrainCircuit, Check, Languages, Network, Plus, Sparkles, Users } from "lucide-react";
+import { BookOpen, BrainCircuit, Check, Languages, Network, Plus, Users } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { KnowledgeTopic } from "@/clients/knowledge";
@@ -15,10 +15,31 @@ function TopicIcon({ category, iconKey }: { category: string; iconKey?: string |
   return <Icon className="size-5" strokeWidth={1.8} />;
 }
 
+function formatEnglishTitle(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed !== trimmed.toUpperCase()) return trimmed;
+
+  return trimmed.split(/\s+/).map((word) => word.split("-").map((part) => {
+    const normalized = part.toLocaleLowerCase();
+    if (normalized.length <= 3) return normalized.toLocaleUpperCase();
+    return `${normalized.slice(0, 1).toLocaleUpperCase()}${normalized.slice(1)}`;
+  }).join("-")).join(" ");
+}
+
+function CreatorLogo() {
+  return (
+    <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+      <Image src="/brand/logo-night.png" alt="" width={20} height={20} className="size-full object-contain dark:hidden" />
+      <Image src="/brand/logo-day.png" alt="" width={20} height={20} className="hidden size-full object-contain dark:block" />
+    </span>
+  );
+}
+
 export function TopicCard({ topic, featured = false }: { topic: KnowledgeTopic; featured?: boolean }) {
   const [imageFailed, setImageFailed] = useState(false);
   const { followedTopics, toggleTopicFollow } = useUserPreferences();
   const author = typeof topic.author === "string" ? { name: topic.author } : topic.author;
+  const authorName = author.name.toLocaleLowerCase() === "shenzhi" ? "ShenZhi" : author.name;
   const following = followedTopics[topic.id] ?? topic.isFollowing ?? false;
 
   return (
@@ -28,11 +49,11 @@ export function TopicCard({ topic, featured = false }: { topic: KnowledgeTopic; 
         <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" />
         <div className="absolute bottom-3 left-4 flex size-11 items-center justify-center rounded-xl border border-white/80 bg-white/90 text-primary shadow-sm backdrop-blur"><TopicIcon category={topic.category} iconKey={topic.iconKey} /></div>
       </Link>
-      <div className="flex flex-1 flex-col p-3.5">
-        <div className="mb-2 min-w-0"><Link href={`/knowledge/topics/${encodeURIComponent(topic.id)}`} className="block"><h3 className="truncate text-lg font-semibold tracking-tight text-foreground transition group-hover:text-primary">{topic.nameZh}</h3><p className="mt-0.5 truncate text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">{topic.nameEn}</p></Link></div>
-        <p className="mb-2 line-clamp-2 min-h-9 text-sm leading-5 text-muted-foreground">{topic.descriptionZh}</p>
-        <p className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground"><Sparkles className="size-3.5 text-primary/70" /><span className="text-[10px] uppercase tracking-[0.12em]">by</span><span className="font-medium text-foreground">{author.name}</span>{typeof topic.author !== "string" && topic.author.isVerified ? <span className="text-primary" title="已认证作者">✓</span> : null}</p>
-        <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 pt-3"><div className="flex min-w-0 items-center gap-3 text-xs text-muted-foreground"><span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="关联论文数量"><BookOpen className="size-3.5" />{topic.paperCount.toLocaleString()} 篇</span><span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="关注人数"><Users className="size-3.5" />{topic.followersCount.toLocaleString()} 人关注</span></div><Button type="button" variant={following ? "soft" : "default"} size="sm" aria-pressed={following} onClick={() => toggleTopicFollow(topic.id, topic.isFollowing)} title={following ? "取消关注主题" : "关注主题"}>{following ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}{following ? "已关注" : "关注"}</Button></div>
+      <div className="flex flex-1 flex-col p-3">
+        <div className="mb-1.5 min-w-0"><Link href={`/knowledge/topics/${encodeURIComponent(topic.id)}`} className="block"><h3 className="truncate text-lg font-semibold leading-6 tracking-tight text-foreground transition group-hover:text-primary">{topic.nameZh}</h3><p className="mt-0.5 truncate text-[11px] font-medium leading-4 tracking-[0.02em] text-muted-foreground">{formatEnglishTitle(topic.nameEn)}</p></Link></div>
+        <p className="mb-2 line-clamp-2 min-h-10 text-[13px] leading-5 text-muted-foreground" title={topic.descriptionZh}>{topic.descriptionZh}</p>
+        <div className="mb-2"><Button type="button" variant="soft" size="sm" className="h-7 px-2.5" title={`创作者：${authorName}`} aria-label={`查看创作者：${authorName}`}><CreatorLogo /><span>{authorName}</span>{typeof topic.author !== "string" && topic.author.isVerified ? <span className="text-primary" title="已认证作者">✓</span> : null}</Button></div>
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5"><div className="flex min-w-0 items-center gap-2.5 text-xs text-muted-foreground"><span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="关联论文数量"><BookOpen className="size-3.5" />{topic.paperCount.toLocaleString()} 篇</span><span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="关注人数"><Users className="size-3.5" />{topic.followersCount.toLocaleString()} 人关注</span></div><Button type="button" variant={following ? "soft" : "default"} size="sm" aria-pressed={following} onClick={() => toggleTopicFollow(topic.id, topic.isFollowing)} title={following ? "取消关注主题" : "关注主题"}>{following ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}{following ? "已关注" : "关注"}</Button></div>
       </div>
     </article>
   );

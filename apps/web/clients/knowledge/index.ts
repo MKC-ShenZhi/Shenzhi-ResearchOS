@@ -19,6 +19,7 @@ export type {
   KnowledgeSubjectSearchResponse,
   KnowledgeTopic,
   KnowledgeTopicListResponse,
+  KnowledgeCreator,
   KnowledgeScholarSearchParams,
   KnowledgeScholarSearchResponse,
   KnowledgeScholarSummary,

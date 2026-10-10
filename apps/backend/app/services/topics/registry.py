@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.schemas.topic import KnowledgeTopic, KnowledgeTopicListResponse
+from app.schemas.topic import KnowledgeCreator, KnowledgeTopic, KnowledgeTopicListResponse
 from app.services.topics.catalog import load_topic_catalog
 
 
@@ -27,4 +27,30 @@ class TopicRegistry:
         if topic is None:
             raise TopicRegistryError('未找到对应主题')
         return topic
+
+    def get_creator(self, creator_id: str) -> KnowledgeCreator:
+        normalized = creator_id.strip().lower()
+        if normalized != 'shenzhi':
+            raise TopicRegistryError('未找到对应创作者')
+
+        topic_count = sum(
+            1
+            for topic in self._topics
+            if topic.enabled
+            and (
+                (isinstance(topic.author, str) and topic.author.strip().lower() == normalized)
+                or (
+                    not isinstance(topic.author, str)
+                    and topic.author.id.strip().lower() == normalized
+                )
+            )
+        )
+        return KnowledgeCreator(
+            id='shenzhi',
+            name='ShenZhi',
+            avatar_url='/brand/logo-night.png',
+            bio='深知 ShenZhi · Research OS，整理和维护面向科研工作的知识主题。',
+            topic_count=topic_count,
+            is_verified=True,
+        )
 

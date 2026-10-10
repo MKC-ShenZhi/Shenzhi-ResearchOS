@@ -69,6 +69,15 @@ export interface KnowledgeTopicAuthor {
   isVerified?: boolean;
 }
 
+export interface KnowledgeCreator {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  bio: string;
+  topicCount: number;
+  isVerified: boolean;
+}
+
 export interface KnowledgeTopicListResponse {
   items: KnowledgeTopic[];
   total: number;

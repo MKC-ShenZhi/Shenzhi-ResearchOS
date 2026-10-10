@@ -24,6 +24,17 @@ if %ERRORLEVEL%==0 (
   exit /b 0
 )
 
-"%BIN%\pg_ctl.exe" -D "%DATA%" -l "%LOG%" -o "-p %PORT% -h 127.0.0.1" start
-"%BIN%\pg_isready.exe" -h 127.0.0.1 -p %PORT%
+"%BIN%\pg_ctl.exe" -D "%DATA%" -l "%LOG%" -o "-p %PORT% -h 127.0.0.1" -w -t 30 start
+if errorlevel 1 (
+  echo PostgreSQL failed to start. Check %LOG%
+  exit /b 1
+)
+
+"%BIN%\pg_isready.exe" -h 127.0.0.1 -p %PORT% >nul 2>&1
+if errorlevel 1 (
+  echo PostgreSQL process started but 127.0.0.1:%PORT% is not accepting connections.
+  echo Check %LOG%
+  exit /b 1
+)
+echo PostgreSQL ready on 127.0.0.1:%PORT%
 endlocal

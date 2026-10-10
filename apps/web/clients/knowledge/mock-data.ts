@@ -34,7 +34,7 @@ export const MOCK_TOPICS: KnowledgeTopic[] = [
     nameZh: "强化学习",
     nameEn: "Reinforcement Learning",
     author: "shenzhi",
-    descriptionZh: "整理智能体如何在环境反馈中学习决策与长期策略。",
+    descriptionZh: "研究智能体如何利用环境反馈学习决策，在不确定环境中规划长期策略，并通过试错、价值估计与策略优化持续提升行为表现。",
     descriptionEn: "How agents learn decisions and long-horizon strategies from environmental feedback.",
     followersCount: 18,
     category: "机器学习",

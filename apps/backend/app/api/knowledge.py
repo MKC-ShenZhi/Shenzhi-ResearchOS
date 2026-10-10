@@ -94,6 +94,18 @@ def topic_not_found(request: Request) -> JSONResponse:
             request_id=request_id(request),
         ).model_dump(mode='json', by_alias=True),
     )
+
+
+def creator_not_found(request: Request) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content=KnowledgeError(
+            code='NOT_FOUND',
+            message='未找到对应创作者',
+            retryable=False,
+            request_id=request_id(request),
+        ).model_dump(mode='json', by_alias=True),
+    )
     return JSONResponse(
         status_code=500,
         content=KnowledgeError(
@@ -190,6 +202,23 @@ async def topic(
         response = topic_registry.get_topic(topic_id)
     except TopicRegistryError:
         return topic_not_found(request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/creators/{creator_id:path}')
+async def creator(
+    creator_id: str,
+    request: Request,
+    _credential: None = Depends(require_bff),
+):
+    if not creator_id.strip():
+        return invalid_argument(request, 'creatorId 不能为空')
+    try:
+        response = topic_registry.get_creator(creator_id)
+    except TopicRegistryError:
+        return creator_not_found(request)
     except Exception as error:
         return unknown_error(request, error)
     return ok(response.model_dump(mode='json', by_alias=True))
