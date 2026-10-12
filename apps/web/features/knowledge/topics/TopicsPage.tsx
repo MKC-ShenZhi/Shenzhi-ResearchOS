@@ -52,7 +52,7 @@ export function TopicsPage() {
         {isPending ? <TopicLoadingState /> : isError ? <TopicErrorState onRetry={() => void refetch()} /> : visibleTopics.length === 0 ? <TopicEmptyState onReset={() => updateState({ query: "", category: "" })} /> : (
           <div className="space-y-10">
             {featuredTopics.length > 0 ? <section><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">精选主题</h2><span className="text-sm text-muted-foreground">{data?.total ?? 0} 个主题</span></div><TopicGrid topics={featuredTopics} featured onCreatorClick={handleCreatorClick} /></section> : null}
-            {groups.map(([category, categoryTopics]) => <section key={category}><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">{category}</h2><span className="text-sm text-muted-foreground">{categoryTopics.length} 个主题</span></div><TopicGrid topics={categoryTopics} carousel={categoryTopics.length > 3} onCreatorClick={handleCreatorClick} /></section>)}
+            {groups.map(([category, categoryTopics]) => <section key={category}><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">{category}</h2><span className="text-sm text-muted-foreground">{categoryTopics.length} 个主题</span></div><TopicGrid topics={categoryTopics} carousel={!state.category && categoryTopics.length > 3} onCreatorClick={handleCreatorClick} /></section>)}
           </div>
         )}
       </div>
