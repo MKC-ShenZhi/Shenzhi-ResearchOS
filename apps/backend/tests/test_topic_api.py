@@ -29,10 +29,13 @@ class TopicApiTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 200, response.text)
         data = response.json()['data']
-        self.assertEqual(data['total'], 7)
-        self.assertEqual(data['categories'], ['机器学习', '自然语言处理'])
-        self.assertEqual(data['items'][0]['id'], 'deep-learning')
-        self.assertEqual(data['items'][0]['subjectQuery'], 'deep learning')
+        self.assertEqual(data['total'], 293)
+        self.assertEqual(
+            set(data['categories']),
+            {'大语言模型', '多模态', '机器学习', '计算机视觉', '生成式AI', '语音/音频处理', '智能体', '自然语言处理'},
+        )
+        self.assertEqual(data['items'][0]['id'], 'reinforcement-learning')
+        self.assertEqual(data['items'][0]['subjectQuery'], 'reinforcement learning')
         self.assertNotIn('descriptionEh', data['items'][0])
 
     async def test_topic_detail_returns_metadata_by_stable_id(self):
@@ -43,7 +46,16 @@ class TopicApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         data = response.json()['data']
         self.assertEqual(data['nameZh'], '大语言模型')
-        self.assertEqual(data['subjectQuery'], 'llm')
+        self.assertEqual(data['subjectQuery'], 'large language models')
+
+    async def test_new_catalog_topic_detail_returns_metadata_by_stable_id(self):
+        response = await self.client.get('/api/v1/knowledge/topics/contrastive-learning')
+
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()['data']
+        self.assertEqual(data['category'], '机器学习')
+        self.assertEqual(data['subjectQuery'], 'contrastive learning')
+        self.assertEqual(data['author']['id'], 'shenzhi')
 
     async def test_missing_topic_returns_unified_not_found_error(self):
         response = await self.client.get('/api/v1/knowledge/topics/missing-topic')
