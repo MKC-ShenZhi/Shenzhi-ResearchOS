@@ -46,7 +46,7 @@ export function TopicsPage() {
     <main className="min-h-screen bg-white px-4 py-7 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1180px]">
         <header className="mb-7">
-          <div className="mb-4"><TopicSearch value={state.query} onChange={(query) => updateState({ query })} /></div>
+          <div className="mb-4"><TopicSearch value={state.query} onSearch={(query) => updateState({ query })} /></div>
           <TopicCategoryTabs categories={data?.categories ?? []} value={state.category} onChange={(category) => updateState({ category })} />
         </header>
         {isPending ? <TopicLoadingState /> : isError ? <TopicErrorState onRetry={() => void refetch()} /> : visibleTopics.length === 0 ? <TopicEmptyState onReset={() => updateState({ query: "", category: "" })} /> : (

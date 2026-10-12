@@ -4,18 +4,9 @@ import { Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 
-const SEARCH_DEBOUNCE_MS = 250;
-
-export function TopicSearch({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function TopicSearch({ value, onSearch }: { value: string; onSearch: (value: string) => void }) {
   const [draftValue, setDraftValue] = useState(value);
   const composingRef = useRef(false);
-  const skipNextDebounceRef = useRef(false);
-  const onChangeRef = useRef(onChange);
-  const debounceTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
 
   useEffect(() => {
     // Keep browser back/forward navigation in sync with the local draft.
@@ -23,62 +14,34 @@ export function TopicSearch({ value, onChange }: { value: string; onChange: (val
     setDraftValue(value);
   }, [value]);
 
-  useEffect(() => {
-    if (debounceTimerRef.current !== null) {
-      window.clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
-    if (skipNextDebounceRef.current) {
-      skipNextDebounceRef.current = false;
-      return;
-    }
-    if (composingRef.current || draftValue === value) return;
-    debounceTimerRef.current = window.setTimeout(() => {
-      debounceTimerRef.current = null;
-      onChangeRef.current(draftValue);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => {
-      if (debounceTimerRef.current !== null) {
-        window.clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
-      }
-    };
-  }, [draftValue, value]);
-
   const clearSearch = () => {
-    if (debounceTimerRef.current !== null) {
-      window.clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
-    skipNextDebounceRef.current = true;
     setDraftValue("");
-    onChangeRef.current("");
+    onSearch("");
   };
 
-  const startComposition = () => {
-    composingRef.current = true;
-    if (debounceTimerRef.current !== null) {
-      window.clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
+  const submitSearch = () => {
+    if (composingRef.current) return;
+    onSearch(draftValue);
   };
 
   return (
-    <div className="relative w-full">
+    <form className="relative w-full" role="search" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}>
       <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
       <Input
         value={draftValue}
         onChange={(event) => setDraftValue(event.target.value)}
-        onCompositionStart={startComposition}
-        onCompositionEnd={(event) => {
-          composingRef.current = false;
-          setDraftValue(event.currentTarget.value);
-        }}
+        onCompositionStart={() => { composingRef.current = true; }}
+        onCompositionEnd={() => { composingRef.current = false; }}
+        onKeyDown={(event) => { if (event.key === "Enter" && composingRef.current) event.preventDefault(); }}
+        type="text"
         placeholder="搜索主题"
         aria-label="搜索主题"
-        className="h-12 rounded-full border-slate-200 bg-slate-50/70 pl-12 pr-12 text-base shadow-none transition focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-primary/20"
+        className="h-12 rounded-full border-slate-200 bg-slate-50/70 pl-12 pr-28 text-base shadow-none transition focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-primary/20"
       />
-      {draftValue ? <button type="button" onClick={clearSearch} aria-label="清除搜索" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="size-4" /></button> : null}
-    </div>
+      <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+        {draftValue ? <button type="button" onClick={clearSearch} aria-label="清除搜索" className="rounded-full p-2 text-muted-foreground hover:text-foreground"><X className="size-4" /></button> : null}
+        <button type="submit" aria-label="搜索" className="rounded-full p-2 text-primary hover:bg-primary/10"><Search className="size-4" /></button>
+      </div>
+    </form>
   );
 }
