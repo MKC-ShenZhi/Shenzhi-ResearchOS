@@ -2,16 +2,29 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { BookOpen, BrainCircuit, Check, Languages, Network, Plus, Users } from "lucide-react";
+import { AudioLines, BookOpen, Boxes, BrainCircuit, Bot, Check, Eye, Languages, Network, Plus, Sparkles, Users } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { KnowledgeTopic } from "@/clients/knowledge";
 import { useUserPreferences } from "@/stores/user-preferences";
 
-const categoryIcons = { "机器学习": BrainCircuit, "自然语言处理": Languages, network: Network, brain: BrainCircuit, language: Languages } as const;
+const categoryIcons: Record<string, LucideIcon> = {
+  "机器学习": BrainCircuit,
+  "自然语言处理": Languages,
+  "大语言模型": Languages,
+  "智能体": Bot,
+  "计算机视觉": Eye,
+  "语音/音频处理": AudioLines,
+  "生成式AI": Sparkles,
+  "多模态": Boxes,
+  network: Network,
+  brain: BrainCircuit,
+  language: Languages,
+};
 
 function TopicIcon({ category, iconKey }: { category: string; iconKey?: string | null }) {
-  const Icon = categoryIcons[iconKey as keyof typeof categoryIcons] ?? categoryIcons[category as keyof typeof categoryIcons] ?? Network;
+  const Icon = (iconKey ? categoryIcons[iconKey] : undefined) ?? categoryIcons[category] ?? Network;
   return <Icon className="size-5" strokeWidth={1.8} />;
 }
 

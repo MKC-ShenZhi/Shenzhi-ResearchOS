@@ -10,6 +10,9 @@ class TopicRegistryError(RuntimeError):
     """Raised for a catalog lookup that cannot be completed."""
 
 
+CREATOR_ALIASES = {'shenzhi', '深知'}
+
+
 class TopicRegistry:
     def __init__(self, topics: tuple[KnowledgeTopic, ...] | None = None):
         self._topics = topics if topics is not None else load_topic_catalog()
@@ -30,7 +33,7 @@ class TopicRegistry:
 
     def get_creator(self, creator_id: str) -> KnowledgeCreator:
         normalized = creator_id.strip().lower()
-        if normalized != 'shenzhi':
+        if normalized not in CREATOR_ALIASES:
             raise TopicRegistryError('未找到对应创作者')
 
         topic_count = sum(
@@ -38,10 +41,10 @@ class TopicRegistry:
             for topic in self._topics
             if topic.enabled
             and (
-                (isinstance(topic.author, str) and topic.author.strip().lower() == normalized)
+                (isinstance(topic.author, str) and topic.author.strip().lower() in CREATOR_ALIASES)
                 or (
                     not isinstance(topic.author, str)
-                    and topic.author.id.strip().lower() == normalized
+                    and topic.author.id.strip().lower() in CREATOR_ALIASES
                 )
             )
         )

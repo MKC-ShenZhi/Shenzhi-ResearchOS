@@ -31,6 +31,7 @@ def load_topic_catalog() -> tuple[KnowledgeTopic, ...]:
 
     topics: list[KnowledgeTopic] = []
     seen_ids: set[str] = set()
+    seen_subject_queries: set[str] = set()
     for item in raw:
         if not isinstance(item, dict):
             raise TopicCatalogError('主题目录记录格式无效')
@@ -43,7 +44,13 @@ def load_topic_catalog() -> tuple[KnowledgeTopic, ...]:
             raise TopicCatalogError('主题目录字段无效') from error
         if topic.id in seen_ids:
             raise TopicCatalogError('主题目录包含重复 ID')
+        normalized_subject_query = topic.subject_query.strip().casefold()
+        if normalized_subject_query in seen_subject_queries:
+            raise TopicCatalogError('主题目录包含重复 subjectQuery')
+        if topic.image_path and not topic.image_path.startswith('/images/topics/'):
+            raise TopicCatalogError('主题目录图片路径无效')
         seen_ids.add(topic.id)
+        seen_subject_queries.add(normalized_subject_query)
         topics.append(topic)
     return tuple(topics)
 

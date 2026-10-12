@@ -14,7 +14,7 @@ export function filterTopics(topics: KnowledgeTopic[], { query, category }: Topi
     const author = typeof topic.author === "string"
       ? topic.author
       : `${topic.author.id} ${topic.author.name}`;
-    return [topic.nameZh, topic.nameEn, topic.descriptionZh, topic.descriptionEn, author]
+    return [topic.id, topic.subjectQuery, topic.category, topic.nameZh, topic.nameEn, topic.descriptionZh, topic.descriptionEn, author]
       .join(" ")
       .normalize("NFKC")
       .toLocaleLowerCase()
