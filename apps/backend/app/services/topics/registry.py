@@ -7,7 +7,7 @@ from app.services.topics.catalog import load_topic_catalog
 
 
 class TopicRegistryError(RuntimeError):
-    """Raised for a catalog lookup that cannot be completed."""
+    """Raised when a topic or creator is not found in a valid catalog."""
 
 
 CREATOR_ALIASES = {'shenzhi', '深知'}
@@ -15,7 +15,13 @@ CREATOR_ALIASES = {'shenzhi', '深知'}
 
 class TopicRegistry:
     def __init__(self, topics: tuple[KnowledgeTopic, ...] | None = None):
-        self._topics = topics if topics is not None else load_topic_catalog()
+        self._provided_topics = topics
+
+    @property
+    def _topics(self) -> tuple[KnowledgeTopic, ...]:
+        # Load only during a request. The loader caches successes, not failures;
+        # keep no second snapshot so cache_clear() also refreshes live registries.
+        return self._provided_topics if self._provided_topics is not None else load_topic_catalog()
 
     def list_topics(self) -> KnowledgeTopicListResponse:
         items = [topic for topic in self._topics if topic.enabled]
@@ -32,13 +38,14 @@ class TopicRegistry:
         return topic
 
     def get_creator(self, creator_id: str) -> KnowledgeCreator:
+        topics = self._topics
         normalized = creator_id.strip().lower()
         if normalized not in CREATOR_ALIASES:
             raise TopicRegistryError('未找到对应创作者')
 
         topic_count = sum(
             1
-            for topic in self._topics
+            for topic in topics
             if topic.enabled
             and (
                 (isinstance(topic.author, str) and topic.author.strip().lower() in CREATOR_ALIASES)

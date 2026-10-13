@@ -24,7 +24,7 @@ class TopicCatalogError(RuntimeError):
 def load_topic_catalog() -> tuple[KnowledgeTopic, ...]:
     try:
         raw = json.loads(CATALOG_PATH.read_text(encoding='utf-8'))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise TopicCatalogError('主题目录暂时不可用') from error
 
     if not isinstance(raw, list):

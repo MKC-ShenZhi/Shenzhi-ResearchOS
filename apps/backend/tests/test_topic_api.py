@@ -1,4 +1,11 @@
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import textwrap
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import httpx
@@ -6,11 +13,14 @@ import httpx
 from app.core.identity import require_bff
 from app.main import app
 from app.schemas.topic import KnowledgeTopic
+from app.services.topics.catalog import CATALOG_PATH, load_topic_catalog
 from app.services.topics.registry import TopicRegistry
 
 
 class TopicApiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        load_topic_catalog.cache_clear()
+        self.addCleanup(load_topic_catalog.cache_clear)
         async def allow_bff():
             return None
 
@@ -106,6 +116,89 @@ class TopicApiTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get('/api/v1/knowledge/creators/missing')
         self.assertEqual(response.status_code, 404, response.text)
         self.assertEqual(response.json()['code'], 'NOT_FOUND')
+
+    def test_fresh_application_import_does_not_load_catalog(self):
+        result = subprocess.run(
+            [sys.executable, '-c', textwrap.dedent('''
+                from unittest.mock import patch
+                from app.services.topics.catalog import TopicCatalogError
+
+                with patch('app.services.topics.registry.load_topic_catalog',
+                           side_effect=TopicCatalogError('catalog unavailable')) as load:
+                    from app.main import app
+                    assert '/api/v1/knowledge/topics' in app.openapi()['paths']
+                    load.assert_not_called()
+            ''')],
+            capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    async def test_catalog_failures_are_logged_safe_500_and_isolated_from_other_routes(self):
+        paths = [
+            '/api/v1/knowledge/topics',
+            '/api/v1/knowledge/topics/large-language-models',
+            '/api/v1/knowledge/topics/missing-topic',
+            '/api/v1/knowledge/creators/shenzhi',
+            '/api/v1/knowledge/creators/missing',
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'private-catalog.json'
+            for content in [None, b'{', b'[{"id": "invalid"}]', b'\xff']:
+                with self.subTest(content=content):
+                    load_topic_catalog.cache_clear()
+                    if content is not None:
+                        path.write_bytes(content)
+                    with patch('app.services.topics.catalog.CATALOG_PATH', path):
+                        for route in paths:
+                            with self.subTest(route=route), self.assertLogs('app.api.knowledge', 'ERROR') as logs:
+                                response = await self.client.get(route, headers={'x-request-id': 'catalog-failure'})
+                            self.assertEqual(response.status_code, 500, response.text)
+                            self.assertEqual(response.json(), {
+                                'code': 'UNKNOWN', 'message': '知识服务请求失败',
+                                'retryable': False, 'requestId': 'catalog-failure',
+                            })
+                            self.assertTrue(any(record.exc_info for record in logs.records))
+
+                        health = await self.client.get('/health')
+                        self.assertEqual(health.status_code, 200, health.text)
+                        with patch.dict(os.environ, {'BACKEND_BFF_SECRET': 'test-secret'}):
+                            overview = await self.client.get('/api/v1/knowledge/personal-overview', headers={
+                                'x-shenzhi-bff-secret': 'test-secret',
+                                'x-shenzhi-anonymous-id': '00000000-0000-4000-8000-000000000001',
+                            })
+                        self.assertEqual(overview.status_code, 200, overview.text)
+                        self.assertTrue(overview.json()['data']['authRequired'])
+
+    async def test_catalog_repair_recovers_existing_routes_and_cache_can_be_refreshed(self):
+        row = json.loads(CATALOG_PATH.read_text(encoding='utf-8'))[0]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'catalog.json'
+            with patch('app.services.topics.catalog.CATALOG_PATH', path):
+                failed = await self.client.get('/api/v1/knowledge/topics')
+                self.assertEqual(failed.status_code, 500, failed.text)
+                # Failed loads are not cached: the next request retries repaired data.
+                path.write_text(json.dumps([row]), encoding='utf-8')
+                recovered = await self.client.get('/api/v1/knowledge/topics')
+                self.assertEqual(recovered.status_code, 200, recovered.text)
+                self.assertEqual(recovered.json()['data']['total'], 1)
+                detail = await self.client.get(f'/api/v1/knowledge/topics/{row["id"]}')
+                self.assertEqual(detail.status_code, 200, detail.text)
+                creator = await self.client.get('/api/v1/knowledge/creators/shenzhi')
+                self.assertEqual(creator.status_code, 200, creator.text)
+                self.assertEqual(creator.json()['data']['topicCount'], 1)
+
+                path.write_text('{', encoding='utf-8')
+                cached = await self.client.get('/api/v1/knowledge/topics')
+                self.assertEqual(cached.status_code, 200, cached.text)
+                load_topic_catalog.cache_clear()
+                invalidated = await self.client.get('/api/v1/knowledge/topics')
+                self.assertEqual(invalidated.status_code, 500, invalidated.text)
+                path.write_text(json.dumps([row, {**row, 'id': 'new-topic', 'subjectQuery': 'new subject'}]), encoding='utf-8')
+                updated = await self.client.get('/api/v1/knowledge/topics')
+                self.assertEqual(updated.status_code, 200, updated.text)
+                self.assertEqual(updated.json()['data']['total'], 2)
+                missing = await self.client.get('/api/v1/knowledge/topics/missing-topic')
+                self.assertEqual(missing.status_code, 404, missing.text)
 
     def test_registry_filters_disabled_topics_without_losing_category_order(self):
         topics = (

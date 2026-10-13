@@ -2,9 +2,11 @@ import { TopicDetailPage } from "@/features/knowledge/topics/detail/topic-detail
 
 export default async function Page({
   params,
+  searchParams,
 }: {
   params: Promise<{ topicId: string }>;
+  searchParams: Promise<{ returnTo?: string | string[] }>;
 }) {
-  const { topicId } = await params;
-  return <TopicDetailPage topicId={topicId} />;
+  const [{ topicId }, { returnTo }] = await Promise.all([params, searchParams]);
+  return <TopicDetailPage topicId={topicId} returnTo={typeof returnTo === "string" ? returnTo : null} />;
 }

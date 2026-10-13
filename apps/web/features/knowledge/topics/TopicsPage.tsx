@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getKnowledgeClient } from "@/clients/knowledge";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { TopicCategoryTabs } from "./topic-category-tabs";
 import { TopicGrid } from "./topic-grid";
 import { filterTopics, groupTopics, readTopicViewState, updateTopicViewParams } from "./topic-url-state";
@@ -14,6 +15,7 @@ export function TopicsPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const returnTo = useCurrentInternalPath();
   const state = readTopicViewState(new URLSearchParams(searchParams.toString()));
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["knowledge", "topics"],
@@ -40,8 +42,8 @@ export function TopicsPage() {
         </header>
         {isPending ? <TopicLoadingState /> : isError ? <TopicErrorState onRetry={() => void refetch()} /> : visibleTopics.length === 0 ? <TopicEmptyState onReset={() => updateState({ query: "", category: "" })} /> : (
           <div className="space-y-10">
-            {featuredTopics.length > 0 ? <section><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">精选主题</h2><span className="text-sm text-muted-foreground">{data?.total ?? 0} 个主题</span></div><TopicGrid topics={featuredTopics} featured /></section> : null}
-            {groups.map(([category, categoryTopics]) => <section key={category}><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">{category}</h2><span className="text-sm text-muted-foreground">{categoryTopics.length} 个主题</span></div><TopicGrid topics={categoryTopics} carousel={!state.category && categoryTopics.length > 3} /></section>)}
+            {featuredTopics.length > 0 ? <section><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">精选主题</h2><span className="text-sm text-muted-foreground">{data?.total ?? 0} 个主题</span></div><TopicGrid topics={featuredTopics} returnTo={returnTo} featured /></section> : null}
+            {groups.map(([category, categoryTopics]) => <section key={category}><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">{category}</h2><span className="text-sm text-muted-foreground">{categoryTopics.length} 个主题</span></div><TopicGrid topics={categoryTopics} returnTo={returnTo} carousel={!state.category && categoryTopics.length > 3} /></section>)}
           </div>
         )}
       </div>

@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { TopicCover } from "../topic-cover";
 import { TopicRelatedPapers } from "./topic-related-papers";
 import { useTopicDetail } from "./use-topic-detail";
+import { topicSquareHref } from "../topic-url-state";
 
-export function TopicDetailPage({ topicId }: { topicId: string }) {
+export function TopicDetailPage({ topicId, returnTo }: { topicId: string; returnTo?: string | null }) {
+  const squareHref = topicSquareHref(returnTo);
   const { data: topic, error, isPending, isError, refetch } =
     useTopicDetail(topicId);
 
@@ -45,7 +47,7 @@ export function TopicDetailPage({ topicId }: { topicId: string }) {
           </p>
           <div className="mt-6 flex justify-center gap-3">
             <Link
-              href="/knowledge/topics"
+              href={squareHref}
               className="inline-flex h-9 items-center rounded-lg border border-line px-4 text-sm font-medium text-foreground"
             >
               返回主题广场
@@ -73,7 +75,7 @@ export function TopicDetailPage({ topicId }: { topicId: string }) {
     <main className="min-h-screen bg-background px-4 py-7 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[980px]">
         <Link
-          href="/knowledge/topics"
+          href={squareHref}
           className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-primary"
         >
           <ArrowLeft className="size-4" />

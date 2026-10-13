@@ -86,3 +86,21 @@ class TopicCatalogTests(unittest.TestCase):
         for invalid in [{}, [None]]:
             with self.assertRaises(TopicCatalogError):
                 self.load(invalid)
+
+    def test_registry_defers_loading_and_uses_one_refreshable_catalog_cache(self):
+        with patch('app.services.topics.catalog.CATALOG_PATH', self.path):
+            registry = TopicRegistry()
+            self.assertEqual(load_topic_catalog.cache_info().misses, 0)
+            with self.assertRaises(TopicCatalogError):
+                registry.list_topics()
+            self.path.write_text(json.dumps([self.raw[0]]), encoding='utf-8')
+            self.assertEqual(registry.list_topics().total, 1)
+            self.assertEqual(TopicRegistry().get_topic(self.raw[0]['id']).id, self.raw[0]['id'])
+            self.assertEqual(registry.get_creator('shenzhi').topic_count, 1)
+            self.assertEqual(load_topic_catalog.cache_info().misses, 2)
+
+            self.path.write_text(json.dumps(self.raw[:2]), encoding='utf-8')
+            self.assertEqual(registry.list_topics().total, 1)
+            load_topic_catalog.cache_clear()
+            self.assertEqual(registry.list_topics().total, 2)
+            self.assertEqual(registry.get_creator('shenzhi').topic_count, 2)

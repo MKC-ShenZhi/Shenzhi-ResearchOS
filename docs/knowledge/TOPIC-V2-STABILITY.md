@@ -11,6 +11,8 @@ Topic 继续沿用 JSON → FastAPI → Next.js BFF → Knowledge Client → Fea
 - FastAPI 不读取前端源码或 public 目录。图片存在性由 `test_topic_catalog.py` 在仓库中验证；卡片和详情共用 `TopicCover`，加载失败显示默认封面。
 - 数量和分类版本快照仅保留在数据质量测试中。正常新增主题或分类不需要修改 Loader 常量；有意更新目录时同步更新测试快照及演示 fixture。
 - 当前前端 `MOCK_TOPICS` 是显式 mock 数据，测试校验它与后端 JSON 一致；正式 BFF 失败不会切换到 mock。
+- Registry 构造及路由导入不读取 Catalog；首次 Topic / Creator 请求才加载。加载失败沿用知识接口的日志与标准 `UNKNOWN` 500，不影响其他知识接口；有效目录中的缺失 ID 仍返回 404。
+- `load_topic_catalog()` 按进程缓存成功结果，失败不缓存，修复文件后下一次请求可重试。更新已缓存的目录时，在对应服务进程调用 `load_topic_catalog.cache_clear()`；已有 Registry 随下一次请求取得新数据，多 worker 时需逐进程清理或滚动重启 worker。
 
 2026-10-13 核对：293 条记录全部启用，ID 与 subjectQuery 无重复，8 个分类：
 
@@ -50,17 +52,20 @@ Catalog 的 `paperCount` 是目录收录时的统计，目前没有统计时间�
 - 创作者只展示静态信息，取消没有可见结果的按钮与预取行为。
 - 搜索保持显式提交，输入法合成期间不提交；清空和分类与关键词组合保留现有行为。
 - URL 更新保留其他参数，去除空的 q/category；有变化时 push 浏览历史，使前进/后退能恢复查询与分类。
+- 广场卡片将当前内部 URL 编码到详情链接的 `returnTo`。详情正常页与错误页均通过该参数返回，刷新或新标签打开仍保留 q/category；缺失或非法来源回退 `/knowledge/topics`。复用内部 URL 校验并仅允许字面路径 `/knowledge/topics`，拒绝外部地址、协议相对地址、其他页面、编码路径和目录穿越。
 - 详情显示封面、中文名、英文名、分类、创建者、简介和实时关联论文；保留加载、404、错误和空数据状态。
 
 ## 本地验证（2026-10-13）
 
+本轮两项 P1 修复重新执行下表中的六条前后端检查命令；新增回归覆盖返回 URL 与安全兜底、Catalog 导入隔离、标准 500、缓存及修复恢复。全量后端与浏览器联调条目保留此前验证记录，本轮未重跑。
+
 | 命令 / 验收 | 结果 |
 | --- | --- |
 | `cd apps/web && pnpm typecheck` | 通过 |
-| `cd apps/web && pnpm lint` | 通过 |
-| `cd apps/web && pnpm test` | 279 项通过 |
+| `cd apps/web && pnpm lint` | 0 错误；Chat Hook 与 popover Hook 各有 1 条既有依赖警告 |
+| `cd apps/web && pnpm test` | 282 项通过，0 失败 |
 | `cd apps/web && pnpm build` | 通过，Turbopack 生产构建及 30 个静态页面生成成功 |
-| `cd apps/backend && uv --cache-dir /private/tmp/shenzhi-topic-uv-cache run --locked --no-sync python -m unittest discover -s tests -p 'test_topic*.py'` | 14 项通过，包含目录质量与资源存在性 |
+| `cd apps/backend && uv --cache-dir /private/tmp/shenzhi-topic-uv-cache run --locked --no-sync python -m unittest discover -s tests -p 'test_topic*.py'` | 18 项通过，0 失败，包含目录质量与资源存在性 |
 | `cd apps/backend && uv --cache-dir /private/tmp/shenzhi-topic-uv-cache run --locked --no-sync python -m unittest discover -s tests -p 'test_knowledge*.py'` | 103 项通过，包含正常响应与分页边界 |
 | `cd apps/backend && uv --cache-dir /private/tmp/shenzhi-topic-uv-cache run --locked --no-sync python -m unittest discover -s tests` | 403 项：379 通过、23 跳过、1 导入错误 |
 | 浏览器实际 BFF 链路 | 中文、llm、英文 subjectQuery、Enter、搜索按钮、分类组合、空结果、前进/后退已验证 |

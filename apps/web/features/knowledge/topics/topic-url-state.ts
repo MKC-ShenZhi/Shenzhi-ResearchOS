@@ -1,4 +1,24 @@
 import type { KnowledgeTopic } from "@/clients/knowledge";
+import { appendInternalReturnTo, normalizeInternalReturnTo } from "../../../lib/navigation/internal-return-to";
+
+const TOPIC_SQUARE_PATH = "/knowledge/topics";
+
+function normalizeTopicReturnTo(value: unknown): string | null {
+  const safe = normalizeInternalReturnTo(value);
+  // Check the literal path too: encoded paths and dot segments are not square URLs.
+  return safe?.split(/[?#]/, 1)[0] === TOPIC_SQUARE_PATH ? safe : null;
+}
+
+export function topicSquareHref(returnTo: unknown): string {
+  return normalizeTopicReturnTo(returnTo) ?? TOPIC_SQUARE_PATH;
+}
+
+export function topicHref(id: string, returnTo?: string | null): string {
+  return appendInternalReturnTo(
+    `${TOPIC_SQUARE_PATH}/${encodeURIComponent(id)}`,
+    normalizeTopicReturnTo(returnTo),
+  );
+}
 
 export interface TopicViewState { query: string; category: string; }
 

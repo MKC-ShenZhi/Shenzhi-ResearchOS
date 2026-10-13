@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { filterTopics, groupTopics, readTopicViewState, updateTopicViewParams } from "../../features/knowledge/topics/topic-url-state";
+import { filterTopics, groupTopics, readTopicViewState, topicHref, topicSquareHref, updateTopicViewParams } from "../../features/knowledge/topics/topic-url-state";
 import { selectFeaturedTopics } from "../../features/knowledge/topics/topic-metadata";
 import { MOCK_TOPICS } from "../../clients/knowledge/mock-data";
 
@@ -39,6 +39,55 @@ test("URL 更新保留分类和其他参数，清空与浏览器历史可恢复�
   assert.equal(cleared.has("q"), false);
   assert.equal(cleared.get("category"), "大语言模型");
   assert.deepEqual(readTopicViewState(new URLSearchParams(searched.toString())), { query: "machine translation", category: "自然语言处理" });
+});
+
+test("详情链接保存完整广场 URL，刷新后返回恢复搜索、分类和结果", () => {
+  for (const params of [
+    new URLSearchParams({ q: "llm" }),
+    new URLSearchParams({ category: "机器学习" }),
+    new URLSearchParams({ q: "llm", category: "大语言模型", view: "grid" }),
+    new URLSearchParams({ q: "machine translation", category: "自然语言处理" }),
+  ]) {
+    const source = `/knowledge/topics?${params.toString()}`;
+    const state = readTopicViewState(params);
+    const results = filterTopics(MOCK_TOPICS, state);
+    assert.ok(results.length > 0);
+    const href = topicHref(results[0].id, source);
+    // Reconstruct from the URL alone, as on a reload or opening in a new tab.
+    const detailUrl = new URL(href, "https://shenzhi.test");
+    assert.equal(detailUrl.pathname, `/knowledge/topics/${results[0].id}`);
+    const restored = topicSquareHref(detailUrl.searchParams.get("returnTo"));
+    assert.equal(restored, source);
+    const restoredState = readTopicViewState(new URL(restored, detailUrl).searchParams);
+    assert.deepEqual(restoredState, state);
+    assert.deepEqual(filterTopics(MOCK_TOPICS, restoredState), results);
+  }
+});
+
+test("直接访问详情和默认广场来源安全返回主题广场，Topic ID 仍按路径段编码", () => {
+  assert.equal(topicHref("deep-learning"), "/knowledge/topics/deep-learning");
+  assert.equal(topicSquareHref(undefined), "/knowledge/topics");
+  assert.equal(topicSquareHref(null), "/knowledge/topics");
+  const href = topicHref("opaque/id ?中文", "/knowledge/topics");
+  const url = new URL(href, "https://shenzhi.test");
+  assert.equal(url.pathname, `/knowledge/topics/${encodeURIComponent("opaque/id ?中文")}`);
+  assert.equal(topicSquareHref(url.searchParams.get("returnTo")), "/knowledge/topics");
+});
+
+test("非法或非主题广场的 returnTo 不进入链接且返回默认广场", () => {
+  for (const value of [
+    "", "https://evil.test/knowledge/topics", "//evil.test/knowledge/topics",
+    "javascript:alert(1)", "/\\evil.test/knowledge/topics", "/knowledge/topics\\evil",
+    " /knowledge/topics", "/knowledge/topics\n", "/knowledge/topics\u0000",
+    "/knowledge/topics/../topics", "/knowledge/%74opics", "/knowledge/topics/%2e%2e",
+    "/knowledge/topics/deep-learning", "/knowledge/topics-extra", "/knowledge/papers",
+    "?q=llm", "%2Fknowledge%2Ftopics", ["/knowledge/topics"],
+  ]) {
+    assert.equal(topicSquareHref(value), "/knowledge/topics", String(value));
+    if (typeof value === "string") {
+      assert.equal(topicHref("deep-learning", value), "/knowledge/topics/deep-learning", value);
+    }
+  }
 });
 
 test("精选 ID 配置不受目录顺序影响，并跳过缺失或禁用的主题", () => {
