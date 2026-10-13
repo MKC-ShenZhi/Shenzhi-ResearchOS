@@ -41,7 +41,7 @@ function ComingSoonDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30 p-4 backdrop-blur-[1px]"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-overlay/30 p-4 backdrop-blur-[1px]"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -51,7 +51,7 @@ function ComingSoonDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="coming-soon-title"
-        className="relative w-full max-w-sm rounded-3xl border border-line bg-card px-6 py-7 text-center shadow-pop"
+        className="relative w-full max-w-sm rounded-3xl border border-line bg-popover px-6 py-7 text-center shadow-pop"
       >
         <button
           ref={closeButtonRef}

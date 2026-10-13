@@ -127,7 +127,7 @@ function FundingBrowserContent({ searchParams }: { searchParams: FundingSearchPa
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="搜索基金名称或 ID…"
-            className="h-11 w-full rounded-xl border border-line bg-panel pl-10 pr-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
+            className="h-11 w-full rounded-xl border border-line bg-panel pl-10 pr-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary"
           />
         </label>
         <Button type="submit" className="h-11 px-5" disabled={!query.trim() && committedQuery === ""}>

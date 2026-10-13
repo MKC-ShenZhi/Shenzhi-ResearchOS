@@ -85,7 +85,7 @@ export function SettingsMenu({ collapsed }: { collapsed: boolean }) {
 
       {/* 悬停选项栏:出现在条目右侧,底部对齐向上展开 */}
       <div className="pointer-events-none absolute bottom-0 left-full z-50 pl-2 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100">
-        <div className="w-52 rounded-2xl border border-line bg-card p-2 shadow-pop">
+        <div className="w-52 rounded-2xl border border-line bg-popover p-2 shadow-pop">
           {MENU_ITEMS.map((item) => (
             <Link
               key={item.label}

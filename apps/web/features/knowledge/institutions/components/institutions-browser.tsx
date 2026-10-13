@@ -57,7 +57,7 @@ export function InstitutionsBrowser() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索机构名称、地点或研究方向…"
             aria-label="搜索研究机构"
-            className="h-10 w-full rounded-xl border border-line bg-card pl-10 pr-4 text-sm text-ink outline-none transition-colors placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
+            className="h-10 w-full rounded-xl border border-line bg-card pl-10 pr-4 text-sm text-ink outline-none transition-colors placeholder:text-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary"
           />
         </div>
         <div className="flex gap-1.5">

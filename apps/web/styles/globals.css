@@ -1,44 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./themes/indigo-research.css";
 
-/*
- * 设计令牌 —— 深知品牌色板 V2
- * 主色 #174A7E · 深色状态 #123A63（悬停、深色导航、页脚）· 浅色背景 #E8F1F8
- * 智能强调 #0F766E（智能体、数据连接、成功）· 正文 #17212B · 页面 #F6F9FC
- */
+/* 配色集中在 themes/；沿用原有主题逻辑、布局及动效参数。 */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-background: #f6f9fc;
-  --color-sidebar: #e8f1f8;
-  --color-card: #ffffff;
-
-  --color-primary: #174a7e;
-  --color-primary-deep: #123a63;
-  --color-primary-foreground: #ffffff;
-  --color-primary-soft: #e8f1f8;
-
-  --color-agent: #0f766e;
-  --color-agent-soft: #dff0ee;
-
-  --color-brand-violet: #5b21b6;
-  --color-brand-cyan: #0f766e;
-  --color-brand-gold: #f3d029;
-
-  --color-ink: #17212b;
-  --color-ink-2: #374151;
-  --color-muted: #6b7280;
-  --color-faint: #9ca3af;
-
-  --color-chip: #f3f4f6;
-  --color-panel: #e8f1f8;
-  --color-line: #e5e7eb;
-
-  --color-danger: #ef4444;
-  --color-danger-soft: #fee2e2;
-  --color-success: #0f766e;
-  --color-success-soft: #dff0ee;
-
   --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
     "Noto Sans SC", system-ui, -apple-system, "Segoe UI", sans-serif;
 
@@ -46,37 +13,13 @@
   --shadow-pop: 0 8px 24px 0 rgb(23 33 43 / 0.08);
 }
 
+@theme inline {
+  --color-surface: var(--color-card);
+  --color-surface-muted: var(--color-panel);
+  --color-border: var(--color-line);
+}
+
 .dark {
-  --color-background: #0b1020;
-  --color-sidebar: #123a63;
-  --color-card: #161d36;
-
-  --color-primary: #5a94c8;
-  --color-primary-deep: #4a80b3;
-  --color-primary-foreground: #ffffff;
-  --color-primary-soft: #1a2c47;
-
-  --color-agent: #3aa79d;
-  --color-agent-soft: #12332e;
-
-  --color-brand-violet: #9f7aea;
-  --color-brand-cyan: #3aa79d;
-  --color-brand-gold: #f3d029;
-
-  --color-ink: #e9edf7;
-  --color-ink-2: #b7c1d9;
-  --color-muted: #8791ab;
-  --color-faint: #5f6b88;
-
-  --color-chip: #1d2542;
-  --color-panel: #1a3552;
-  --color-line: #26304f;
-
-  --color-danger: #f87171;
-  --color-danger-soft: #3d2129;
-  --color-success: #3aa79d;
-  --color-success-soft: #12332e;
-
   --shadow-card: 0 2px 6px 0 rgb(0 0 0 / 0.3);
   --shadow-pop: 0 8px 24px 0 rgb(0 0 0 / 0.4);
 }
@@ -93,17 +36,19 @@
 
   body {
     background-color: var(--color-background);
-    color: var(--color-ink);
+    color: var(--color-body);
     font-family: var(--font-sans);
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   ::selection {
-    background: rgb(23 74 126 / 0.18);
+    background: var(--color-selection);
+    color: var(--color-selection-foreground);
   }
 
   .dark ::selection {
-    background: rgb(90 148 200 / 0.35);
+    background: var(--color-selection);
+    color: var(--color-selection-foreground);
   }
 }
 
@@ -128,9 +73,9 @@
   }
 
   &:hover {
-    scrollbar-color: var(--color-line) transparent;
+    scrollbar-color: var(--color-scrollbar) transparent;
   }
   &:hover::-webkit-scrollbar-thumb {
-    background-color: var(--color-line);
+    background-color: var(--color-scrollbar);
   }
 }

@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 type SessionUser = { name?: string | null; email?: string | null; image?: string | null };
 type Draft = Pick<UserProfile, "avatar_key" | "bio" | "achievements" | "educations" | "biography" | "institutions">;
 
-const textareaClass = "w-full rounded-xl border border-line bg-card px-4 py-3 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15 disabled:opacity-50";
+const textareaClass = "w-full rounded-xl border border-line bg-card px-4 py-3 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50";
 
 function draftFrom(profile: UserProfile): Draft {
   return {

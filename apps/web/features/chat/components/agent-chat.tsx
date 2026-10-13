@@ -257,7 +257,7 @@ function ChatWorkspace({
               <button
                 type="button"
                 onClick={() => reset()}
-                className="rounded-lg bg-primary px-3 py-1.5 text-white hover:bg-primary-deep"
+                className="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground hover:bg-primary-deep"
               >
                 新建对话
               </button>
@@ -322,7 +322,7 @@ function ChatWorkspace({
                   nearBottom.current = true;
                   bottomRef.current?.scrollIntoView({ behavior: "smooth" });
                 }}
-                className="absolute -top-12 left-1/2 flex size-9 -translate-x-1/2 items-center justify-center rounded-full border border-line bg-card text-muted shadow-pop"
+                className="absolute -top-12 left-1/2 flex size-9 -translate-x-1/2 items-center justify-center rounded-full border border-line bg-popover text-muted shadow-pop"
               >
                 <ChevronDown className="size-4" />
               </button>

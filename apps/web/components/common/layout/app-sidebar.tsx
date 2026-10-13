@@ -110,7 +110,7 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
         <span className="flex-1 text-[15px] font-medium">{item.label}</span>
       )}
       {!collapsed && item.badge && (
-        <span className="rounded-full bg-brand-gold px-1.5 py-0.5 text-[10px] font-semibold leading-none text-ink">
+        <span className="rounded-full bg-brand-gold px-1.5 py-0.5 text-[10px] font-semibold leading-none text-brand-gold-foreground">
           {item.badge}
         </span>
       )}
@@ -146,8 +146,8 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
         className={cn(
           "flex h-10 shrink-0 items-center justify-center rounded-xl transition-colors",
           active
-            ? "bg-primary text-white shadow-sm"
-            : "text-ink-2 hover:bg-card",
+            ? "bg-selected text-selected-foreground shadow-sm"
+            : "text-ink-2 hover:bg-hover",
         )}
       >
         <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
@@ -166,8 +166,8 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
         "flex h-10 shrink-0 items-center rounded-xl transition-colors",
         "gap-3 px-3",
         active
-          ? "bg-primary text-white shadow-sm"
-          : "text-ink-2 hover:bg-card",
+          ? "bg-selected text-selected-foreground shadow-sm"
+          : "text-ink-2 hover:bg-hover",
       )}
     >
       {inner}
@@ -276,8 +276,8 @@ function ExpandableNav({
         className={cn(
           "flex h-10 shrink-0 items-center justify-center rounded-xl transition-colors",
           routeActive
-            ? "bg-primary text-white shadow-sm"
-            : "text-ink-2 hover:bg-card",
+            ? "bg-selected text-selected-foreground shadow-sm"
+            : "text-ink-2 hover:bg-hover",
         )}
       >
         <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
@@ -291,8 +291,8 @@ function ExpandableNav({
         className={cn(
           "flex h-10 items-center rounded-xl transition-colors",
           routeActive
-            ? "bg-primary text-white shadow-sm"
-            : "text-ink-2 hover:bg-card",
+            ? "bg-selected text-selected-foreground shadow-sm"
+            : "text-ink-2 hover:bg-hover",
         )}
       >
         <button
@@ -308,7 +308,7 @@ function ExpandableNav({
           aria-label={open ? `收起${label}子栏目` : `展开${label}子栏目`}
           title={open ? "收起" : "展开"}
           onClick={() => setExpanded(href, !open)}
-          className="mr-2 rounded-md p-1.5 hover:bg-white/15"
+          className="mr-2 rounded-md p-1.5 hover:bg-hover"
         >
           <ChevronDown
             className={cn("size-4 transition-transform", !open && "-rotate-90")}
@@ -329,8 +329,8 @@ function ExpandableNav({
                 className={cn(
                   "flex h-9 items-center rounded-lg px-3 text-sm transition-colors",
                   active
-                    ? "bg-card font-semibold text-primary shadow-sm"
-                    : "text-muted hover:bg-card hover:text-ink-2",
+                    ? "bg-selected font-semibold text-selected-foreground shadow-sm"
+                    : "text-muted hover:bg-hover hover:text-ink-2",
                 )}
               >
                 {sub.label}
@@ -396,7 +396,7 @@ function LogoutPopup({
   return (
     <div
       ref={ref}
-      className="absolute bottom-full right-0 z-50 mb-2 w-28 rounded-xl border border-line bg-card p-1.5 shadow-pop"
+      className="absolute bottom-full right-0 z-50 mb-2 w-28 rounded-xl border border-line bg-popover p-1.5 shadow-pop"
     >
       {error && (
         <p className="px-2.5 py-1 text-[11px] leading-4 text-danger" role="alert">

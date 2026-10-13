@@ -53,7 +53,7 @@ export function SubmitBrowser({ kind }: { kind: "conference" | "journal" }) {
               className={cn(
                 "h-8 cursor-pointer rounded-full px-4 text-[13px] transition-colors",
                 tab === t
-                  ? "bg-primary font-medium text-white"
+                  ? "bg-primary font-medium text-primary-foreground"
                   : "text-muted hover:text-ink-2",
               )}
             >

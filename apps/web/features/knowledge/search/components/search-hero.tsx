@@ -37,7 +37,7 @@ export function KnowledgeSearchHero({
             value={initialQuery}
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder="搜索论文标题、作者、关键词… 例如 Diffusion Policy"
-            className="h-12 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-faint"
+            className="h-12 min-w-0 flex-1 text-[15px] outline-none bg-transparent text-ink placeholder:text-faint"
             autoFocus
           />
           <span className="hidden shrink-0 items-center gap-1 text-[11px] text-faint md:flex">

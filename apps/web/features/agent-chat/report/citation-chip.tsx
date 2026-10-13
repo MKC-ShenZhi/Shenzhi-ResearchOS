@@ -123,7 +123,7 @@ function PaperPopover({
     <div
       data-slot="paper-popover"
       role="dialog"
-      className="fixed z-50 max-w-[calc(100vw-16px)] rounded-xl border border-line bg-card shadow-pop"
+      className="fixed z-50 max-w-[calc(100vw-16px)] rounded-xl border border-line bg-popover shadow-pop"
       style={{ top: layout.top, left: layout.left }}
     >
       {children}

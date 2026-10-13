@@ -79,8 +79,8 @@ export function PaperAssistantPanel({ paper }: { paper: KnowledgePaperDetail }) 
         ))}
       </div>
       <form className="shrink-0 space-y-2 border-t border-line p-4" onSubmit={(event) => { event.preventDefault(); submit(value); }}>
-        <textarea aria-label="向论文 Assistant 提问" placeholder="询问这篇论文的正文内容…" maxLength={2000} rows={3} value={value} disabled={disabled} onChange={(event) => setValue(event.target.value)} className="w-full resize-none rounded-xl border border-line bg-panel p-3 text-sm outline-none focus:border-primary disabled:opacity-50" />
-        {running ? <button type="button" onClick={stop} className="text-sm text-primary">停止生成</button> : <button type="submit" disabled={disabled || !value.trim()} className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-50">发送</button>}
+        <textarea aria-label="向论文 Assistant 提问" placeholder="询问这篇论文的正文内容…" maxLength={2000} rows={3} value={value} disabled={disabled} onChange={(event) => setValue(event.target.value)} className="w-full resize-none rounded-xl border p-3 text-sm outline-none disabled:opacity-50 border-line bg-panel focus:border-primary" />
+        {running ? <button type="button" onClick={stop} className="text-sm text-primary">停止生成</button> : <button type="submit" disabled={disabled || !value.trim()} className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50">发送</button>}
       </form>
     </div>
   );

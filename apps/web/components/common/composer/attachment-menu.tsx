@@ -94,7 +94,7 @@ function RefPanel({
 
   if (!expandable) {
     return (
-      <div className="w-64 rounded-xl border border-line bg-card p-1.5 shadow-pop">
+      <div className="w-64 rounded-xl border border-line bg-popover p-1.5 shadow-pop">
         {groups.flatMap((group) =>
           group.items.map((item) => (
             <button
@@ -112,7 +112,7 @@ function RefPanel({
   }
 
   return (
-    <div className="w-64 rounded-xl border border-line bg-card p-1.5 shadow-pop">
+    <div className="w-64 rounded-xl border border-line bg-popover p-1.5 shadow-pop">
       {groups.map((group) => {
         const open = expanded === group.label;
         return (
@@ -284,7 +284,7 @@ export function AttachmentMenu({
           e.target.value = "";
         }}
       />
-      {uploadError && <p role="alert" className="absolute bottom-full left-0 z-[130] mb-2 w-72 rounded-xl border border-line bg-card p-3 text-xs text-muted shadow-pop">{uploadError}</p>}
+      {uploadError && <p role="alert" className="absolute bottom-full left-0 z-[130] mb-2 w-72 rounded-xl border border-line bg-popover p-3 text-xs text-muted shadow-pop">{uploadError}</p>}
       <button
         type="button"
         disabled={disabled}
@@ -302,7 +302,7 @@ export function AttachmentMenu({
       {open && (
         <div
           className={cn(
-            "absolute left-0 z-[120] w-52 rounded-xl border border-line bg-card p-1.5 shadow-pop",
+            "absolute left-0 z-[120] w-52 rounded-xl border border-line bg-popover p-1.5 shadow-pop",
             popoverPosition(placement),
           )}
         >

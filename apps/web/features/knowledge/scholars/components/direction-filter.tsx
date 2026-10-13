@@ -28,7 +28,7 @@ export function DirectionFilter({
             >
               <span className={cn("size-3.5 rounded-[4px]", active ? "bg-primary" : "bg-ink-2/70")} />
               <span className="flex-1 text-left">{dir.name}</span>
-              <span className={cn("text-xs", active ? "rounded-full bg-primary px-1.5 py-0.5 leading-none text-white" : "text-faint")}>{dir.count}</span>
+              <span className={cn("text-xs", active ? "rounded-full bg-primary px-1.5 py-0.5 leading-none text-primary-foreground" : "text-faint")}>{dir.count}</span>
             </button>
           </li>;
         })}

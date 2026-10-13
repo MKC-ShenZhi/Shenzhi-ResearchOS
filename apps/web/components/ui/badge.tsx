@@ -9,11 +9,11 @@ const badgeVariants = cva(
       variant: {
         default: "bg-primary-soft text-primary",
         violet: "bg-primary-soft text-primary",
-        amber: "bg-[#FEF3C7] text-[#B45309] dark:bg-[#3a2f10] dark:text-[#f0c94e]",
-        green: "bg-success-soft text-[#059669] dark:text-success",
+        amber: "bg-warning-soft text-warning",
+        green: "bg-success-soft text-success",
         gray: "bg-chip text-muted",
         danger: "bg-danger-soft text-danger",
-        dark: "bg-ink text-white",
+        dark: "bg-neutral-action text-neutral-foreground",
       },
     },
     defaultVariants: {

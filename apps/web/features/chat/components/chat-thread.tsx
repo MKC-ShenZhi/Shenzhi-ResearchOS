@@ -171,7 +171,7 @@ export function ChatThread({ turns, busy, onResume, onFollowup }: {
       {turns.map((turn, index) =>
         turn.role === "user" ? (
           <div key={turn.localId} className="flex justify-end">
-            <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-white">
+            <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground">
               {turn.content}
             </p>
           </div>

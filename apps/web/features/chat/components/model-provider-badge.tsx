@@ -27,7 +27,7 @@ const PROVIDER_META: Record<
   },
   platform: {
     mark: "深",
-    className: "bg-primary text-white",
+    className: "bg-primary text-primary-foreground",
   },
 };
 

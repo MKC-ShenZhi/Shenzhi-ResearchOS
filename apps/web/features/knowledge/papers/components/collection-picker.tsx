@@ -82,7 +82,7 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
         {!iconOnly && "收藏"}
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-line bg-card p-3 shadow-card">
+        <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-line bg-popover p-3 shadow-card">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-semibold text-ink">收藏到文件夹</span>
             <button type="button" onClick={() => setOpen(false)} aria-label="关闭" className="rounded-md p-1 text-faint hover:bg-chip hover:text-ink"><X className="size-4" /></button>
@@ -98,7 +98,7 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
                   onClick={() => setSelected((current) => isChecked ? current.filter((id) => id !== folder.id) : [...current, folder.id])}
                   className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-ink-2 hover:bg-chip"
                 >
-                  <span className={`flex size-4 items-center justify-center rounded border ${isChecked ? "border-primary bg-primary text-white" : "border-line"}`}>
+                  <span className={`flex size-4 items-center justify-center rounded border ${isChecked ? "border-primary bg-primary text-primary-foreground" : "border-line"}`}>
                     {isChecked && <Check className="size-3" />}
                   </span>
                   <span className="truncate">{folder.name}</span>
@@ -112,7 +112,7 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
               onChange={(event) => setName(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void addFolder(); } }}
               placeholder="新建文件夹"
-              className="h-8 min-w-0 flex-1 rounded-lg border border-line bg-background px-2.5 text-xs text-ink outline-none placeholder:text-faint focus-visible:border-primary/50"
+              className="h-8 min-w-0 flex-1 rounded-lg border px-2.5 text-xs outline-none border-line bg-background text-ink placeholder:text-faint focus-visible:border-primary"
             />
             <button type="button" onClick={() => void addFolder()} aria-label="新建文件夹" className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary hover:bg-primary-soft/70"><Plus className="size-4" /></button>
           </div>
@@ -136,7 +136,7 @@ export function FolderMoreButton({ onRename, onDelete }: { onRename: () => void;
     <span className="relative shrink-0">
       <button type="button" onClick={() => setOpen((value) => !value)} aria-label="文件夹操作" className="rounded-md p-1 text-faint hover:bg-chip hover:text-ink"><MoreHorizontal className="size-4" /></button>
       {open && (
-        <span className="absolute right-0 top-full z-20 mt-1 w-24 rounded-lg border border-line bg-card p-1 text-xs shadow-card">
+        <span className="absolute right-0 top-full z-20 mt-1 w-24 rounded-lg border border-line bg-popover p-1 text-xs shadow-card">
           <button type="button" onClick={() => { setOpen(false); onRename(); }} className="block w-full rounded-md px-2 py-1.5 text-left text-ink-2 hover:bg-chip">重命名</button>
           <button type="button" onClick={() => { setOpen(false); onDelete(); }} className="block w-full rounded-md px-2 py-1.5 text-left text-danger hover:bg-danger-soft">删除</button>
         </span>

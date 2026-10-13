@@ -64,7 +64,7 @@ function SearchModeSwitch({
         className={cn(
           MODE_PILL,
           mode === "ai"
-            ? "bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-200"
+            ? "bg-agent-soft text-agent"
             : "text-muted hover:bg-chip hover:text-ink-2",
         )}
       >
@@ -161,17 +161,17 @@ function PlusMenu({
       {open && (
         <div
           className={cn(
-            "absolute left-0 z-[120] w-44 rounded-2xl border border-line bg-card p-1.5 shadow-pop",
+            "absolute left-0 z-[120] w-44 rounded-2xl border border-line bg-popover p-1.5 shadow-pop",
             popoverPosition(placement),
           )}
         >
           <RightSubmenuRow label="插件" value="即将上线">
-            <div className="w-40 rounded-xl border border-line bg-card p-2 text-[11px] text-muted shadow-pop">
+            <div className="w-40 rounded-xl border border-line bg-popover p-2 text-[11px] text-muted shadow-pop">
               插件市场筹备中
             </div>
           </RightSubmenuRow>
           <RightSubmenuRow label="技能" value="即将上线">
-            <div className="w-40 rounded-xl border border-line bg-card p-2 text-[11px] text-muted shadow-pop">
+            <div className="w-40 rounded-xl border border-line bg-popover p-2 text-[11px] text-muted shadow-pop">
               技能库筹备中
             </div>
           </RightSubmenuRow>
@@ -383,7 +383,7 @@ export function ComposerShell({
         placeholder={placeholder}
         rows={2}
         maxLength={2000}
-        className="min-h-[3.25rem] w-full resize-none bg-transparent px-0.5 text-[15px] leading-relaxed text-ink outline-none placeholder:text-faint"
+        className="min-h-[3.25rem] w-full resize-none px-0.5 text-[15px] leading-relaxed outline-none bg-transparent text-ink placeholder:text-faint"
       />
 
       <div className="mt-1.5 flex items-center gap-1.5">
@@ -429,7 +429,7 @@ export function ComposerShell({
               aria-label="停止生成"
               onPointerDown={requestStop}
               onClick={requestStop}
-              className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-ink text-white transition-colors hover:bg-ink/90"
+              className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-neutral-action text-neutral-foreground transition-colors hover:bg-neutral-action/90"
             >
               <Square className="size-3.5 fill-current" />
             </button>
@@ -442,7 +442,7 @@ export function ComposerShell({
               className={cn(
                 "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors",
                 canSend
-                  ? "bg-primary text-white hover:bg-primary-deep"
+                  ? "bg-primary text-primary-foreground hover:bg-primary-deep"
                   : "border border-line bg-chip text-faint",
                 !canSend && "cursor-not-allowed",
               )}

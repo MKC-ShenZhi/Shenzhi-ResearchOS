@@ -166,8 +166,8 @@ shenzhi/
 ## 品牌与设计令牌
 
 - **标识**:用户书法定稿「深知」日/夜双版(白字黑底 / 黑字白底),成品直用;随主题 CSS 切换,无 JS 闪烁。运行时资产位于 `apps/web/public/brand/`,资产管线见 `tools/brand/process_logo.py`。
-- **配色「深识」体系**:主色深识蓝 `#002FA7`(夜间调浅 `#5B84F1`);辅助灵犀紫 / 探索青 / 桂冠金 `#f3d029`(金底一律配墨字)。
-- **日/夜模式**:`apps/web/styles/globals.css` 用 `.dark` 块重定义同名令牌,组件零改动;`layout.tsx` 内联脚本首屏定主题(`?theme=` > localStorage `shenzhi-theme` > 系统偏好);切换按钮在侧边栏 Logo 右侧与移动端顶栏。
+- **配色系统**：提供靛色与青绿两套视觉方向；靛色包含「冷静靛紫」与「暖白靛蓝」两个变体，青绿为「暖白青绿」。当前导入「冷静靛紫」。三份完整日／夜颜色位于 `apps/web/styles/themes/`，共用 44 个语义变量，在 `globals.css` 替换唯一导入即可比较。定位、对比度微调与使用规则见 [配色说明](docs/dev/配色说明.md)。
+- **外观模式**：沿用项目原有日间／夜间／跟随系统、偏好保存与首屏机制。桌面在侧栏「设置」悬停菜单底部选择，移动端使用原顶栏日夜切换按钮。本轮仅调整颜色，不新增主题入口或改变布局；PDF 保留原始白纸与图表颜色。
 - 完整规范:见本地 `docs/superpowers/specs/`(仅本地工作文档,不入库)
 
 ---
@@ -196,8 +196,8 @@ URL 状态     useSearchParams  → 搜索关键词、筛选条件、?theme 调�
 
 ### 颜色使用纪律
 
-- 一律走 `globals.css` 令牌(`bg-card`、`text-ink`、`bg-primary` …),**禁止在组件里写死页面结构色**;少数语义徽章色(琥珀/绿/紫)必须成对提供 `dark:` 变体。
-- 金(`brand-gold`)只作底色/图标色并配墨字,不作正文文字色(明度高,可读性差)。
+- 一律使用主题语义颜色（`bg-card`、`text-ink`、`bg-primary` 等），**禁止在组件里写死页面结构色**。日／夜状态在候选主题中集中定义。
+- 主色底使用 `text-primary-foreground`；中性操作底使用 `text-neutral-foreground`；金色底使用 `text-brand-gold-foreground`。背景与文字须成对，不用会在夜间变化的 `text-ink` 充当固定金底的文字。
 
 ### 数据约定
 

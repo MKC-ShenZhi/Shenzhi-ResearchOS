@@ -87,7 +87,7 @@ export function ReadingHistory() {
           setQuery(event.target.value);
         }}
         placeholder="搜索论文的标题/作者/会议"
-        className="mt-5 h-10 w-full max-w-[460px] rounded-xl border border-line bg-card px-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
+        className="mt-5 h-10 w-full max-w-[460px] rounded-xl border border-line bg-card px-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary"
       />
 
       {unauthenticated ? (

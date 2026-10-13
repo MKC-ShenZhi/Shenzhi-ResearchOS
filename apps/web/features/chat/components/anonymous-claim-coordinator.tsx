@@ -91,7 +91,7 @@ function ClaimPrompt({ account }: { account: string }) {
   return (
     <dialog ref={dialog} aria-labelledby="claim-title" aria-describedby="claim-description"
       onCancel={(event) => { event.preventDefault(); dismiss(); }}
-      className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-line bg-card p-6 text-ink shadow-xl backdrop:bg-black/40">
+      className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-line bg-popover p-6 text-ink shadow-xl backdrop:bg-overlay/40">
       <h2 id="claim-title" className="text-lg font-semibold">迁移对话历史？</h2>
       <p id="claim-description" className="mt-3 text-sm leading-6 text-muted">
         发现此浏览器中有 {count} 条未登录时的对话，是否将它们保存到当前账号？
@@ -103,7 +103,7 @@ function ClaimPrompt({ account }: { account: string }) {
         <button type="button" autoFocus disabled={busy} onClick={dismiss}
           className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50">暂不迁移</button>
         <button type="button" disabled={busy} onClick={migrate}
-          className="rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary-deep disabled:opacity-50">
+          className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary-deep disabled:opacity-50">
           {busy ? "正在迁移…" : notice ? "重试迁移" : "迁移到当前账号"}
         </button>
       </div>

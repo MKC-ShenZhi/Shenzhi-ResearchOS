@@ -49,13 +49,13 @@ export function PaperCard({
 
           {/* 标题 */}
           <Link href={paperHref(paper.id, { mode: "create", source: returnTo })} className="group mt-2 block">
-            <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
+            <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-ink-2">
               {paper.title}
             </h3>
           </Link>
 
           {/* 摘要 */}
-          <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted">
+          <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-body">
             {paper.abstract}
           </p>
 
@@ -106,7 +106,7 @@ export function PaperCard({
         {layout === "feed" && (
           <div className="relative hidden w-[200px] shrink-0 md:block">
             {paper.citations !== undefined && (
-              <div className="absolute -top-2 right-2 z-10 flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs text-muted shadow-card">
+              <div className="absolute -top-2 right-2 z-10 flex items-center gap-1 rounded-full bg-popover px-2.5 py-1 text-xs text-muted shadow-card">
                 <TrendingUp className="size-3 text-primary" />
                 引用 {paper.citations}
               </div>

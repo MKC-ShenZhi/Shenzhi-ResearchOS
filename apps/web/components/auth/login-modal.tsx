@@ -112,7 +112,7 @@ function PasswordRequirements({
   return (
     <div
       id="registration-password-requirements"
-      className="mt-2 w-full rounded-xl border border-line bg-card p-3 shadow-pop lg:absolute lg:left-[calc(100%+0.75rem)] lg:top-6 lg:z-20 lg:mt-0 lg:w-64"
+      className="mt-2 w-full rounded-xl border border-line bg-popover p-3 shadow-pop lg:absolute lg:left-[calc(100%+0.75rem)] lg:top-6 lg:z-20 lg:mt-0 lg:w-64"
     >
       <p className="text-xs font-medium text-ink-2">密码需满足以下条件</p>
       <ul className="mt-2.5 flex flex-col gap-2">
@@ -759,14 +759,14 @@ export function LoginModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/40 p-4"
       role="presentation"
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={authTab === "login" ? "登录" : "注册"}
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl bg-card p-6 shadow-card lg:max-h-none lg:overflow-visible"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl bg-popover p-6 shadow-card lg:max-h-none lg:overflow-visible"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold text-ink">

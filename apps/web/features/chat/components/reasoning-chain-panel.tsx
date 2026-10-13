@@ -37,8 +37,8 @@ export function ReasoningChainPanel({
         <span className="ml-auto text-[11px] text-faint">已生成 {tokens} 字</span>
       </button>
       {open && (
-        <div className="border-t border-primary/10 bg-white/50 p-3 dark:bg-card/50">
-          <div className="max-h-[380px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white/80 p-3 text-[12.5px] leading-6 text-ink-2 shadow-inner ring-1 ring-line/60 dark:bg-card">
+        <div className="border-t border-line bg-panel p-3">
+          <div className="max-h-[380px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-card p-3 text-[12.5px] leading-6 text-body shadow-inner ring-1 ring-line/60">
             {content}
             {streaming && (
               <span className="ml-0.5 inline-block h-[1em] w-[2px] animate-pulse bg-primary align-[-2px]" />

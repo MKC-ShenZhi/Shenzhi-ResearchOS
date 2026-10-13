@@ -142,7 +142,7 @@ export function ComposerControlPicker({
       {open && (
         <div
           className={cn(
-            "absolute left-0 z-[120] w-[min(20rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-line bg-card shadow-pop",
+            "absolute left-0 z-[120] w-[min(20rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-line bg-popover shadow-pop",
             popoverPosition(placement),
           )}
         >

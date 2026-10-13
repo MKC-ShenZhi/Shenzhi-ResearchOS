@@ -32,21 +32,21 @@ export function ErrorBubble({
   const hint = hintForError(message);
   const [copyState, setCopyState] = useState("");
   return (
-    <div className="rounded-2xl rounded-tl-md border border-red-200/70 bg-red-50/60 p-4 dark:border-red-900/50 dark:bg-red-950/30">
+    <div className="rounded-2xl rounded-tl-md border border-danger/30 bg-danger-soft p-4">
       <div className="mb-2 flex items-start gap-2">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400" />
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-red-800 dark:text-red-200">{hint.title}</p>
-          <p className="mt-1 break-all text-[12px] text-red-700/90 dark:text-red-300/90">{message}</p>
+          <p className="text-[13px] font-semibold text-danger">{hint.title}</p>
+          <p className="mt-1 break-all text-[12px] text-danger">{message}</p>
           {hint.action && (
-            <p className="mt-2 rounded-lg bg-white/70 p-2 text-[12px] leading-relaxed text-red-900/90 dark:bg-black/20 dark:text-red-100/90">
+            <p className="mt-2 rounded-lg bg-card p-2 text-[12px] leading-relaxed text-body">
               {hint.action}
             </p>
           )}
           {requestId && (
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-red-800/80 dark:text-red-100/80">
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-danger">
               <span>请求 ID：</span>
-              <code className="rounded bg-white/70 px-1.5 py-0.5 font-mono dark:bg-black/20">{requestId}</code>
+              <code className="rounded bg-card px-1.5 py-0.5 font-mono text-body">{requestId}</code>
               <button
                 type="button"
                 onClick={() => {
@@ -55,7 +55,7 @@ export function ErrorBubble({
                     () => setCopyState("复制失败"),
                   );
                 }}
-                className="inline-flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 font-medium hover:bg-white/70 dark:hover:bg-black/20"
+                className="inline-flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 font-medium hover:bg-card"
               >
                 <Copy className="size-3" />
                 {copyState || "复制 ID"}
@@ -68,7 +68,7 @@ export function ErrorBubble({
         <button
           type="button"
           onClick={onResume}
-          className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/80 px-3 py-1.5 text-[12px] font-medium text-red-800 shadow-sm ring-1 ring-red-200/80 hover:bg-white dark:bg-red-950/50 dark:text-red-100 dark:ring-red-900/50"
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-[12px] font-medium text-danger shadow-sm ring-1 ring-danger/30 hover:bg-hover"
         >
           <RotateCcw className="size-3.5" />
           继续生成

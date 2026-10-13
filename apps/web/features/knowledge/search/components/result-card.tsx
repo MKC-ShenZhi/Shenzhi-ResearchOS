@@ -78,14 +78,14 @@ export function KnowledgeResultCard({
             href={paperHref(hit.id, { mode: "create", source: returnTo })}
             className="group mt-2 block"
           >
-            <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
+            <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-ink-2">
               {hit.title}
             </h3>
           </Link>
 
           {/* 摘要 */}
           {hit.abstract && (
-            <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted">
+            <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-body">
               {hit.abstract}
             </p>
           )}

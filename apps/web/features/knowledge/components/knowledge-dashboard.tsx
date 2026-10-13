@@ -162,8 +162,8 @@ function OverviewGraphPreview({ preview }: { preview: KnowledgeOverviewResponse[
           <text x={x} y={y + 3.5} textAnchor="middle" className="fill-primary text-[7px] font-medium">{graphLabel(node.label, 5)}</text>
         </g>)}
         <circle cx={center.x} cy={center.y} r="25" className="fill-primary stroke-primary" strokeWidth="2" />
-        <text x={center.x} y={center.y - 2} textAnchor="middle" className="fill-white text-[8px] font-semibold">论文</text>
-        <text x={center.x} y={center.y + 9} textAnchor="middle" className="fill-white text-[7px]">{graphLabel(root.label, 8)}</text>
+        <text x={center.x} y={center.y - 2} textAnchor="middle" className="fill-primary-foreground text-[8px] font-semibold">论文</text>
+        <text x={center.x} y={center.y + 9} textAnchor="middle" className="fill-primary-foreground text-[7px]">{graphLabel(root.label, 8)}</text>
       </svg>
       <p className="truncate text-center text-xs text-muted" title={root.label}>中心论文：{root.label}</p>
     </div>
@@ -283,7 +283,7 @@ export function KnowledgeDashboard() {
           <p className="mt-2 text-base leading-7 text-muted">通过知识底座检索论文、学者与科研主题，并管理你的个人文献和论文关系图谱。</p>
         </div>
         <div className="flex gap-3">
-          <Link href="/knowledge/search" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"><Search className="size-4" /> 论文检索</Link>
+          <Link href="/knowledge/search" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"><Search className="size-4" /> 论文检索</Link>
           <FeatureNavigationLink href="/knowledge/graph" className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-ink hover:bg-surface"><Network className="size-4" /> 打开关系图谱</FeatureNavigationLink>
         </div>
       </header>
@@ -291,11 +291,11 @@ export function KnowledgeDashboard() {
       <section className="mt-7 rounded-3xl bg-card p-5 shadow-card sm:p-6" aria-label="知识库混合搜索">
         <form onSubmit={(event) => { event.preventDefault(); void submitSearch(); }} className="flex items-center gap-3 rounded-2xl border border-primary/15 bg-primary-soft/60 px-4 py-3">
           <Search className="size-5 shrink-0 text-primary/60" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索论文、学者、主题、项目或基金……" className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-muted" aria-label="搜索论文、学者、主题、项目或基金" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索论文、学者、主题、项目或基金……" className="min-w-0 flex-1 text-base outline-none bg-transparent text-ink placeholder:text-muted" aria-label="搜索论文、学者、主题、项目或基金" />
           <button type="submit" disabled={searching || !query.trim()} className="hidden items-center gap-1 text-sm font-medium text-primary disabled:cursor-not-allowed disabled:opacity-50 sm:inline-flex"><Sparkles className="size-4" /> 跨库检索</button>
         </form>
         <div className="mt-4 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="混合搜索类型">
-          {SEARCH_TABS.map((tab, index) => <button key={tab.label} type="button" role="tab" aria-selected={activeTab === index} onClick={() => { setActiveTab(index); setSearchResponse(null); }} className={`shrink-0 rounded-full px-4 py-2 text-sm transition-colors ${activeTab === index ? "bg-primary text-white" : "bg-surface text-muted hover:text-ink"}`}>{tab.label}</button>)}
+          {SEARCH_TABS.map((tab, index) => <button key={tab.label} type="button" role="tab" aria-selected={activeTab === index} onClick={() => { setActiveTab(index); setSearchResponse(null); }} className={`shrink-0 rounded-full px-4 py-2 text-sm transition-colors ${activeTab === index ? "bg-primary text-primary-foreground" : "bg-surface text-muted hover:text-ink"}`}>{tab.label}</button>)}
         </div>
         {(searching || searchError || searchResponse) && <div className="mt-4" aria-live="polite">
           {searching && <div className="rounded-2xl bg-surface px-4 py-5 text-sm text-muted">正在检索知识底座……</div>}
@@ -339,7 +339,7 @@ export function KnowledgeDashboard() {
         </CardShell>
 
         <CardShell card={CARDS[2]}>
-          {overview?.scholarHighlights.length ? <div className="grid grid-cols-3 gap-2">{overview.scholarHighlights.slice(0, 3).map((item) => <Link key={item.id} href={`/knowledge/scholars/${encodeURIComponent(item.id)}`} className="min-w-0 rounded-xl p-2 hover:bg-success-soft/60"><div className="mx-auto flex size-10 items-center justify-center rounded-full bg-success text-sm font-semibold text-white">{item.name.slice(0, 1)}</div><div className="mt-2 truncate text-center text-sm font-medium text-ink">{item.name}</div><div className="mt-1 truncate text-center text-xs text-muted">{item.count === null ? "数据暂无" : `${item.count.toLocaleString("zh-CN")} 篇论文`}</div></Link>)}</div> : <p className="rounded-2xl bg-surface p-4 text-sm text-muted">数据暂无</p>}
+          {overview?.scholarHighlights.length ? <div className="grid grid-cols-3 gap-2">{overview.scholarHighlights.slice(0, 3).map((item) => <Link key={item.id} href={`/knowledge/scholars/${encodeURIComponent(item.id)}`} className="min-w-0 rounded-xl p-2 hover:bg-success-soft/60"><div className="mx-auto flex size-10 items-center justify-center rounded-full bg-success text-sm font-semibold text-success-foreground">{item.name.slice(0, 1)}</div><div className="mt-2 truncate text-center text-sm font-medium text-ink">{item.name}</div><div className="mt-1 truncate text-center text-xs text-muted">{item.count === null ? "数据暂无" : `${item.count.toLocaleString("zh-CN")} 篇论文`}</div></Link>)}</div> : <p className="rounded-2xl bg-surface p-4 text-sm text-muted">数据暂无</p>}
         </CardShell>
 
         <CardShell card={CARDS[3]} className="flex h-full flex-col" bodyClassName="flex min-h-0 flex-1 flex-col">

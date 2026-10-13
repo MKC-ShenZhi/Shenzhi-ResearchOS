@@ -30,7 +30,7 @@ export function InstitutionCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.06 }}
-      className="rounded-2xl bg-card p-8 shadow-card transition-shadow hover:shadow-pop"
+      className="rounded-2xl bg-popover p-8 shadow-card transition-shadow hover:shadow-pop"
     >
       <div className="flex gap-6">
         <span

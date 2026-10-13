@@ -58,7 +58,7 @@ export function KnowledgeSearchError({
       <span
         className={
           "flex size-12 items-center justify-center rounded-full " +
-          (unavailable ? "bg-danger-soft text-danger" : "bg-brand-gold/20 text-ink")
+          (unavailable ? "bg-danger-soft text-danger" : "bg-warning-soft text-warning")
         }
       >
         {unavailable ? <WifiOff className="size-6" /> : <AlertTriangle className="size-6" />}

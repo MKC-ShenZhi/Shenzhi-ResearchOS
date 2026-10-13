@@ -19,7 +19,7 @@
  *     --width 1440 --height 2400 --wait-text 参考文献 [--settle 500] [--timeout 45000]
  */
 import { spawn } from "node:child_process";
-import { writeFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
@@ -42,10 +42,16 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv);
+if (args.theme && !["light", "dark"].includes(args.theme)) {
+  throw new Error("--theme must be light or dark");
+}
+// Optional browser-only responses for repeatable visual examples; no API or database changes.
+const fixtures = args.responseFixture ? JSON.parse(readFileSync(args.responseFixture, "utf8")) : {};
+const expectedUrl = new URL(args.url);
 const profile = mkdtempSync(join(tmpdir(), "edge-cdp-"));
 
 const edge = spawn(
-  EDGE,
+  args.browser || EDGE,
   [
     "--headless",
     "--disable-gpu",
@@ -55,8 +61,14 @@ const edge = spawn(
     "--remote-debugging-pipe",
     "about:blank",
   ],
-  { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"] },
+  { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"], windowsHide: true },
 );
+edge.on("error", (error) => { console.error(error.message); process.exit(1); });
+const watchdog = setTimeout(() => {
+  edge.kill();
+  console.error("Browser/CDP timed out");
+  process.exit(1);
+}, args.timeout + 30000);
 
 const toEdge = edge.stdio[3]; // 父进程写入 → Edge 的 fd3
 const fromEdge = edge.stdio[4]; // Edge 的 fd4 → 父进程读取
@@ -73,6 +85,19 @@ fromEdge.on("data", (chunk) => {
     recvBuf = recvBuf.slice(idx + 1);
     if (!raw) continue;
     const msg = JSON.parse(raw);
+    if (msg.method === "Fetch.requestPaused") {
+      const { requestId, request } = msg.params;
+      const url = new URL(request.url);
+      const fixture = url.origin === expectedUrl.origin ? fixtures[url.pathname] : undefined;
+      const response = fixture === undefined
+        ? cdp("Fetch.continueRequest", { requestId }, msg.sessionId)
+        : cdp("Fetch.fulfillRequest", {
+          requestId, responseCode: 200,
+          responseHeaders: [{ name: "Content-Type", value: "application/json" }],
+          body: Buffer.from(JSON.stringify(fixture)).toString("base64"),
+        }, msg.sessionId);
+      response.catch((error) => { console.error(error.message); edge.kill(); process.exit(1); });
+    }
     if (msg.id && pending.has(msg.id)) {
       pending.get(msg.id)(msg);
       pending.delete(msg.id);
@@ -89,18 +114,30 @@ function cdp(method, params = {}, sessionId) {
   });
 }
 
-const { targetId } = await cdp("Target.createTarget", { url: args.url });
+const { targetId } = await cdp("Target.createTarget", { url: "about:blank" });
 const { sessionId } = await cdp("Target.attachToTarget", {
   targetId,
   flatten: true,
 });
 await cdp("Page.enable", {}, sessionId);
+if (args.theme) {
+  await cdp("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-color-scheme", value: args.theme }],
+  }, sessionId);
+  await cdp("Page.addScriptToEvaluateOnNewDocument", {
+    source: `try { localStorage.setItem("shenzhi-theme", ${JSON.stringify(args.theme)}); } catch {}`,
+  }, sessionId);
+}
+if (Object.keys(fixtures).length) {
+  await cdp("Fetch.enable", { patterns: [{ urlPattern: `${expectedUrl.origin}/api/*` }] }, sessionId);
+}
 // headless 下 createTarget 不接受宽高,用设备指标覆盖设定视口
 await cdp(
   "Emulation.setDeviceMetricsOverride",
   { width: args.width, height: args.height, deviceScaleFactor: 1, mobile: false },
   sessionId,
 );
+await cdp("Page.navigate", { url: args.url }, sessionId);
 
 // 轮询目标文本(真实时间;页面定时器按真实节奏走)
 const deadline = Date.now() + args.timeout;
@@ -121,9 +158,30 @@ while (Date.now() < deadline) {
   await new Promise((r) => setTimeout(r, 250));
 }
 if (!found)
-  console.error(`WARN: 等待文本「${args.waitText}」超时,按当前状态截图`);
+  console.error(`等待文本「${args.waitText}」超时，此截图不能作为通过证据`);
 
 await new Promise((r) => setTimeout(r, args.settle));
+
+const { result: inspected } = await cdp("Runtime.evaluate", {
+  expression: `(() => {
+    const root = document.documentElement;
+    const css = getComputedStyle(root);
+    return {
+      url: location.href,
+      theme: root.classList.contains("dark") ? "dark" : "light",
+      colors: Object.fromEntries(["background", "sidebar", "topbar", "card", "popover", "body", "primary", "primary-foreground", "selected", "selected-foreground", "ink", "faint"]
+        .map(name => [name, css.getPropertyValue("--color-" + name).trim()]))
+    };
+  })()`, returnByValue: true,
+}, sessionId);
+const state = inspected.value;
+const validPath = state && new URL(state.url).pathname === (args.expectedPath || expectedUrl.pathname);
+const validTheme = !args.theme || state?.theme === args.theme;
+const validPalette = !args.expectedPrimary || state?.colors.primary.toLowerCase() === args.expectedPrimary.toLowerCase();
+const passed = found && validPath && validTheme && validPalette;
+if (!validPath) console.error("截图页面路径与预期不一致");
+if (!validTheme) console.error("实际主题与预期不一致");
+if (!validPalette) console.error("实际主色与候选方案不一致");
 
 const shot = await cdp(
   "Page.captureScreenshot",
@@ -132,13 +190,18 @@ const shot = await cdp(
 );
 mkdirSync(dirname(args.out), { recursive: true });
 writeFileSync(args.out, Buffer.from(shot.data, "base64"));
+writeFileSync(`${args.out}.json`, JSON.stringify({
+  ...state, passed, waitText: args.waitText,
+  fixturePaths: Object.keys(fixtures), viewport: { width: args.width, height: args.height },
+}, null, 2));
 
 edge.kill();
+clearTimeout(watchdog);
 // 临时 profile 用完即删(Edge 释放句柄需稍作等待,失败不致命)
 setTimeout(() => {
   try {
     rmSync(profile, { recursive: true, force: true, maxRetries: 3 });
   } catch {}
-  console.log(`${args.out} written (${found ? "ok" : "TIMEOUT"})`);
-  process.exit(0);
+  console.log(`${args.out} written (${passed ? "ok" : "FAILED"})`);
+  process.exit(passed ? 0 : 1);
 }, 500);

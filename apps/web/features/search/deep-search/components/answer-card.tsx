@@ -11,10 +11,10 @@ export function AnswerCard() {
       {/* 头部 */}
       <div className="flex items-center gap-2.5 border-b border-line pb-4">
         <span className="flex size-8 items-center justify-center rounded-full bg-primary">
-          <Sparkles className="size-4 text-white" />
+          <Sparkles className="size-4 text-primary-foreground" />
         </span>
         <span className="text-sm font-semibold text-ink">深知 AI · 深度研究</span>
-        <span className="rounded bg-brand-gold px-1.5 py-0.5 text-[10px] font-bold text-ink">
+        <span className="rounded bg-brand-gold px-1.5 py-0.5 text-[10px] font-bold text-brand-gold-foreground">
           Pro
         </span>
         <span className="text-xs text-faint">{agentSession.meta}</span>

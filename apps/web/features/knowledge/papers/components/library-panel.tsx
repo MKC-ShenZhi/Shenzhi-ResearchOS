@@ -62,7 +62,7 @@ export function LibraryPanel({
   }
 
   return (
-    <aside className="flex w-60 min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r border-line bg-card p-5">
+    <aside className="flex w-60 min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r p-5 border-line bg-card">
       <div className="flex items-center justify-between">
         <h2 className="text-[15px] font-bold text-ink">我的文献库</h2>
       </div>
@@ -103,7 +103,7 @@ export function LibraryPanel({
                 className={cn(
                   "text-xs",
                   !historyActive && folder.id === selectedFolderId
-                    ? "rounded-full bg-primary px-1.5 py-0.5 leading-none text-white"
+                    ? "rounded-full bg-primary px-1.5 py-0.5 leading-none text-primary-foreground"
                     : "text-faint",
                 )}
               >
@@ -132,10 +132,10 @@ export function LibraryPanel({
         </button>
       </div>
       {dialog && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 p-4" role="presentation">
-          <div className="w-full max-w-sm rounded-2xl bg-card p-5 shadow-card" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-overlay/40 p-4" role="presentation">
+          <div className="w-full max-w-sm rounded-2xl bg-popover p-5 shadow-card" role="dialog" aria-modal="true">
             <h3 className="text-base font-semibold text-ink">{dialog === "delete" ? "删除文件夹" : dialog === "rename" ? "重命名文件夹" : "新建文件夹"}</h3>
-            {dialog === "delete" ? <p className="mt-3 text-sm text-muted">是否确认删除？该操作不可撤回</p> : <input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitDialog(); }} className="mt-4 h-10 w-full rounded-lg border border-line bg-background px-3 text-sm text-ink outline-none focus-visible:border-primary/50" placeholder="文件夹名称" />}
+            {dialog === "delete" ? <p className="mt-3 text-sm text-muted">是否确认删除？该操作不可撤回</p> : <input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitDialog(); }} className="mt-4 h-10 w-full rounded-lg border px-3 text-sm outline-none border-line bg-background text-ink focus-visible:border-primary" placeholder="文件夹名称" />}
             {error && <p className="mt-2 text-xs text-danger">{error}</p>}
             <div className="mt-5 flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setDialog(null)}>取消</Button><Button type="button" variant={dialog === "delete" ? "danger" : "default"} onClick={() => void submitDialog()}>{dialog === "delete" ? "确认删除" : "确认"}</Button></div>
           </div>

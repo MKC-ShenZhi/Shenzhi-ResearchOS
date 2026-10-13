@@ -26,10 +26,10 @@ const ARTICLE =
   // 我们的报告嵌在聊天回答流里（扣掉侧栏、头像列、卡片内边距，只剩约 600-700px），
   // 同一套字号在窄容器里比例上必然偏大。这里等比压到适合聊天宽度的一档，
   // 保留 SZDR 的视觉语言：h1 底线、h2 左侧色条、h3 主色、表格表头着色、引用块。
-  "text-[14.5px] leading-[1.8] break-words text-ink " +
+  "text-[14.5px] leading-[1.8] break-words text-body " +
   "[&_h1]:mb-3.5 [&_h1]:mt-0 [&_h1]:border-b [&_h1]:border-line [&_h1]:pb-2 [&_h1]:text-[22px] [&_h1]:font-bold [&_h1]:leading-[1.35] [&_h1]:text-ink " +
   "[&_h2]:mb-2.5 [&_h2]:mt-6 [&_h2]:border-l-[3px] [&_h2]:border-primary [&_h2]:pl-2.5 [&_h2]:text-[17.5px] [&_h2]:font-bold [&_h2]:leading-[1.45] " +
-  "[&_h3]:mb-2 [&_h3]:mt-[18px] [&_h3]:text-[15.5px] [&_h3]:font-bold [&_h3]:text-primary " +
+  "[&_h3]:mb-2 [&_h3]:mt-[18px] [&_h3]:text-[15.5px] [&_h3]:font-bold [&_h3]:text-ink " +
   "[&_h4]:mb-1.5 [&_h4]:mt-4 [&_h4]:text-[14.5px] [&_h4]:font-bold " +
   "[&_p]:mb-[13px] " +
   "[&_a]:text-primary [&_a]:no-underline hover:[&_a]:underline " +

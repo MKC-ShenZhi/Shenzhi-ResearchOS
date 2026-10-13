@@ -149,7 +149,7 @@ const FALLBACK_CONFIG: AgentConfig = {
 };
 
 function Md({ text }: { text: string }) {
-  return <div className="min-w-0 break-words text-[15px] leading-7">
+  return <div className="min-w-0 break-words text-[15px] leading-7 text-body">
     <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
       p: ({ children }) => <p className="my-2">{children}</p>,
       ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-6">{children}</ul>,
@@ -185,7 +185,7 @@ function Sources({ sources }: { sources: Source[] }) {
 }
 
 function AssistantAvatar() {
-  return <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-agent text-white shadow-card" aria-hidden>
+  return <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-card bg-agent text-agent-foreground" aria-hidden>
     <Sparkles className="size-4" strokeWidth={2} />
   </div>;
 }
@@ -211,7 +211,7 @@ function ReportSummary({ text, sources, onOpen }: {
         </div>
       </div>
       <button type="button" onClick={onOpen}
-        className="shrink-0 cursor-pointer rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-primary/90">
+        className="shrink-0 cursor-pointer rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90">
         查看报告
       </button>
     </div>
@@ -611,7 +611,7 @@ export function ShenzhiAiPage() {
   return <AppShell>
     <div className="flex h-[calc(100vh-3.5rem)] lg:h-screen">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-line px-6 py-3">
+        <div className="flex items-center justify-between border-b border-line bg-topbar px-6 py-3">
           <h1 className="max-w-[45%] truncate text-base font-semibold">{sessionTitle}</h1>
           <div className="flex items-center gap-2">
             <span className="mr-1 hidden text-[11px] text-faint sm:inline">选中回答文本可引用追问</span>
@@ -645,7 +645,7 @@ export function ShenzhiAiPage() {
                 </p>
                 {!loadingSession && (
                   <button type="button" onClick={() => router.push("/")}
-                    className="mt-4 cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary-deep">
+                    className="mt-4 cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary-deep">
                     返回发现页开始新对话
                   </button>
                 )}
@@ -672,7 +672,7 @@ export function ShenzhiAiPage() {
                     </div>
                   ))}
                   {turn.warnings?.length ? (
-                    <div className="mb-2 text-xs text-amber-600 dark:text-amber-400">⚠ {turn.warnings.join("；")}</div>
+                    <div className="mb-2 text-xs text-warning">⚠ {turn.warnings.join("；")}</div>
                   ) : null}
                   {(isMeaningful(turn.reasoning) || isMeaningful(turn.content)
                     || turn.report || turn.question || turn.error || turn.stopped) && (
@@ -700,7 +700,7 @@ export function ShenzhiAiPage() {
                         />
                       ) : null}
                       {turn.sources && !turn.report && <Sources sources={turn.sources} />}
-                      {turn.error && <div className="mt-1 text-sm text-red-600 dark:text-red-400">{turn.error}</div>}
+                      {turn.error && <div className="mt-1 text-sm text-danger">{turn.error}</div>}
                       {turn.stopped && (
                         <div className="mt-1 text-xs text-muted">{stopLabel(turn.stopReason)}</div>
                       )}
@@ -738,7 +738,7 @@ export function ShenzhiAiPage() {
                 <span className="text-[11px] leading-4 text-agent">运行中 · 现在发送的内容将作为插话注入，不打断当前任务</span>
                 <button type="button"
                   onClick={() => void stop()}
-                  className="ml-auto shrink-0 cursor-pointer rounded-full border border-agent/40 px-2.5 py-0.5 text-[11px] font-medium text-agent transition-colors hover:bg-agent hover:text-white">
+                  className="ml-auto shrink-0 cursor-pointer rounded-full border border-agent/40 px-2.5 py-0.5 text-[11px] font-medium text-agent transition-colors hover:bg-agent hover:text-agent-foreground">
                   停止
                 </button>
               </div>
@@ -769,8 +769,8 @@ export function ShenzhiAiPage() {
               onStop={() => void stop()}
               skills={agentConfig.skills}
             />
-            {steerError && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{steerError}</div>}
-            {runError && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{runError}</div>}
+            {steerError && <div className="mt-2 text-xs text-danger">{steerError}</div>}
+            {runError && <div className="mt-2 text-xs text-danger">{runError}</div>}
           </div>
         </div>
       </div>

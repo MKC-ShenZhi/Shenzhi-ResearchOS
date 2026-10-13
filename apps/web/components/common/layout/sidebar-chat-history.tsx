@@ -153,11 +153,11 @@ export function SidebarChatHistory({ collapsed }: { collapsed?: boolean }) {
             </button>
             <button type="button" aria-label={`${item.title} 更多操作`}
               onClick={() => setMenuId((current) => current === item.id ? null : item.id)}
-              className="absolute right-1 rounded-md p-1 text-faint opacity-0 transition-opacity hover:bg-card hover:text-ink group-hover:opacity-100 focus:opacity-100">
+              className="absolute right-1 rounded-md p-1 text-faint opacity-0 transition-opacity hover:bg-popover hover:text-ink group-hover:opacity-100 focus:opacity-100">
               <MoreHorizontal className="size-4" />
             </button>
             {menuId === item.id && (
-              <div className="absolute right-1 top-8 z-40 w-28 rounded-xl border border-line bg-card p-1 shadow-pop">
+              <div className="absolute right-1 top-8 z-40 w-28 rounded-xl border border-line bg-popover p-1 shadow-pop">
                 <button type="button" onClick={() => void rename(item)}
                   className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-xs text-ink-2 hover:bg-chip">
                   <Pencil className="size-3.5" />重命名

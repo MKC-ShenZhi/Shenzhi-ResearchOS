@@ -14,7 +14,7 @@ export function ScholarCard({
   return (
     <Link
       href={scholarHref(scholar.id, returnTo)}
-      className="group flex items-center gap-4 rounded-2xl bg-card p-5 shadow-card transition-shadow hover:shadow-pop"
+      className="group flex items-center gap-4 rounded-2xl bg-popover p-5 shadow-card transition-shadow hover:shadow-pop"
     >
       <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
         <FileText className="size-5" />

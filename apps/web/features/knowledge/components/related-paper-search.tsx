@@ -112,7 +112,7 @@ export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={copy.placeholder}
-            className="h-11 w-full rounded-xl border border-line bg-panel pl-10 pr-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
+            className="h-11 w-full rounded-xl border border-line bg-panel pl-10 pr-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary"
           />
         </label>
         <Button type="submit" className="h-11 px-5" disabled={!query.trim()}>
@@ -177,7 +177,7 @@ export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {
                     min={1}
                     max={totalPages}
                     defaultValue={page}
-                    className="h-9 w-16 rounded-lg border border-line bg-panel px-2 text-center text-sm text-ink outline-none focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
+                    className="h-9 w-16 rounded-lg border border-line bg-panel px-2 text-center text-sm text-ink outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary"
                   />
                 </form>
                 <Button variant="outline" size="icon" aria-label="下一页" onClick={() => goToPage(page + 1)} disabled={page >= totalPages || isFetching}>

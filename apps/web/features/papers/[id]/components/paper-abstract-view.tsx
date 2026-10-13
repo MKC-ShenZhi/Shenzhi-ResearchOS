@@ -29,7 +29,7 @@ export function PaperAbstractView({ paper }: { paper: KnowledgePaperDetail }) {
 
       <div className="mt-12 max-w-3xl">
         <h2 className="text-base font-semibold text-ink">Abstract</h2>
-        <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-muted">
+        <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-body">
           {paper.abstract?.trim() || "当前论文暂无摘要"}
         </p>
       </div>

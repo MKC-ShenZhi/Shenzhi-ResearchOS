@@ -116,7 +116,7 @@ export function GraphRelatedPanel({
             onChange={(event) => setQuery(event.target.value)}
             onFocus={() => suggestions.length > 0 && setOpen(true)}
             placeholder="搜索并切换中心论文…"
-            className="h-9 min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-faint"
+            className="h-9 min-w-0 flex-1 text-xs outline-none bg-transparent text-ink placeholder:text-faint"
           />
           {query && (
             <button
@@ -192,7 +192,7 @@ export function GraphRelatedPanel({
             className={cn(
               "rounded-full px-2.5 py-1 text-[11px] transition-colors",
               direction === option.value
-                ? "bg-primary text-white"
+                ? "bg-primary text-primary-foreground"
                 : "bg-chip text-muted hover:text-ink",
             )}
           >

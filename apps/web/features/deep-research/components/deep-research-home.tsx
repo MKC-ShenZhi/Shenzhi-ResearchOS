@@ -47,7 +47,7 @@ export function DeepResearchHome({
           rows={3}
           autoFocus
           placeholder="输入你的研究问题,例如:扩散模型在机器人策略学习中最近有哪些突破性进展?"
-          className="w-full resize-none bg-transparent text-[15px] leading-relaxed text-ink outline-none placeholder:text-faint"
+          className="w-full resize-none text-[15px] leading-relaxed outline-none bg-transparent text-ink placeholder:text-faint"
         />
         <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
           {drScopeOptions.map((s) => (
@@ -98,7 +98,7 @@ export function DeepResearchHome({
             key={item.id}
             type="button"
             onClick={onOpenHistory}
-            className="cursor-pointer rounded-2xl bg-card p-4 text-left shadow-card transition-shadow hover:shadow-pop"
+            className="cursor-pointer rounded-2xl bg-popover p-4 text-left shadow-card transition-shadow hover:shadow-pop"
           >
             <div className="flex items-center gap-2">
               <span className="block min-w-0 flex-1 truncate text-[14px] font-medium text-ink">

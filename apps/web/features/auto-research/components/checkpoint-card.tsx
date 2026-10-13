@@ -68,7 +68,7 @@ export function CheckpointCard({
   return (
     <div
       className={cn(
-        "mb-3 rounded-xl border-2 bg-card p-4 shadow-pop",
+        "mb-3 rounded-xl border-2 bg-popover p-4 shadow-pop",
         mandatory ? "border-[#d97706]" : "border-primary",
       )}
     >

@@ -73,12 +73,12 @@ export function ReportViewer({
       {/* 品牌行(与深度搜索答案卡同源) */}
       <div className="flex items-center gap-2.5">
         <span className="flex size-8 items-center justify-center rounded-full bg-primary">
-          <Sparkles className="size-4 text-white" aria-hidden="true" />
+          <Sparkles className="size-4 text-primary-foreground" aria-hidden="true" />
         </span>
         <span className="text-sm font-semibold text-ink">
           深知 AI · Deep Research
         </span>
-        <span className="rounded bg-brand-gold px-1.5 py-0.5 text-[10px] font-bold text-ink">
+        <span className="rounded bg-brand-gold px-1.5 py-0.5 text-[10px] font-bold text-brand-gold-foreground">
           Pro
         </span>
       </div>

@@ -15,7 +15,7 @@ function ToolLine({ tool }: { tool: Activity }) {
   return (
     <div className="font-mono text-xs text-muted">
       <div className="flex items-center gap-2">
-      <span className={`shrink-0 ${tool.isError ? "text-red-500" : tool.done ? "text-agent" : "text-ink-2"}`}>
+      <span className={`shrink-0 ${tool.isError ? "text-danger" : tool.done ? "text-agent" : "text-ink-2"}`}>
         {!tool.done ? "→" : tool.isError ? "✗" : "✓"}
       </span>
       {!tool.done && <Loader2 className="size-3 shrink-0 animate-spin text-agent" strokeWidth={2.2} aria-hidden />}
@@ -28,7 +28,7 @@ function ToolLine({ tool }: { tool: Activity }) {
       {tool.done && <span className="shrink-0 text-faint">{tool.durationMs}ms</span>}
       </div>
       {tool.done && tool.summary && (
-        <div className={tool.isError ? "ml-5 truncate text-red-500" : "ml-5 truncate text-faint"} title={tool.summary}>
+        <div className={tool.isError ? "ml-5 truncate text-danger" : "ml-5 truncate text-faint"} title={tool.summary}>
           {previewLine(tool.summary, 160)}
         </div>
       )}
