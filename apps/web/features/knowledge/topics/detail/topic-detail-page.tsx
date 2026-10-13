@@ -82,33 +82,28 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
           返回主题广场
         </Link>
 
-        <article className="mt-5 overflow-hidden rounded-3xl border border-line bg-card shadow-[0_8px_30px_rgba(23,33,43,0.06)]">
-          <div className="relative aspect-[3.6/1] bg-muted">
-            <TopicCover key={topic.imagePath} imagePath={topic.imagePath} name={topic.nameZh} sizes="(max-width: 980px) 100vw, 980px" eager />
+        <article className="mt-5 grid grid-cols-[96px_minmax(0,1fr)] gap-x-4 gap-y-3 rounded-2xl border border-line bg-card p-4 sm:p-5 md:grid-cols-[240px_minmax(0,1fr)] md:gap-x-6 md:gap-y-0">
+          <div className="relative aspect-[4/3] self-start overflow-hidden rounded-xl bg-muted md:row-span-3">
+            <TopicCover key={topic.imagePath} imagePath={topic.imagePath} name={topic.nameZh} sizes="(min-width: 768px) 240px, 96px" eager />
           </div>
-          <div className="p-6 sm:p-8">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-              <Tag className="size-3.5" />
-              {topic.category}
-            </span>
-
-            <h1 className="mt-5 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          <div className="min-w-0 [overflow-wrap:anywhere]">
+            <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground md:text-[30px]">
               {topic.nameZh}
             </h1>
-            <p className="mt-2 text-base font-medium text-muted-foreground">
+            <p className="mt-1 text-sm leading-5 text-muted-foreground md:text-[15px]">
               {topic.nameEn}
             </p>
-            <p className="mt-6 whitespace-pre-line text-sm leading-7 text-muted-foreground sm:text-base">
-              {description}
-            </p>
-
-            <div className="mt-7 flex flex-wrap gap-3 border-t border-line pt-5 text-sm text-muted-foreground">
-              <span>创建者：{typeof topic.author === "string" ? topic.author : topic.author.name}</span>
-              <span className="rounded-full bg-muted px-3 py-1">
-                分类：{topic.category}
-              </span>
-            </div>
+            <span className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary/5 px-2.5 py-1 text-xs text-muted-foreground">
+              <Tag className="size-3 shrink-0" />
+              {topic.category}
+            </span>
           </div>
+          <p className="col-span-2 line-clamp-3 min-w-0 whitespace-pre-line text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere] md:col-span-1 md:mt-3 md:text-[15px]" title={description}>
+            {description}
+          </p>
+          <p className="col-span-2 min-w-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere] md:col-span-1 md:mt-3 md:text-[13px]">
+            创建者：{typeof topic.author === "string" ? topic.author : topic.author.name}
+          </p>
         </article>
 
         <TopicRelatedPapers

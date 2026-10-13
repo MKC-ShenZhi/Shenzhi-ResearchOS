@@ -66,7 +66,7 @@ export function TopicRelatedPapers({
       : new KnowledgeClientError("UNKNOWN", "相关论文加载失败");
 
   return (
-    <section aria-labelledby="topic-related-papers" className="mt-10">
+    <section aria-labelledby="topic-related-papers" className="mt-7">
       <div className="mb-4 flex items-end justify-between gap-4">
         <div>
           <h2
