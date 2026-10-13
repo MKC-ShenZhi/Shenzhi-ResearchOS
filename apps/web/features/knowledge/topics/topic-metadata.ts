@@ -1,5 +1,14 @@
 import type { KnowledgeTopic } from "@/clients/knowledge";
 
+const FEATURED_TOPIC_IDS = ["reinforcement-learning", "deep-learning"] as const;
+
+export function selectFeaturedTopics(topics: readonly KnowledgeTopic[]): KnowledgeTopic[] {
+    return FEATURED_TOPIC_IDS.flatMap((id) => {
+        const topic = topics.find((item) => item.id === id && item.enabled !== false);
+        return topic ? [topic] : [];
+    });
+}
+
 function firstNonEmpty(...values: Array<string | null | undefined>): string {
     return values.map((value) => value?.trim()).find((value): value is string => Boolean(value)) ?? "";
 }

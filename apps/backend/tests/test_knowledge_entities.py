@@ -619,6 +619,9 @@ class KnowledgeEntityApiTests(unittest.IsolatedAsyncioTestCase):
             ('/api/v1/knowledge/scholars/search', {'q': ' '}),
             ('/api/v1/knowledge/subjects/search', {'subject': ' ', 'topK': 10}),
             ('/api/v1/knowledge/subjects/search', {'subject': 'graph', 'offset': 1000, 'limit': 10}),
+            ('/api/v1/knowledge/subjects/search', {'subject': 'graph', 'offset': -1}),
+            ('/api/v1/knowledge/subjects/search', {'subject': 'graph', 'limit': 0}),
+            ('/api/v1/knowledge/subjects/search', {'subject': 'graph', 'limit': 101}),
             ('/api/v1/knowledge/funding/search', {'funding': 'NSF', 'topK': 21}),
             ('/api/v1/knowledge/fundings/search', {'limit': 101}),
             ('/api/v1/knowledge/fundings/search', {'offset': -1}),
@@ -628,6 +631,17 @@ class KnowledgeEntityApiTests(unittest.IsolatedAsyncioTestCase):
                 response = await self.client.get(path, params=params)
                 self.assertEqual(response.status_code, 422)
                 self.assertEqual(response.json()['code'], 'INVALID_ARGUMENT')
+
+    async def test_subject_search_accepts_pagination_and_last_allowed_offset(self):
+        for offset, limit in [(0, 10), (10, 10), (999, 1)]:
+            with self.subTest(offset=offset):
+                response = await self.client.get(
+                    '/api/v1/knowledge/subjects/search',
+                    params={'subject': 'graph', 'offset': offset, 'limit': limit},
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(self.adapter.subject_search, ('graph', offset, limit))
+                self.assertEqual(response.json()['data']['total'], 327)
 
     async def test_funding_route_accepts_empty_query_as_browse_request(self):
         response = await self.client.get(

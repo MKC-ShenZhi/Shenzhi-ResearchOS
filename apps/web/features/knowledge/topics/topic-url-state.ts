@@ -6,6 +6,16 @@ export function readTopicViewState(searchParams: URLSearchParams): TopicViewStat
   return { query: searchParams.get("q")?.trim() ?? "", category: searchParams.get("category")?.trim() ?? "" };
 }
 
+export function updateTopicViewParams(searchParams: URLSearchParams, next: Partial<TopicViewState>): URLSearchParams {
+  const params = new URLSearchParams(searchParams);
+  const state = { ...readTopicViewState(params), ...next };
+  for (const [key, value] of [["q", state.query.trim()], ["category", state.category.trim()]]) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
+  return params;
+}
+
 export function filterTopics(topics: KnowledgeTopic[], { query, category }: TopicViewState): KnowledgeTopic[] {
   const normalizedQuery = query.trim().normalize("NFKC").toLocaleLowerCase();
   return topics.filter((topic) => {

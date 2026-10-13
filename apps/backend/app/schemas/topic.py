@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.schemas.knowledge import KnowledgeModel
 
@@ -26,6 +26,13 @@ class KnowledgeCreator(KnowledgeModel):
 
 
 class KnowledgeTopic(KnowledgeModel):
+    @field_validator('id', 'name_zh', 'name_en', 'description_zh', 'description_en', 'category', 'subject_query')
+    @classmethod
+    def required_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('Topic text must not be blank')
+        return value
+
     id: str = Field(min_length=1, max_length=200)
     image_path: str | None = Field(
         default=None,

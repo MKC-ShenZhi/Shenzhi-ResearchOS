@@ -1,19 +1,19 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getKnowledgeClient } from "@/clients/knowledge";
 import { TopicCategoryTabs } from "./topic-category-tabs";
 import { TopicGrid } from "./topic-grid";
-import { filterTopics, groupTopics, readTopicViewState } from "./topic-url-state";
+import { filterTopics, groupTopics, readTopicViewState, updateTopicViewParams } from "./topic-url-state";
 import { TopicEmptyState, TopicErrorState, TopicLoadingState } from "./topic-states";
 import { TopicSearch } from "./topic-search";
+import { selectFeaturedTopics } from "./topic-metadata";
 
 export function TopicsPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
   const state = readTopicViewState(new URLSearchParams(searchParams.toString()));
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["knowledge", "topics"],
@@ -21,25 +21,14 @@ export function TopicsPage() {
   });
 
   const updateState = (next: Partial<typeof state>) => {
-    const params = new URLSearchParams(searchParams.toString());
-    const query = next.query ?? state.query;
-    const category = next.category ?? state.category;
-    if (query) params.set("q", query); else params.delete("q");
-    if (category) params.set("category", category); else params.delete("category");
-    router.replace(`${pathname}${params.size ? `?${params.toString()}` : ""}`, { scroll: false });
-  };
-
-  const handleCreatorClick = (creatorId: string) => {
-    void queryClient.prefetchQuery({
-      queryKey: ["knowledge", "creator", creatorId],
-      queryFn: () => getKnowledgeClient().creator(creatorId),
-      staleTime: 5 * 60 * 1000,
-    });
+    const params = updateTopicViewParams(new URLSearchParams(searchParams.toString()), next);
+    if (params.toString() === searchParams.toString()) return;
+    router.push(`${pathname}${params.size ? `?${params.toString()}` : ""}`, { scroll: false });
   };
 
   const topics = data?.items ?? [];
   const visibleTopics = filterTopics(topics, state);
-  const featuredTopics = state.category || state.query ? [] : topics.slice(0, 2);
+  const featuredTopics = state.category || state.query ? [] : selectFeaturedTopics(topics);
   const groups = groupTopics(visibleTopics);
 
   return (
@@ -51,8 +40,8 @@ export function TopicsPage() {
         </header>
         {isPending ? <TopicLoadingState /> : isError ? <TopicErrorState onRetry={() => void refetch()} /> : visibleTopics.length === 0 ? <TopicEmptyState onReset={() => updateState({ query: "", category: "" })} /> : (
           <div className="space-y-10">
-            {featuredTopics.length > 0 ? <section><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">精选主题</h2><span className="text-sm text-muted-foreground">{data?.total ?? 0} 个主题</span></div><TopicGrid topics={featuredTopics} featured onCreatorClick={handleCreatorClick} /></section> : null}
-            {groups.map(([category, categoryTopics]) => <section key={category}><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">{category}</h2><span className="text-sm text-muted-foreground">{categoryTopics.length} 个主题</span></div><TopicGrid topics={categoryTopics} carousel={!state.category && categoryTopics.length > 3} onCreatorClick={handleCreatorClick} /></section>)}
+            {featuredTopics.length > 0 ? <section><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">精选主题</h2><span className="text-sm text-muted-foreground">{data?.total ?? 0} 个主题</span></div><TopicGrid topics={featuredTopics} featured /></section> : null}
+            {groups.map(([category, categoryTopics]) => <section key={category}><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">{category}</h2><span className="text-sm text-muted-foreground">{categoryTopics.length} 个主题</span></div><TopicGrid topics={categoryTopics} carousel={!state.category && categoryTopics.length > 3} /></section>)}
           </div>
         )}
       </div>

@@ -63,6 +63,49 @@ class TopicApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 404, response.text)
         self.assertEqual(response.json()['code'], 'NOT_FOUND')
         self.assertTrue(response.json()['requestId'])
+        self.assertFalse(response.json()['retryable'])
+
+    async def test_topic_routes_return_safe_500_on_unexpected_registry_error(self):
+        for path, method in [
+            ('/api/v1/knowledge/topics', 'list_topics'),
+            ('/api/v1/knowledge/topics/large-language-models', 'get_topic'),
+            ('/api/v1/knowledge/creators/shenzhi', 'get_creator'),
+        ]:
+            with self.subTest(path=path), patch(
+                f'app.api.knowledge.topic_registry.{method}',
+                side_effect=RuntimeError('private internal detail'),
+            ):
+                response = await self.client.get(path, headers={'x-request-id': 'topic-regression'})
+                self.assertEqual(response.status_code, 500, response.text)
+                self.assertEqual(response.json(), {
+                    'code': 'UNKNOWN', 'message': '知识服务请求失败',
+                    'retryable': False, 'requestId': 'topic-regression',
+                })
+
+    async def test_knowledge_service_unexpected_errors_use_same_500_contract(self):
+        cases = [
+            ('GET', '/api/v1/knowledge/overview', 'overview', None),
+            ('GET', '/api/v1/knowledge/paper?paperId=test', 'get_paper', None),
+            ('GET', '/api/v1/knowledge/graph?paperId=test', 'get_graph', None),
+            ('GET', '/api/v1/knowledge/subjects/search?subject=llm', 'search_by_subject', None),
+            ('POST', '/api/v1/knowledge/search', 'search', {'query': 'llm'}),
+        ]
+        for verb, path, method, body in cases:
+            with self.subTest(path=path), patch(
+                f'app.api.knowledge.service.{method}',
+                side_effect=RuntimeError('private internal detail'),
+            ):
+                response = await self.client.request(verb, path, json=body)
+                self.assertEqual(response.status_code, 500, response.text)
+                self.assertEqual(response.json()['code'], 'UNKNOWN')
+                self.assertEqual(response.json()['message'], '知识服务请求失败')
+                self.assertFalse(response.json()['retryable'])
+                self.assertTrue(response.json()['requestId'])
+
+    async def test_creator_not_found_keeps_404_contract(self):
+        response = await self.client.get('/api/v1/knowledge/creators/missing')
+        self.assertEqual(response.status_code, 404, response.text)
+        self.assertEqual(response.json()['code'], 'NOT_FOUND')
 
     def test_registry_filters_disabled_topics_without_losing_category_order(self):
         topics = (

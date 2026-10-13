@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -13,19 +14,6 @@ from app.schemas.topic import KnowledgeTopic
 
 
 CATALOG_PATH = Path(__file__).resolve().parents[2] / 'data' / 'topic_catalog.json'
-PROJECT_ROOT = CATALOG_PATH.parents[4]
-WEB_PUBLIC_PATH = PROJECT_ROOT / 'apps' / 'web' / 'public'
-EXPECTED_TOPIC_COUNT = 293
-EXPECTED_CATEGORIES = {
-    '大语言模型',
-    '多模态',
-    '机器学习',
-    '计算机视觉',
-    '生成式AI',
-    '语音/音频处理',
-    '智能体',
-    '自然语言处理',
-}
 
 
 class TopicCatalogError(RuntimeError):
@@ -60,22 +48,18 @@ def load_topic_catalog() -> tuple[KnowledgeTopic, ...]:
         normalized_subject_query = topic.subject_query.strip().casefold()
         if normalized_subject_query in seen_subject_queries:
             raise TopicCatalogError('主题目录包含重复 subjectQuery')
-        if topic.image_path and not topic.image_path.startswith('/images/topics/'):
+        # Only local topic assets: reject traversal, encoded paths, URLs and query strings.
+        # File existence belongs to repository validation, not backend deployment.
+        if topic.image_path is not None and not re.fullmatch(
+            r'/images/topics/[A-Za-z0-9_-]+\.(?:png|jpg|jpeg|webp|avif|svg)',
+            topic.image_path,
+        ):
             raise TopicCatalogError('主题目录图片路径无效')
-        if topic.image_path:
-            image_file = WEB_PUBLIC_PATH.joinpath(*topic.image_path.lstrip('/').split('/'))
-            if not image_file.is_file():
-                raise TopicCatalogError('主题目录图片文件不存在')
         author_id = topic.author if isinstance(topic.author, str) else topic.author.id
         if author_id.strip().lower() != 'shenzhi':
             raise TopicCatalogError('主题目录作者 ID 无效')
         seen_ids.add(topic.id)
         seen_subject_queries.add(normalized_subject_query)
         topics.append(topic)
-    enabled_topics = [topic for topic in topics if topic.enabled]
-    if len(enabled_topics) != EXPECTED_TOPIC_COUNT:
-        raise TopicCatalogError('主题目录数量不符合预期')
-    if {topic.category for topic in enabled_topics} != EXPECTED_CATEGORIES:
-        raise TopicCatalogError('主题目录分类不符合预期')
     return tuple(topics)
 

@@ -82,6 +82,15 @@ def unknown_error(request: Request, error: Exception) -> JSONResponse:
         },
         error,
     )
+    return JSONResponse(
+        status_code=500,
+        content=KnowledgeError(
+            code='UNKNOWN',
+            message='知识服务请求失败',
+            retryable=False,
+            request_id=request_id(request),
+        ).model_dump(mode='json', by_alias=True),
+    )
 
 
 def topic_not_found(request: Request) -> JSONResponse:
@@ -102,15 +111,6 @@ def creator_not_found(request: Request) -> JSONResponse:
         content=KnowledgeError(
             code='NOT_FOUND',
             message='未找到对应创作者',
-            retryable=False,
-            request_id=request_id(request),
-        ).model_dump(mode='json', by_alias=True),
-    )
-    return JSONResponse(
-        status_code=500,
-        content=KnowledgeError(
-            code='UNKNOWN',
-            message='知识服务请求失败',
             retryable=False,
             request_id=request_id(request),
         ).model_dump(mode='json', by_alias=True),
