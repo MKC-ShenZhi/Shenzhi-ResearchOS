@@ -72,24 +72,7 @@ cp .env.example .env         # 填 DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY 等
 uv run uvicorn app.main:app --env-file .env --reload --host 127.0.0.1 --port 8000
 ```
 
-### 3.4 一键启动本地服务
-
-Windows 可从仓库根目录运行：
-
-```powershell
-.\scripts\start-local-services.ps1
-```
-
-脚本按 PostgreSQL 5433、FastAPI 8000、Next.js 3000 的顺序启动，并等待
-`/health`、首页和 `/api/v1/chat/config` 返回 200 后才报告就绪。启动日志写入
-`.local-logs/`。脚本不会自动执行数据库迁移；迁移前先检查计划，再在
-`apps/backend` 中运行：
-
-```powershell
-uv run --locked --env-file .env alembic upgrade head
-```
-
-### 3.5 提交前的检查
+### 3.4 提交前的检查
 
 ```bash
 cd apps/web && pnpm typecheck && pnpm lint && pnpm test
