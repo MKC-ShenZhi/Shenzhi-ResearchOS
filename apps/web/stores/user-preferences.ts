@@ -6,6 +6,8 @@ import { persist } from "zustand/middleware";
 interface UserPreferencesState {
   /** 已关注的学者 id 集合 */
   followedScholars: Record<string, boolean>;
+  /** 已关注的主题 id 集合；登录关注接口接入后可由服务端状态覆盖 */
+  followedTopics: Record<string, boolean>;
   /** 已点赞的论文 id 集合 */
   likedPapers: Record<string, boolean>;
   /** 已收藏的论文 id 集合 */
@@ -13,6 +15,7 @@ interface UserPreferencesState {
   /** 已收藏的机构 id 集合 */
   bookmarkedInstitutions: Record<string, boolean>;
   toggleFollow: (scholarId: string, defaultFollowing?: boolean) => void;
+  toggleTopicFollow: (topicId: string, defaultFollowing?: boolean) => void;
   toggleLike: (paperId: string) => void;
   toggleBookmark: (paperId: string) => void;
   toggleInstitutionBookmark: (
@@ -25,6 +28,7 @@ export const useUserPreferences = create<UserPreferencesState>()(
   persist(
     (set) => ({
       followedScholars: { "yoshua-bengio": true, "pieter-abbeel": true },
+      followedTopics: {},
       likedPapers: {},
       bookmarkedPapers: {},
       bookmarkedInstitutions: {},
@@ -33,6 +37,13 @@ export const useUserPreferences = create<UserPreferencesState>()(
           followedScholars: {
             ...s.followedScholars,
             [scholarId]: !(s.followedScholars[scholarId] ?? defaultFollowing),
+          },
+        })),
+      toggleTopicFollow: (topicId, defaultFollowing = false) =>
+        set((s) => ({
+          followedTopics: {
+            ...s.followedTopics,
+            [topicId]: !(s.followedTopics[topicId] ?? defaultFollowing),
           },
         })),
       toggleLike: (paperId) =>

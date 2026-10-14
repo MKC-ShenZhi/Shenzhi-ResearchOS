@@ -4,6 +4,7 @@ import { KnowledgeClientError, type KnowledgeClient } from "./client";
 import {
   buildMockGraph,
   MOCK_PAPERS,
+  MOCK_TOPICS,
   mockPaperDetail,
 } from "./mock-data";
 import type {
@@ -23,7 +24,19 @@ import type {
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
   KnowledgeSubjectSearchResponse,
+  KnowledgeTopic,
+  KnowledgeTopicListResponse,
+  KnowledgeCreator,
 } from "./types";
+
+const MOCK_CREATOR: KnowledgeCreator = {
+  id: "shenzhi",
+  name: "ShenZhi",
+  avatarUrl: "/brand/logo-night.png",
+  bio: "深知 ShenZhi · Research OS，整理和维护面向科研工作的知识主题。",
+  topicCount: MOCK_TOPICS.length,
+  isVerified: true,
+};
 
 const MOCK_SCHOLAR: KnowledgeScholarDetail = {
   id: "author:mock:geoffrey-hinton",
@@ -161,6 +174,37 @@ export class MockKnowledgeClient implements KnowledgeClient {
     await this.wait();
     this.throwIfNeeded();
     return { authRequired: false, folders: [], recentPapers: [] };
+  }
+
+  async topics(signal?: AbortSignal): Promise<KnowledgeTopicListResponse> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded();
+    if (scenario === "zero_results") return { items: [], total: 0, categories: [] };
+    const items = MOCK_TOPICS.filter((topic) => topic.enabled);
+    return {
+      items,
+      total: items.length,
+      categories: [...new Set(items.map((topic) => topic.category))],
+    };
+  }
+
+  async topic(topicId: string, signal?: AbortSignal): Promise<KnowledgeTopic> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded(topicId);
+    if (scenario === "zero_results") throw KnowledgeClientError.notFound("未找到对应主题");
+    const topic = MOCK_TOPICS.find((item) => item.id === topicId && item.enabled);
+    if (!topic) throw KnowledgeClientError.notFound("未找到对应主题");
+    return topic;
+  }
+
+  async creator(creatorId: string): Promise<KnowledgeCreator> {
+    await this.wait();
+    if (this.scenario === "timeout") throw KnowledgeClientError.timeout();
+    if (this.scenario === "upstream_unavailable") throw KnowledgeClientError.unavailable();
+    if (creatorId.trim().toLowerCase() !== MOCK_CREATOR.id) {
+      throw KnowledgeClientError.notFound("未找到对应创作者");
+    }
+    return MOCK_CREATOR;
   }
 
   async overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse> {

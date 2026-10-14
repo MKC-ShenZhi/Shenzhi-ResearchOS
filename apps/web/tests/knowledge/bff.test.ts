@@ -65,6 +65,45 @@ test("BFF client unwraps the Search success envelope and preserves the request c
   }]);
 });
 
+test("BFF client requests Topic Catalog list and detail through stable routes", async () => {
+  const requests: string[] = [];
+  await withFetch(async (input) => {
+    requests.push(String(input));
+    if (requests.length === 1) {
+      return jsonResponse({ code: 0, data: {
+        items: [],
+        total: 0,
+        categories: [],
+      } });
+    }
+    return jsonResponse({ code: 0, data: {
+      id: "large-language-models",
+      imagePath: null,
+      nameZh: "大语言模型",
+      nameEn: "Large Language Models",
+      author: "shenzhi",
+      descriptionZh: "主题简介",
+      descriptionEn: "Topic description",
+      followersCount: 0,
+      category: "自然语言处理",
+      subjectQuery: "llm",
+      paperCount: 2225,
+      enabled: true,
+    } });
+  }, async () => {
+    const client = new BffKnowledgeClient();
+    const list = await client.topics();
+    const detail = await client.topic("large-language-models");
+    assert.equal(list.total, 0);
+    assert.equal(detail.subjectQuery, "llm");
+  });
+
+  assert.deepEqual(requests, [
+    "/api/v1/knowledge/topics",
+    "/api/v1/knowledge/topics/large-language-models",
+  ]);
+});
+
 test("BFF paper search forwards AbortSignal and preserves cancellation as AbortError", async () => {
   const controller = new AbortController();
   await withFetch((_input, init) => new Promise((_resolve, reject) => {

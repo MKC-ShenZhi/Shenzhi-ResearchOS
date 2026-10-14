@@ -88,7 +88,7 @@ PAPER_MAX_SIZE_MB=150
 | 论文图谱 | `GET /api/v1/knowledge/graph?paperId=...&depth=1\|2` | `GET /api/kg/graph?paperId=...&depth=1\|2` |
 | 学者搜索 | `GET /api/v1/knowledge/scholars/search?q=...&limit=20&offset=0` | `GET /api/retrieval/scholars/search?q=...&limit=20&offset=0` |
 | 学者详情 | `GET /api/v1/knowledge/scholars/{scholarId}` | `GET /api/retrieval/scholars/{scholar_id}` |
-| 主题关联论文 | `GET /api/v1/knowledge/subjects/search?subject=...&topK=10` | `GET /api/retrieval/search/by-subject?subject=...&top_k=10` |
+| 主题关联论文 | `GET /api/v1/knowledge/subjects/search?subject=...&offset=0&limit=10` | `GET /api/retrieval/search/by-subject?subject=...&offset=0&limit=10` |
 | Funding 候选检索 | `GET /api/v1/knowledge/fundings/search?q=...&limit=20&offset=0` | `GET /api/retrieval/fundings/search?q=...&limit=20&offset=0` |
 | Funding 关联论文 | `GET /api/v1/knowledge/funding/search?funding=...&topK=10` | `GET /api/retrieval/search/by-funding?funding=...&top_k=10` |
 | PDF 字节流 | `GET /api/v1/paper-resource/pdf?paperId=...` | `pdf_url` 对应资源 |
@@ -165,6 +165,9 @@ Knowledge 查询最多自动重试一次；`TIMEOUT`、`RATE_LIMITED`、
 也必须遵守 `retryable` 和最多一次的上限，不能无限重试。
 
 ## 页面范围
+
+Topic Catalog、分页上限、错误重试、数据核对与本地验收见
+[Topic V2 稳定性与维护约定](TOPIC-V2-STABILITY.md)。
 
 | 路由 | 行为 |
 |---|---|

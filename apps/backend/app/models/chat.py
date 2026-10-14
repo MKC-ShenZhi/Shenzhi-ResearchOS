@@ -30,6 +30,11 @@ class ChatSessionRow(Base):
 
     __table_args__ = (
         Index('idx_chat_sessions_owner', 'owner', favorite.desc(), updated_at.desc()),
+        Index(
+            'idx_chat_sessions_anonymous_expiry',
+            'updated_at',
+            postgresql_where=text("owner LIKE 'anon:%'"),
+        ),
     )
 
 
