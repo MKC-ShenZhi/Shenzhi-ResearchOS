@@ -42,7 +42,7 @@ repository.
 | `TURNSTILE_ENABLED` | `apps/web/config/turnstile.ts` | 是否在发送 Email OTP 前强制人机验证 | 默认 `false`；启用时必须同时配置 site key 与 secret |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Client Component | 浏览器渲染 Turnstile 的公开 site key | 可公开，但必须与 secret 对应 |
 | `TURNSTILE_SECRET_KEY` | `apps/web/config/turnstile.ts` | 服务端校验 Turnstile token | 仅由 Deployment Secrets 注入 |
-| `TURNSTILE_EXPECTED_ACTION` | `apps/web/config/turnstile.ts` | 可选的 token action 约束 | 与 Cloudflare Widget 配置一致时填写 |
+| `TURNSTILE_EXPECTED_ACTION` | `apps/web/config/turnstile.ts` | 可选的 token action 约束 | 与 Cloudflare Widget 配置一致时填写；OAuth 验证页会自动使用该值 |
 | `TURNSTILE_ALLOWED_HOSTNAMES` | `apps/web/config/turnstile.ts` | 可选的逗号分隔 hostname 白名单 | 生产建议配置正式域名 |
 
 `BETTER_AUTH_TRUSTED_ORIGINS` 会被裁剪并过滤空项，例如：
