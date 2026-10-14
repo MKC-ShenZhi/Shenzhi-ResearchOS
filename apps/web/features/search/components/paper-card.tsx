@@ -29,7 +29,7 @@ export function PaperCard({
   const returnTo = useCurrentInternalPath();
   const { likedPapers, toggleLike } = useUserPreferences();
   const liked = !!likedPapers[paper.id];
-  const isRead = usePaperReadStatus(paper.id);
+  const status = usePaperReadStatus(paper.id);
 
   return (
     <motion.article
@@ -44,7 +44,7 @@ export function PaperCard({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
             <span className="text-faint">{paper.date}</span>
             <Badge variant={VENUE_VARIANT[paper.venueTone]}>{paper.venue}</Badge>
-            {isRead && <PaperReadBadge className={layout === "feed" ? "md:hidden" : undefined} />}
+            {status && <PaperReadBadge status={status} className={layout === "feed" ? "md:hidden" : undefined} />}
             <span className="flex items-center gap-1.5 text-muted">
               <Users className="size-3.5 text-faint" />
               {paper.authors}
@@ -121,7 +121,7 @@ export function PaperCard({
                 title={paper.title}
                 className="h-full min-h-[128px]"
               />
-              {isRead && <PaperReadBadge className="absolute bottom-0 right-0 z-10 rounded-bl-xl rounded-br-none rounded-tl-xl rounded-tr-none px-3 py-2 text-sm" />}
+              {status && <PaperReadBadge status={status} className="absolute bottom-0 right-0 z-10 rounded-bl-xl rounded-br-none rounded-tl-xl rounded-tr-none px-3 py-2 text-sm" />}
             </div>
           </div>
         )}

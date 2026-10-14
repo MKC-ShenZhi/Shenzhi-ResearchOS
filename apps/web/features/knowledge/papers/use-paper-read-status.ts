@@ -2,9 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/auth-provider";
-import { fetchPaperReadStatus, paperReadStatusQueryKey } from "@/clients/backend/read-status";
+import { fetchPaperReadStatus, paperReadStatusQueryKey, type PaperReadStatus } from "@/clients/backend/read-status";
 
-export function usePaperReadStatus(paperId: string, enabled = true): boolean {
+export function usePaperReadStatus(paperId: string, enabled = true): PaperReadStatus {
   const { session, isPending } = useAuth();
   const userId = session?.user?.id ?? "";
   const query = useQuery({
@@ -17,5 +17,5 @@ export function usePaperReadStatus(paperId: string, enabled = true): boolean {
     refetchInterval: 10_000,
     retry: false,
   });
-  return Boolean(userId && query.data);
+  return userId ? query.data ?? null : null;
 }

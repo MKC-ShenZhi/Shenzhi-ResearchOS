@@ -34,7 +34,7 @@ export function KnowledgeResultCard({
   lastViewedAt?: string;
 }) {
   const authors = hit.authors.length ? hit.authors.join(" · ") : "未知作者";
-  const isRead = usePaperReadStatus(hit.id, !historyMode) || historyMode;
+  const status = usePaperReadStatus(hit.id);
 
   return (
     <motion.article
@@ -65,7 +65,7 @@ export function KnowledgeResultCard({
               ) : (
                 <span className="text-[11px] text-faint">暂无会议</span>
               )}
-              {isRead && <PaperReadBadge className="sm:hidden" />}
+              {status && <PaperReadBadge status={status} className="sm:hidden" />}
             </div>
             {!historyMode && (
               <CollectionPicker className="shrink-0" paperId={hit.id} />
@@ -137,7 +137,7 @@ export function KnowledgeResultCard({
             title={hit.title}
             className="h-full min-h-[128px]"
           />
-          {isRead && <PaperReadBadge className="absolute bottom-0 right-0 z-10 rounded-bl-xl rounded-br-none rounded-tl-xl rounded-tr-none px-2.5 py-2" />}
+          {status && <PaperReadBadge status={status} className="absolute bottom-0 right-0 z-10 rounded-bl-xl rounded-br-none rounded-tl-xl rounded-tr-none px-2.5 py-2" />}
         </div>
       </div>
     </motion.article>

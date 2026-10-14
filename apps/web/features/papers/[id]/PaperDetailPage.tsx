@@ -47,10 +47,23 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
       },
     ).then((result) => {
       if (!result.success || result.user_id !== userId) return;
-      queryClient.setQueryData(paperReadStatusQueryKey(userId, loadedPaperId), true);
-      publishPaperRead(userId, loadedPaperId);
+      // A visit is still in progress until the PDF's final page is reached.
+      queryClient.invalidateQueries({ queryKey: paperReadStatusQueryKey(userId, loadedPaperId) });
+      publishPaperRead(userId, loadedPaperId, "reading");
     }).catch(() => {});
   }, [isIdentityPending, loadedPaperId, queryClient, userId]);
+
+  const handleReachedEnd = () => {
+    if (!loadedPaperId || !userId || isIdentityPending) return;
+    void apiJson<{ success: boolean; user_id: string }>("/papers/read", {
+      method: "POST",
+      body: JSON.stringify({ paper_id: loadedPaperId }),
+    }).then((result) => {
+      if (!result.success || result.user_id !== userId) return;
+      queryClient.setQueryData(paperReadStatusQueryKey(userId, loadedPaperId), "read");
+      publishPaperRead(userId, loadedPaperId, "read");
+    }).catch(() => {});
+  };
 
   return (
     <div className="flex min-h-dvh flex-col bg-background lg:h-dvh lg:overflow-hidden">
@@ -125,6 +138,7 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
                         zoom={zoom}
                         setZoom={setZoom}
                         onViewerStateChange={setViewerState}
+                        onReachedEnd={handleReachedEnd}
                       />
                     </div>
                   )}

@@ -34,6 +34,7 @@ class PaperReadStatusRequest(BaseModel):
 class PaperReadStatusResponse(BaseModel):
     user_id: str
     read_paper_ids: list[str]
+    reading_paper_ids: list[str]
 
 
 class PaperViewRequest(BaseModel):

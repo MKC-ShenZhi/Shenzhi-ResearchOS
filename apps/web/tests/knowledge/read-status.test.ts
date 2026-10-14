@@ -10,7 +10,7 @@ test("simultaneous card checks use one request and preserve paper IDs", async ()
     requests.push(body.paper_ids);
     return new Response(JSON.stringify({
       code: 0,
-      data: { user_id: "user-a", read_paper_ids: ["paper:one"] },
+      data: { user_id: "user-a", read_paper_ids: ["paper:one"], reading_paper_ids: ["paper:two"] },
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   };
   try {
@@ -19,7 +19,7 @@ test("simultaneous card checks use one request and preserve paper IDs", async ()
       fetchPaperReadStatus("user-a", "paper:two"),
       fetchPaperReadStatus("user-a", "paper:one"),
     ]);
-    assert.deepEqual(statuses, [true, false, true]);
+    assert.deepEqual(statuses, ["read", "reading", "read"]);
     assert.deepEqual(requests, [["paper:one", "paper:two"]]);
   } finally {
     globalThis.fetch = previousFetch;
@@ -30,7 +30,7 @@ test("a response from a different signed-in account is never used", async () => 
   const previousFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({
     code: 0,
-    data: { user_id: "user-b", read_paper_ids: ["paper:one"] },
+    data: { user_id: "user-b", read_paper_ids: ["paper:one"], reading_paper_ids: [] },
   }), { status: 200, headers: { "Content-Type": "application/json" } });
   try {
     await assert.rejects(fetchPaperReadStatus("user-a", "paper:one"), /所属账户已变化/);
@@ -47,7 +47,7 @@ test("large result grids are split at the backend's 100-paper limit", async () =
     sizes.push(body.paper_ids.length);
     return new Response(JSON.stringify({
       code: 0,
-      data: { user_id: "user-a", read_paper_ids: [] },
+      data: { user_id: "user-a", read_paper_ids: [], reading_paper_ids: [] },
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   };
   try {
@@ -55,7 +55,7 @@ test("large result grids are split at the backend's 100-paper limit", async () =
       { length: 101 }, (_, index) => fetchPaperReadStatus("user-a", `paper-${index}`),
     ));
     assert.equal(statuses.length, 101);
-    assert.ok(statuses.every((read) => !read));
+    assert.ok(statuses.every((status) => status === null));
     assert.deepEqual(sizes, [100, 1]);
   } finally {
     globalThis.fetch = previousFetch;

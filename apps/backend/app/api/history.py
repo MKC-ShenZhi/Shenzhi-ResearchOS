@@ -13,11 +13,18 @@ service = ReadingHistoryService()
 
 @router.post('/api/v1/papers/read-status')
 async def paper_read_status(body: PaperReadStatusRequest, identity: RequestIdentity = Depends(require_user)):
-    read_paper_ids = await service.read_paper_ids(identity.subject_id, body.paper_ids)
+    read_paper_ids, reading_paper_ids = await service.paper_status_ids(identity.subject_id, body.paper_ids)
     return ok(PaperReadStatusResponse(
         user_id=identity.subject_id,
         read_paper_ids=read_paper_ids,
+        reading_paper_ids=reading_paper_ids,
     ).model_dump())
+
+
+@router.post('/api/v1/papers/read')
+async def mark_paper_read(body: PaperViewRequest, identity: RequestIdentity = Depends(require_user)):
+    await service.mark_read(identity.subject_id, body.paper_id)
+    return ok({'success': True, 'user_id': identity.subject_id})
 
 
 @router.post('/api/v1/papers/view')

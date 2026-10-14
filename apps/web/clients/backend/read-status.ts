@@ -6,9 +6,11 @@ export const PAPER_READ_CHANNEL = "shenzhi-paper-read";
 interface ReadStatusResponse {
   user_id: string;
   read_paper_ids: string[];
+  reading_paper_ids: string[];
 }
 
-type Pending = { resolve: (read: boolean) => void; reject: (error: unknown) => void };
+export type PaperReadStatus = "read" | "reading" | null;
+type Pending = { resolve: (status: PaperReadStatus) => void; reject: (error: unknown) => void };
 let pendingByUser = new Map<string, Map<string, Pending[]>>();
 let scheduled = false;
 let publishChannel: BroadcastChannel | undefined;
@@ -25,8 +27,10 @@ async function requestBatch(userId: string, entries: [string, Pending[]][]) {
     });
     if (response.user_id !== userId) throw new Error("阅读状态所属账户已变化");
     const readIds = new Set(response.read_paper_ids);
+    const readingIds = new Set(response.reading_paper_ids);
     for (const [paperId, waiters] of entries) {
-      for (const waiter of waiters) waiter.resolve(readIds.has(paperId));
+      const status = readIds.has(paperId) ? "read" : readingIds.has(paperId) ? "reading" : null;
+      for (const waiter of waiters) waiter.resolve(status);
     }
   } catch (error) {
     for (const [, waiters] of entries) {
@@ -48,7 +52,7 @@ function flushPending() {
 }
 
 /** Collect card queries from the current render into bounded backend requests. */
-export function fetchPaperReadStatus(userId: string, paperId: string): Promise<boolean> {
+export function fetchPaperReadStatus(userId: string, paperId: string): Promise<PaperReadStatus> {
   return new Promise((resolve, reject) => {
     const papers = pendingByUser.get(userId) ?? new Map<string, Pending[]>();
     const waiters = papers.get(paperId) ?? [];
@@ -62,8 +66,8 @@ export function fetchPaperReadStatus(userId: string, paperId: string): Promise<b
   });
 }
 
-export function publishPaperRead(userId: string, paperId: string) {
+export function publishPaperRead(userId: string, paperId: string, status: Exclude<PaperReadStatus, null>) {
   if (typeof BroadcastChannel === "undefined") return;
   publishChannel ??= new BroadcastChannel(PAPER_READ_CHANNEL);
-  publishChannel.postMessage({ userId, paperId });
+  publishChannel.postMessage({ userId, paperId, status });
 }

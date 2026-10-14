@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/auth-provider";
-import { PAPER_READ_CHANNEL, paperReadStatusQueryKey } from "@/clients/backend/read-status";
+import { PAPER_READ_CHANNEL, paperReadStatusQueryKey, type PaperReadStatus } from "@/clients/backend/read-status";
 
 /** Make a successful read in another browser tab visible without a refresh. */
 export function ReadStatusSync() {
@@ -19,7 +19,11 @@ export function ReadStatusSync() {
       if (!value || typeof value !== "object") return;
       const message = value as Record<string, unknown>;
       if (message.userId !== userId || typeof message.paperId !== "string") return;
-      queryClient.setQueryData(paperReadStatusQueryKey(userId, message.paperId), true);
+      if (message.status !== "read" && message.status !== "reading") return;
+      queryClient.setQueryData<PaperReadStatus>(
+        paperReadStatusQueryKey(userId, message.paperId),
+        (current) => current === "read" ? "read" : message.status as PaperReadStatus,
+      );
     };
     return () => channel.close();
   }, [queryClient, userId]);
