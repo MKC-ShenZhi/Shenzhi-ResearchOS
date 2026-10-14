@@ -16,6 +16,7 @@ class ReadingHistoryRow(Base):
     last_viewed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text('now()'),
     )
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint('user_id', 'paper_id', name='uq_reading_history_user_paper'),

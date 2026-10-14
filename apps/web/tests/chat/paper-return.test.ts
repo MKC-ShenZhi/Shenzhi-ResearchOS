@@ -12,6 +12,7 @@ import {
 } from "../../features/papers/[id]/paper-back-navigation";
 import {
   initialRenderedPageCount,
+  isFinalPageVisible,
   nextRenderedPageCount,
 } from "../../features/papers/[id]/components/pdf-pagination.js";
 import type { ChatReference } from "../../types/ai-search";
@@ -289,6 +290,14 @@ test("PDF reader pagination starts small and grows in bounded batches", () => {
   assert.equal(nextRenderedPageCount(3, 20), 6);
   assert.equal(nextRenderedPageCount(6, 8), 8);
   assert.equal(nextRenderedPageCount(8, 8), 8);
+  assert.equal(isFinalPageVisible(
+    { top: 800, bottom: 1800, height: 1000 },
+    { top: 0, bottom: 900, height: 900 },
+  ), false);
+  assert.equal(isFinalPageVisible(
+    { top: 600, bottom: 1600, height: 1000 },
+    { top: 0, bottom: 900, height: 900 },
+  ), true);
 });
 
 test("Paper Detail uses a slim reader header and a proportional dual workspace", () => {

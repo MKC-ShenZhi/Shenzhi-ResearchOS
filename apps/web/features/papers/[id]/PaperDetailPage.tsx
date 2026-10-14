@@ -8,8 +8,11 @@ import {
   type KeyboardEvent,
 } from "react";
 import { PanelRightOpen } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "@/clients/backend/http";
+import { paperReadStatusQueryKey, publishPaperRead } from "@/clients/backend/read-status";
 import { KnowledgeClientError } from "@/clients/knowledge";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
 import { useKnowledgePaper } from "@/features/knowledge/paper/use-knowledge-paper";
@@ -39,6 +42,9 @@ function clampAssistantWidthPercent(percent: number, availableWidth: number) {
 
 export function PaperDetailPage({ paperId, returnTo }: { paperId: string; returnTo?: string | null }) {
   const { data: paper, isPending, isError, error, refetch } = useKnowledgePaper(paperId);
+  const { session, isPending: isIdentityPending } = useAuth();
+  const userId = session?.user?.id ?? null;
+  const queryClient = useQueryClient();
   const safeReturnTo = normalizeInternalReturnTo(returnTo);
   const [viewMode, setViewMode] = useState<PaperViewMode>("abstract");
   const [hasOpenedPaper, setHasOpenedPaper] = useState(false);
@@ -90,11 +96,32 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
   const loadedPaperId = paper?.id ?? null;
 
   useEffect(() => {
-    if (!loadedPaperId) return;
-    // 进入论文详情页（含“立即阅读”）即记录浏览行为。
-    // 仅登录用户会被后端写入，未登录返回 401，此处静默忽略，不影响阅读。
-    void apiJson(`/papers/${encodeURIComponent(loadedPaperId)}/view`, { method: "POST" }).catch(() => {});
-  }, [loadedPaperId]);
+    if (!loadedPaperId || !userId || isIdentityPending) return;
+    // 详情加载成功才记录；写入成功后立即更新当前账户的卡片状态。
+    void apiJson<{ success: boolean; user_id: string }>(
+      "/papers/view", {
+        method: "POST",
+        body: JSON.stringify({ paper_id: loadedPaperId }),
+      },
+    ).then((result) => {
+      if (!result.success || result.user_id !== userId) return;
+      // A visit is still in progress until the PDF's final page is reached.
+      queryClient.invalidateQueries({ queryKey: paperReadStatusQueryKey(userId, loadedPaperId) });
+      publishPaperRead(userId, loadedPaperId, "reading");
+    }).catch(() => {});
+  }, [isIdentityPending, loadedPaperId, queryClient, userId]);
+
+  const handleReachedEnd = () => {
+    if (!loadedPaperId || !userId || isIdentityPending) return;
+    void apiJson<{ success: boolean; user_id: string }>("/papers/read", {
+      method: "POST",
+      body: JSON.stringify({ paper_id: loadedPaperId }),
+    }).then((result) => {
+      if (!result.success || result.user_id !== userId) return;
+      queryClient.setQueryData(paperReadStatusQueryKey(userId, loadedPaperId), "read");
+      publishPaperRead(userId, loadedPaperId, "read");
+    }).catch(() => {});
+  };
 
   return (
     <div className="flex min-h-dvh flex-col bg-background lg:h-dvh lg:overflow-hidden">
@@ -175,6 +202,7 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
                         zoom={zoom}
                         setZoom={setZoom}
                         onViewerStateChange={setViewerState}
+                        onReachedEnd={handleReachedEnd}
                       />
                     </div>
                   )}

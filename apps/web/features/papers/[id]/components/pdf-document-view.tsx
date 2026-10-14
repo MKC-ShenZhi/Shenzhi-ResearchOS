@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   INITIAL_PAGE_COUNT,
   initialRenderedPageCount,
+  isFinalPageVisible,
   nextRenderedPageCount,
 } from "./pdf-pagination";
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -22,6 +23,7 @@ export function PdfDocumentView({
   onLoadSuccess,
   onLoadError,
   onFirstPageReady,
+  onReachedEnd,
   className,
 }: {
   file: string;
@@ -31,6 +33,7 @@ export function PdfDocumentView({
   onLoadSuccess: (value: { numPages: number }) => void;
   onLoadError: (error: Error) => void;
   onFirstPageReady: () => void;
+  onReachedEnd: () => void;
   className?: string;
 }) {
   const [renderCount, setRenderCount] = useState(() => (
@@ -38,6 +41,9 @@ export function PdfDocumentView({
   ));
   const sentinelRef = useRef<HTMLDivElement>(null);
   const firstReadyFileRef = useRef<string | null>(null);
+  const lastPageRef = useRef<HTMLDivElement>(null);
+  const lastReadyRef = useRef(false);
+  const reachedEndRef = useRef(false);
   const visiblePageCount = Math.min(numPages ?? 0, renderCount);
   const pageNumbers = Array.from({ length: visiblePageCount }, (_, index) => index + 1);
 
@@ -46,6 +52,32 @@ export function PdfDocumentView({
     firstReadyFileRef.current = file;
     onFirstPageReady();
   }, [file, onFirstPageReady]);
+
+  useEffect(() => {
+    lastReadyRef.current = false;
+    reachedEndRef.current = false;
+  }, [file]);
+
+  const checkReachedEnd = useCallback(() => {
+    const root = scrollRootRef.current;
+    const lastPage = lastPageRef.current;
+    if (!root || !lastPage || !lastReadyRef.current || reachedEndRef.current) return;
+    if (!isFinalPageVisible(lastPage.getBoundingClientRect(), root.getBoundingClientRect())) return;
+    reachedEndRef.current = true;
+    onReachedEnd();
+  }, [onReachedEnd, scrollRootRef]);
+
+  const handleLastPageReady = useCallback(() => {
+    lastReadyRef.current = true;
+    checkReachedEnd();
+  }, [checkReachedEnd]);
+
+  useEffect(() => {
+    const root = scrollRootRef.current;
+    if (!root) return;
+    root.addEventListener("scroll", checkReachedEnd);
+    return () => root.removeEventListener("scroll", checkReachedEnd);
+  }, [checkReachedEnd, scrollRootRef]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -99,9 +131,13 @@ export function PdfDocumentView({
             pageNumber={pageNumber}
             width={width}
             className="pdf-viewer-page isolate"
+            inputRef={pageNumber === numPages ? lastPageRef : undefined}
             renderTextLayer={true}
             renderAnnotationLayer={false}
-            onRenderSuccess={pageNumber === 1 ? handleFirstPageReady : undefined}
+            onRenderSuccess={() => {
+              if (pageNumber === 1) handleFirstPageReady();
+              if (pageNumber === numPages) handleLastPageReady();
+            }}
           />
         ))}
         {numPages !== null && renderCount < numPages && (

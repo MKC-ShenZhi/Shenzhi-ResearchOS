@@ -7,6 +7,8 @@ import { PaperThumbnail } from "@/components/common/paper-thumbnail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
+import { PaperReadBadge } from "@/features/knowledge/papers/components/paper-read-badge";
+import { usePaperReadStatus } from "@/features/knowledge/papers/use-paper-read-status";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { paperHref } from "@/lib/navigation/paper";
 import { useUserPreferences } from "@/stores/user-preferences";
@@ -27,6 +29,7 @@ export function PaperCard({
   const returnTo = useCurrentInternalPath();
   const { likedPapers, toggleLike } = useUserPreferences();
   const liked = !!likedPapers[paper.id];
+  const status = usePaperReadStatus(paper.id);
 
   return (
     <motion.article
@@ -41,6 +44,7 @@ export function PaperCard({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
             <span className="text-faint">{paper.date}</span>
             <Badge variant={VENUE_VARIANT[paper.venueTone]}>{paper.venue}</Badge>
+            {status && <PaperReadBadge status={status} className={layout === "feed" ? "md:hidden" : undefined} />}
             <span className="flex items-center gap-1.5 text-muted">
               <Users className="size-3.5 text-faint" />
               {paper.authors}
@@ -111,11 +115,14 @@ export function PaperCard({
                 引用 {paper.citations}
               </div>
             )}
-            <PaperThumbnail
-              src={paper.thumbnailUrl}
-              title={paper.title}
-              className="h-full min-h-[128px]"
-            />
+            <div className="relative h-full min-h-[128px] overflow-hidden rounded-xl">
+              <PaperThumbnail
+                src={paper.thumbnailUrl}
+                title={paper.title}
+                className="h-full min-h-[128px]"
+              />
+              {status && <PaperReadBadge status={status} className="absolute bottom-0 right-0 z-10 rounded-bl-xl rounded-br-none rounded-tl-xl rounded-tr-none px-3 py-2 text-sm" />}
+            </div>
           </div>
         )}
       </div>
