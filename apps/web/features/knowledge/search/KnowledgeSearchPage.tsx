@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { useClearSearchRestoration } from "@/hooks/use-search-restoration";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { KnowledgeFilterPanel } from "./components/filter-panel";
 import { KnowledgeResultsSection } from "./components/results-section";
@@ -52,6 +53,7 @@ function createSearchParams(
  */
 function KnowledgeSearchContent() {
   const router = useRouter();
+  const clearRestoration = useClearSearchRestoration("/knowledge/search");
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const returnTo = useCurrentInternalPath();
@@ -86,6 +88,7 @@ function KnowledgeSearchContent() {
   /** 提交搜索：更新查询词并同步 URL */
   const submitSearch = (q: string) => {
     const text = q.trim();
+    if (!text) clearRestoration();
     const nextParams = createSearchParams(text, filters, 1);
     void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
     if (nextParams) {

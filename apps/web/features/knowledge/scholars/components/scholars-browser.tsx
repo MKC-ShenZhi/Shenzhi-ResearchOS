@@ -7,6 +7,7 @@ import { Search } from "lucide-react";
 import { getKnowledgeClient, KnowledgeClientError } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { useClearSearchRestoration } from "@/hooks/use-search-restoration";
 import { knowledgeQueryRetry } from "@/features/knowledge/retry";
 import {
   KnowledgeSearchError,
@@ -17,6 +18,7 @@ import { ScholarCard } from "./scholar-card";
 /** Scholar Search 正式入口；不读取原型学者数据。 */
 export function ScholarsBrowser() {
   const router = useRouter();
+  const clearRestoration = useClearSearchRestoration("/knowledge/scholars");
   const searchParams = useSearchParams();
   const committedQuery = searchParams.get("q")?.trim() ?? "";
   const returnTo = useCurrentInternalPath();
@@ -37,6 +39,7 @@ export function ScholarsBrowser() {
     event.preventDefault();
     const next = new URLSearchParams();
     const normalizedQuery = query.trim();
+    if (!normalizedQuery) clearRestoration();
     if (normalizedQuery) next.set("q", normalizedQuery);
     const serialized = next.toString();
     router.replace(`/knowledge/scholars${serialized ? `?${serialized}` : ""}`, {
@@ -64,7 +67,7 @@ export function ScholarsBrowser() {
             className="h-11 w-full rounded-xl border border-line bg-panel pl-10 pr-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
           />
         </label>
-        <Button type="submit" className="h-11 px-5" disabled={!query.trim()}>
+        <Button type="submit" className="h-11 px-5" disabled={!query.trim() && !committedQuery}>
           <Search />
           搜索
         </Button>

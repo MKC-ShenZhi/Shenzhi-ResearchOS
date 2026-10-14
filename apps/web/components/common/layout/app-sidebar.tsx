@@ -31,9 +31,11 @@ import {
   useFeatureAvailability,
 } from "@/components/common/feature-availability-provider";
 import { isUnavailableFeatureHref } from "@/lib/feature-availability";
+import { SEARCH_RESTORATION_ROUTES } from "@/lib/navigation/search-restoration";
 import { Logo } from "./logo";
 import { SettingsMenu } from "./settings-menu";
 import { SidebarChatHistory } from "./sidebar-chat-history";
+import { SearchNavigationLink } from "./search-navigation-link";
 
 interface NavItem {
   href: string;
@@ -320,8 +322,11 @@ function ExpandableNav({
         <div className="mt-0.5 flex flex-col gap-0.5 pl-6">
           {availableSubNav.map((sub) => {
             const active = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
+            const NavigationLink = Object.hasOwn(SEARCH_RESTORATION_ROUTES, sub.href)
+              ? SearchNavigationLink
+              : FeatureNavigationLink;
             return (
-              <FeatureNavigationLink
+              <NavigationLink
                 key={sub.href}
                 href={sub.href}
                 scroll={false}
@@ -334,7 +339,7 @@ function ExpandableNav({
                 )}
               >
                 {sub.label}
-              </FeatureNavigationLink>
+              </NavigationLink>
             );
           })}
           {footer}

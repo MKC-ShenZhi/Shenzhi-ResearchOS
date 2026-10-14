@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getKnowledgeClient } from "@/clients/knowledge";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { useClearSearchRestoration } from "@/hooks/use-search-restoration";
 import { TopicCategoryTabs } from "./topic-category-tabs";
 import { TopicGrid } from "./topic-grid";
 import { filterTopics, groupTopics, readTopicViewState, updateTopicViewParams } from "./topic-url-state";
@@ -13,6 +14,7 @@ import { selectFeaturedTopics } from "./topic-metadata";
 
 export function TopicsPage() {
   const router = useRouter();
+  const clearRestoration = useClearSearchRestoration("/knowledge/topics");
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const returnTo = useCurrentInternalPath();
@@ -24,6 +26,8 @@ export function TopicsPage() {
 
   const updateState = (next: Partial<typeof state>) => {
     const params = updateTopicViewParams(new URLSearchParams(searchParams.toString()), next);
+    const nextState = readTopicViewState(params);
+    if (!nextState.query && !nextState.category) clearRestoration();
     if (params.toString() === searchParams.toString()) return;
     router.push(`${pathname}${params.size ? `?${params.toString()}` : ""}`, { scroll: false });
   };
