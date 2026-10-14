@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { paperHref } from "@/lib/navigation/paper";
 import { getPaperThumbnailUrl } from "@/lib/paper-thumbnail";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
+import { PaperReadBadge } from "@/features/knowledge/papers/components/paper-read-badge";
+import { usePaperReadStatus } from "@/features/knowledge/papers/use-paper-read-status";
 
 const VENUE_VARIANT = ["violet", "amber", "green"] as const;
 
@@ -32,6 +34,7 @@ export function KnowledgeResultCard({
   lastViewedAt?: string;
 }) {
   const authors = hit.authors.length ? hit.authors.join(" · ") : "未知作者";
+  const isRead = usePaperReadStatus(hit.id, !historyMode) || historyMode;
 
   return (
     <motion.article
@@ -62,6 +65,7 @@ export function KnowledgeResultCard({
               ) : (
                 <span className="text-[11px] text-faint">暂无会议</span>
               )}
+              {isRead && <PaperReadBadge className="sm:hidden" />}
             </div>
             {!historyMode && (
               <CollectionPicker className="shrink-0" paperId={hit.id} />
@@ -127,11 +131,14 @@ export function KnowledgeResultCard({
           </div>
         </div>
 
-        <PaperThumbnail
-          src={getPaperThumbnailUrl(hit.id)}
-          title={hit.title}
-          className="hidden min-h-[128px] w-[168px] shrink-0 sm:block"
-        />
+        <div className="relative hidden min-h-[128px] w-[168px] shrink-0 overflow-hidden rounded-xl sm:block">
+          <PaperThumbnail
+            src={getPaperThumbnailUrl(hit.id)}
+            title={hit.title}
+            className="h-full min-h-[128px]"
+          />
+          {isRead && <PaperReadBadge className="absolute bottom-0 right-0 z-10 rounded-bl-xl rounded-br-none rounded-tl-xl rounded-tr-none px-2.5 py-2" />}
+        </div>
       </div>
     </motion.article>
   );

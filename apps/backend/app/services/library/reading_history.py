@@ -28,6 +28,17 @@ class ReadingHistoryService:
                 set_={'last_viewed_at': now},
             ))
 
+    async def read_paper_ids(self, user_id: str, paper_ids: list[str]) -> list[str]:
+        async with session_scope() as session:
+            rows = await session.scalars(
+                select(ReadingHistoryRow.paper_id).where(
+                    ReadingHistoryRow.user_id == user_id,
+                    ReadingHistoryRow.paper_id.in_(paper_ids),
+                )
+            )
+            found = set(rows)
+        return [paper_id for paper_id in paper_ids if paper_id in found]
+
     async def list(self, user_id: str, page: int, page_size: int, query: str) -> ReadingHistoryResponse:
         async with session_scope() as session:
             rows = list(await session.scalars(
