@@ -36,15 +36,15 @@ export function PaperCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.08 }}
-      className="rounded-2xl bg-card p-6 shadow-card"
+      className="@container rounded-2xl bg-card p-6 shadow-card"
     >
-      <div className="flex gap-6">
-        <div className="min-w-0 flex-1">
+      <div className={layout === "feed" ? "grid grid-cols-1 gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(240px,34cqw,320px)]" : "grid grid-cols-1 gap-y-4"}>
+        <div className="col-span-full min-w-0">
           {/* 元信息行 */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
             <span className="text-faint">{paper.date}</span>
             <Badge variant={VENUE_VARIANT[paper.venueTone]}>{paper.venue}</Badge>
-            {status && <PaperReadBadge status={status} className={layout === "feed" ? "md:hidden" : undefined} />}
+            {status && <PaperReadBadge status={status} />}
             <span className="flex items-center gap-1.5 text-muted">
               <Users className="size-3.5 text-faint" />
               {paper.authors}
@@ -57,9 +57,11 @@ export function PaperCard({
               {paper.title}
             </h3>
           </Link>
+        </div>
 
+        <div className="min-w-0">
           {/* 摘要 */}
-          <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted">
+          <p className="line-clamp-3 text-sm leading-relaxed text-muted @min-[600px]:line-clamp-5">
             {paper.abstract}
           </p>
 
@@ -72,59 +74,52 @@ export function PaperCard({
             {paper.aiLink}
             <ArrowRight className="size-3.5" />
           </Link>
-
-          {/* 底部操作行 */}
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-x-4 gap-y-1">
-              {paper.tags.map((tag) => (
-                <span key={tag} className="text-[13px] text-muted">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={() => toggleLike(paper.id)}
-                className={
-                  "flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] transition-colors " +
-                  (liked ? "text-primary" : "text-muted hover:bg-chip")
-                }
-              >
-                <ThumbsUp className="size-4" fill={liked ? "currentColor" : "none"} />
-                {paper.likes !== undefined && paper.likes + (liked ? 1 : 0)}
-              </button>
-              <CollectionPicker paperId={paper.id} />
-              {layout === "feed" && (
-                <Link href={paperHref(paper.id, { mode: "create", source: returnTo })}>
-                  <Button size="sm" className="h-9 rounded-lg px-4 text-[13px]">
-                    立即阅读
-                    <ArrowRight className="size-3.5" />
-                  </Button>
-                </Link>
-              )}
-            </div>
-          </div>
         </div>
 
         {layout === "feed" && (
-          <div className="relative hidden w-[200px] shrink-0 md:block">
+          <div className="hidden w-full max-w-[320px] justify-self-center self-start @min-[400px]:block @min-[600px]:max-w-none">
+            <PaperThumbnail src={paper.thumbnailUrl} title={paper.title} />
             {paper.citations !== undefined && (
-              <div className="absolute -top-2 right-2 z-10 flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs text-muted shadow-card">
+              <div className="mt-2 flex items-center justify-end gap-1 text-xs text-muted">
                 <TrendingUp className="size-3 text-primary" />
                 引用 {paper.citations}
               </div>
             )}
-            <div className="relative h-full min-h-[128px] overflow-hidden rounded-xl">
-              <PaperThumbnail
-                src={paper.thumbnailUrl}
-                title={paper.title}
-                className="h-full min-h-[128px]"
-              />
-              {status && <PaperReadBadge status={status} className="absolute bottom-0 right-0 z-10 rounded-bl-xl rounded-br-none rounded-tl-xl rounded-tr-none px-3 py-2 text-sm" />}
-            </div>
           </div>
         )}
+
+        {/* 底部操作行 */}
+        <div className="col-span-full flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {paper.tags.map((tag) => (
+              <span key={tag} className="text-[13px] text-muted">
+                #{tag}
+              </span>
+            ))}
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => toggleLike(paper.id)}
+              className={
+                "flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] transition-colors " +
+                (liked ? "text-primary" : "text-muted hover:bg-chip")
+              }
+            >
+              <ThumbsUp className="size-4" fill={liked ? "currentColor" : "none"} />
+              {paper.likes !== undefined && paper.likes + (liked ? 1 : 0)}
+            </button>
+            <CollectionPicker paperId={paper.id} />
+            {layout === "feed" && (
+              <Link href={paperHref(paper.id, { mode: "create", source: returnTo })}>
+                <Button size="sm" className="h-9 rounded-lg px-4 text-[13px]">
+                  立即阅读
+                  <ArrowRight className="size-3.5" />
+                </Button>
+              </Link>
+            )}
+          </div>
+        </div>
       </div>
     </motion.article>
   );
