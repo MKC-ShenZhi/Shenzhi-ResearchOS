@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { searchRestoration } from "@/lib/navigation/search-restoration";
+import { searchDrafts } from "@/lib/navigation/search-draft";
 import { useCurrentInternalPath } from "./use-current-internal-path";
 
 export function useSearchRestorationScope() {
@@ -15,7 +16,10 @@ export function useRecordSearchRestoration() {
   const href = useCurrentInternalPath();
   const scope = useSearchRestorationScope();
   useEffect(() => {
-    if (scope) searchRestoration.record(scope, href);
+    if (scope) {
+      searchDrafts.activate(scope);
+      searchRestoration.record(scope, href);
+    }
   }, [scope, href]);
 }
 
