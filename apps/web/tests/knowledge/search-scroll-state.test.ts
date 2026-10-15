@@ -51,3 +51,16 @@ test("unavailable session storage does not break paper navigation", () => {
   assert.equal(readSearchScroll(storage, source), null);
   assert.doesNotThrow(() => clearSearchScroll(storage, source));
 });
+
+
+test("scroll records use the existing navigation identity scopes", () => {
+  const storage = memoryStorage();
+  saveSearchScroll(storage, source, 900, 100, "user:alice");
+  saveSearchScroll(storage, source, 300, 100, "user:bob");
+  assert.equal(readSearchScroll(storage, source, 101, "anonymous"), null);
+  assert.equal(readSearchScroll(storage, source, 101, "user:alice"), 900);
+  assert.equal(readSearchScroll(storage, source, 101, "user:bob"), 300);
+  clearSearchScroll(storage, source, "user:bob");
+  assert.equal(readSearchScroll(storage, source, 101, "user:bob"), null);
+  assert.equal(readSearchScroll(storage, source, 101, "user:alice"), 900);
+});

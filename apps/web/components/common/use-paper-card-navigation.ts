@@ -13,7 +13,7 @@ const INTERACTIVE_SELECTOR = [
 export const PAPER_CARD_INTERACTION_CLASS =
   "cursor-pointer outline-none ring-1 ring-transparent transition-[box-shadow] duration-200 hover:shadow-pop hover:ring-primary/20 focus-visible:ring-2 focus-visible:ring-primary/50 motion-reduce:transition-none";
 
-export function usePaperCardNavigation(href: string, title: string) {
+export function usePaperCardNavigation(href: string, title: string, onNavigate?: () => void) {
   const router = useRouter();
 
   function isIndependentTarget(target: EventTarget, card: HTMLElement) {
@@ -34,6 +34,7 @@ export function usePaperCardNavigation(href: string, title: string) {
     if (event.metaKey || event.ctrlKey || event.shiftKey) {
       window.open(href, "_blank", "noopener,noreferrer");
     } else {
+      onNavigate?.();
       router.push(href);
     }
   }
@@ -43,6 +44,7 @@ export function usePaperCardNavigation(href: string, title: string) {
         (event.key !== "Enter" && event.key !== " ") ||
         event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     event.preventDefault();
+    onNavigate?.();
     router.push(href);
   }
 

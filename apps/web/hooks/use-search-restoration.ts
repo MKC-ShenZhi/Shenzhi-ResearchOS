@@ -5,7 +5,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { searchRestoration } from "@/lib/navigation/search-restoration";
 import { useCurrentInternalPath } from "./use-current-internal-path";
 
-function useSearchRestorationScope() {
+export function useSearchRestorationScope() {
   const { session, isPending } = useAuth();
   return isPending ? null : session?.user.id ? `user:${session.user.id}` : "anonymous";
 }

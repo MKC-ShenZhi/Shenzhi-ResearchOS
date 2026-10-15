@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
-import { useClearSearchRestoration } from "@/hooks/use-search-restoration";
+import { useClearSearchRestoration, useSearchRestorationScope } from "@/hooks/use-search-restoration";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { KnowledgeFilterPanel } from "./components/filter-panel";
 import { KnowledgeResultsSection } from "./components/results-section";
@@ -54,6 +54,7 @@ function createSearchParams(
  */
 function KnowledgeSearchContent() {
   const router = useRouter();
+  const scope = useSearchRestorationScope();
   const clearRestoration = useClearSearchRestoration("/knowledge/search");
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
@@ -88,9 +89,10 @@ function KnowledgeSearchContent() {
 
   /** 提交搜索：更新查询词并同步 URL */
   const submitSearch = (q: string) => {
-    discardSearchScroll(returnTo);
+    discardSearchScroll(returnTo, scope);
     const text = q.trim();
     if (!text) clearRestoration();
+    discardSearchScroll(buildKnowledgeSearchUrl({ query: text, filters, page: 1 }), scope);
     const nextParams = createSearchParams(text, filters, 1);
     void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
     if (nextParams) {
@@ -107,7 +109,8 @@ function KnowledgeSearchContent() {
   }, [committedQuery, filters, page]);
 
   const updateFilters = (nextFilters: KnowledgeFilters) => {
-    discardSearchScroll(returnTo);
+    discardSearchScroll(returnTo, scope);
+    discardSearchScroll(buildKnowledgeSearchUrl({ query: committedQuery, filters: nextFilters, page: 1 }), scope);
     const nextParams = createSearchParams(committedQuery, nextFilters, 1);
     void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
     if (nextParams) {
@@ -120,7 +123,8 @@ function KnowledgeSearchContent() {
   };
 
   const updatePage = (nextPage: number) => {
-    discardSearchScroll(returnTo);
+    discardSearchScroll(returnTo, scope);
+    discardSearchScroll(buildKnowledgeSearchUrl({ query: committedQuery, filters, page: nextPage }), scope);
     const nextParams = createSearchParams(committedQuery, filters, nextPage);
     void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
     if (nextParams) {

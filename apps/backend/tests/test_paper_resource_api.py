@@ -136,6 +136,35 @@ class PaperResourceApiTests(unittest.IsolatedAsyncioTestCase):
                                  '机器人_ Learning_Control.pdf')
                 self.assertNotIn('123456', header)
 
+    async def test_download_preserves_partial_pdf_bytes_and_range_headers(self):
+        requests = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(206, headers={
+                'content-type': 'application/pdf',
+                'content-range': 'bytes 0-7/1024',
+                'accept-ranges': 'bytes',
+            }, content=b'%PDF-1.7')
+
+        with (
+            patch.object(paper_resource_api, 'knowledge_service',
+                         StubKnowledgeService('https://papers.example/paper.pdf', '论文')),
+            patch.object(paper_resource_api, 'paper_resource_service',
+                         PaperResourceService(transport=httpx.MockTransport(handler))),
+        ):
+            response = await self.client.get('/api/v1/paper-resource/pdf', params={
+                'paperId': PAPER_ID, 'download': 'true',
+            }, headers={'Range': 'bytes=0-7'})
+        self.assertEqual(response.status_code, 206)
+        self.assertEqual(response.content, b'%PDF-1.7')
+        self.assertEqual(requests[0].headers['range'], 'bytes=0-7')
+        self.assertEqual(response.headers['content-range'], 'bytes 0-7/1024')
+        self.assertEqual(response.headers['accept-ranges'], 'bytes')
+        self.assertTrue(response.headers['content-disposition'].startswith('attachment;'))
+        self.assertEqual(unquote(response.headers['content-disposition'].split("filename*=UTF-8''")[1]),
+                         '论文.pdf')
+
     async def test_does_not_accept_an_arbitrary_proxy_url(self):
         with patch.object(
             paper_resource_api,

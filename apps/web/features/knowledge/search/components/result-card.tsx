@@ -27,17 +27,19 @@ export function KnowledgeResultCard({
   returnTo,
   historyMode = false,
   lastViewedAt,
+  onNavigate,
 }: {
   hit: KnowledgePaperHit;
   index: number;
   returnTo: string;
   historyMode?: boolean;
   lastViewedAt?: string;
+  onNavigate?: () => void;
 }) {
   const authors = hit.authors.length ? hit.authors.join(" · ") : "未知作者";
   const status = usePaperReadStatus(hit.id);
   const detailHref = paperHref(hit.id, { mode: "create", source: returnTo });
-  const cardNavigation = usePaperCardNavigation(detailHref, hit.title);
+  const cardNavigation = usePaperCardNavigation(detailHref, hit.title, onNavigate);
 
   return (
     <motion.article
