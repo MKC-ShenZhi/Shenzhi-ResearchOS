@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import { Maximize2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
+import { PaperImagePreview } from "@/components/common/paper-image-preview";
 import { cn } from "@/lib/utils";
 
 export const PAPER_THUMBNAIL_FALLBACK_SRC =
@@ -20,6 +21,8 @@ export function PaperThumbnail({ src, title, className }: PaperThumbnailProps) {
   const normalizedSrc = src?.trim() || null;
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [loadedImage, setLoadedImage] = useState<{ src: string; ratio: number } | null>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const [preview, setPreview] = useState<{ src: string; thumbnail: string | null } | null>(null);
   const imageSrc =
     normalizedSrc && failedSrc !== normalizedSrc
       ? normalizedSrc
@@ -39,12 +42,13 @@ export function PaperThumbnail({ src, title, className }: PaperThumbnailProps) {
       style={{ aspectRatio }}
     >
       <Image
+        ref={imageRef}
         src={imageSrc}
         alt={`${title} 的论文缩略图`}
         fill
-        sizes="(min-width: 640px) 320px, 100vw"
+        sizes="320px"
         className="object-contain"
-        unoptimized
+        unoptimized={isFallback}
         onLoad={(event) => {
           if (!isFallback) {
             const { naturalWidth, naturalHeight } = event.currentTarget;
@@ -60,18 +64,33 @@ export function PaperThumbnail({ src, title, className }: PaperThumbnailProps) {
         }}
       />
       {!isFallback && (
-        <a
-          href={imageSrc}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`查看 ${title} 的原图（新标签页）`}
-          className="absolute inset-0 rounded-xl focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+        <button
+          type="button"
+          onClick={() => {
+            const image = imageRef.current;
+            setPreview({
+              src: imageSrc,
+              thumbnail: image?.complete && image.naturalWidth > 0 ? image.currentSrc : null,
+            });
+          }}
+          aria-label={`查看 ${title} 的原图`}
+          aria-haspopup="dialog"
+          className="absolute inset-0 cursor-zoom-in rounded-xl focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
         >
           <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-card/95 px-2 py-1 text-xs text-ink opacity-0 shadow-card transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
             <Maximize2 className="size-3" />
             查看原图
           </span>
-        </a>
+        </button>
+      )}
+      {!isFallback && preview?.src === imageSrc && (
+        <PaperImagePreview
+          key={imageSrc}
+          src={imageSrc}
+          previewSrc={preview.thumbnail}
+          title={title}
+          onClose={() => setPreview(null)}
+        />
       )}
     </div>
   );
