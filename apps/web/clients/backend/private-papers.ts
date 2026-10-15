@@ -19,7 +19,7 @@ export async function uploadPrivatePaper(folderId: number, file: File) {
   try {
     return await apiJson<PrivatePaper>(`/private-papers?folder_id=${folderId}`, { method: "POST", body });
   } catch (error) {
-    if (error instanceof ApiError && error.status === 413) {
+    if (error instanceof ApiError && error.status === 413 && error.code !== 20010) {
       throw new ApiError(error.code, "私有论文超过上传大小限制（20 MB）", 413,
         { requestId: error.requestId });
     }

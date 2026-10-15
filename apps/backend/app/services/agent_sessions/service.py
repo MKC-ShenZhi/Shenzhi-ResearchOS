@@ -1,14 +1,16 @@
 """Application service joining persistent Agent sessions to the existing runtime."""
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
 from app.services.agent import service as agent_runtime
 from app.services.agent.types import RunResult, message_to_dict
 from app.services.agent_sessions.repository import agent_session_repository
-from app.services.chat.repository import repository
+from app.services.agent_uploads import agent_upload_store
 
+logger = logging.getLogger(__name__)
 
 class TimelineCapture:
     """Capture the same interleaved timeline that the Web UI renders during SSE."""
@@ -81,13 +83,13 @@ async def start_session_run(
     """Validate ownership and concurrency before returning the live SSE iterator."""
     session = await agent_session_repository.get(session_id, owner)
     history = agent_runtime.decode_history(session.runtime_history)
-    attachment_text, warnings = agent_runtime.resolve_attachments(attachments, owner)
+    attachment_text, warnings, files = await agent_runtime.resolve_attachments(attachments, owner)
     # File IDs point to short-lived parsed upload slots. Persist only safe display
     # metadata on this turn; the extracted text is already part of the run transcript.
     display_attachments = []
     for attachment in attachments:
         if attachment.get('kind') == 'file':
-            item = repository.upload(attachment.get('file_id') or '', owner)
+            item = files[attachment.get('file_id') or '']
             display_attachments.append({'kind': 'file', 'title': item['filename']})
         else:
             display_attachments.append({
@@ -132,6 +134,10 @@ async def start_session_run(
             },
             'transcript': [message_to_dict(message) for message in result.messages],
         })
+        try:
+            await agent_upload_store.consume(owner, list(files))
+        except Exception:
+            logger.exception('Failed to delete consumed Agent attachment text')
 
     async def events() -> AsyncIterator[tuple[str, dict]]:
         completed = False
@@ -172,6 +178,7 @@ async def start_session_run(
                                         'tool_calls': [], 'stop_reason': 'cancelled',
                                         'usage_tokens': 0}],
                     })
+                    await agent_upload_store.consume(owner, list(files))
                 except Exception:
                     pass
 

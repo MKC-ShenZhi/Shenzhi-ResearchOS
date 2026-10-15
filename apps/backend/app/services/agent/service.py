@@ -79,14 +79,18 @@ def decode_history(raw: Sequence[dict]) -> list[AgentMessage]:
         raise BusinessError(20001, 'history 消息格式无效') from exc
 
 
-def resolve_attachments(raw: Sequence[dict], owner: str) -> tuple[str, list[str]]:
-    """复用 Chat 的附件管线（uploads 落库 → attachment_context 组装文本）。"""
+async def resolve_attachments(raw: Sequence[dict], owner: str) -> tuple[str, list[str], dict[str, dict]]:
+    """Resolve short-lived parsed Agent uploads and assemble this turn's context."""
     from app.schemas.chat import ChatAttachment
+    from app.services.agent_uploads import agent_upload_store
     try:
         parsed = [ChatAttachment.model_validate(item) for item in raw]
     except Exception as exc:
         raise BusinessError(20001, 'attachments 格式无效') from exc
-    return attachment_context(parsed, owner, repository)
+    files = await agent_upload_store.get_many(
+        owner, [item.file_id or '' for item in parsed if item.kind == 'file'])
+    context, warnings = attachment_context(parsed, owner, repository, file_contexts=files)
+    return context, warnings, files
 
 
 def _web_search_tool() -> Tool:

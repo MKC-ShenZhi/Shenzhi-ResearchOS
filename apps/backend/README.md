@@ -83,7 +83,7 @@ CORS 响应头导致浏览器拒绝加载。端点只接受可信 `paperId`，�
 配置项为 `PAPER_RESOURCE_TIMEOUT`（秒）与
 `PAPER_MAX_SIZE_MB`（可获取资源大小上限）。
 
-当前仅支持 **单进程 / 单 worker**，Session 与解析后的附件为临时内存数据，重启清空。
+配置 `CHAT_DATABASE_URL` 后，Agent 会话及待发送附件的解析文本可跨后端实例读取。Agent 附件源文件不入库；临时文本在对话运行结束并写入记录后删除，未发送的记录 24 小时后失效，并由上传请求及维护命令清理。旧 Chat 附件和未配置数据库时的会话仍依赖进程内存。
 
 Python 环境与依赖统一使用 [uv](https://docs.astral.sh/uv/) 管理。新增依赖使用：
 
@@ -105,6 +105,8 @@ uv add --dev <package>
 cd apps/backend
 uv run --locked --env-file .env alembic upgrade head
 ```
+
+该迁移也会创建 `agent_uploads` 临时文本表。生产环境需定期执行 `uv run --locked --env-file .env python -m app.services.chat.maintenance`，清理到期的未发送 Agent 附件及过期匿名 Chat 会话。
 
 每天通过显式维护命令生成一次候选池：
 

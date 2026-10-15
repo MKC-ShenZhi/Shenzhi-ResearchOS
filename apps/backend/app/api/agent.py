@@ -1,5 +1,6 @@
 """Agent HTTP 入口：产品会话、SSE run、运行配置、Web 工作区与产物文件。"""
 import json
+import logging
 from pathlib import PurePosixPath
 from typing import Literal
 from urllib.parse import quote
@@ -7,7 +8,9 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Query, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
+from app.api._support.upload_reader import read_upload
 from app.core.config import MAX_FILES, UPLOAD_ACCEPT, model_config
 from app.core.errors import BusinessError
 from app.core.identity import request_owner, require_bff
@@ -19,8 +22,11 @@ from app.schemas.agent import (
 )
 from app.services.agent_sessions.repository import agent_session_repository
 from app.services.agent_sessions.service import start_session_run
+from app.services.agent_uploads import agent_upload_store
+from app.services.uploads.parser import parse_document
 
 router = APIRouter(prefix='/api/v1/agent', tags=['agent'])
+logger = logging.getLogger(__name__)
 
 
 class AgentRunBody(BaseModel):
@@ -66,18 +72,38 @@ async def run(body: AgentRunBody, owner: str = Depends(request_owner)):
         workspace_id=body.workspace_id,
         forced_skills=body.skills, session_id=body.session_id, allow_shell=False)
     history = agent_service.decode_history(body.history)
-    attachments, warnings = agent_service.resolve_attachments(body.attachments, owner)
+    attachments, warnings, files = await agent_service.resolve_attachments(body.attachments, owner)
     meta = {'warnings': warnings} if warnings else None
+
+    async def cleanup(_result):
+        try:
+            await agent_upload_store.consume(owner, list(files))
+        except Exception:
+            logger.exception('Failed to delete consumed Agent attachment text')
 
     async def generate():
         async for name, data in agent_service.run_events(runtime, body.prompt + attachments,
                                                          history, meta=meta, owner=owner,
-                                                         session_id=body.session_id):
+                                                         session_id=body.session_id,
+                                                         on_complete=cleanup):
             yield f'event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'
 
     return StreamingResponse(generate(), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache, no-transform',
                                       'X-Accel-Buffering': 'no'})
+
+
+@router.post('/uploads')
+async def upload_agent_attachment(request: Request, owner: str = Depends(request_owner)):
+    filename, data = await read_upload(request)
+    parsed = await run_in_threadpool(parse_document, data, filename)
+    return ok(await agent_upload_store.save(owner, filename, parsed))
+
+
+@router.get('/uploads/{file_id}')
+async def get_agent_attachment(file_id: str, owner: str = Depends(request_owner)):
+    item = await agent_upload_store.get(owner, file_id)
+    return ok({key: value for key, value in item.items() if key not in ('text', 'owner', 'expires_at')})
 
 
 @router.post('/run/{run_id}/steer')

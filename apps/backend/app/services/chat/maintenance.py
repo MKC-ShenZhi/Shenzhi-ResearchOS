@@ -6,6 +6,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 from app.services.chat.repository import repository
+from app.services.agent_uploads import agent_upload_store
 
 DEFAULT_ANONYMOUS_TTL_SECONDS = 604800
 logger = logging.getLogger(__name__)
@@ -32,12 +33,13 @@ async def purge_expired_anonymous_sessions(now: datetime | None = None) -> int:
 async def main() -> int:
     try:
         deleted = await purge_expired_anonymous_sessions()
+        expired_uploads = await agent_upload_store.purge_expired()
     except Exception:
         logger.exception('Anonymous session cleanup failed')
         return 1
     else:
         logger.info('Anonymous session cleanup completed deleted_sessions=%s', deleted)
-        print(f'deleted_sessions={deleted}')
+        print(f'deleted_sessions={deleted} expired_agent_uploads={expired_uploads}')
         return 0
     finally:
         await repository.close()

@@ -12,7 +12,7 @@ from app.services.agent import AgentRuntime
 from app.services.agent.provider import Finish, TextDelta, ToolCallEvent
 from app.services.agent.types import StopReason, ToolCall
 from app.services.agent_sessions.repository import MemoryAgentSessionRepository
-from app.services.chat.repository import repository as upload_repository
+from app.services.agent_uploads import agent_upload_store
 from tests.test_agent import FakeProvider, make_echo
 
 
@@ -180,7 +180,7 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_file_attachment_is_bound_to_one_turn_without_persisting_file_id(self):
         owner = 'anon:00000000-0000-4000-8000-000000000011'
-        uploaded = upload_repository.save_upload(owner, 'notes.md', {
+        uploaded = await agent_upload_store.save(owner, 'notes.md', {
             'text': '附件解析正文', 'original_length': 6, 'final_length': 6,
             'truncated': False, 'warning': None,
         })
@@ -199,6 +199,8 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detail['turns'][0]['settings']['attachments'], [{'kind': 'file', 'title': 'notes.md'}])
         self.assertNotIn(uploaded['file_id'], json.dumps(detail, ensure_ascii=False))
         self.assertIn('附件解析正文', self.repo.sessions[session_id].runtime_history[0]['text'])
+        with self.assertRaises(BusinessError):
+            await agent_upload_store.get(owner, uploaded['file_id'])
 
     async def test_failed_and_stopped_turns_remain_persisted(self):
         failed_id = await self.create('失败测试')

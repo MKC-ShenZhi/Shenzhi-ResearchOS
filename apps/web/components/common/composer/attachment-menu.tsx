@@ -18,7 +18,7 @@ import { feedPapers } from "@/features/knowledge/data-papers";
 import { scholars } from "@/features/knowledge/data-scholars";
 import { institutions } from "@/features/knowledge/data-institutions";
 import { projects } from "@/features/projects/data";
-import { uploadFile } from "@/clients/backend/uploads";
+import { uploadAgentFile } from "@/clients/backend/uploads";
 import type { ChatAttachment, ChatAttachmentKind } from "@/types/ai-search";
 
 interface RefItem {
@@ -220,7 +220,7 @@ export function AttachmentMenu({
       for (const file of list) {
         if (file.size > maxSizeMb * 1024 * 1024) { errors.push(`${file.name} 超过 ${maxSizeMb}MB`); continue; }
         try {
-          const result = await uploadFile(file);
+          const result = await uploadAgentFile(file);
           added.push({ kind: "file", file_id: result.file_id, title: file.name, warning: result.warning });
         } catch (error) { errors.push(error instanceof Error ? error.message : "上传失败"); }
       }
