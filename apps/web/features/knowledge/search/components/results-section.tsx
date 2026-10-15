@@ -3,6 +3,7 @@
 import { KnowledgeClientError } from "@/clients/knowledge";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { useKnowledgeSearch } from "../use-knowledge-search";
+import { rememberSearchScroll, useSearchScrollRestoration } from "../use-search-scroll-restoration";
 import { KnowledgeResultCard } from "./result-card";
 import { KnowledgeSearchPagination } from "./search-pagination";
 import {
@@ -25,6 +26,7 @@ export function KnowledgeResultsSection({
 }) {
   const query = params.query.trim();
   const { data, isPending, isError, error, refetch } = useKnowledgeSearch(params);
+  useSearchScrollRestoration(returnTo, Boolean(data?.results.length));
 
   if (query.length === 0) {
     return (
@@ -54,7 +56,7 @@ export function KnowledgeResultsSection({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onClickCapture={(event) => rememberSearchScroll(event, returnTo)}>
       <p className="px-1 text-sm text-muted">
         「{query}」的搜索结果 · 第 {page} 页 · 本页
         <span className="font-semibold text-ink"> {results.length}</span> 篇

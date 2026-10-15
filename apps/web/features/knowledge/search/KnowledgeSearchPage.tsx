@@ -9,6 +9,7 @@ import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { KnowledgeFilterPanel } from "./components/filter-panel";
 import { KnowledgeResultsSection } from "./components/results-section";
 import { KnowledgeSearchHero } from "./components/search-hero";
+import { discardSearchScroll } from "./use-search-scroll-restoration";
 import {
   KNOWLEDGE_SEARCH_PAGE_SIZE,
   knowledgeSearchOffset,
@@ -87,6 +88,7 @@ function KnowledgeSearchContent() {
 
   /** 提交搜索：更新查询词并同步 URL */
   const submitSearch = (q: string) => {
+    discardSearchScroll(returnTo);
     const text = q.trim();
     if (!text) clearRestoration();
     const nextParams = createSearchParams(text, filters, 1);
@@ -105,6 +107,7 @@ function KnowledgeSearchContent() {
   }, [committedQuery, filters, page]);
 
   const updateFilters = (nextFilters: KnowledgeFilters) => {
+    discardSearchScroll(returnTo);
     const nextParams = createSearchParams(committedQuery, nextFilters, 1);
     void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
     if (nextParams) {
@@ -117,6 +120,7 @@ function KnowledgeSearchContent() {
   };
 
   const updatePage = (nextPage: number) => {
+    discardSearchScroll(returnTo);
     const nextParams = createSearchParams(committedQuery, filters, nextPage);
     void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
     if (nextParams) {
