@@ -225,6 +225,39 @@ class PaperResourceApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.content, b'%PDF-1.7')
         self.assertEqual(len(requests), 2)
 
+    async def test_browser_cancellation_closes_the_upstream_stream(self):
+        class CancelledStream(httpx.AsyncByteStream):
+            def __init__(self):
+                self.closed = False
+
+            async def __aiter__(self):
+                yield b'%PDF'
+                yield b'-1.7'
+
+            async def aclose(self):
+                self.closed = True
+
+        upstream = CancelledStream()
+        service = PaperResourceService(transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                headers={
+                    'content-type': 'application/pdf',
+                    'content-length': '8',
+                },
+                stream=upstream,
+            )
+        ))
+        fetch = await service.open_paper_resource(
+            'https://papers.example/paper.pdf'
+        )
+        body = paper_resource_api._stream(fetch)
+
+        self.assertEqual(await anext(body), b'%PDF')
+        await body.aclose()
+
+        self.assertTrue(upstream.closed)
+
     async def test_does_not_accept_an_arbitrary_proxy_url(self):
         with patch.object(
             paper_resource_api,

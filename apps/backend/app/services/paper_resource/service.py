@@ -31,7 +31,11 @@ def _body_span(validation: ProviderValidation) -> tuple[int, int, int | None] | 
             return None
         start, end = int(match[1]), int(match[2])
         total = None if match[3] == '*' else int(match[3])
-        return (start, end, total) if end >= start else None
+        return (
+            (start, end, total)
+            if end >= start and (total is None or total > end)
+            else None
+        )
     if validation.status_code == 200:
         try:
             length = int(headers.get('content-length', ''))
@@ -46,6 +50,15 @@ def _retryable_fetch(validation: ProviderValidation) -> bool:
         validation.reason in {'request_timeout', 'resource_unavailable'}
         and (validation.status_code is None or validation.status_code >= 500)
     )
+
+
+def _strong_etag(headers: Mapping[str, str]) -> str | None:
+    etag = headers.get('etag', '').strip()
+    if etag.lower().startswith('w/'):
+        return None
+    if len(etag) >= 2 and etag.startswith('"') and etag.endswith('"'):
+        return etag
+    return None
 
 
 class PaperResourceService:
@@ -215,15 +228,18 @@ class PaperResourceFetch:
         expected = end - start + 1
         delivered = 0
         last_error: httpx.TransportError | None = None
+        initial_etag = self.headers.get('etag', '').strip() or None
+        if_range = _strong_etag(self.headers)
         for attempt in range(_MAX_FETCH_ATTEMPTS):
             try:
                 async for chunk in self._provider_fetch.iter_bytes():
                     remaining = expected - delivered
-                    if remaining <= 0:
-                        break
-                    part = chunk[:remaining]
-                    delivered += len(part)
-                    yield part
+                    if len(chunk) > remaining:
+                        raise httpx.RemoteProtocolError(
+                            'PDF upstream response exceeded its promised byte range'
+                        )
+                    delivered += len(chunk)
+                    yield chunk
             except httpx.TransportError as error:
                 last_error = error
             if delivered == expected:
@@ -239,6 +255,7 @@ class PaperResourceFetch:
                     candidate = await self._provider.open(
                         self._source_url,
                         range_header=f'bytes={next_start}-{end}',
+                        if_range=if_range,
                     )
                 except Exception:
                     if request_attempt + 1 == _MAX_FETCH_ATTEMPTS:
@@ -251,6 +268,10 @@ class PaperResourceFetch:
                 break
             assert continuation is not None
             continued_span = _body_span(continuation.validation)
+            continued_etag = (
+                (continuation.validation.headers or {}).get('etag', '').strip()
+                or None
+            )
             if (
                 not continuation.validation.available
                 or continuation.validation.status_code != 206
@@ -258,9 +279,16 @@ class PaperResourceFetch:
                 or continued_span[0] != next_start
                 or continued_span[1] > end
                 or continued_span[2] != total
+                or (
+                    initial_etag is not None
+                    and continued_etag is not None
+                    and continued_etag != initial_etag
+                )
             ):
                 await continuation.close()
-                raise httpx.RemoteProtocolError('PDF upstream did not honor the resume byte range')
+                raise httpx.RemoteProtocolError(
+                    'PDF upstream did not honor the resume byte range or validator'
+                )
             self._provider_fetch = continuation
 
     async def close(self) -> None:
