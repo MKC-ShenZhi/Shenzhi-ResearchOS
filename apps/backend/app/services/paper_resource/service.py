@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping, Sequence
+import re
 
 import httpx
 
@@ -16,6 +17,35 @@ from app.integrations.paper_resource.base import (
 )
 from app.integrations.paper_resource.http import HTTPProvider
 from app.integrations.paper_resource.openreview import OpenReviewProvider
+
+_CONTENT_RANGE = re.compile(r'^bytes\s+(\d+)-(\d+)/(\d+|\*)$', re.IGNORECASE)
+_MAX_FETCH_ATTEMPTS = 3
+
+
+def _body_span(validation: ProviderValidation) -> tuple[int, int, int | None] | None:
+    """Return the byte span promised by a PDF response, when known."""
+    headers = validation.headers or {}
+    if validation.status_code == 206:
+        match = _CONTENT_RANGE.fullmatch(headers.get('content-range', '').strip())
+        if match is None:
+            return None
+        start, end = int(match[1]), int(match[2])
+        total = None if match[3] == '*' else int(match[3])
+        return (start, end, total) if end >= start else None
+    if validation.status_code == 200:
+        try:
+            length = int(headers.get('content-length', ''))
+        except ValueError:
+            return None
+        return (0, length - 1, length) if length > 0 else None
+    return None
+
+
+def _retryable_fetch(validation: ProviderValidation) -> bool:
+    return (
+        validation.reason in {'request_timeout', 'resource_unavailable'}
+        and (validation.status_code is None or validation.status_code >= 500)
+    )
 
 
 class PaperResourceService:
@@ -109,18 +139,26 @@ class PaperResourceService:
                 reason='invalid_pdf_url',
             ))
 
-        try:
-            fetch = await provider.open(normalized, range_header=range_header)
-        except Exception:
-            return PaperResourceFetch(PaperResource(
-                url=normalized,
-                provider=provider.name,
-                status='unavailable',
-                reason='resource_unavailable',
-            ))
+        for attempt in range(_MAX_FETCH_ATTEMPTS):
+            try:
+                fetch = await provider.open(normalized, range_header=range_header)
+            except Exception:
+                if attempt + 1 < _MAX_FETCH_ATTEMPTS:
+                    continue
+                return PaperResourceFetch(PaperResource(
+                    url=normalized,
+                    provider=provider.name,
+                    status='unavailable',
+                    reason='resource_unavailable',
+                ))
+            if not _retryable_fetch(fetch.validation) or attempt + 1 == _MAX_FETCH_ATTEMPTS:
+                break
+            await fetch.close()
         return PaperResourceFetch(
             self._resource(provider, fetch.validation),
             provider_fetch=fetch,
+            provider=provider,
+            source_url=normalized,
         )
 
     @staticmethod
@@ -144,9 +182,13 @@ class PaperResourceFetch:
         resource: PaperResource,
         *,
         provider_fetch: ProviderFetch | None = None,
+        provider: PDFProvider | None = None,
+        source_url: str | None = None,
     ):
         self.resource = resource
         self._provider_fetch = provider_fetch
+        self._provider = provider
+        self._source_url = source_url
 
     @property
     def status_code(self) -> int | None:
@@ -163,8 +205,63 @@ class PaperResourceFetch:
     async def iter_bytes(self) -> AsyncIterator[bytes]:
         if self._provider_fetch is None:
             return
-        async for chunk in self._provider_fetch.iter_bytes():
-            yield chunk
+        span = _body_span(self._provider_fetch.validation)
+        if span is None or self._provider is None or self._source_url is None:
+            async for chunk in self._provider_fetch.iter_bytes():
+                yield chunk
+            return
+
+        start, end, total = span
+        expected = end - start + 1
+        delivered = 0
+        last_error: httpx.TransportError | None = None
+        for attempt in range(_MAX_FETCH_ATTEMPTS):
+            try:
+                async for chunk in self._provider_fetch.iter_bytes():
+                    remaining = expected - delivered
+                    if remaining <= 0:
+                        break
+                    part = chunk[:remaining]
+                    delivered += len(part)
+                    yield part
+            except httpx.TransportError as error:
+                last_error = error
+            if delivered == expected:
+                return
+            if attempt + 1 == _MAX_FETCH_ATTEMPTS:
+                raise httpx.RemoteProtocolError('PDF upstream response ended before its promised byte range') from last_error
+
+            await self._provider_fetch.close()
+            next_start = start + delivered
+            continuation = None
+            for request_attempt in range(_MAX_FETCH_ATTEMPTS):
+                try:
+                    candidate = await self._provider.open(
+                        self._source_url,
+                        range_header=f'bytes={next_start}-{end}',
+                    )
+                except Exception:
+                    if request_attempt + 1 == _MAX_FETCH_ATTEMPTS:
+                        raise
+                    continue
+                if _retryable_fetch(candidate.validation) and request_attempt + 1 < _MAX_FETCH_ATTEMPTS:
+                    await candidate.close()
+                    continue
+                continuation = candidate
+                break
+            assert continuation is not None
+            continued_span = _body_span(continuation.validation)
+            if (
+                not continuation.validation.available
+                or continuation.validation.status_code != 206
+                or continued_span is None
+                or continued_span[0] != next_start
+                or continued_span[1] > end
+                or continued_span[2] != total
+            ):
+                await continuation.close()
+                raise httpx.RemoteProtocolError('PDF upstream did not honor the resume byte range')
+            self._provider_fetch = continuation
 
     async def close(self) -> None:
         if self._provider_fetch is not None:
