@@ -101,7 +101,7 @@ async def stop(run_id: str, owner: str = Depends(request_owner)):
 @router.post('/sessions')
 async def create_agent_session(body: AgentSessionCreate, owner: str = Depends(request_owner)):
     settings = {
-        'model': body.model, 'mode': body.mode, 'attachments': body.attachments,
+        'model': body.model, 'mode': body.mode,
         'skills': body.skills, 'workspace_id': body.workspace_id,
     }
     session = await agent_session_repository.create(

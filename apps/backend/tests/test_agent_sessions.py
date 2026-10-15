@@ -12,6 +12,7 @@ from app.services.agent import AgentRuntime
 from app.services.agent.provider import Finish, TextDelta, ToolCallEvent
 from app.services.agent.types import StopReason, ToolCall
 from app.services.agent_sessions.repository import MemoryAgentSessionRepository
+from app.services.chat.repository import repository as upload_repository
 from tests.test_agent import FakeProvider, make_echo
 
 
@@ -176,6 +177,28 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(tool_item['isError'])
         self.assertEqual([item['kind'] for item in self.repo.sessions[session_id].runtime_history],
                          ['user', 'assistant', 'tool', 'assistant'])
+
+    async def test_file_attachment_is_bound_to_one_turn_without_persisting_file_id(self):
+        owner = 'anon:00000000-0000-4000-8000-000000000011'
+        uploaded = upload_repository.save_upload(owner, 'notes.md', {
+            'text': '附件解析正文', 'original_length': 6, 'final_length': 6,
+            'truncated': False, 'warning': None,
+        })
+        created = await self.request('POST', '/api/v1/agent/sessions', json_body={
+            'prompt': '请分析附件', 'attachments': [{'kind': 'file', 'file_id': uploaded['file_id'], 'title': 'notes.md'}],
+        })
+        session_id = created.json()['data']['id']
+        self.assertNotIn('attachments', created.json()['data']['settings'])
+        runtime = AgentRuntime(provider=FakeProvider([[TextDelta('已分析'), Finish(StopReason.STOP)]]))
+        with patch('app.services.agent.service.default_runtime', return_value=runtime):
+            response = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run', json_body={
+                'prompt': '请分析附件', 'attachments': [{'kind': 'file', 'file_id': uploaded['file_id'], 'title': 'notes.md'}],
+            })
+        self.assertEqual(response.status_code, 200)
+        detail = (await self.request('GET', f'/api/v1/agent/sessions/{session_id}')).json()['data']
+        self.assertEqual(detail['turns'][0]['settings']['attachments'], [{'kind': 'file', 'title': 'notes.md'}])
+        self.assertNotIn(uploaded['file_id'], json.dumps(detail, ensure_ascii=False))
+        self.assertIn('附件解析正文', self.repo.sessions[session_id].runtime_history[0]['text'])
 
     async def test_failed_and_stopped_turns_remain_persisted(self):
         failed_id = await self.create('失败测试')

@@ -7,6 +7,7 @@ from typing import Any
 from app.services.agent import service as agent_runtime
 from app.services.agent.types import RunResult, message_to_dict
 from app.services.agent_sessions.repository import agent_session_repository
+from app.services.chat.repository import repository
 
 
 class TimelineCapture:
@@ -81,8 +82,20 @@ async def start_session_run(
     session = await agent_session_repository.get(session_id, owner)
     history = agent_runtime.decode_history(session.runtime_history)
     attachment_text, warnings = agent_runtime.resolve_attachments(attachments, owner)
+    # File IDs point to short-lived parsed upload slots. Persist only safe display
+    # metadata on this turn; the extracted text is already part of the run transcript.
+    display_attachments = []
+    for attachment in attachments:
+        if attachment.get('kind') == 'file':
+            item = repository.upload(attachment.get('file_id') or '', owner)
+            display_attachments.append({'kind': 'file', 'title': item['filename']})
+        else:
+            display_attachments.append({
+                'kind': attachment.get('kind'),
+                'title': attachment.get('title') or attachment.get('ref_id') or '引用条目',
+            })
     settings = {
-        'model': model, 'mode': mode, 'attachments': attachments,
+        'model': model, 'mode': mode, 'attachments': display_attachments,
         'workspace_id': workspace_id, 'skills': skills,
     }
     runtime = agent_runtime.build_run_runtime(
@@ -154,7 +167,7 @@ async def start_session_run(
                         # Do not persist incomplete tool calls: the next provider request requires a
                         # closed transcript. The UI timeline still retains every observed tool event.
                         'transcript': [*session.runtime_history,
-                                       {'kind': 'user', 'text': prompt},
+                                       {'kind': 'user', 'text': prompt + attachment_text},
                                        {'kind': 'assistant', 'content': partial, 'reasoning': '',
                                         'tool_calls': [], 'stop_reason': 'cancelled',
                                         'usage_tokens': 0}],

@@ -7,6 +7,9 @@ from app.core.errors import BusinessError
 
 
 async def read_upload(request: Request) -> tuple[str, bytes]:
+    content_length = request.headers.get('content-length')
+    if content_length and content_length.isdigit() and int(content_length) > MAX_UPLOAD_BYTES + 65536:
+        raise BusinessError(20006, '上传请求过大，文件不能超过 20MB', 413)
     content_type, options = parse_options_header(request.headers.get('content-type', ''))
     boundary = options.get(b'boundary')
     if content_type != b'multipart/form-data' or not boundary or len(boundary) > 200:

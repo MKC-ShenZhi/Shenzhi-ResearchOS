@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.core.database import session_scope
 from app.core.errors import BusinessError
 from app.models.collections import CollectionFolderRow, CollectionItemRow, CollectionUserStateRow
+from app.models.private_paper import PrivatePaperRow
 from app.schemas.collections import (
     CollectionFolder,
     CollectionPaperItem,
@@ -55,8 +56,14 @@ class CollectionService:
                 .where(CollectionItemRow.folder_id.in_([row.id for row in rows]))
                 .group_by(CollectionItemRow.folder_id)
             )) if rows else {}
+            private_counts = dict((folder_id, count) for folder_id, count in await session.execute(
+                select(PrivatePaperRow.folder_id, func.count(PrivatePaperRow.id))
+                .where(PrivatePaperRow.user_id == user_id, PrivatePaperRow.folder_id.in_([row.id for row in rows]))
+                .group_by(PrivatePaperRow.folder_id)
+            )) if rows else {}
         return FolderListResponse(folders=[CollectionFolder(
-            id=row.id, name=row.name, is_default=row.is_default, paper_count=counts.get(row.id, 0),
+            id=row.id, name=row.name, is_default=row.is_default,
+            paper_count=counts.get(row.id, 0) + private_counts.get(row.id, 0),
         ) for row in rows])
 
     async def create_folder(self, user_id: str, name: str) -> CollectionFolder:
@@ -90,7 +97,10 @@ class CollectionService:
             row.name = name
             row.updated_at = datetime.now(timezone.utc)
             count = await session.scalar(select(func.count(CollectionItemRow.id)).where(CollectionItemRow.folder_id == folder_id))
-            return CollectionFolder(id=row.id, name=row.name, is_default=row.is_default, paper_count=count or 0)
+            private_count = await session.scalar(select(func.count(PrivatePaperRow.id)).where(
+                PrivatePaperRow.folder_id == folder_id, PrivatePaperRow.user_id == user_id))
+            return CollectionFolder(id=row.id, name=row.name, is_default=row.is_default,
+                                    paper_count=(count or 0) + (private_count or 0))
 
     async def delete_folder(self, user_id: str, folder_id: int) -> None:
         async with session_scope() as session:

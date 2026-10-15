@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from app.integrations.knowledge.adapter import KnowledgeAdapter
+import asyncio
+
+from app.integrations.knowledge.adapter import KnowledgeAdapter, paper_summary
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.services.knowledge.cache import (
     PaperDetailTTLCache,
@@ -159,10 +161,22 @@ class KnowledgeService:
         return detail
 
     async def batch_get_papers(self, paper_ids: list[str]) -> list[PaperSummary]:
-        try:
-            return await self.adapter.batch_papers(paper_ids)
-        except KnowledgeIntegrationError as error:
-            raise KnowledgeServiceError.from_integration_error(error) from error
+        if not paper_ids:
+            return []
+        # Folder lists and reading history share the detail cache with paper pages.
+        # Keep concurrent fetches and the batch API's missing-paper behavior.
+        results = await asyncio.gather(
+            *(self.get_paper(paper_id) for paper_id in paper_ids),
+            return_exceptions=True,
+        )
+        summaries: list[PaperSummary] = []
+        for result in results:
+            if isinstance(result, KnowledgeServiceError) and result.error.code == 'NOT_FOUND':
+                continue
+            if isinstance(result, Exception):
+                raise result
+            summaries.append(paper_summary(result))
+        return summaries
 
     async def get_graph(self, paper_id: str, *, depth: int = 1) -> PaperGraph:
         try:
