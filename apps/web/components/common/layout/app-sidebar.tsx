@@ -17,6 +17,7 @@ import {
   Send,
   Sparkles,
   User,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SITE } from "@/lib/constants";
@@ -93,7 +94,7 @@ function sectionOf(path: string): string {
   return seg ? `/${seg}` : "/";
 }
 
-function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+function NavLink({ item, collapsed, mobile = false }: { item: NavItem; collapsed: boolean; mobile?: boolean }) {
   const pathname = usePathname();
   const setCollapsed = useSidebarStore((s) => s.setCollapsed);
   const active = item.matchPrefix
@@ -102,7 +103,7 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const Icon = item.icon;
   /** 展开态:点击当前所在主标题时折叠侧边栏;点击其他主标题仅跳转 */
   const collapseIfSameSection = () => {
-    if (sectionOf(item.href) === sectionOf(pathname)) setCollapsed(true);
+    if (!mobile && sectionOf(item.href) === sectionOf(pathname)) setCollapsed(true);
   };
 
   const inner = (
@@ -194,6 +195,7 @@ function ExpandableNav({
   subNav,
   collapsed,
   footer,
+  mobile = false,
 }: {
   href: string;
   label: string;
@@ -202,6 +204,7 @@ function ExpandableNav({
   collapsed: boolean;
   /** 子栏目列表末尾的附加内容(如「新建项目」) */
   footer?: React.ReactNode;
+  mobile?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -242,7 +245,7 @@ function ExpandableNav({
       // Knowledge 子页面点击主标题返回总览;其他栏目保持原有折叠行为
       if (href === "/knowledge" && pathname !== href) {
         navigate(href);
-      } else {
+      } else if (!mobile) {
         setCollapsed(true);
       }
     } else if (pathname !== dest) {
@@ -422,8 +425,9 @@ function LogoutPopup({
 }
 
 /** 全局侧边栏 —— 240px 左侧栏(背景 primary soft)，可折叠为 64px 图标栏 */
-export function AppSidebar() {
-  const collapsed = useSidebarStore((s) => s.collapsed);
+export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
+  const desktopCollapsed = useSidebarStore((s) => s.collapsed);
+  const collapsed = mobileOpen ? false : desktopCollapsed;
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
   const setNavScrollTop = useSidebarStore((s) => s.setNavScrollTop);
   const { showComingSoon } = useFeatureAvailability();
@@ -450,6 +454,7 @@ export function AppSidebar() {
   const [logoutOpen, setLogoutOpen] = React.useState(false);
   const handleLoggedOut = () => {
     setLogoutOpen(false);
+    onMobileClose?.();
     openLogin({ notice: "已退出登录，你可以重新登录或注册" });
   };
 
@@ -490,7 +495,8 @@ export function AppSidebar() {
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-30 hidden flex-col bg-sidebar py-5 transition-[width] duration-200 lg:flex",
+        "fixed inset-y-0 left-0 z-30 flex-col bg-sidebar py-5 transition-[width] duration-200 lg:flex",
+        mobileOpen ? "flex max-w-[calc(100vw-3rem)] pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]" : "hidden",
         collapsed ? "w-16 px-2" : "w-60 px-4",
       )}
     >
@@ -503,12 +509,12 @@ export function AppSidebar() {
         <Logo compact={collapsed} />
         <button
           type="button"
-          onClick={toggleCollapsed}
-          aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
+          onClick={mobileOpen ? onMobileClose : toggleCollapsed}
+          aria-label={mobileOpen ? "关闭导航" : collapsed ? "展开侧边栏" : "折叠侧边栏"}
           title={collapsed ? "展开侧边栏" : "折叠侧边栏"}
           className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-chip hover:text-ink"
         >
-          {collapsed ? (
+          {mobileOpen ? <X className="size-4" /> : collapsed ? (
             <PanelLeftOpen className="size-4" strokeWidth={1.8} />
           ) : (
             <PanelLeftClose className="size-4" strokeWidth={1.8} />
@@ -526,28 +532,28 @@ export function AppSidebar() {
           </p>
         )}
         {RESEARCH_NAV.map((item) => (
-          <NavLink key={item.label} item={item} collapsed={collapsed} />
+          <NavLink key={item.label} item={item} collapsed={collapsed} mobile={mobileOpen} />
         ))}
         <ExpandableNav
           href="/agents"
           label="AI 助手"
           icon={Sparkles}
           subNav={AGENT_SUB_NAV}
-          collapsed={collapsed}
+          collapsed={collapsed} mobile={mobileOpen}
         />
         <ExpandableNav
           href="/knowledge"
           label="知识库"
           icon={Library}
           subNav={KNOWLEDGE_SUB_NAV}
-          collapsed={collapsed}
+          collapsed={collapsed} mobile={mobileOpen}
         />
         <ExpandableNav
           href="/projects"
           label="科研项目"
           icon={Layers}
           subNav={PROJECT_SUB_NAV}
-          collapsed={collapsed}
+          collapsed={collapsed} mobile={mobileOpen}
           footer={
             <button
               type="button"
@@ -565,7 +571,7 @@ export function AppSidebar() {
           label="投稿"
           icon={Send}
           subNav={SUBMIT_SUB_NAV}
-          collapsed={collapsed}
+          collapsed={collapsed} mobile={mobileOpen}
         />
         <React.Suspense fallback={null}>
           <SidebarChatHistory collapsed={collapsed} />
@@ -574,11 +580,11 @@ export function AppSidebar() {
 
       <div className="mt-4 flex shrink-0 flex-col gap-0.5 [&>div]:mt-0">
         {!isUnavailableFeatureHref(MY_PAPERS_NAV.href) && (
-          <NavLink item={MY_PAPERS_NAV} collapsed={collapsed} />
+          <NavLink item={MY_PAPERS_NAV} collapsed={collapsed} mobile={mobileOpen} />
         )}
 
         {/* 设置(悬停显示选项栏) */}
-        <SettingsMenu collapsed={collapsed} />
+        <SettingsMenu collapsed={collapsed} mobile={mobileOpen} />
       </div>
 
       {/* 用户卡片:未登录点击弹出登录弹窗;登录后「···」向上弹出「登出」 */}
@@ -589,7 +595,7 @@ export function AppSidebar() {
             aria-label={userName ? "账号菜单" : "登录"}
             className="flex size-9 cursor-pointer items-center justify-center rounded-full bg-primary-soft"
             onClick={() =>
-              userName ? setLogoutOpen((v) => !v) : openLogin()
+              userName ? setLogoutOpen((v) => !v) : (onMobileClose?.(), openLogin())
             }
           >
             {userName ? (
@@ -647,7 +653,7 @@ export function AppSidebar() {
         <button
           type="button"
           className="mt-2 flex cursor-pointer items-center gap-2.5 rounded-xl bg-card p-2.5 text-left shadow-card transition-colors hover:bg-chip"
-          onClick={() => openLogin()}
+          onClick={() => { onMobileClose?.(); openLogin(); }}
         >
           <span className="flex size-9 items-center justify-center rounded-full bg-primary-soft">
             <User className="size-4.5 text-primary" />

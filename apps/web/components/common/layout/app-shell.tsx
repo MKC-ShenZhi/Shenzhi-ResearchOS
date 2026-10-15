@@ -1,13 +1,14 @@
 "use client";
 
-import { Suspense, type ReactNode } from "react";
+import { Suspense, useCallback, useState, type ReactNode } from "react";
 import { AppSidebar } from "./app-sidebar";
-import { Logo } from "./logo";
-import { ThemeToggle } from "./theme-toggle";
+import { MobileHeader } from "./mobile-header";
+import { MobileNavDrawer } from "./mobile-nav-drawer";
 import { useSidebarStore } from "@/stores/sidebar";
 import { cn } from "@/lib/utils";
 import { AnonymousClaimCoordinator } from "@/features/chat/components/anonymous-claim-coordinator";
 import { useRecordSearchRestoration } from "@/hooks/use-search-restoration";
+import { useVisualViewport } from "@/hooks/use-visual-viewport";
 
 function SearchNavigationRecorder() {
   useRecordSearchRestoration();
@@ -21,27 +22,30 @@ function SearchNavigationRecorder() {
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const collapsed = useSidebarStore((s) => s.collapsed);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const closeMobile = useCallback(() => setMobileOpen(false), []);
+  const viewportRef = useVisualViewport<HTMLDivElement>();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div ref={viewportRef} className="min-h-dvh bg-background">
       <Suspense fallback={null}>
         <SearchNavigationRecorder />
       </Suspense>
-      <AppSidebar />
-      {/* 移动端顶栏 */}
-      <header className="sticky top-0 z-20 flex h-14 items-center border-b border-line bg-card px-4 lg:hidden">
-        <Logo />
-        <ThemeToggle className="ml-auto" />
-      </header>
+      <MobileNavDrawer open={mobileOpen} onClose={closeMobile}>
+        <AppSidebar mobileOpen={mobileOpen} onMobileClose={closeMobile} />
+      </MobileNavDrawer>
       <AnonymousClaimCoordinator />
-      <main
-        className={cn(
-          "transition-[padding] duration-200",
-          collapsed ? "lg:pl-16" : "lg:pl-60",
-        )}
-      >
-        {children}
-      </main>
+      <div inert={mobileOpen}>
+        <MobileHeader open={mobileOpen} onOpen={() => setMobileOpen(true)} />
+        <main
+          className={cn(
+            "min-w-0 transition-[padding] duration-200",
+            collapsed ? "lg:pl-16" : "lg:pl-60",
+          )}
+        >
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

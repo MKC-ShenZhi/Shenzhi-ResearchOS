@@ -7,6 +7,8 @@ const COMPOSER_SOURCE = readFileSync("features/chat/components/composer.tsx", "u
 const SEARCH_HERO_SOURCE = readFileSync("features/search/components/search-hero.tsx", "utf8");
 const KNOWLEDGE_PAGE_SOURCE = readFileSync("features/knowledge/search/KnowledgeSearchPage.tsx", "utf8");
 const RESULTS_SOURCE = readFileSync("features/knowledge/search/components/results-section.tsx", "utf8");
+const QUERY_HOOK_SOURCE = readFileSync("features/knowledge/search/use-knowledge-search.ts", "utf8");
+const QUERY_RESOURCE_SOURCE = readFileSync("features/knowledge/search/search-query-resource.ts", "utf8");
 const RESULT_CARD_SOURCE = readFileSync("features/knowledge/search/components/result-card.tsx", "utf8");
 const SEARCH_ROUTE_SOURCE = readFileSync("app/search/page.tsx", "utf8");
 
@@ -35,22 +37,25 @@ test("simple search submit never enters Chat send or creates a Chat session", ()
 });
 
 test("formal simple search uses Knowledge retrieval and paper result states", () => {
-  assert.match(RESULTS_SOURCE, /getKnowledgeClient\(\)\.search/);
+  assert.match(RESULTS_SOURCE, /useKnowledgeSearch\(params\)/);
+  assert.match(QUERY_HOOK_SOURCE, /useQuery\(knowledgeSearchQueryOptions\(normalizedParams\)\)/);
+  assert.match(QUERY_RESOURCE_SOURCE, /client\.search\(normalizedParams, signal\)/);
   assert.doesNotMatch(RESULTS_SOURCE, /ModelProvider|chatInputFromComposer|createChatSession|\bsend\(/);
-  assert.match(RESULTS_SOURCE, /queryKey/);
-  assert.match(RESULTS_SOURCE, /enabled:\s*query\.length\s*>\s*0/);
+  assert.match(QUERY_RESOURCE_SOURCE, /queryKey: knowledgeSearchQueryKey/);
+  assert.match(KNOWLEDGE_PAGE_SOURCE, /if \(!normalizedQuery\) return null/);
   assert.match(RESULTS_SOURCE, /KnowledgeSearchSkeleton/);
   assert.match(RESULTS_SOURCE, /KnowledgeSearchError/);
   assert.match(RESULTS_SOURCE, /KnowledgeSearchEmpty/);
   assert.match(RESULTS_SOURCE, /KnowledgeResultCard/);
   assert.match(RESULTS_SOURCE, /KnowledgeClientError/);
-  assert.match(RESULTS_SOURCE, /retry:\s*knowledgeQueryRetry/);
+  assert.match(QUERY_RESOURCE_SOURCE, /retry:\s*knowledgeQueryRetry/);
   assert.match(KNOWLEDGE_PAGE_SOURCE, /KnowledgeResultsSection/);
   assert.match(KNOWLEDGE_PAGE_SOURCE, /KnowledgeFilterPanel/);
   assert.match(
     RESULT_CARD_SOURCE,
-    /href=\{paperHref\(hit\.id, \{ mode: "create", source: returnTo \}\)\}/,
+    /const detailHref = paperHref\(hit\.id, \{ mode: "create", source: returnTo \}\)/,
   );
+  assert.match(RESULT_CARD_SOURCE, /href=\{detailHref\}/);
   assert.doesNotMatch(RESULTS_SOURCE, /深知 AI|思考完成|Reasoning|ModelProvider|引用 \[\d+\]/);
 });
 

@@ -21,7 +21,7 @@ export function FeedTabs({
   onTabChange: (tab: DiscoveryFeedTab) => void;
 }) {
   return (
-    <div className="flex items-center gap-8 px-1">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-1 sm:gap-x-8">
       {TABS.map((tab) => {
         const Icon = tab.icon;
         return (
@@ -31,7 +31,7 @@ export function FeedTabs({
             onClick={() => onTabChange(tab.key)}
             aria-pressed={activeTab === tab.key}
             className={cn(
-              "flex cursor-pointer items-center gap-1.5 text-[15px] transition-colors",
+              "flex shrink-0 cursor-pointer items-center gap-1.5 text-[15px] transition-colors",
               activeTab === tab.key
                 ? "font-semibold text-primary"
                 : "text-muted hover:text-ink-2",
