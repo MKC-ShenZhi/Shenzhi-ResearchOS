@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from app.core.database import session_scope
 from app.models.chat import ChatSessionRow
 from app.models.agent_session import AgentSessionRow
+from app.models.agent_upload import AgentUploadRow
 from app.models.collections import CollectionFolderRow, CollectionItemRow, CollectionUserStateRow
 from app.models.profile import UserProfileRow
 from app.models.reading_history import ReadingHistoryRow
@@ -33,6 +34,7 @@ class AccountDeletionService:
     async def delete_all_for_user(self, user_id: str) -> BusinessDataDeletionResult:
         owner = f'user:{user_id}'
         async with session_scope() as db:
+            await db.execute(delete(AgentUploadRow).where(AgentUploadRow.owner == owner))
             session_ids = {
                 str(session_id)
                 for session_id in (

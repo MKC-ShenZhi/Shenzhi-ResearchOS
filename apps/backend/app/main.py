@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from app.api import account_deletion, agent, chat, collections, discovery, history, knowledge, paper_resource, profile, settings, uploads
+from app.api import account_deletion, agent, chat, collections, discovery, history, knowledge, paper_resource, private_papers, profile, settings, uploads
 from app.core.logging import configure_logging, http_logging_middleware, log_exception, request_duration_ms
 from app.core.errors import BusinessError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE
 from app.core.responses import fail
@@ -36,6 +36,7 @@ for router in (
     history.router,
     knowledge.router,
     paper_resource.router,
+    private_papers.router,
     profile.router,
     settings.router,
     uploads.router,

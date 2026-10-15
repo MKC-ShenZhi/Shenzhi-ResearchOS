@@ -98,6 +98,7 @@ interface Turn {
   id: string;
   role: "user" | "assistant";
   content: string;
+  attachments?: ChatAttachment[];
   reasoning: string;
   /** 过程流的全部状态（思考 / 正文 / 工具按到达顺序交错）；渲染与持久化都从它派生。 */
   stream: StreamState;
@@ -306,6 +307,7 @@ export function ShenzhiAiPage() {
         setSessionTitle(session.title);
         setTurns(session.turns.flatMap((turn) => [
           { id: `${turn.id}:user`, role: "user" as const, content: turn.user_content, reasoning: "",
+            attachments: (turn.settings.attachments ?? []) as ChatAttachment[],
             stream: initialStreamState(), steers: [] },
           { id: `${turn.id}:assistant`, role: "assistant" as const, content: turn.assistant_content,
             reasoning: turn.reasoning ?? "", stream: fromStoredTurn(turn),
@@ -317,7 +319,8 @@ export function ShenzhiAiPage() {
         const settings = session.settings ?? {};
         setModel(settings.model || "default");
         if (settings.mode) setMode(settings.mode);
-        setAttachments((settings.attachments ?? []) as ChatAttachment[]);
+        // Session settings describe past turns; sent files must not reappear in the composer.
+        setAttachments([]);
         setSelectedSkills((settings.skills ?? []).map((name) => ({ name, description: "" })));
         setWorkspace(settings.workspace_id
           ? { id: settings.workspace_id, name: "会话工作区", files: 0 } : null);
@@ -392,12 +395,15 @@ export function ShenzhiAiPage() {
     const prompt = runInput.prompt.trim();
     if (!prompt || running || !sessionId) return;
     const generation = sessionGenerationRef.current;
+    const userId = newTurnId("user");
     const assistantId = newTurnId("assistant");
     const context = { sessionId, generation, assistantId };
     setTurns((previous) => [...previous,
-      { id: newTurnId("user"), role: "user", content: prompt, reasoning: "", stream: initialStreamState(), steers: [] },
+      { id: userId, role: "user", content: prompt, attachments: runInput.attachments as ChatAttachment[],
+        reasoning: "", stream: initialStreamState(), steers: [] },
       { id: assistantId, role: "assistant", content: "", reasoning: "", stream: initialStreamState(), steers: [] }]);
     setInput("");
+    setAttachments([]);
     setRunError(null);
     setSteerError(null);
     setRunning(true);
@@ -411,9 +417,10 @@ export function ShenzhiAiPage() {
         && current.sessionId === sessionId
         && current.generation === sessionGenerationRef.current;
     };
+    let accepted = false;
     try {
       await streamAgentSessionRun(sessionId, runInput, {
-        onRunStart: (runId) => { if (isCurrent()) runIdRef.current = runId; },
+        onRunStart: (runId) => { accepted = true; if (isCurrent()) runIdRef.current = runId; },
         onDelta: (text, reasoning, turn) => patchAssistant(context, (current) => {
           // 状态机全在 timeline.ts（可测）。这里只负责把它与页面的 Turn 接起来。
           return {
@@ -465,6 +472,11 @@ export function ShenzhiAiPage() {
         },
       }, controller.signal);
     } catch (error) {
+      if (!accepted && isCurrent()) {
+        setTurns((previous) => previous.filter((turn) => turn.id !== userId && turn.id !== assistantId));
+        setInput(prompt);
+        setAttachments(runInput.attachments as ChatAttachment[]);
+      }
       if ((error as Error).name === "AbortError") {
         patchAssistant(context, (turn) => ({ ...turn, stopped: true }));
       } else if (isCurrent()) {
@@ -653,8 +665,11 @@ export function ShenzhiAiPage() {
             )}
             {turns.map((turn, index) => turn.role === "user"
               ? <div key={turn.id} className="mb-6 flex justify-end">
-                  <div className="max-w-[75%] whitespace-pre-wrap rounded-3xl bg-chip px-4 py-2.5 text-[15px] leading-7 text-ink">
-                    {turn.content}
+                  <div className="max-w-[75%] rounded-3xl bg-chip px-4 py-2.5 text-[15px] leading-7 text-ink">
+                    <div className="whitespace-pre-wrap">{turn.content}</div>
+                    {!!turn.attachments?.length && <div className="mt-2 flex flex-wrap gap-1.5">
+                      {turn.attachments.map((attachment, attachmentIndex) => <span key={`${turn.id}:attachment:${attachmentIndex}`} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-card px-2 py-1 text-xs text-muted" title={attachment.title ?? undefined}><FileText className="size-3.5 shrink-0" /><span className="truncate">{attachment.title || "附件"}</span></span>)}
+                    </div>}
                   </div>
                 </div>
               : <div key={turn.id} className="mb-8">
