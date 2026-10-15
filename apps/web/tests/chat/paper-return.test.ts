@@ -255,7 +255,10 @@ test("PDF reader keeps only zoom and download controls without a hidden header s
   assert.match(topbar, /aria-label="Zoom Out"/);
   assert.match(topbar, /aria-label="Zoom In"/);
   assert.match(topbar, /aria-label="Download PDF"/);
-  assert.match(topbar, /download="paper\.pdf"/);
+  assert.match(topbar, /&download=true/);
+  assert.match(topbar, /\sdownload\s/);
+  assert.doesNotMatch(topbar, /download="paper\.pdf"/);
+  assert.doesNotMatch(pdf, /download=true/);
   assert.match(topbar, /controlsVisible && \(/);
   assert.doesNotMatch(topbar, /aria-hidden/);
   assert.doesNotMatch(topbar, /invisible/);
