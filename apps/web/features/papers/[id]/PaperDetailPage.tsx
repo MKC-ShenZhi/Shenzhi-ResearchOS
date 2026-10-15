@@ -22,6 +22,7 @@ import { PaperBackButton, PaperTopbar } from "./components/paper-topbar";
 import { PaperAbstractView } from "./components/paper-abstract-view";
 import { PaperPdfViewer, type ViewerState } from "./components/paper-pdf-viewer";
 import { PaperRightPanel } from "./components/right-panel";
+import { useVisualViewport } from "@/hooks/use-visual-viewport";
 
 type PaperViewMode = "abstract" | "paper";
 
@@ -54,6 +55,8 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
   const layoutRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [viewerState, setViewerState] = useState<ViewerState>("loading");
+  const [mobilePanel, setMobilePanel] = useState<"reader" | "assistant">("reader");
+  const viewportRef = useVisualViewport<HTMLDivElement>();
 
   const resizeAssistant = (clientX: number) => {
     const bounds = layoutRef.current?.getBoundingClientRect();
@@ -124,7 +127,7 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background lg:h-dvh lg:overflow-hidden">
+    <div ref={viewportRef} className="flex h-[var(--visual-viewport-height,100dvh)] min-h-0 flex-col overflow-hidden bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] lg:h-dvh lg:p-0">
       {!paper && (
         <header className="border-b border-line bg-card px-5 py-4">
           <div className="text-sm text-primary">
@@ -146,14 +149,19 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
           onValueChange={handleViewModeChange}
           className="flex min-h-0 flex-1 flex-col"
         >
+          <div role="group" aria-label="阅读工作区" className="flex shrink-0 gap-2 border-b border-line bg-card p-2 lg:hidden">
+            <button type="button" aria-pressed={mobilePanel === "reader"} onClick={() => setMobilePanel("reader")} className="min-h-10 flex-1 rounded-lg bg-chip text-sm aria-pressed:bg-primary-soft aria-pressed:text-primary">论文阅读</button>
+            <button type="button" aria-pressed={mobilePanel === "assistant"} onClick={() => setMobilePanel("assistant")} className="min-h-10 flex-1 rounded-lg bg-chip text-sm aria-pressed:bg-primary-soft aria-pressed:text-primary">Assistant</button>
+          </div>
           <div
             ref={layoutRef}
             data-assistant-collapsed={assistantCollapsed}
             data-resizing={isResizing}
+            data-mobile-panel={mobilePanel}
             className="paper-detail-layout flex min-h-0 flex-1 flex-col lg:p-3"
             style={{ "--assistant-width": `${assistantWidthPercent}%` } as CSSProperties}
           >
-            <div className="flex min-h-0 min-w-0 flex-col lg:overflow-hidden">
+            <div className="paper-reader-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <PaperTopbar
                 paper={paper}
                 returnTo={safeReturnTo}
@@ -246,9 +254,10 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
               key={`assistant-${paperId}`}
               paper={paper}
               onCollapse={() => setAssistantCollapsed(true)}
+              onMobileClose={() => setMobilePanel("reader")}
             />
             {assistantCollapsed && (
-              <div className="flex min-h-12 items-center justify-center border-t border-line bg-card lg:min-h-0 lg:items-start lg:justify-end lg:rounded-xl lg:border lg:pr-3 lg:pt-2">
+              <div className="hidden min-h-12 items-center justify-center border-t border-line bg-card lg:flex lg:min-h-0 lg:items-start lg:justify-end lg:rounded-xl lg:border lg:pr-3 lg:pt-2">
                 <button
                   type="button"
                   aria-label="展开 Assistant"

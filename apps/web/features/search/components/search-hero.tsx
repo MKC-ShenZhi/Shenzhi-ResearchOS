@@ -26,6 +26,13 @@ export function SearchHero({
   const entryMode = chosenMode ?? (draft.value ? "search" : "ai");
   const value = entryMode === "search" ? draft.value : aiValue;
   const setValue = entryMode === "search" ? draft.set : setAiValue;
+  const changeEntryMode = (next: ComposerEntryMode) => {
+    if (next === entryMode) return;
+    // Switching modes keeps the current input, as in the existing Composer.
+    if (next === "search") draft.set(aiValue);
+    else setAiValue(draft.value);
+    setEntryMode(next);
+  };
   const [agentConfig, setAgentConfig] = useState<AgentConfig>();
   const [model, setModel] = useState("default");
   const [mode, setMode] = useState<AgentMode>("fast");
@@ -95,7 +102,7 @@ export function SearchHero({
         onSend={send}
         placeholder={entryMode === "search" ? PLACEHOLDER_SEARCH : PLACEHOLDER_AI}
         entryMode={entryMode}
-        onEntryModeChange={setEntryMode}
+        onEntryModeChange={changeEntryMode}
         config={config}
         model={model}
         onModelChange={setModel}

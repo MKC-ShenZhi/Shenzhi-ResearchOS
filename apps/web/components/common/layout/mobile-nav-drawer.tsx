@@ -21,7 +21,7 @@ export function MobileNavDrawer({ open, onClose, children }: { open: boolean; on
     const previousFocus = document.activeElement as HTMLElement | null;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const focusable = () => Array.from(panel.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex="0"]') ?? [])
+    const focusable = () => Array.from(panel.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]') ?? [])
       .filter((element) => element.getClientRects().length > 0);
     focusable()[0]?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
@@ -54,7 +54,7 @@ export function MobileNavDrawer({ open, onClose, children }: { open: boolean; on
       onClick={(event) => {
         const target = event.target as HTMLElement;
         // Same-route links also dismiss, while modified clicks retain native Link behavior.
-        if (open && !event.defaultPrevented && !event.metaKey && !event.ctrlKey && target.closest("a[href]")) onClose();
+        if (open && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && target.closest("a[href]")) onClose();
       }}>
       <Suspense fallback={null}><RouteDismiss onClose={onClose} /></Suspense>
       {open && <div aria-hidden="true" className="absolute inset-0 bg-black/40 lg:hidden" onClick={onClose} />}

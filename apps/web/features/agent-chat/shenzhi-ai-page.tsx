@@ -621,9 +621,9 @@ export function ShenzhiAiPage() {
 
 
   return <AppShell>
-    <div className="flex h-[calc(100vh-3.5rem)] lg:h-screen">
+    <div className="app-workspace-height flex min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-line px-6 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 sm:px-6">
           <h1 className="max-w-[45%] truncate text-base font-semibold">{sessionTitle}</h1>
           <div className="flex items-center gap-2">
             <span className="mr-1 hidden text-[11px] text-faint sm:inline">选中回答文本可引用追问</span>
@@ -638,7 +638,7 @@ export function ShenzhiAiPage() {
             </button>
           </div>
         </div>
-        <div ref={scrollRef} className="flex-1 overflow-y-auto"
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto"
           onMouseUp={captureQuote}
           onScroll={(event) => {
             const el = event.currentTarget;
@@ -646,7 +646,7 @@ export function ShenzhiAiPage() {
           }}>
           {/* 宽度按可用空间走，不再死卡 768px 居中：宽屏下左右两侧会留下大片死空白
               （用户反馈"死空白太多"）。上限放宽到 1100px 只防止超宽屏上单行过长难以阅读。 */}
-          <div className="mx-auto w-full max-w-[1100px] px-6 pt-8">
+          <div className="mx-auto w-full max-w-[1100px] px-4 pt-6 sm:px-6 sm:pt-8">
             {turns.length === 0 && !running && (
               <div className="mt-24 mb-16 text-center">
                 <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary-soft text-primary" aria-hidden>
@@ -665,7 +665,7 @@ export function ShenzhiAiPage() {
             )}
             {turns.map((turn, index) => turn.role === "user"
               ? <div key={turn.id} className="mb-6 flex justify-end">
-                  <div className="max-w-[75%] rounded-3xl bg-chip px-4 py-2.5 text-[15px] leading-7 text-ink">
+                  <div className="max-w-[90%] break-words sm:max-w-[75%] rounded-3xl bg-chip px-4 py-2.5 text-[15px] leading-7 text-ink">
                     <div className="whitespace-pre-wrap">{turn.content}</div>
                     {!!turn.attachments?.length && <div className="mt-2 flex flex-wrap gap-1.5">
                       {turn.attachments.map((attachment, attachmentIndex) => <span key={`${turn.id}:attachment:${attachmentIndex}`} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-card px-2 py-1 text-xs text-muted" title={attachment.title ?? undefined}><FileText className="size-3.5 shrink-0" /><span className="truncate">{attachment.title || "附件"}</span></span>)}
@@ -725,7 +725,7 @@ export function ShenzhiAiPage() {
             <div ref={bottomRef} />
           </div>
         </div>
-        <div className="px-6 pb-4">
+        <div className="shrink-0 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
           <div className="mx-auto w-full max-w-[1100px]">
             {workspace && (
               <div className="mb-1.5 flex items-center gap-2">

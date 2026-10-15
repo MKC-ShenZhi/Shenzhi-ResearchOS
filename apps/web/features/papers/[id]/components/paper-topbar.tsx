@@ -56,10 +56,10 @@ export function PaperTopbar({
   const controlButtonClass = "size-9 rounded-lg text-muted transition-colors hover:bg-primary-soft hover:text-primary [&_svg]:size-[18px]";
 
   return (
-    <header className="grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 border-b border-line/70 bg-card px-2 sm:px-3">
+    <header className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1 border-b border-line/70 bg-card px-2 py-1 lg:h-14 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:py-0 sm:px-3">
       <PaperBackButton returnTo={returnTo} />
       <div className="min-w-0 justify-self-center">{children}</div>
-      <div className="flex min-w-0 items-center gap-1">
+      <div className="col-span-full flex min-w-0 items-center justify-end gap-1 lg:col-span-1">
         {controlsVisible && (
           <div className="flex shrink-0 items-center gap-0.5">
             <Button

@@ -8,6 +8,7 @@ import { useSidebarStore } from "@/stores/sidebar";
 import { cn } from "@/lib/utils";
 import { AnonymousClaimCoordinator } from "@/features/chat/components/anonymous-claim-coordinator";
 import { useRecordSearchRestoration } from "@/hooks/use-search-restoration";
+import { useVisualViewport } from "@/hooks/use-visual-viewport";
 
 function SearchNavigationRecorder() {
   useRecordSearchRestoration();
@@ -23,9 +24,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
   const closeMobile = useCallback(() => setMobileOpen(false), []);
+  const viewportRef = useVisualViewport<HTMLDivElement>();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div ref={viewportRef} className="min-h-dvh bg-background">
       <Suspense fallback={null}>
         <SearchNavigationRecorder />
       </Suspense>
@@ -34,15 +36,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       </MobileNavDrawer>
       <AnonymousClaimCoordinator />
       <div inert={mobileOpen}>
-      <MobileHeader open={mobileOpen} onOpen={() => setMobileOpen(true)} />
-      <main
-        className={cn(
-          "min-w-0 transition-[padding] duration-200",
-          collapsed ? "lg:pl-16" : "lg:pl-60",
-        )}
-      >
-        {children}
-      </main>
+        <MobileHeader open={mobileOpen} onOpen={() => setMobileOpen(true)} />
+        <main
+          className={cn(
+            "min-w-0 transition-[padding] duration-200",
+            collapsed ? "lg:pl-16" : "lg:pl-60",
+          )}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

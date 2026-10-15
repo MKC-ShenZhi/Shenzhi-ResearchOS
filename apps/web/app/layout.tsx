@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import Script from "next/script";
 import { AuthProvider } from "@/components/auth/auth-provider";
@@ -11,6 +11,8 @@ export const metadata: Metadata = {
   title: "深知 ShenZhi · Research OS",
   description: "深知 —— 面向科研工作者的论文发现、投稿跟踪与 AI 研究助手平台",
 };
+
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", interactiveWidget: "resizes-content" };
 
 /**
  * 首屏前确定主题,避免闪烁:

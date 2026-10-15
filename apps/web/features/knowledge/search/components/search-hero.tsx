@@ -41,7 +41,7 @@ export function KnowledgeSearchHero({
             aria-label="搜索论文"
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder="搜索论文标题、作者、关键词… 例如 Diffusion Policy"
-            className="h-12 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-faint"
+            className="h-12 min-w-0 flex-1 bg-transparent text-base sm:text-[15px] text-ink outline-none placeholder:text-faint"
           />
           <span className="hidden shrink-0 items-center gap-1 text-[11px] text-faint md:flex">
             <Sparkles className="size-3.5" /> 论文数据库

@@ -139,11 +139,25 @@
   --assistant-width: 42%;
 }
 
-.paper-detail-layout[data-assistant-collapsed="true"] > .paper-assistant-panel {
-  display: none;
+.app-workspace-height {
+  height: calc(var(--visual-viewport-height, 100dvh) - 3.5rem - env(safe-area-inset-top));
+}
+
+@media (max-width: 63.999rem) {
+  .paper-detail-layout[data-mobile-panel="reader"] > .paper-assistant-panel,
+  .paper-detail-layout[data-mobile-panel="assistant"] > .paper-reader-panel {
+    display: none;
+  }
 }
 
 @media (min-width: 64rem) {
+  .app-workspace-height {
+    height: 100dvh;
+  }
+
+  .paper-detail-layout[data-assistant-collapsed="true"] > .paper-assistant-panel {
+    display: none;
+  }
   .paper-detail-layout {
     display: grid;
     grid-template-columns:
