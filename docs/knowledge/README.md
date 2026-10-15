@@ -115,6 +115,11 @@ PDF 源站；因此 PDF 的超时、404 或格式异常不会阻塞详情与摘�
 端点不接受任意 URL，并透传合法的单段 Range。Backend 不保存或缓存 PDF，
 也不创建下载任务。
 
+PDF 响应使用可信论文标题生成文件名，替换非法字符、限制 UTF-8 字节长度，
+空标题回退为论文 ID。默认返回 `inline`；下载按钮使用同一端点的
+`download=true` 参数获取 `attachment`。两种模式均覆盖上游文件名，提供 ASCII
+`filename` 回退和 UTF-8 `filename*`，预览和 Range 行为保持一致。
+
 Search 请求使用 `query`、`topK`、`offset`、`yearFrom`、`yearTo`、`venue`、
 `author`、`keyword`、`subject`。论文检索页固定 `topK=20`，并按
 `offset=(page-1)*20` 请求；响应通过 `hasMore` 表示是否存在下一页。当前外部

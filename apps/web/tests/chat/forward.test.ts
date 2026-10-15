@@ -101,7 +101,7 @@ test("BFF logs a failed backend fetch with request ID but no error message", asy
   assert.equal(record.authorization, undefined);
 });
 
-test("BFF forwards PDF Range and preserves partial response headers", async (t) => {
+test("BFF forwards PDF Range and preserves partial response and filename headers", async (t) => {
   t.mock.method(identity, "resolveBackendIdentity", async () => ({ kind: "anonymous" }));
   let outgoingHeaders: Headers | undefined;
   t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
@@ -111,6 +111,7 @@ test("BFF forwards PDF Range and preserves partial response headers", async (t) 
       headers: {
         "Content-Type": "application/pdf",
         "Content-Range": "bytes 0-2/3",
+        "Content-Disposition": "inline; filename=paper.pdf; filename*=UTF-8''%E8%AE%BA%E6%96%87.pdf",
       },
     });
   });
@@ -124,4 +125,6 @@ test("BFF forwards PDF Range and preserves partial response headers", async (t) 
   assert.equal(outgoingHeaders?.get("range"), "bytes=0-2");
   assert.equal(response.status, 206);
   assert.equal(response.headers.get("content-range"), "bytes 0-2/3");
+  assert.equal(response.headers.get("content-disposition"),
+    "inline; filename=paper.pdf; filename*=UTF-8''%E8%AE%BA%E6%96%87.pdf");
 });

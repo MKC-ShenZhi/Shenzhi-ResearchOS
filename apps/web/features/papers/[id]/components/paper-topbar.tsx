@@ -46,7 +46,7 @@ export function PaperTopbar({
   children: ReactNode;
 }) {
   const pdfPath = apiPath(
-    `/paper-resource/pdf?paperId=${encodeURIComponent(paper.id)}`,
+    `/paper-resource/pdf?paperId=${encodeURIComponent(paper.id)}&download=true`,
   );
   const controlsVisible = viewMode === "paper" && viewerState !== "unavailable" && viewerState !== "no_pdf";
   const controlsDisabled = viewerState === "loading" || viewerState === "rendering";
@@ -88,7 +88,7 @@ export function PaperTopbar({
             </Button>
             <a
               href={pdfPath}
-              download="paper.pdf"
+              download
               aria-label="Download PDF"
               title="Download PDF"
               aria-disabled={downloadDisabled}
