@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Network, Users } from "lucide-react";
 import type { KnowledgePaperHit } from "@/clients/knowledge";
 import { PaperThumbnail } from "@/components/common/paper-thumbnail";
+import { PAPER_CARD_INTERACTION_CLASS, usePaperCardNavigation } from "@/components/common/use-paper-card-navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { paperHref } from "@/lib/navigation/paper";
@@ -35,25 +36,16 @@ export function KnowledgeResultCard({
 }) {
   const authors = hit.authors.length ? hit.authors.join(" · ") : "未知作者";
   const status = usePaperReadStatus(hit.id);
+  const detailHref = paperHref(hit.id, { mode: "create", source: returnTo });
+  const cardNavigation = usePaperCardNavigation(detailHref, hit.title);
 
   return (
     <motion.article
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.06 }}
-      className={`@container rounded-2xl bg-card p-6 shadow-card ${historyMode ? "cursor-pointer transition-colors hover:bg-card/80" : ""}`}
-      onClick={(event) => {
-        if (!historyMode || (event.target as HTMLElement).closest("a, button")) return;
-        window.location.href = paperHref(hit.id, { mode: "create", source: returnTo });
-      }}
-      onKeyDown={(event) => {
-        if (historyMode && (event.key === "Enter" || event.key === " ") && !(event.target as HTMLElement).closest("a, button")) {
-          event.preventDefault();
-          window.location.href = paperHref(hit.id, { mode: "create", source: returnTo });
-        }
-      }}
-      role={historyMode ? "link" : undefined}
-      tabIndex={historyMode ? 0 : undefined}
+      className={`@container rounded-2xl bg-card p-6 shadow-card ${PAPER_CARD_INTERACTION_CLASS}`}
+      {...cardNavigation}
     >
       <div className="grid grid-cols-1 gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(240px,34cqw,320px)]">
         <div className="col-span-full min-w-0">
@@ -79,7 +71,7 @@ export function KnowledgeResultCard({
 
           {/* 标题 */}
           <Link
-            href={paperHref(hit.id, { mode: "create", source: returnTo })}
+            href={detailHref}
             className="group mt-2 block"
           >
             <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
@@ -124,7 +116,7 @@ export function KnowledgeResultCard({
             </time>
           ) : (
             <div className="ml-auto flex shrink-0 items-center gap-2">
-              <Link href={paperHref(hit.id, { mode: "create", source: returnTo })}>
+              <Link href={detailHref}>
                 <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-xs">
                   论文详情
                   <ArrowRight className="size-3.5" />

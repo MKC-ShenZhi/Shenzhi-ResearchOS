@@ -125,8 +125,10 @@ test("cached data remains visible if background revalidation fails", () => {
 });
 
 test("all paper card entries continue using the same opaque paper id", () => {
-  assert.equal(
-    PAPER_CARD_SOURCE.match(/paperHref\(paper\.id, \{ mode: "create", source: returnTo \}\)/g)?.length,
-    3,
+  assert.match(
+    PAPER_CARD_SOURCE,
+    /const detailHref = paperHref\(paper\.id, \{ mode: "create", source: returnTo \}\)/,
   );
+  assert.equal(PAPER_CARD_SOURCE.match(/href=\{detailHref\}/g)?.length, 3);
+  assert.match(PAPER_CARD_SOURCE, /usePaperCardNavigation\(detailHref, paper\.title\)/);
 });

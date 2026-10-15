@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Plus, ThumbsUp, TrendingUp, Users } from "lucide-react";
 import { PaperThumbnail } from "@/components/common/paper-thumbnail";
+import { PAPER_CARD_INTERACTION_CLASS, usePaperCardNavigation } from "@/components/common/use-paper-card-navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
@@ -30,13 +31,16 @@ export function PaperCard({
   const { likedPapers, toggleLike } = useUserPreferences();
   const liked = !!likedPapers[paper.id];
   const status = usePaperReadStatus(paper.id);
+  const detailHref = paperHref(paper.id, { mode: "create", source: returnTo });
+  const cardNavigation = usePaperCardNavigation(detailHref, paper.title);
 
   return (
     <motion.article
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.08 }}
-      className="@container rounded-2xl bg-card p-6 shadow-card"
+      className={`@container rounded-2xl bg-card p-6 shadow-card ${PAPER_CARD_INTERACTION_CLASS}`}
+      {...cardNavigation}
     >
       <div className={layout === "feed" ? "grid grid-cols-1 gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(240px,34cqw,320px)]" : "grid grid-cols-1 gap-y-4"}>
         <div className="col-span-full min-w-0">
@@ -52,7 +56,7 @@ export function PaperCard({
           </div>
 
           {/* 标题 */}
-          <Link href={paperHref(paper.id, { mode: "create", source: returnTo })} className="group mt-2 block">
+          <Link href={detailHref} className="group mt-2 block">
             <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
               {paper.title}
             </h3>
@@ -67,7 +71,7 @@ export function PaperCard({
 
           {/* AI 解读入口 */}
           <Link
-            href={paperHref(paper.id, { mode: "create", source: returnTo })}
+            href={detailHref}
             className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
           >
             <Plus className="size-3.5" />
@@ -111,7 +115,7 @@ export function PaperCard({
             </button>
             <CollectionPicker paperId={paper.id} />
             {layout === "feed" && (
-              <Link href={paperHref(paper.id, { mode: "create", source: returnTo })}>
+              <Link href={detailHref}>
                 <Button size="sm" className="h-9 rounded-lg px-4 text-[13px]">
                   立即阅读
                   <ArrowRight className="size-3.5" />
