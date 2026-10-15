@@ -58,10 +58,10 @@ export function TopicCard({
   returnTo: string;
   featured?: boolean;
 }) {
-  const { followedTopics, toggleTopicFollow } = useUserPreferences();
+  const following = useUserPreferences((state) => state.followedTopics[topic.id] ?? topic.isFollowing ?? false);
+  const toggleTopicFollow = useUserPreferences((state) => state.toggleTopicFollow);
   const author = typeof topic.author === "string" ? { name: topic.author } : topic.author;
   const authorName = author.name.toLocaleLowerCase() === "shenzhi" ? "ShenZhi" : author.name;
-  const following = followedTopics[topic.id] ?? topic.isFollowing ?? false;
   const href = topicHref(topic.id, returnTo);
 
   return (
