@@ -38,8 +38,8 @@ export function PaperCard({
     <motion.article
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.08 }}
-      className={`@container rounded-2xl bg-card p-6 shadow-card ${PAPER_CARD_INTERACTION_CLASS}`}
+      transition={{ duration: 0.3, delay: (index % 12) * 0.03 }}
+      className={`@container rounded-2xl bg-card p-6 shadow-card [contain-intrinsic-size:auto_260px] [content-visibility:auto] ${PAPER_CARD_INTERACTION_CLASS}`}
       {...cardNavigation}
     >
       <div className={layout === "feed" ? "grid grid-cols-1 gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(240px,34cqw,320px)]" : "grid grid-cols-1 gap-y-4"}>
@@ -81,8 +81,8 @@ export function PaperCard({
         </div>
 
         {layout === "feed" && (
-          <div className="hidden w-full max-w-[320px] justify-self-center self-start @min-[400px]:block @min-[600px]:max-w-none">
-            <PaperThumbnail src={paper.thumbnailUrl} title={paper.title} />
+          <div className="block w-full max-w-[320px] justify-self-center self-start @min-[600px]:max-w-none">
+            <PaperThumbnail src={paper.thumbnailUrl} title={paper.title} eager={index < 2} />
             {paper.citations !== undefined && (
               <div className="mt-2 flex items-center justify-end gap-1 text-xs text-muted">
                 <TrendingUp className="size-3 text-primary" />
