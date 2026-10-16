@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSearchDraft } from "@/hooks/use-search-draft";
 import { ComposerShell, type ComposerSkill } from "@/components/common/composer/composer";
 import { createAgentSession, fetchAgentConfig, type AgentConfig, type AgentMode } from "@/clients/backend/agent";
 import { saveAgentLaunch } from "@/features/agent-chat/launch-store";
@@ -19,8 +20,19 @@ export function SearchHero({
   initialQuery?: string;
 }) {
   const router = useRouter();
-  const [value, setValue] = useState(initialQuery);
-  const [entryMode, setEntryMode] = useState<ComposerEntryMode>("ai");
+  const draft = useSearchDraft("home-search", initialQuery, initialQuery);
+  const [aiValue, setAiValue] = useState(initialQuery);
+  const [chosenMode, setEntryMode] = useState<ComposerEntryMode | null>(null);
+  const entryMode = chosenMode ?? (draft.value ? "search" : "ai");
+  const value = entryMode === "search" ? draft.value : aiValue;
+  const setValue = entryMode === "search" ? draft.set : setAiValue;
+  const changeEntryMode = (next: ComposerEntryMode) => {
+    if (next === entryMode) return;
+    // Switching modes keeps the current input, as in the existing Composer.
+    if (next === "search") draft.set(aiValue);
+    else setAiValue(draft.value);
+    setEntryMode(next);
+  };
   const [agentConfig, setAgentConfig] = useState<AgentConfig>();
   const [model, setModel] = useState("default");
   const [mode, setMode] = useState<AgentMode>("fast");
@@ -45,6 +57,7 @@ export function SearchHero({
   const send = async (payload: ComposerSubmitPayload) => {
     if (!payload.question.trim()) return;
     if (payload.entryMode === "search") {
+      draft.clear();
       router.push(`/knowledge/search?q=${encodeURIComponent(payload.question)}`);
       return;
     }
@@ -89,7 +102,7 @@ export function SearchHero({
         onSend={send}
         placeholder={entryMode === "search" ? PLACEHOLDER_SEARCH : PLACEHOLDER_AI}
         entryMode={entryMode}
-        onEntryModeChange={setEntryMode}
+        onEntryModeChange={changeEntryMode}
         config={config}
         model={model}
         onModelChange={setModel}
@@ -106,6 +119,7 @@ export function SearchHero({
         webSearchSwitch={false}
         hideStyleRow
         busy={busy}
+        disabled={!draft.ready}
       />
       {error && <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
     </div>

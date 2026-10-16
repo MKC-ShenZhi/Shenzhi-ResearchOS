@@ -59,6 +59,7 @@ export function PaperPdfViewer({
   zoom,
   setZoom,
   onViewerStateChange,
+  onReachedEnd,
 }: {
   paperId: string;
   pdfUrl: string | null;
@@ -66,6 +67,7 @@ export function PaperPdfViewer({
   zoom: number;
   setZoom: Dispatch<SetStateAction<number>>;
   onViewerStateChange: (state: ViewerState) => void;
+  onReachedEnd: () => void;
 }) {
   const externalUrl = paperExternalUrl(pdfUrl);
   const [state, setState] = useState<ViewerState>(() => {
@@ -149,7 +151,7 @@ export function PaperPdfViewer({
   return (
     <section
       aria-label={`${title} PDF 阅读区`}
-      className="flex h-[75dvh] min-h-96 flex-col overflow-hidden bg-background lg:h-full"
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-background"
     >
       {showViewer && (
         <div
@@ -174,6 +176,7 @@ export function PaperPdfViewer({
               onLoadSuccess={handleDocumentLoad}
               onLoadError={handleDocumentError}
               onFirstPageReady={handleFirstPageReady}
+              onReachedEnd={onReachedEnd}
             />
           )}
         </div>

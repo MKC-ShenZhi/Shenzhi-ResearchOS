@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Iterable, Mapping
 from dataclasses import dataclass
 import ipaddress
 from urllib.parse import SplitResult, urlsplit, urlunsplit
@@ -45,6 +45,7 @@ class PDFProvider(ABC):
         url: str,
         *,
         range_header: str | None = None,
+        if_range: str | None = None,
     ) -> 'ProviderFetch':
         """Open a validated response for streaming when the provider supports it."""
         return ProviderFetch(await self.validate(url))
@@ -59,22 +60,51 @@ class ProviderFetch:
         *,
         client: httpx.AsyncClient | None = None,
         response: httpx.Response | None = None,
+        max_body_bytes: int | None = None,
+        expected_body_bytes: int | None = None,
     ):
         self.validation = validation
         self._client = client
         self._response = response
+        self._max_body_bytes = max_body_bytes
+        self._expected_body_bytes = expected_body_bytes
 
     async def iter_bytes(self) -> AsyncIterator[bytes]:
         if self._response is None:
             return
+        delivered = 0
         if self._response.is_stream_consumed:
             # Mock/in-memory transports may eagerly buffer the response even
             # when the client requested streaming. Real network responses take
             # the raw streaming branch below.
-            yield self._response.content
-            return
-        async for chunk in self._response.aiter_raw():
+            chunks = (self._response.content,)
+        else:
+            chunks = self._response.aiter_raw()
+        async for chunk in _as_async_iterator(chunks):
+            next_delivered = delivered + len(chunk)
+            if (
+                self._max_body_bytes is not None
+                and next_delivered > self._max_body_bytes
+            ):
+                raise httpx.RemoteProtocolError(
+                    'PDF upstream response exceeded the configured size limit'
+                )
+            if (
+                self._expected_body_bytes is not None
+                and next_delivered > self._expected_body_bytes
+            ):
+                raise httpx.RemoteProtocolError(
+                    'PDF upstream response exceeded its promised byte length'
+                )
+            delivered = next_delivered
             yield chunk
+        if (
+            self._expected_body_bytes is not None
+            and delivered != self._expected_body_bytes
+        ):
+            raise httpx.RemoteProtocolError(
+                'PDF upstream response ended before its promised byte length'
+            )
 
     async def close(self) -> None:
         if self._response is not None:
@@ -83,6 +113,17 @@ class ProviderFetch:
         if self._client is not None:
             await self._client.aclose()
             self._client = None
+
+
+async def _as_async_iterator(
+    chunks: AsyncIterator[bytes] | Iterable[bytes],
+) -> AsyncIterator[bytes]:
+    if hasattr(chunks, '__aiter__'):
+        async for chunk in chunks:
+            yield chunk
+        return
+    for chunk in chunks:
+        yield chunk
 
 
 def normalize_public_http_url(value: str) -> str | None:

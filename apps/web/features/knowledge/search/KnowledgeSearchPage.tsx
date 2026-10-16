@@ -4,10 +4,14 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { useSearchDraft } from "@/hooks/use-search-draft";
+import { SlidersHorizontal } from "lucide-react";
+import { useClearSearchRestoration, useSearchRestorationScope } from "@/hooks/use-search-restoration";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { KnowledgeFilterPanel } from "./components/filter-panel";
 import { KnowledgeResultsSection } from "./components/results-section";
 import { KnowledgeSearchHero } from "./components/search-hero";
+import { discardSearchScroll } from "./use-search-scroll-restoration";
 import {
   KNOWLEDGE_SEARCH_PAGE_SIZE,
   knowledgeSearchOffset,
@@ -52,17 +56,17 @@ function createSearchParams(
  */
 function KnowledgeSearchContent() {
   const router = useRouter();
+  const scope = useSearchRestorationScope();
+  const clearRestoration = useClearSearchRestoration("/knowledge/search");
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const returnTo = useCurrentInternalPath();
   const { query: committedQuery, filters, page } = readKnowledgeSearchUrlState(searchParams);
-  const [queryDraft, setQueryDraft] = useState({
-    source: committedQuery,
-    value: committedQuery,
-  });
-  const query = queryDraft.source === committedQuery ? queryDraft.value : committedQuery;
+  const draft = useSearchDraft("/knowledge/search", returnTo, committedQuery);
+  const query = draft.value;
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const setQuery = (value: string) => {
-    setQueryDraft({ source: committedQuery, value });
+    draft.set(value);
     // 输入变化立即废弃旧预取；新请求只会在 debounce 到期后开始。
     void cancelObsoleteKnowledgeSearches(
       queryClient,
@@ -85,7 +89,11 @@ function KnowledgeSearchContent() {
 
   /** 提交搜索：更新查询词并同步 URL */
   const submitSearch = (q: string) => {
+    draft.clear();
+    discardSearchScroll(returnTo, scope);
     const text = q.trim();
+    if (!text) clearRestoration();
+    discardSearchScroll(buildKnowledgeSearchUrl({ query: text, filters, page: 1 }), scope);
     const nextParams = createSearchParams(text, filters, 1);
     void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
     if (nextParams) {
@@ -102,6 +110,8 @@ function KnowledgeSearchContent() {
   }, [committedQuery, filters, page]);
 
   const updateFilters = (nextFilters: KnowledgeFilters) => {
+    discardSearchScroll(returnTo, scope);
+    discardSearchScroll(buildKnowledgeSearchUrl({ query: committedQuery, filters: nextFilters, page: 1 }), scope);
     const nextParams = createSearchParams(committedQuery, nextFilters, 1);
     void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
     if (nextParams) {
@@ -114,6 +124,8 @@ function KnowledgeSearchContent() {
   };
 
   const updatePage = (nextPage: number) => {
+    discardSearchScroll(returnTo, scope);
+    discardSearchScroll(buildKnowledgeSearchUrl({ query: committedQuery, filters, page: nextPage }), scope);
     const nextParams = createSearchParams(committedQuery, filters, nextPage);
     void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
     if (nextParams) {
@@ -127,16 +139,20 @@ function KnowledgeSearchContent() {
   };
 
   return (
-      <div className="mx-auto max-w-[1120px] px-6 py-8 lg:px-8">
+      <div className="mx-auto max-w-[1120px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <KnowledgeSearchHero
           initialQuery={query}
           onQueryChange={setQuery}
           onSearch={submitSearch}
+          disabled={!draft.ready}
         />
 
+        <button type="button" aria-expanded={filtersOpen} aria-controls="paper-search-filters" onClick={() => setFiltersOpen((open) => !open)} className="mt-4 flex min-h-10 items-center gap-2 rounded-xl border border-line bg-card px-4 text-sm text-ink lg:hidden">
+          <SlidersHorizontal className="size-4" />{filtersOpen ? "收起筛选" : "展开筛选"}
+        </button>
         <div className="mt-6 flex flex-col gap-6 lg:flex-row">
           {/* 筛选栏 */}
-          <aside className="w-full shrink-0 lg:w-64">
+          <aside id="paper-search-filters" className={`${filtersOpen ? "block" : "hidden"} w-full shrink-0 lg:block lg:w-64`}>
             <KnowledgeFilterPanel
               filters={filters}
               onChange={updateFilters}

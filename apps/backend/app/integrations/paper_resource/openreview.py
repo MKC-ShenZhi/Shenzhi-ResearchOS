@@ -66,10 +66,15 @@ class OpenReviewProvider(PDFProvider):
         url: str,
         *,
         range_header: str | None = None,
+        if_range: str | None = None,
     ) -> ProviderFetch:
         note_id = _note_id(url)
         if note_id is None:
-            return await self.http_provider.open(url, range_header=range_header)
+            return await self.http_provider.open(
+                url,
+                range_header=range_header,
+                if_range=if_range,
+            )
 
         token = await self._get_token()
         if (self.username or self.password) and token is None:
@@ -84,6 +89,7 @@ class OpenReviewProvider(PDFProvider):
             api_base_url=self.api_base_url,
             token=token,
             range_header=range_header,
+            if_range=if_range,
             allow_auth_retry=True,
         )
         if fetch.validation.available or _preserve_failure(fetch.validation):
@@ -98,6 +104,7 @@ class OpenReviewProvider(PDFProvider):
             api_base_url=LEGACY_API_BASE_URL,
             token=token,
             range_header=range_header,
+            if_range=if_range,
             allow_auth_retry=not auth_retried,
         )
         return fetch
@@ -110,6 +117,7 @@ class OpenReviewProvider(PDFProvider):
         api_base_url: str,
         token: str | None,
         range_header: str | None,
+        if_range: str | None,
         allow_auth_retry: bool,
     ) -> tuple[ProviderFetch, str | None, bool]:
         fetch = await self._open_api(
@@ -118,6 +126,7 @@ class OpenReviewProvider(PDFProvider):
             api_base_url=api_base_url,
             token=token,
             range_header=range_header,
+            if_range=if_range,
         )
         if (
             fetch.validation.status_code not in AUTH_FAILURE_STATUSES
@@ -137,6 +146,7 @@ class OpenReviewProvider(PDFProvider):
             api_base_url=api_base_url,
             token=refreshed_token,
             range_header=range_header,
+            if_range=if_range,
         )
         if fetch.validation.status_code in AUTH_FAILURE_STATUSES:
             await self._clear_client(refreshed_token)
@@ -150,11 +160,13 @@ class OpenReviewProvider(PDFProvider):
         api_base_url: str,
         token: str | None,
         range_header: str | None,
+        if_range: str | None,
     ) -> ProviderFetch:
         headers = {'Authorization': f'Bearer {token}'} if token else None
         fetch = await self.http_provider.open_with_headers(
             _api_pdf_url(api_base_url, note_id),
             range_header=range_header,
+            if_range=if_range,
             extra_headers=headers,
         )
         _log_attempt(

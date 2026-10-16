@@ -3,10 +3,12 @@
 import os
 import unittest
 import uuid
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
 from app.core.database import session_scope
 from app.models.chat import ChatMessageRow, ChatSessionRow
+from app.models.agent_upload import AgentUploadRow
 from app.models.collections import CollectionFolderRow, CollectionItemRow, CollectionUserStateRow
 from app.models.profile import UserProfileRow
 from app.models.reading_history import ReadingHistoryRow
@@ -23,6 +25,8 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         other_session_id = uuid.uuid4()
         target_message_id = uuid.uuid4()
         other_message_id = uuid.uuid4()
+        target_upload_id = uuid.uuid4()
+        other_upload_id = uuid.uuid4()
 
         async with session_scope() as db:
             db.add_all([
@@ -46,6 +50,14 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
                     attachment_context='', warnings=[], content='', reasoning='', status='done',
                     message_refs=[], followups=[], duration_ms=0,
                 ),
+                AgentUploadRow(id=target_upload_id, owner=f'user:{target_user}',
+                               filename='target.md', text='delete', original_length=6,
+                               final_length=6, truncated=False,
+                               expires_at=datetime.now(timezone.utc) + timedelta(hours=1)),
+                AgentUploadRow(id=other_upload_id, owner=f'user:{other_user}',
+                               filename='other.md', text='keep', original_length=4,
+                               final_length=4, truncated=False,
+                               expires_at=datetime.now(timezone.utc) + timedelta(hours=1)),
             ])
             target_folder = CollectionFolderRow(user_id=target_user, name='target')
             other_folder = CollectionFolderRow(user_id=other_user, name='other')
@@ -68,6 +80,8 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(await db.get(UserSettingsRow, target_user))
                 self.assertIsNone(await db.get(ChatSessionRow, target_session_id))
                 self.assertIsNone(await db.get(ChatMessageRow, target_message_id))
+                self.assertIsNone(await db.get(AgentUploadRow, target_upload_id))
+                self.assertIsNotNone(await db.get(AgentUploadRow, other_upload_id))
                 self.assertIsNone(await db.get(CollectionUserStateRow, target_user))
                 self.assertIsNone(await db.get(CollectionFolderRow, target_folder_id))
                 self.assertEqual(len((await db.scalars(select(CollectionItemRow).where(CollectionItemRow.folder_id == target_folder_id))).all()), 0)
@@ -87,6 +101,7 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 for model, key in (
                     (ChatMessageRow, target_message_id),
                     (ChatMessageRow, other_message_id),
+                    (AgentUploadRow, other_upload_id),
                     (ChatSessionRow, target_session_id),
                     (ChatSessionRow, other_session_id),
                     (UserProfileRow, target_user),

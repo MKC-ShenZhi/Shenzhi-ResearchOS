@@ -4,12 +4,18 @@ from app.core.config import MAX_ATTACHMENT_CHARS
 from app.core.errors import BusinessError
 
 
-def attachment_context(attachments, owner: str, repository, paper_contexts: dict[str, str] | None = None) -> tuple[str, list[str]]:
+def attachment_context(attachments, owner: str, repository, paper_contexts: dict[str, str] | None = None,
+                       file_contexts: dict[str, dict] | None = None) -> tuple[str, list[str]]:
     parts, warnings = [], []
     remaining = MAX_ATTACHMENT_CHARS
     for attachment in attachments:
         if attachment.kind == 'file':
-            item = repository.upload(attachment.file_id or '', owner)
+            if file_contexts is None:
+                item = repository.upload(attachment.file_id or '', owner)
+            else:
+                item = file_contexts.get(attachment.file_id or '')
+                if item is None:
+                    raise BusinessError(20004, '附件不存在或已过期，请重新上传', 404)
             text = item['text']
             if item['warning']:
                 warnings.append(item['warning'])

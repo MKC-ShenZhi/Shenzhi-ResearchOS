@@ -85,7 +85,7 @@ Vercel Postgres (Neon):Auth 表 + Chat 表共存于 neondb 库
 ### 限制与已知事项(测试必读)
 
 1. **Serverless 形态**:FastAPI 的 `lifespan` 在 Serverless 下不保证执行;其唯一副作用是中断中的流式消息不会被标记为 failed,不影响会话读写。函数单次执行上限 300s,后端模型调用超时 `AI_TIMEOUT_SEC=90`,流式长回答不会触顶;冷启动首请求略慢属正常。
-2. **会话与附件**:`CHAT_DATABASE_URL` 必须配置,缺失时会话退化为函数内存态,多实例下随机丢失(接口会返回 `ephemeral: true`,可作为测试探针:`GET /api/v1/chat/sessions` 带 `x-shenzhi-bff-secret` 与 `x-shenzhi-anonymous-id` 头)。上传附件的解析结果当前仍存内存,跨实例可能取不到,属已知限制。
+2. **会话与附件**:`CHAT_DATABASE_URL` 必须配置,缺失时会话退化为函数内存态,多实例下随机丢失(接口会返回 `ephemeral: true`,可作为测试探针:`GET /api/v1/chat/sessions` 带 `x-shenzhi-bff-secret` 与 `x-shenzhi-anonymous-id` 头)。Agent 附件仅将解析文本短暂写入共享数据库（需迁移 `011_agent_uploads`），对话运行结束并写入记录后删除临时文本，不保存源文件；旧 Chat 附件仍使用进程内存,跨实例可能取不到。
 3. **知识底座可达性**:`KNOWLEDGE_BASE_API_URL` 必须是**公网可达**地址(Vercel 函数位于美国机房);国内服务需确认安全组未按来源 IP 拦截。上游不可用时接口显式报错(“知识底座暂不可用”),不会返回 mock 数据。
 4. **数据库分支陷阱**:已断开 `shenzhi` 项目与 Neon 集成的连接并改用手动 `DATABASE_URL`。**不要重新连接该集成**,其“预览分支”功能会向预览部署注入独立数据库分支(无迁移后的表),表现为 `relation "verification" does not exist`。
 5. **国内网络访问**:`*.vercel.app` 域名在国内存在 DNS 污染与阻断,测试人员需自备可访问外网的网络环境;`api.vercel.com`(CLI/管理接口)国内可直连。

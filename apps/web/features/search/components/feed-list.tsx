@@ -1,15 +1,12 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/components/auth/auth-provider";
-import { recommendationQueryRetry } from "@/clients/backend/recommendations";
+import { discoveryQueryRetry } from "@/clients/backend/discovery";
 import {
-  fetchDailyRecommendationFeed,
-  readCachedRecommendationFeed,
-  recommendationDate,
-  type DiscoveryFeedTab,
-} from "../services/daily-recommendation-feed";
+  fetchDiscoveryFeedPage,
+} from "../services/discovery-feed";
 import { PaperCard } from "./paper-card";
 
 function FeedLoading() {
@@ -25,34 +22,55 @@ function FeedLoading() {
   );
 }
 
-/** 发现 Feed —— ShenZhi 每日推荐及 localStorage stale-while-revalidate。 */
-export function FeedList({ tab }: { tab: DiscoveryFeedTab }) {
-  const { session, isPending: isIdentityPending } = useAuth();
-  const identityKey = isIdentityPending
-    ? "pending"
-    : session?.user?.id
-      ? `user:${session.user.id}`
-      : "anonymous";
-  const date = recommendationDate();
-  const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["discovery-feed", identityKey, date, tab],
-    queryFn: () => fetchDailyRecommendationFeed(tab, identityKey),
-    enabled: !isIdentityPending,
-    initialData: () => isIdentityPending
-      ? undefined
-      : readCachedRecommendationFeed(identityKey, tab, date),
-    staleTime: 0,
-    refetchOnMount: "always",
-    retry: recommendationQueryRetry,
+/** Single snapshot-backed discovery feed with cursor-based infinite loading. */
+export function FeedList() {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const {
+    data,
+    isPending,
+    isError,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: ["discovery-papers"],
+    queryFn: ({ pageParam }) => fetchDiscoveryFeedPage(pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.hasMore ? page.nextCursor ?? undefined : undefined,
+    staleTime: 10 * 60 * 1000,
+    retry: discoveryQueryRetry,
   });
 
-  if (isIdentityPending || isPending) return <FeedLoading />;
+  const papers = useMemo(() => {
+    const unique = new Map<string, NonNullable<typeof data>["pages"][number]["items"][number]>();
+    for (const page of data?.pages ?? []) {
+      for (const paper of page.items) unique.set(paper.id, paper);
+    }
+    return [...unique.values()];
+  }, [data]);
 
-  if (isError && !data) {
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasNextPage || isFetchingNextPage || isFetchNextPageError) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void fetchNextPage();
+      },
+      { rootMargin: "600px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchNextPageError, isFetchingNextPage]);
+
+  if (isPending) return <FeedLoading />;
+
+  if (isError && papers.length === 0) {
     return (
       <div className="rounded-2xl bg-card px-6 py-12 text-center shadow-card" role="alert">
         <p className="text-sm font-medium text-ink">发现论文加载失败</p>
-        <p className="mt-2 text-sm text-muted">推荐服务暂时不可用，请稍后重试。</p>
+        <p className="mt-2 text-sm text-muted">论文发现服务暂时不可用，请稍后重试。</p>
         <Button variant="outline" size="sm" className="mt-4" onClick={() => void refetch()}>
           重新加载
         </Button>
@@ -60,19 +78,42 @@ export function FeedList({ tab }: { tab: DiscoveryFeedTab }) {
     );
   }
 
-  if (!data || data.length === 0) {
+  if (papers.length === 0) {
     return (
       <div className="rounded-2xl bg-card px-6 py-12 text-center text-sm text-muted shadow-card">
-        当前分类暂无推荐论文，请稍后再试。
+        当前没有可展示的论文。
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      {data.map((paper, i) => (
+      {papers.map((paper, i) => (
         <PaperCard key={paper.id} paper={paper} index={i} />
       ))}
+      <div ref={sentinelRef} className="flex min-h-12 items-center justify-center py-2" aria-live="polite">
+        {isFetchingNextPage && (
+          <span className="text-sm text-muted">正在加载更多论文…</span>
+        )}
+        {isFetchNextPageError && (
+          <div className="text-center" role="alert">
+            <p className="text-sm text-muted">后续论文加载失败，已加载内容不受影响。</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => void fetchNextPage()}
+            >
+              重试加载
+            </Button>
+          </div>
+        )}
+        {!hasNextPage && !isFetchNextPageError && (
+          <span className="text-sm text-faint">
+            已浏览完全部 {data?.pages[0]?.total ?? papers.length} 篇论文
+          </span>
+        )}
+      </div>
     </div>
   );
 }

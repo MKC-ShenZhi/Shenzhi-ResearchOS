@@ -38,7 +38,7 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
 ];
 
 /** 设置条目 + 悬停展开的选项栏,栏底为日/夜/跟随系统切换 */
-export function SettingsMenu({ collapsed }: { collapsed: boolean }) {
+export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean; mobile?: boolean }) {
   const mode = useThemeStore((s) => s.mode);
   const setMode = useThemeStore((s) => s.setMode);
   // persist 的主题在客户端水合后才可读,避免水合不一致
@@ -51,7 +51,7 @@ export function SettingsMenu({ collapsed }: { collapsed: boolean }) {
   const pathname = usePathname();
   // 与侧边栏一致:已处于设置栏目时再点击才折叠;从其他栏目进入仅跳转
   const collapseIfSameSection = () => {
-    if (pathname.startsWith("/settings")) setCollapsed(true);
+    if (!mobile && pathname.startsWith("/settings")) setCollapsed(true);
   };
 
   return (
@@ -84,7 +84,7 @@ export function SettingsMenu({ collapsed }: { collapsed: boolean }) {
       )}
 
       {/* 悬停选项栏:出现在条目右侧,底部对齐向上展开 */}
-      <div className="pointer-events-none absolute bottom-0 left-full z-50 pl-2 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100">
+      <div className={cn(mobile && "hidden", "pointer-events-none absolute bottom-0 left-full z-50 pl-2 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100")}>
         <div className="w-52 rounded-2xl border border-line bg-card p-2 shadow-pop">
           {MENU_ITEMS.map((item) => (
             <Link

@@ -11,6 +11,7 @@ import logging
 
 from app.services.agent import workspace as agent_workspace
 from app.services.agent_sessions.repository import agent_session_repository
+from app.services.agent_uploads import agent_upload_store
 from app.services.chat.repository import repository as chat_repository
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ async def claim_anonymous_sessions(source_owner: str, target_owner: str) -> dict
     agent_result = await agent_session_repository.claim_anonymous_sessions(
         source_owner, target_owner, session_ids=prepared_ids,
     )
+    await agent_upload_store.claim_owner(source_owner, target_owner)
     moved_ids = [str(item) for item in agent_result.get('moved_session_ids', [])]
     for session_id in moved_ids:
         try:

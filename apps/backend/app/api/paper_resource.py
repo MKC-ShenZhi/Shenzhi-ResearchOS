@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Mapping
 import logging
 import os
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -16,6 +17,7 @@ from app.schemas.knowledge import KnowledgeError
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 from app.services.paper_resource import PaperResourceService
 from app.services.paper_resource.service import PaperResourceFetch
+from app.services.paper_resource.filename import build_pdf_filename
 
 
 router = APIRouter(prefix='/api/v1/paper-resource', tags=['paper-resource'])
@@ -48,17 +50,21 @@ def _error(
     )
 
 
-def _response_headers(source_headers: Mapping[str, str]) -> dict[str, str]:
+def _response_headers(
+    source_headers: Mapping[str, str], *, filename: str, download: bool,
+) -> dict[str, str]:
     headers = {'Content-Type': 'application/pdf'}
     for name in (
-        'content-disposition',
         'accept-ranges',
         'content-range',
         'cache-control',
     ):
         if value := source_headers.get(name):
             headers[name] = value
-    headers.setdefault('content-disposition', 'inline')
+    disposition = 'attachment' if download else 'inline'
+    headers['content-disposition'] = (
+        f'{disposition}; filename="paper.pdf"; filename*=UTF-8\'\'{quote(filename, safe="")}'
+    )
     return headers
 
 
@@ -98,6 +104,7 @@ async def _stream(fetch: PaperResourceFetch) -> AsyncIterator[bytes]:
 async def paper_pdf(
     request: Request,
     paper_id: str | None = Query(default=None, alias='paperId'),
+    download: bool = Query(default=False),
     _credential: None = Depends(require_bff),
 ):
     """Stream a trusted paper's PDF without accepting an arbitrary source URL."""
@@ -185,5 +192,7 @@ async def paper_pdf(
         _stream(fetch),
         status_code=fetch.status_code or 200,
         media_type='application/pdf',
-        headers=_response_headers(fetch.headers),
+        headers=_response_headers(
+            fetch.headers, filename=build_pdf_filename(detail.title, detail.id), download=download,
+        ),
     )

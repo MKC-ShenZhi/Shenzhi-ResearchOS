@@ -12,6 +12,22 @@ from app.integrations.paper_resource.openreview import OpenReviewProvider, _note
 from app.services.paper_resource.service import PaperResourceService
 
 
+class TrackingStream(httpx.AsyncByteStream):
+    def __init__(self, *chunks: bytes, error: Exception | None = None):
+        self.chunks = chunks
+        self.error = error
+        self.closed = False
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            yield chunk
+        if self.error is not None:
+            raise self.error
+
+    async def aclose(self):
+        self.closed = True
+
+
 class PaperResourceServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_http_provider_probes_only_headers_and_returns_browser_url(self):
         requests = []
@@ -112,6 +128,29 @@ class PaperResourceServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, 'unavailable')
         self.assertEqual(result.reason, 'pdf_too_large')
 
+    async def test_partial_content_length_is_not_treated_as_full_pdf_size(self):
+        provider = HTTPProvider(
+            timeout=30,
+            max_size_bytes=1,
+            transport=httpx.MockTransport(lambda request: httpx.Response(
+                206,
+                headers={
+                    'content-type': 'application/pdf',
+                    'content-range': 'bytes 0-0/*',
+                    'content-length': '100',
+                },
+            )),
+        )
+
+        fetch = await provider.open(
+            'https://papers.example/paper.pdf',
+            range_header='bytes=0-0',
+        )
+
+        self.assertTrue(fetch.validation.available)
+        self.assertIsNone(fetch.validation.size_bytes)
+        await fetch.close()
+
     async def test_timeout_and_invalid_urls_are_non_throwing(self):
         timeout_service = PaperResourceService(
             transport=httpx.MockTransport(
@@ -189,6 +228,235 @@ class PaperResourceServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(requests[0].headers['accept-encoding'], 'identity')
         await fetch.close()
         self.assertTrue(responses[0].is_closed)
+
+    async def test_stream_without_content_length_enforces_actual_size_limit(self):
+        stream = TrackingStream(b'%PDF', b'-1.7')
+        provider = HTTPProvider(
+            timeout=30,
+            max_size_bytes=7,
+            transport=httpx.MockTransport(lambda request: httpx.Response(
+                200,
+                headers={'content-type': 'application/pdf'},
+                stream=stream,
+            )),
+        )
+        fetch = await provider.open('https://papers.example/paper.pdf')
+
+        with self.assertRaisesRegex(httpx.RemoteProtocolError, 'size limit'):
+            b''.join([chunk async for chunk in fetch.iter_bytes()])
+        await fetch.close()
+
+        self.assertTrue(stream.closed)
+
+    async def test_stream_rejects_body_length_mismatches(self):
+        for declared, chunks, message in (
+            ('3', (b'%PDF',), 'exceeded its promised byte length'),
+            ('5', (b'%PDF',), 'ended before its promised byte length'),
+        ):
+            with self.subTest(declared=declared):
+                stream = TrackingStream(*chunks)
+                provider = HTTPProvider(
+                    timeout=30,
+                    max_size_bytes=100,
+                    transport=httpx.MockTransport(lambda request: httpx.Response(
+                        200,
+                        headers={
+                            'content-type': 'application/pdf',
+                            'content-length': declared,
+                        },
+                        stream=stream,
+                    )),
+                )
+                fetch = await provider.open('https://papers.example/paper.pdf')
+
+                with self.assertRaisesRegex(httpx.RemoteProtocolError, message):
+                    b''.join([chunk async for chunk in fetch.iter_bytes()])
+                await fetch.close()
+
+                self.assertTrue(stream.closed)
+
+    async def test_rejects_invalid_or_mismatched_content_ranges(self):
+        for content_range in (
+            None,
+            'bytes 5-7/7',
+            'bytes 4-7/8',
+            'bytes 5-8/9',
+        ):
+            with self.subTest(content_range=content_range):
+                headers = {'content-type': 'application/pdf'}
+                if content_range is not None:
+                    headers['content-range'] = content_range
+                provider = HTTPProvider(
+                    timeout=30,
+                    max_size_bytes=100,
+                    transport=httpx.MockTransport(
+                        lambda request: httpx.Response(206, headers=headers)
+                    ),
+                )
+
+                fetch = await provider.open(
+                    'https://papers.example/paper.pdf',
+                    range_header='bytes=5-7',
+                )
+
+                self.assertFalse(fetch.validation.available)
+                self.assertEqual(fetch.validation.reason, 'resource_unavailable')
+                await fetch.close()
+
+    async def test_resume_rejects_full_response_when_range_is_unsupported(self):
+        requests = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if len(requests) == 1:
+                return httpx.Response(
+                    200,
+                    headers={
+                        'content-type': 'application/pdf',
+                        'content-length': '8',
+                    },
+                    stream=TrackingStream(
+                        b'%PDF-',
+                        error=httpx.RemoteProtocolError('upstream closed early'),
+                    ),
+                )
+            return httpx.Response(
+                200,
+                headers={'content-type': 'application/pdf'},
+                content=b'%PDF-1.7',
+            )
+
+        fetch = await PaperResourceService(
+            transport=httpx.MockTransport(handler)
+        ).open_paper_resource('https://papers.example/paper.pdf')
+
+        with self.assertRaisesRegex(httpx.RemoteProtocolError, 'resume byte range'):
+            b''.join([chunk async for chunk in fetch.iter_bytes()])
+        await fetch.close()
+
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(requests[1].headers['range'], 'bytes=5-7')
+
+    async def test_resume_uses_if_range_and_rejects_changed_etag(self):
+        requests = []
+        responses = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if len(requests) == 1:
+                response = httpx.Response(
+                    200,
+                    headers={
+                        'content-type': 'application/pdf',
+                        'content-length': '8',
+                        'etag': '"version-1"',
+                    },
+                    stream=TrackingStream(
+                        b'%PDF-',
+                        error=httpx.RemoteProtocolError('upstream closed early'),
+                    ),
+                )
+            else:
+                response = httpx.Response(
+                    206,
+                    headers={
+                        'content-type': 'application/pdf',
+                        'content-range': 'bytes 5-7/8',
+                        'etag': '"version-2"',
+                    },
+                    content=b'2.0',
+                )
+            responses.append(response)
+            return response
+
+        fetch = await PaperResourceService(
+            transport=httpx.MockTransport(handler)
+        ).open_paper_resource('https://papers.example/paper.pdf')
+
+        with self.assertRaisesRegex(httpx.RemoteProtocolError, 'validator'):
+            b''.join([chunk async for chunk in fetch.iter_bytes()])
+        await fetch.close()
+
+        self.assertEqual(requests[1].headers['if-range'], '"version-1"')
+        self.assertTrue(all(response.is_closed for response in responses))
+
+    async def test_retries_are_bounded_and_nonretryable_statuses_are_not_retried(self):
+        for status_code, expected_requests in ((503, 3), (403, 1), (404, 1), (416, 1)):
+            with self.subTest(status_code=status_code):
+                responses = []
+
+                def handler(request: httpx.Request) -> httpx.Response:
+                    response = httpx.Response(status_code)
+                    responses.append(response)
+                    return response
+
+                fetch = await PaperResourceService(
+                    transport=httpx.MockTransport(handler)
+                ).open_paper_resource('https://papers.example/paper.pdf')
+
+                self.assertEqual(len(responses), expected_requests)
+                self.assertEqual(fetch.resource.status, 'unavailable')
+                await fetch.close()
+                self.assertTrue(all(response.is_closed for response in responses))
+
+    async def test_initial_timeout_is_retried_and_can_recover(self):
+        requests = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if len(requests) == 1:
+                raise httpx.ReadTimeout('timed out', request=request)
+            return httpx.Response(
+                200,
+                headers={'content-type': 'application/pdf'},
+                content=b'%PDF-1.7',
+            )
+
+        fetch = await PaperResourceService(
+            transport=httpx.MockTransport(handler)
+        ).open_paper_resource('https://papers.example/paper.pdf')
+
+        self.assertEqual(fetch.resource.status, 'available')
+        self.assertEqual(
+            b''.join([chunk async for chunk in fetch.iter_bytes()]),
+            b'%PDF-1.7',
+        )
+        await fetch.close()
+        self.assertEqual(len(requests), 2)
+
+    async def test_resume_retries_are_bounded_and_responses_are_closed(self):
+        requests = []
+        responses = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if len(requests) == 1:
+                response = httpx.Response(
+                    200,
+                    headers={
+                        'content-type': 'application/pdf',
+                        'content-length': '8',
+                    },
+                    stream=TrackingStream(
+                        b'%PDF-',
+                        error=httpx.RemoteProtocolError('upstream closed early'),
+                    ),
+                )
+            else:
+                response = httpx.Response(503)
+            responses.append(response)
+            return response
+
+        fetch = await PaperResourceService(
+            transport=httpx.MockTransport(handler)
+        ).open_paper_resource('https://papers.example/paper.pdf')
+
+        with self.assertRaisesRegex(httpx.RemoteProtocolError, 'resume byte range'):
+            b''.join([chunk async for chunk in fetch.iter_bytes()])
+        await fetch.close()
+
+        self.assertEqual(len(requests), 4)
+        self.assertTrue(all(response.is_closed for response in responses))
 
 
 class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
@@ -275,7 +543,15 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
 
         def handler(request: httpx.Request) -> httpx.Response:
             pdf_requests.append(request)
-            return httpx.Response(206, headers={'content-type': 'application/pdf'})
+            range_header = request.headers.get('range')
+            if range_header == 'bytes=0-9':
+                content_range = 'bytes 0-9/100'
+            else:
+                content_range = 'bytes 10-19/100'
+            return httpx.Response(206, headers={
+                'content-type': 'application/pdf',
+                'content-range': content_range,
+            })
 
         provider = self.provider(handler, client_factory=client_factory)
         first = await provider.open(
@@ -400,7 +676,10 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
             ranges.append(request.headers.get('range'))
             if len(pdf_tokens) == 1:
                 return httpx.Response(403)
-            return httpx.Response(206, headers={'content-type': 'application/pdf'})
+            return httpx.Response(206, headers={
+                'content-type': 'application/pdf',
+                'content-range': 'bytes 20-29/100',
+            })
 
         fetch = await self.provider(
             handler,
@@ -500,7 +779,14 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
         provider = self.provider(
             lambda request: httpx.Response(
                 206,
-                headers={'content-type': 'application/pdf'},
+                headers={
+                    'content-type': 'application/pdf',
+                    'content-range': (
+                        'bytes 10-19/100'
+                        if request.headers.get('range')
+                        else 'bytes 0-9/100'
+                    ),
+                },
             ),
             client_factory=client_factory,
         )
@@ -572,7 +858,10 @@ class OpenReviewProviderTests(unittest.IsolatedAsyncioTestCase):
                         ),
                     },
                 )
-            return httpx.Response(206, headers={'content-type': 'application/pdf'})
+            return httpx.Response(206, headers={
+                'content-type': 'application/pdf',
+                'content-range': 'bytes 0-9/100',
+            })
 
         provider = HTTPProvider(
             timeout=30,

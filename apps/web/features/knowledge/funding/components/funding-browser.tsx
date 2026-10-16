@@ -8,6 +8,7 @@ import { getKnowledgeClient, KnowledgeClientError } from "@/clients/knowledge";
 import type { KnowledgeFundingSummary } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { useClearSearchRestoration } from "@/hooks/use-search-restoration";
 import { knowledgeQueryRetry } from "@/features/knowledge/retry";
 import { KnowledgeResultCard } from "@/features/knowledge/search/components/result-card";
 import {
@@ -30,6 +31,7 @@ export function FundingBrowser() {
 
 function FundingBrowserContent({ searchParams }: { searchParams: FundingSearchParamsLike }) {
   const router = useRouter();
+  const clearRestoration = useClearSearchRestoration("/knowledge/funding");
   const { query: urlQuery, fundingId } = readFundingUrlState(searchParams);
   const returnTo = useCurrentInternalPath();
   const [queryDraft, setQueryDraft] = useState({ source: urlQuery, value: urlQuery });
@@ -87,6 +89,7 @@ function FundingBrowserContent({ searchParams }: { searchParams: FundingSearchPa
   });
 
   const updateFundingUrl = (nextQuery: string, nextFundingId: string | null) => {
+    if (!nextQuery.trim() && !nextFundingId) clearRestoration();
     router.replace(buildFundingUrl(searchParams, nextQuery, nextFundingId), { scroll: false });
   };
 

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, FileText, RotateCw, UserRound } from "lucide-react";
 import { getKnowledgeClient, KnowledgeClientError } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
+import { PaperReadBadgeForPaper } from "@/features/knowledge/papers/components/paper-read-badge";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { normalizeInternalReturnTo } from "@/lib/navigation/internal-return-to";
 import { paperHref } from "@/lib/navigation/paper";
@@ -117,6 +118,7 @@ export function ScholarDetailPage({
                       <span className="block text-sm font-medium leading-snug text-ink group-hover:text-primary">
                         {paper.title}
                       </span>
+                      <PaperReadBadgeForPaper paperId={paper.id} className="mt-1" />
                       {paper.year !== null && (
                         <span className="mt-1 block text-xs text-faint">{paper.year}</span>
                       )}

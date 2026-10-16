@@ -270,6 +270,20 @@ class KnowledgeBatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([paper.id for paper in papers], ['paper-3', 'paper-1'])
         self.assertEqual(client.paper_calls, ['paper-3', 'missing', 'paper-1'])
 
+    async def test_batch_papers_reuses_cached_details_on_second_read(self):
+        from app.services.knowledge.cache import PaperDetailTTLCache
+
+        client = BatchFixtureClient()
+        service = KnowledgeService(
+            KnowledgeAdapter(client), paper_detail_cache=PaperDetailTTLCache()
+        )
+
+        first = await service.batch_get_papers(['paper-1', 'paper-2'])
+        second = await service.batch_get_papers(['paper-1', 'paper-2'])
+
+        self.assertEqual([paper.id for paper in first], [paper.id for paper in second])
+        self.assertEqual(client.paper_calls, ['paper-1', 'paper-2'])
+
 
 class KnowledgeContinuityTests(unittest.IsolatedAsyncioTestCase):
     async def test_search_detail_graph_keep_canonical_id(self):

@@ -527,6 +527,19 @@ components/ui/       # 基础 UI
 components/common/   # 跨 Feature 通用组件
 ```
 
+搜索导航恢复由 `apps/web/lib/navigation/search-restoration.ts` 的静态路由与参数白名单管理，
+只在 `sessionStorage` 中按认证用户 ID（未登录为 `anonymous`）保存最后一次带参数的内部地址。
+`AppShell` 在 Suspense 内监听 URL，侧栏 `SearchNavigationLink` 读取恢复地址并保留原生 Link 行为；
+直接访问空路径不自动跳转，也不清除记录。Feature 继续负责 URL 的业务解析、请求和缓存，
+主动清空时调用 `useClearSearchRestoration`；部分条件清除后仍有参数则记录新的地址。
+新增搜索入口只需注册路径与允许参数，并在需要恢复的导航入口使用该 Link。
+存储访问集中封装，可替换存储策略；不可用时退回原始导航地址。认证切换时不将当前旧 URL
+记到新身份下，直到 URL 再次变化。未提交的输入草稿、API 响应和其他页面状态不在此导航地址恢复机制内。
+首页简单搜索与论文库的短期文本草稿由 `lib/navigation/search-draft.ts` 和
+`hooks/use-search-draft.ts` 管理，按身份、入口及来源 URL 隔离，不保存附件或 API 结果。
+手机与桌面共用一个 AppSidebar 实例，AppShell 手机抽屉状态与桌面折叠状态分离。
+布局、状态归属及验收边界见 [响应式基础设施维护说明](responsive-core.md)。
+
 不要因为两个组件代码相似就立即提升为全局公共组件；只有职责稳定且确有跨模块复用时再抽取。
 
 一个主要业务可以包含多个子功能。
