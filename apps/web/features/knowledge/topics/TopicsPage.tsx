@@ -41,7 +41,7 @@ export function TopicsPage() {
   const groups = groupTopics(visibleTopics);
 
   return (
-    <main className="min-h-screen bg-white px-4 py-7 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-background px-4 py-7 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1180px]">
         <header className="mb-7">
           <div className="mb-4"><TopicSearch value={state.query} onSearch={(query) => updateState({ query })} /></div>
@@ -51,8 +51,8 @@ export function TopicsPage() {
           <TopicResults key={JSON.stringify([state.query, state.category])} topics={visibleTopics} returnTo={returnTo} />
         ) : (
           <div className="space-y-10">
-            {featuredTopics.length > 0 ? <section><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">精选主题</h2><span className="text-sm text-muted-foreground">{data?.total ?? 0} 个主题</span></div><TopicGrid topics={featuredTopics} returnTo={returnTo} featured /></section> : null}
-            {groups.map(([category, categoryTopics], index) => <section key={category}><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-foreground">{category}</h2><span className="text-sm text-muted-foreground">{categoryTopics.length} 个主题</span></div><TopicGrid topics={categoryTopics} returnTo={returnTo} carousel={categoryTopics.length > 3} deferred={index > 0} /></section>)}
+            {featuredTopics.length > 0 ? <section><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-ink">精选主题</h2><span className="text-sm text-muted">{data?.total ?? 0} 个主题</span></div><TopicGrid topics={featuredTopics} returnTo={returnTo} featured /></section> : null}
+            {groups.map(([category, categoryTopics], index) => <section key={category}><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-ink">{category}</h2><span className="text-sm text-muted">{categoryTopics.length} 个主题</span></div><TopicGrid topics={categoryTopics} returnTo={returnTo} carousel={categoryTopics.length > 3} deferred={index > 0} /></section>)}
           </div>
         )}
       </div>

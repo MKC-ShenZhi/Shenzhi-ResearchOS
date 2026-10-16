@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { KnowledgeTopic } from "@/clients/knowledge";
 import { TopicCard } from "./topic-card";
 
-const carouselButtonClass = "absolute top-1/2 z-10 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-[0_3px_12px_rgba(23,33,43,0.12)] transition-[color,background-color,border-color,transform,box-shadow] duration-200 hover:scale-105 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-[0_6px_16px_rgba(23,33,43,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 md:flex";
+const carouselButtonClass = "absolute top-1/2 z-10 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-card text-muted shadow-pop transition-[color,background-color,border-color,transform,box-shadow] duration-200 hover:scale-105 hover:border-primary hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 md:flex";
 const CAROUSEL_BATCH_SIZE = 6;
 
 interface TopicGridProps {
@@ -21,9 +21,9 @@ function TopicRowPlaceholder() {
   return (
     <div aria-hidden="true" className="scrollbar-subtle flex gap-4 overflow-x-scroll pb-1 xl:gap-5">
       {[0, 1, 2].map((index) => (
-        <div key={index} className={`${index ? "hidden md:block" : ""} min-w-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white`}>
-          <div className="aspect-[3.6/1] bg-slate-100" />
-          <div className="h-[12.5rem] space-y-3 p-3"><div className="h-6 w-1/2 rounded bg-slate-100" /><div className="h-10 rounded bg-slate-50" /></div>
+        <div key={index} className={`${index ? "hidden md:block" : ""} min-w-0 flex-1 overflow-hidden rounded-2xl border border-line bg-card`}>
+          <div className="aspect-[3.6/1] bg-chip" />
+          <div className="h-[12.5rem] space-y-3 p-3"><div className="h-6 w-1/2 rounded bg-chip" /><div className="h-10 rounded bg-panel" /></div>
         </div>
       ))}
     </div>
