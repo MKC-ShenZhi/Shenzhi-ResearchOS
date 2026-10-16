@@ -14,10 +14,11 @@ interface PaperThumbnailProps {
   src?: string | null;
   title: string;
   className?: string;
+  eager?: boolean;
 }
 
 /** Preserve complete figures in a landscape frame, with a local fallback. */
-export function PaperThumbnail({ src, title, className }: PaperThumbnailProps) {
+export function PaperThumbnail({ src, title, className, eager = false }: PaperThumbnailProps) {
   const normalizedSrc = src?.trim() || null;
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [loadedImage, setLoadedImage] = useState<{ src: string; ratio: number } | null>(null);
@@ -47,6 +48,7 @@ export function PaperThumbnail({ src, title, className }: PaperThumbnailProps) {
         alt={`${title} 的论文缩略图`}
         fill
         sizes="320px"
+        loading={eager ? "eager" : "lazy"}
         className="object-contain"
         unoptimized={isFallback}
         onLoad={(event) => {

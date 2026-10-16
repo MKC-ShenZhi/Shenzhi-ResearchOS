@@ -97,30 +97,31 @@ uv add <package>
 uv add --dev <package>
 ```
 
-## 首页每日推荐池
+## 首页论文发现快照
 
-首页推荐由 ShenZhi PostgreSQL 的 `daily_recommendations` 表提供，普通首页请求不会在缓存缺失时同步访问知识底座。部署新版本后先执行迁移：
+首页论文发现使用随应用发布的版本化内容快照，`GET /api/v1/discovery/papers` 默认返回 12 篇并通过 cursor 分页。服务端以 `Asia/Shanghai` 日期作为确定性随机种子，每天仅在相同优先级内生成一套全局一致的新顺序；内容快照版本与日期共同构成浏览快照版本。cursor 同时绑定内容版本、排序日期和偏移量，因此同一天所有请求顺序一致，跨过北京时间午夜的既有翻页仍沿用开始浏览时的顺序。普通首页请求不访问知识底座，也不把这批静态候选冒充每日新增或个性化推荐。
+
+从仓库根目录重复执行下列无网络命令，可基于正式 seed 刷新 FastAPI 快照，并仅发布入选论文对应的 300 张 WebP 静态图：
+
+```bash
+python3 scripts/publish_home_discovery.py
+python3 scripts/publish_home_discovery.py --check
+```
+
+输入保持在 `data/discovery/home-seed-300.json`，部署产物为：
+
+- `apps/backend/app/data/home_discovery_snapshot.json`
+- `apps/web/public/paper-thumbnails/*.webp`
+
+部署新版本仍需按常规流程执行数据库迁移：
 
 ```bash
 cd apps/backend
 uv run --locked --env-file .env alembic upgrade head
 ```
 
-该迁移也会创建 `agent_uploads` 临时文本表。生产环境需定期执行 `uv run --locked --env-file .env python -m app.services.chat.maintenance`，清理到期的未发送 Agent 附件及过期匿名 Chat 会话。
+当前没有把候选内容刷新绑定到自动调度；每日变化只重新计算现有候选的稳定顺序，不重新抓取知识底座。需要换批时显式更新 seed 并重新执行发布命令。已有 `daily_recommendations` 表保留为历史迁移兼容，不再承载首页请求。
 
-每天通过显式维护命令生成一次候选池：
-
-```bash
-cd apps/backend
-uv run --locked --env-file .env python -m app.services.daily_recommendations
-```
-
-服务器可使用 Linux cron 在 UTC `00:05` 执行，例如：
-
-```cron
-5 0 * * * cd /opt/shenzhi/apps/backend && uv run --locked --env-file .env python -m app.services.daily_recommendations >> /var/log/shenzhi-daily-recommendations.log 2>&1
-```
-
-命令先通过现有 Knowledge Service 获取并校验完整候选池，再以单次事务 upsert 当天记录。知识底座请求失败或返回空池时命令以非零状态退出，不会覆盖数据库中已有推荐；读取接口会自动使用不晚于当天的最近一份候选池。
+`agent_uploads` 临时文本表及匿名 Chat 会话仍按原维护策略清理。
 
 维护说明：[Chat 架构、协议与配置](../../docs/chat/README.md)。
