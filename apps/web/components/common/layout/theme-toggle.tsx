@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useThemeStore } from "@/stores/theme";
+import { isDarkThemePreset } from "@/lib/theme-presets";
 import { cn } from "@/lib/utils";
 
 /**
@@ -14,6 +15,8 @@ export function ThemeToggle({ className }: { className?: string }) {
   const setMode = useThemeStore((s) => s.setMode);
   const preset = useThemeStore((s) => s.preset);
   const setPreset = useThemeStore((s) => s.setPreset);
+  const customTheme = useThemeStore((s) => s.customTheme);
+  const setCustomAppearance = useThemeStore((s) => s.setCustomAppearance);
   const mounted = useSyncExternalStore(
     () => () => undefined,
     () => true,
@@ -22,7 +25,8 @@ export function ThemeToggle({ className }: { className?: string }) {
 
   const dark =
     mounted &&
-    (preset === "apple-dark" ||
+    ((preset === "custom" && customTheme.appearance === "dark") ||
+      isDarkThemePreset(preset) ||
       (preset === "shenzhi" &&
         (mode === "dark" ||
           (mode === "system" &&
@@ -33,7 +37,11 @@ export function ThemeToggle({ className }: { className?: string }) {
       setMode(dark ? "light" : "dark");
       return;
     }
-    setPreset(preset === "apple-dark" ? "apple-light" : "apple-dark");
+    if (preset === "custom") {
+      setCustomAppearance(dark ? "light" : "dark");
+      return;
+    }
+    setPreset(isDarkThemePreset(preset) ? "apple-light" : "apple-dark");
   };
 
   return (

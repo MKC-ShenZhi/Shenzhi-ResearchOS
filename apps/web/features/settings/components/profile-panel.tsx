@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { settingsMessages } from "../i18n";
 import { PreferenceStatus } from "./preference-status";
 import { ProfileEditor } from "./profile/profile-editor";
+import { CustomThemeControls } from "@/components/common/custom-theme-controls";
 
 const themes: { mode: ThemeMode; zh: string; en: string; icon: typeof Sun }[] = [
   { mode: "light", zh: "日间", en: "Light", icon: Sun },
@@ -60,6 +61,7 @@ export function ProfilePanel({
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {THEME_PRESETS.map((option) => <button key={option.id} type="button" aria-pressed={themePreset === option.id} onClick={() => onThemePresetChange(option.id)} className={cn("min-h-14 rounded-xl px-4 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary", themePreset === option.id ? "bg-primary-soft text-primary" : "bg-chip text-ink-2")}><span className="block text-sm font-medium">{option.label}</span><span className="mt-0.5 block text-xs text-muted">{option.description}</span></button>)}
           </div>
+          {themePreset === "custom" && <div className="mt-4"><CustomThemeControls /></div>}
           {themePreset === "shenzhi" && <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
             {themes.map((option) => <button key={option.mode} type="button" aria-pressed={themeMode === option.mode} onClick={() => onThemeChange(option.mode)} className={cn("flex h-10 items-center gap-2 rounded-xl px-5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary", themeMode === option.mode ? "bg-primary-soft font-medium text-primary" : "bg-chip text-ink-2")}><option.icon className="size-4" aria-hidden="true" />{locale === "en" ? option.en : option.zh}</button>)}
           </div>}

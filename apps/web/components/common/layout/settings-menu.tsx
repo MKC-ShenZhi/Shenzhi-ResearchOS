@@ -21,6 +21,7 @@ import { THEME_PRESETS } from "@/lib/theme-presets";
 import { cn } from "@/lib/utils";
 import { McpIcon } from "@/features/settings/components/settings-tabs";
 import { useSidebarStore } from "@/stores/sidebar";
+import { CustomThemeControls } from "@/components/common/custom-theme-controls";
 
 /** 设置选项,自上而下与设置页 Tab 顺序一致,点击跳转对应 Tab */
 const MENU_ITEMS = [
@@ -112,7 +113,7 @@ export function SettingsMenu({ collapsed }: { collapsed: boolean }) {
               <Palette className="size-3.5" strokeWidth={1.8} />
               视觉风格
             </div>
-            <div className="grid grid-cols-2 gap-1">
+            <div className="scrollbar-subtle grid max-h-64 grid-cols-2 gap-1 overflow-y-auto pr-1">
               {THEME_PRESETS.map((option) => (
                 <button
                   key={option.id}
@@ -132,6 +133,7 @@ export function SettingsMenu({ collapsed }: { collapsed: boolean }) {
                 </button>
               ))}
             </div>
+            {preset === "custom" && <div className="mt-2"><CustomThemeControls compact /></div>}
           </div>
 
           {/* 深知原版继续支持日间 / 夜间 / 跟随系统 */}
