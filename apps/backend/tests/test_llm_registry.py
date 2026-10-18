@@ -88,7 +88,10 @@ class RegistryTests(unittest.TestCase):
 
     def test_invalid_default_and_url_are_configuration_errors(self):
         for env in [{'AI_DEFAULT_MODEL': 'missing'}, {'DEEPSEEK_BASE_URL': 'http://untrusted.example'},
-                    {'AI_AGENT_DEFAULT_MODEL': 'deepseek-reasoner'}]:
+                    {'AI_AGENT_DEFAULT_MODEL': 'deepseek-reasoner'},
+                    {'DEEPSEEK_BASE_URL': 'https://test.example:invalid'},
+                    {'DEEPSEEK_BASE_URL': 'https://user:password@test.example'},
+                    {'DEEPSEEK_BASE_URL': 'https://test.example/v1?api_key=private'}]:
             with self.subTest(env=env), self.assertRaises(RegistryConfigError):
                 self.load(env)
 
@@ -97,3 +100,41 @@ class RegistryTests(unittest.TestCase):
         resolved = registry.resolve_model('deepseek-chat')
         self.assertNotIn('SECRET_VALUE', repr(resolved))
         self.assertNotIn('SECRET_VALUE', json.dumps(registry.public_models('chat')))
+
+    def test_qualified_model_keeps_provider_when_legacy_priority_changes(self):
+        env = {'DASHSCOPE_API_KEY': 'dash', 'DEEPSEEK_API_KEY': 'deep',
+               'DASHSCOPE_MODEL': 'shared', 'DEEPSEEK_MODEL': 'shared'}
+        first = self.load(env)
+        second = self.load({**env, 'DASHSCOPE_API_KEY': ''})
+        self.assertEqual(first.resolve_model('deepseek/shared').provider.spec.id, 'deepseek')
+        self.assertEqual(second.resolve_model('deepseek/shared').provider.spec.id, 'deepseek')
+        with self.assertRaisesRegex(BusinessError, '凭据'):
+            second.resolve_model('dashscope/shared')
+
+    def test_file_duplicate_ids_and_invalid_params_fail_without_input_leak(self):
+        provider = {'id': 'p', 'base_url': 'https://p.example', 'api_key_env': 'P_KEY'}
+        model = {'id': 'm', 'provider_id': 'p', 'upstream_model': 'm', 'label': 'M'}
+        for data in [
+            {'providers': [provider], 'models': [model, model]},
+            {'providers': [provider, provider], 'models': [model]},
+            {'providers': [provider], 'models': [{**model, 'request_params': {'api_key': 'PRIVATE_INPUT'}}]},
+            {'providers': [{**provider, 'protocol': 'unsupported'}], 'models': [model]},
+            {'providers': [provider], 'models': [{**model, 'capabilities': {'thinking': 'none'},
+                                                  'request_params': {'enable_thinking': True}}]},
+        ]:
+            with self.subTest(data=data), tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
+                json.dump(data, file)
+                file.flush()
+                with self.assertRaises(RegistryConfigError) as error:
+                    self.load({'AI_MODEL_REGISTRY_FILE': file.name})
+                self.assertNotIn('PRIVATE_INPUT', str(error.exception))
+
+    def test_fourth_provider_alone_can_supply_default_without_old_keys(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
+            json.dump({'providers': [{'id': 'fourth', 'base_url': 'https://fourth.example', 'api_key_env': 'FOURTH_KEY'}],
+                       'models': [{'id': 'fourth/m', 'provider_id': 'fourth', 'upstream_model': 'm', 'label': 'M',
+                                   'capabilities': {'tool_calling': True}}]}, file)
+            file.flush()
+            registry = self.load({'AI_MODEL_REGISTRY_FILE': file.name, 'FOURTH_KEY': 'key'})
+            self.assertEqual(registry.default_model('chat').id, 'fourth/m')
+            self.assertEqual(registry.default_model('agent').id, 'fourth/m')

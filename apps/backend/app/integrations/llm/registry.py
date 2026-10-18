@@ -18,7 +18,7 @@ class RegistryConfigError(BusinessError):
 
 
 class Definition(BaseModel):
-    model_config = ConfigDict(extra='forbid', frozen=True, strict=True)
+    model_config = ConfigDict(extra='forbid', frozen=True, strict=True, str_strip_whitespace=True)
 
 
 class Capabilities(Definition):
@@ -49,7 +49,8 @@ class ProviderSpec(Definition):
     @classmethod
     def trusted_endpoint(cls, value: str) -> str:
         parsed = urlsplit(value)
-        if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
+        port = parsed.port  # Also reject malformed or out-of-range ports.
+        if (port == 0 or parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
                 or parsed.query or parsed.fragment):
             raise ValueError('provider endpoint must be HTTPS without credentials, query or fragment')
         return value.rstrip('/')
@@ -168,7 +169,8 @@ class ModelRegistry:
         if not model.enabled:
             raise BusinessError(20001, '所选模型已禁用，请选择其他模型')
         if not model.capabilities.supports(purpose):
-            raise BusinessError(20001, '所选模型不支持当前业务所需能力（Agent 需要 Tool Calling）')
+            detail = '（Agent 需要 Tool Calling）' if purpose == 'agent' else ''
+            raise BusinessError(20001, f'所选模型不支持当前业务所需能力{detail}')
         provider = self.providers[model.provider_id]
         if not provider.spec.enabled or (not provider.configured and require_configured):
             raise BusinessError(20004, '所选模型的 Provider 未启用或未配置凭据，请联系管理员', 503)

@@ -114,3 +114,30 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
             for model in ['missing', 'deepseek-r1']:
                 with self.subTest(model=model), self.assertRaises(BusinessError):
                     AgentRuntime(model=model)
+
+    async def test_new_glm_version_uses_explicit_capabilities_and_vendor_strategy(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
+            json.dump({'models': [{'id': 'zhipu/future-glm', 'provider_id': 'zhipu',
+                                   'upstream_model': 'future-glm', 'label': 'GLM Custom', 'brand': 'zhipu',
+                                   'capabilities': {'tool_calling': True, 'temperature': False,
+                                                    'thinking': 'thinking', 'max_output_tokens': 777},
+                                   'request_params': {'thinking': {'type': 'disabled'}}}]}, file)
+            file.flush()
+            with patch.dict(os.environ, {**ENV, 'ZHIPU_MODEL': 'future-glm',
+                                         'AI_MODEL_REGISTRY_FILE': file.name}, clear=True):
+                registry = load_registry()
+            seen = []
+            def handler(request):
+                seen.append(json.loads(request.content))
+                return httpx.Response(200, text=sse({'content': 'ok'}))
+            chat = ModelProvider(registry=registry, transport=httpx.MockTransport(handler))
+            agent = OpenAICompatProvider(registry=registry, transport=httpx.MockTransport(handler))
+            _ = [event async for event in chat.stream([], 'zhipu/future-glm', 'idea')]
+            _ = [event async for event in agent.stream(ModelRequest('zhipu/future-glm', [], temperature=1.0))]
+            for payload in seen:
+                self.assertEqual(payload['model'], 'future-glm')
+                self.assertEqual(payload['thinking'], {'type': 'disabled'})
+                self.assertEqual(payload['max_tokens'], 777)
+                self.assertNotIn('temperature', payload)
+                self.assertNotIn('enable_thinking', payload)
+                self.assertNotIn('stream_options', payload)

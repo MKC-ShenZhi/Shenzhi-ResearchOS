@@ -75,7 +75,7 @@ shenzhi/
 │       │   ├── services/        # 按 chat、knowledge、uploads、user、library 等领域组织业务逻辑
 │       │   ├── integrations/    # 外部服务与科研能力接入边界
 │       │   │   ├── knowledge/   # Knowledge Base Research Capability
-│       │   │   ├── llm/         # 外部模型 Provider
+│       │   │   ├── llm/         # 统一 Model Registry / Resolver 与 Chat Provider
 │       │   │   ├── web_search/  # 外部搜索 Provider
 │       │   │   └── paper_resource/ # 外部 PDF 资源 Provider
 │       │   ├── core/            # 配置、身份、错误等基础能力
@@ -680,3 +680,11 @@ main
 - 良好的可扩展性
 - 对科研能力变化的适应能力
 - 较低的跨组协作和后续维护成本
+
+## LLM 接入基础设施
+
+Chat、Agent 与后续 AI Feature 统一通过 `integrations/llm` 的 Model Registry / Resolver
+解析 Model ID、Provider、上游型号和能力。Chat 的 `integrations/llm/provider.py` 与 Agent 的
+`services/agent/provider.py` 继续各自负责流式协议处理。模型品牌只用于展示，实际路由由
+`provider_id` 决定；Provider 凭据仅在服务端加载。接入规则、兼容策略及声明示例见
+[LLM API Foundation](llm-api-foundation.md)。

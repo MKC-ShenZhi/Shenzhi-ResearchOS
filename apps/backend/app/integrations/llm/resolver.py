@@ -80,11 +80,13 @@ def load_registry() -> ModelRegistry:
     for purpose, env in [('chat', 'AI_DEFAULT_MODEL'), ('agent', 'AI_AGENT_DEFAULT_MODEL')]:
         if os.getenv(env, '').strip():
             defaults[purpose] = os.environ[env].strip()
-    # With only legacy settings, DashScope wins if it has a key; otherwise DeepSeek.
-    # With Zhipu alone configured, the ordinary configured-first default applies.
+    # Explicit new provider definitions can supply a configured-first default.
+    # With only old environment settings, retain DashScope -> DeepSeek priority.
+    configured_new = any(provider.enabled and provider.id not in ('dashscope', 'deepseek')
+                         and os.getenv(provider.api_key_env, '').strip() for provider in providers)
     if ('chat' not in defaults and (os.getenv('DASHSCOPE_API_KEY', '').strip()
                                    or os.getenv('DEEPSEEK_API_KEY', '').strip()
-                                   or not os.getenv('ZHIPU_API_KEY', '').strip())):
+                                   or not configured_new)):
         defaults['chat'] = names[legacy]
     return ModelRegistry(Catalog(providers=providers, models=models, aliases=aliases, defaults=defaults), dict(os.environ))
 
