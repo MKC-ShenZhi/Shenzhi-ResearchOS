@@ -11,8 +11,9 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.api._support.upload_reader import read_upload
-from app.core.config import MAX_FILES, UPLOAD_ACCEPT, model_config
+from app.core.config import MAX_FILES, UPLOAD_ACCEPT
 from app.core.errors import BusinessError
+from app.integrations.llm.resolver import load_registry
 from app.core.identity import request_owner, require_bff
 from app.core.responses import ok
 from app.services.agent import service as agent_service
@@ -49,17 +50,15 @@ class SteerBody(BaseModel):
 @router.get('/config')
 def config(_credential: None = Depends(require_bff)):
     """运行配置：可选模型、技能清单、附件限制（结构与 chat/config 对齐）。"""
-    settings = model_config()
+    registry = load_registry()
     store = agent_service.default_store()
     skills = [{'name': skill.name, 'description': skill.description}
               for name in store.names()
               for skill in [store.get(name)]
               if skill and not skill.disable_model_invocation]
     return ok({
-        'models': [{'value': item, 'label': item, 'provider': settings.provider,
-                    'enabled': bool(settings.key)}
-                   for item in settings.models],
-        'default_model': settings.model,
+        'models': registry.public_models('agent'),
+        'default_model': registry.public_default('agent'),
         'skills': skills,
         'upload': {'max_size_mb': 20, 'max_files': MAX_FILES, 'accept': UPLOAD_ACCEPT},
     })

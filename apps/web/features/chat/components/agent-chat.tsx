@@ -14,7 +14,7 @@ import { getChatConfig } from "../services/chat-config";
 import { askSessionUrl, normalizeAskSessionId } from "../services/session-url";
 import type { ChatAttachment, ChatModelId, ChatReplyMode, ComposerSubmitPayload, ChatConfig } from "@/types/ai-search";
 import type { ComposerEntryMode } from "@/types";
-import { DEFAULT_CHAT_MODEL } from "../services/model-catalog";
+import { DEFAULT_CHAT_MODEL, selectAvailableModel } from "../services/model-catalog";
 import { useAuth } from "@/components/auth/auth-provider";
 
 const SUGGESTIONS = [
@@ -152,9 +152,7 @@ function ChatWorkspace({
     initialQuestionStarted.current = true;
     const draft = readAskDraft(question);
     const preferred = initialModel ?? draft.model;
-    const selected = config.models.some((m) => m.value === preferred && m.enabled)
-      ? preferred
-      : config.default_model ?? config.models.find((m) => m.enabled)?.value ?? preferred;
+    const selected = selectAvailableModel(config, preferred);
     setModel(selected);
     const selectedMode = initialMode ?? draft.mode;
     const web = initialWebSearch ?? draft.web_search;

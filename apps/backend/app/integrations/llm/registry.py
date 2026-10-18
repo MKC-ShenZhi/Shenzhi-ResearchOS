@@ -182,6 +182,7 @@ class ModelRegistry:
             result.append({
                 'value': model.id, 'label': model.label, 'provider': model.brand,
                 'provider_id': model.provider_id, 'brand': model.brand,
+                'aliases': [alias for alias, target in self.aliases.items() if target == model.id],
                 'description': model.description, 'enabled': enabled,
                 **({} if enabled else {'reason': 'model_disabled' if not model.enabled else 'provider_not_configured'}),
                 'capabilities': model.capabilities.model_dump(),
