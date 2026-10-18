@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import random
-import re
 import time
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
@@ -20,12 +19,13 @@ from typing import Any, Protocol
 
 import httpx
 
-from app.core.config import ModelConfig, model_config
+from app.core.config import ModelConfig
+from app.integrations.llm.registry import ModelRegistry, ResolvedModel
+from app.integrations.llm.resolver import load_registry, registry_from_legacy
 from app.core.errors import BusinessError
 from app.services.agent.json_repair import parse_streaming_json
 from app.services.agent.types import StopReason, ToolCall
 
-REASONING_MODEL = re.compile(r'reasoner|r1|qwen3', re.I)
 # 可重试状态码（pi provider-retry.ts:23-35）：408/409/429/≥500。
 # 400 不在其中——它是参数/内容错误，重试必然复现；此前把 400 加进来是为了兜住一次
 # 未确诊的线上失败，根因（截断的 function.arguments 原样回传）已在 json_repair 层修掉，
@@ -173,11 +173,8 @@ def _retry_after_seconds(headers: Mapping[str, str]) -> float | None:
 
 
 def _status_error(status: int, detail: str = '') -> BusinessError:
-    """上游状态 → 业务错误。detail（上游响应体摘要）随消息带出：
-    400 的原因（参数不支持 / 输入超限 / 消息序列非法）只有上游说得清，丢掉它就只能猜。"""
+    """上游状态 → 安全业务错误；原始响应体仅用于内部重试分类。"""
     message = _STATUS_MESSAGES.get(status, f'模型服务暂不可用（HTTP {status}）')
-    if detail:
-        message = f'{message}（上游：{detail[:200]}）'
     return BusinessError(20004, message, 502)
 
 
@@ -190,11 +187,12 @@ class OpenAICompatProvider:
     """
 
     def __init__(self, config: ModelConfig | None = None, *,
+                 registry: ModelRegistry | None = None,
                  transport: httpx.AsyncBaseTransport | None = None, retry_delay: float = 1.5,
                  max_retries: int = 2, max_retry_delay: float = 24.0,
                  on_payload: Callable[[dict], None] | None = None,
                  on_response: Callable[[dict | None], None] | None = None):
-        self.config = config or model_config()
+        self.registry = registry or (registry_from_legacy(config) if config is not None else load_registry())
         self.transport = transport
         self.retry_delay = retry_delay
         self.max_retries = max_retries
@@ -203,15 +201,14 @@ class OpenAICompatProvider:
         self.on_response = on_response
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ProviderEvent]:
-        if not self.config.key:
-            raise BusinessError(20004, '后端未配置 DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY', 503)
+        resolved = self.registry.resolve_model(request.model, 'agent')
         attempt = 0
         while True:
             attempt += 1
             emitted = False
             retry_after: float | None = None
             try:
-                async for event in self._stream_once(request):
+                async for event in self._stream_once(request, resolved):
                     emitted = True
                     yield event
                 return
@@ -252,44 +249,38 @@ class OpenAICompatProvider:
         except Exception:
             logging.getLogger('app.agent').exception('provider 观测钩子失败（已忽略）')
 
-    def _build_payload(self, request: ModelRequest, *, thinking: bool = True,
-                       include_usage: bool = True) -> dict:
-        reasoning = bool(REASONING_MODEL.search(request.model))
+    def _build_payload(self, request: ModelRequest, *, resolved: ResolvedModel | None = None,
+                       thinking: bool = True, include_usage: bool = True) -> dict:
+        resolved = resolved or self.registry.resolve_model(request.model, 'agent')
+        caps = resolved.spec.capabilities
         payload: dict = {
-            'model': request.model,
+            'model': resolved.upstream_model,
             'messages': request.messages,
             'stream': True,
-            'max_tokens': MAX_OUTPUT_TOKENS if reasoning else request.max_tokens,
+            'max_tokens': min(request.max_tokens, caps.agent_max_tokens, caps.max_output_tokens),
         }
         if request.tools:
             payload['tools'] = request.tools
             payload['tool_choice'] = 'auto'
-        if request.temperature is not None and not reasoning:
+        if request.temperature is not None and caps.temperature:
             payload['temperature'] = request.temperature
-        # 流式响应默认不带 usage 尾帧，必须显式索要（pi openai-completions.ts:818-820）；
-        # 拿不到真实用量，compaction 的触发估算就只能退回纯字符启发式。
-        if include_usage:
+        if include_usage and caps.stream_options:
             payload['stream_options'] = {'include_usage': True}
-        # 思维链开关（pi thinkingLevel 的裁剪版）：DashScope 平台传 enable_thinking
-        # 让 qwen-plus 等输出 reasoning_content（deepseek-reasoner 等原生思维链模型不需要）。
-        # 默认开（产品要求思考过程可见）；AGENT_DISABLE_THINKING=true 可关。
-        if (thinking and self.config.provider == 'platform' and not reasoning
+        if (thinking and caps.thinking != 'none'
                 and os.getenv('AGENT_DISABLE_THINKING', '').strip().lower() != 'true'):
-            payload['enable_thinking'] = True
-            payload['max_tokens'] = MAX_OUTPUT_TOKENS  # 平台顶；思考与正文共享这个额度
+            payload[caps.thinking] = (True if caps.thinking == 'enable_thinking' else {'type': 'enabled'})
+            payload.update(resolved.spec.request_params)
         return payload
 
-    async def _stream_once(self, request: ModelRequest) -> AsyncIterator[ProviderEvent]:
-        # 400 降级阶梯（pi 无此需求，因为我们只对接单一平台）：可选增强项逐个摘掉重试，
-        # 增强不得绑架主流程。顺序 = **先摘思维链，再摘 usage 尾帧**：实测上游 400 的原文
-        # 是 "enable_thinking not supported"（平台差异基本都出在思维链开关上），
-        # 先摘 stream_options 会白耗一次尝试。
-        # 回归：test_thinking_dropped_on_400_before_outer_retry。
-        degradations = ('enable_thinking', 'stream_options')
+    async def _stream_once(self, request: ModelRequest, resolved: ResolvedModel) -> AsyncIterator[ProviderEvent]:
+        # Only retry explicitly rejected optional parameters. Arbitrary 400s
+        # (context length, invalid messages, etc.) must fail without degradation.
+        degradations = ('enable_thinking', 'thinking', 'stream_options')
         dropped: set[str] = set()
         timeout = httpx.Timeout(float(os.getenv('AI_TIMEOUT_SEC', '90')), connect=10)
         while True:
-            payload = self._build_payload(request, thinking='enable_thinking' not in dropped,
+            payload = self._build_payload(request, resolved=resolved,
+                                          thinking=not ({'enable_thinking', 'thinking'} & dropped),
                                           include_usage='stream_options' not in dropped)
             usage: Usage | None = None
             tool_calls: dict[int, dict[str, str]] = {}
@@ -299,23 +290,27 @@ class OpenAICompatProvider:
             try:
                 async with httpx.AsyncClient(timeout=timeout, transport=self.transport) as client:
                     async with client.stream(
-                        'POST', f'{self.config.base_url}/chat/completions',
-                        headers={'Authorization': f'Bearer {self.config.key}', 'Accept': 'text/event-stream'},
+                        'POST', f'{resolved.base_url}/chat/completions',
+                        headers={'Authorization': f'Bearer {resolved.key}', 'Accept': 'text/event-stream'},
                         json=payload,
                     ) as response:
                         if response.status_code >= 400:
-                            # 上游响应体是唯一的权威解释（参数不支持/输入超限/消息序列非法），
-                            # 必须在抛错前读出来——否则只剩一句无从下手的通用文案。
+                            # Inspect privately: upstream bodies may echo secrets.
                             detail = (await response.aread()).decode('utf-8', 'replace')
                             next_drop = next((name for name in degradations
-                                              if name not in dropped and name in payload), None)
+                                              if name not in dropped and name in payload
+                                              and name in detail.lower()
+                                              and any(marker in detail.lower() for marker in
+                                                      ('not supported', 'unsupported', 'unknown parameter',
+                                                       'unrecognized', 'not allowed'))), None)
                             if response.status_code == 400 and next_drop is not None:
                                 dropped.add(next_drop)
                                 logging.getLogger('app.agent').warning(
-                                    '%s 被上游拒绝(400)，摘掉后重试：%s', next_drop, detail[:300])
+                                    '%s 参数被上游明确拒绝(400)，摘掉后重试', next_drop)
                                 continue
                             logging.getLogger('app.agent').warning(
-                                '模型上游返回 %s：%s', response.status_code, detail[:500])
+                                '模型上游返回 %s（Provider: %s）',
+                                response.status_code, resolved.provider.spec.id)
                             raise _UpstreamStatus(response.status_code, detail, response.headers)
                         async for line in response.aiter_lines():
                             if not line.startswith('data:'):
@@ -383,7 +378,7 @@ class OpenAICompatProvider:
                                 # content_filter / 未知取值 → error 并保留原文（pi:1550-1574）；
                                 # 静默降级成 stop 会让"被审核截断"伪装成"正常说完"
                                 stop = StopReason.ERROR
-                                error_message = f'模型返回未知停止原因: {raw_reason}'
+                                error_message = '模型返回异常停止原因，请重试'
                         yield Finish(stop, usage, error_message=error_message)
             except BusinessError:
                 raise

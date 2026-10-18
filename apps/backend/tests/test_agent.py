@@ -112,7 +112,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.turns, 1)
         self.assertEqual([e.name for e in events],
                          ['run_start', 'turn_start', 'delta', 'turn_end', 'run_end'])
-        self.assertEqual(events[0].data['model'], 'deepseek-chat')
+        self.assertEqual(events[0].data['model'], 'deepseek/deepseek-chat')
         self.assertEqual(events[-1].data['status'], 'done')
 
     async def test_tool_round_trip_wire_format(self):
@@ -627,8 +627,8 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('凭据无效', ctx.exception.message)
         self.assertEqual(len(calls), 1)  # 401 是配置类错误，不重试
 
-    async def test_upstream_400_detail_surfaces(self):
-        """400 的上游原文必须带出来：原因（参数/长度/消息序列）只有上游说得清。"""
+    async def test_upstream_400_detail_is_private(self):
+        """上游原始响应可能回显凭据，不进入公开异常。"""
         def handler(request):
             return httpx.Response(400, json={'error': {'message': 'Range of input length should be [1, 129024]'}})
 
@@ -636,10 +636,10 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(BusinessError) as ctx:
             await self.collect(provider, ModelRequest('deepseek-chat', [{'role': 'user', 'content': 'q'}]))
         self.assertIn('模型不支持当前请求参数', ctx.exception.message)
-        self.assertIn('Range of input length', ctx.exception.message)
+        self.assertNotIn('Range of input length', ctx.exception.message)
 
-    async def test_transient_400_retried(self):
-        """瞬时 400 重试后可恢复（实测同一 payload 可反复成功，400 多为上游瞬时状态）。"""
+    async def test_arbitrary_400_is_not_parameter_degradation(self):
+        """任意 400 不能当作参数不兼容而重试。"""
         calls = []
 
         def handler(request):
@@ -652,9 +652,9 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             ]), headers={'content-type': 'text/event-stream'})
 
         provider = OpenAICompatProvider(CONFIG, transport=httpx.MockTransport(handler), retry_delay=0)
-        events = await self.collect(provider, ModelRequest('deepseek-chat', [{'role': 'user', 'content': 'q'}]))
-        self.assertEqual([e.text for e in events if isinstance(e, TextDelta)], ['A'])
-        self.assertEqual(len(calls), 2)
+        with self.assertRaises(BusinessError):
+            await self.collect(provider, ModelRequest('deepseek-chat', [{'role': 'user', 'content': 'q'}]))
+        self.assertEqual(len(calls), 1)
 
     async def test_thinking_dropped_on_400_before_outer_retry(self):
         """enable_thinking 被拒 → 先去思考重试（同一次调用内），不占用外层重试次数。"""

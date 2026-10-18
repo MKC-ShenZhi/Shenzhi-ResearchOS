@@ -135,7 +135,8 @@ class ModelRegistry:
         if any(alias in self.models or alias == 'default' or target not in self.models
                for alias, target in self.aliases.items()):
             raise RegistryConfigError('兼容别名冲突或指向未知模型')
-        self.defaults = dict(catalog.defaults)
+        self.defaults = {purpose: self.aliases.get(model_id, model_id)
+                         for purpose, model_id in catalog.defaults.items()}
         if set(self.defaults) - {'chat', 'agent'}:
             raise RegistryConfigError('未知默认模型用途')
         for purpose, model_id in self.defaults.items():
@@ -149,6 +150,9 @@ class ModelRegistry:
     def default_model(self, purpose: Purpose = 'chat') -> ModelSpec:
         if purpose in self.defaults:
             return self.models[self.defaults[purpose]]
+        shared = self.models.get(self.defaults.get('chat', ''))
+        if purpose == 'agent' and shared and shared.capabilities.supports(purpose):
+            return shared
         candidates = [model for model in self.list_models(purpose) if model.enabled]
         configured = [model for model in candidates if self.providers[model.provider_id].configured]
         if not candidates:
@@ -166,7 +170,7 @@ class ModelRegistry:
         if not model.capabilities.supports(purpose):
             raise BusinessError(20001, '所选模型不支持当前业务所需能力（Agent 需要 Tool Calling）')
         provider = self.providers[model.provider_id]
-        if not provider.configured and require_configured:
+        if not provider.spec.enabled or (not provider.configured and require_configured):
             raise BusinessError(20004, '所选模型的 Provider 未启用或未配置凭据，请联系管理员', 503)
         return ResolvedModel(model, provider)
 

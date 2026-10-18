@@ -10,7 +10,9 @@ import re
 from collections.abc import AsyncIterator
 from time import perf_counter
 import httpx
-from app.core.config import ModelConfig, model_config
+from app.core.config import ModelConfig
+from app.integrations.llm.registry import ModelRegistry, ModelSpec
+from app.integrations.llm.resolver import load_registry, model_definition, registry_from_legacy
 from app.core.errors import BusinessError
 from app.core.logging import log_event
 
@@ -19,19 +21,19 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_model(raw: str | None, config: ModelConfig | None = None) -> str:
-    config = config or model_config()
-    model = config.model if not raw or raw == 'default' else raw
-    if model not in config.models:
-        raise BusinessError(20001, '所选模型未配置，请刷新后选择可用模型')
-    return model
+    registry = registry_from_legacy(config) if config is not None else load_registry()
+    return registry.resolve_model(raw, require_configured=False).spec.id
 
 
-def completion_payload(model: str, messages: list[dict], mode: str) -> dict:
-    reasoning = bool(re.search(r'reasoner|r1|qwen3', model, re.I))
-    payload = {'model': model, 'messages': messages, 'stream': True,
-               'max_tokens': 8192 if reasoning else 4096}
-    if not reasoning:
+def completion_payload(model: ModelSpec | str, messages: list[dict], mode: str) -> dict:
+    # String input is retained for existing server-side adapter tests.
+    spec = model if isinstance(model, ModelSpec) else model_definition(model, 'deepseek', model)
+    caps = spec.capabilities
+    payload = {'model': spec.upstream_model, 'messages': messages, 'stream': True,
+               'max_tokens': min(caps.chat_max_tokens, caps.max_output_tokens)}
+    if caps.temperature:
         payload['temperature'] = TEMPERATURE.get(mode, 0.3)
+    payload.update(spec.request_params)
     return payload
 
 
@@ -42,23 +44,24 @@ def provider_error(status: int) -> BusinessError:
 
 
 class ModelProvider:
-    def __init__(self, config: ModelConfig | None = None, transport=None):
-        self.config = config or model_config()
+    def __init__(self, config: ModelConfig | None = None, transport=None, *,
+                 registry: ModelRegistry | None = None):
+        self.registry = registry or (registry_from_legacy(config) if config is not None else load_registry())
         self.transport = transport
 
     async def stream(self, messages: list[dict], model: str, mode: str) -> AsyncIterator[dict]:
         started_at = perf_counter()
         status_code: int | None = None
+        resolved = None
         try:
-            if not self.config.key:
-                raise BusinessError(20004, '后端未配置 DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY', 503)
-            payload = completion_payload(resolve_model(model, self.config), messages, mode)
+            resolved = self.registry.resolve_model(model)
+            payload = completion_payload(resolved.spec, messages, mode)
             timeout = httpx.Timeout(float(os.getenv('AI_TIMEOUT_SEC', '90')), connect=10)
             finished = False
             try:
                 async with httpx.AsyncClient(timeout=timeout, transport=self.transport) as client:
-                    async with client.stream('POST', f'{self.config.base_url}/chat/completions',
-                            headers={'Authorization': f'Bearer {self.config.key}', 'Accept': 'text/event-stream'},
+                    async with client.stream('POST', f'{resolved.base_url}/chat/completions',
+                            headers={'Authorization': f'Bearer {resolved.key}', 'Accept': 'text/event-stream'},
                             json=payload) as response:
                         status_code = response.status_code
                         if response.status_code >= 400:
@@ -100,7 +103,7 @@ class ModelProvider:
                 raise BusinessError(20004, '模型流提前结束，可以继续生成', 502)
         except Exception as error:
             log_event(logger, logging.ERROR, 'llm.request.failed', {
-                'provider': self.config.provider,
+                'provider': resolved.provider.spec.id if resolved else 'unresolved',
                 'operation': 'chat.completions.stream',
                 'status_code': status_code,
                 'duration_ms': round((perf_counter() - started_at) * 1000),
@@ -110,7 +113,7 @@ class ModelProvider:
             raise
         else:
             log_event(logger, logging.INFO, 'llm.request.completed', {
-                'provider': self.config.provider,
+                'provider': resolved.provider.spec.id if resolved else 'unresolved',
                 'operation': 'chat.completions.stream',
                 'status_code': status_code,
                 'duration_ms': round((perf_counter() - started_at) * 1000),
@@ -126,12 +129,14 @@ class ModelProvider:
             {'role': 'assistant', 'content': answer[:1500]},
             {'role': 'user', 'content': '请生成 3 个追问，只返回 JSON 数组。'},
         ]
-        payload = completion_payload(self.config.model, messages, 'fast')
-        payload.update(stream=False, max_tokens=300)
+        resolved = None
         try:
+            resolved = self.registry.resolve_model(None)
+            payload = completion_payload(resolved.spec, messages, 'fast')
+            payload.update(stream=False, max_tokens=min(300, resolved.spec.capabilities.max_output_tokens))
             async with httpx.AsyncClient(timeout=10, transport=self.transport) as client:
-                response = await client.post(f'{self.config.base_url}/chat/completions',
-                    headers={'Authorization': f'Bearer {self.config.key}'}, json=payload)
+                response = await client.post(f'{resolved.base_url}/chat/completions',
+                    headers={'Authorization': f'Bearer {resolved.key}'}, json=payload)
                 response.raise_for_status()
                 raw = response.json()['choices'][0]['message']['content']
                 match = re.search(r'\[[\s\S]*?\]', raw)
@@ -141,15 +146,15 @@ class ModelProvider:
                 if isinstance(parsed, list) else []
             )
             log_event(logger, logging.INFO, 'llm.request.completed', {
-                'provider': self.config.provider,
+                'provider': resolved.provider.spec.id if resolved else 'unresolved',
                 'operation': 'chat.completions.followups',
                 'status_code': response.status_code,
                 'duration_ms': round((perf_counter() - started_at) * 1000),
             })
             return result
-        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as error:
+        except (BusinessError, httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as error:
             log_event(logger, logging.ERROR, 'llm.request.failed', {
-                'provider': self.config.provider,
+                'provider': resolved.provider.spec.id if resolved else 'unresolved',
                 'operation': 'chat.completions.followups',
                 'duration_ms': round((perf_counter() - started_at) * 1000),
                 'error_type': type(error).__name__,

@@ -16,6 +16,8 @@ from app.services.agent_sessions.repository import agent_session_repository
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from app.integrations.llm.resolver import load_registry
+    load_registry()
     await repository.recover()
     await agent_session_repository.recover()
     yield

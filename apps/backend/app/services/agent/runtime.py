@@ -20,7 +20,7 @@ from contextlib import aclosing
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from app.core.config import model_config
+from app.integrations.llm.resolver import load_registry
 from app.core.errors import BusinessError
 from app.services.agent.compaction import (
     estimate_context_chars, format_file_operations, plan_compaction,
@@ -198,8 +198,8 @@ class AgentRuntime:
                  ask_user: bool = False,
                  before_tool_call: BeforeToolCall | None = None,
                  after_tool_call: AfterToolCall | None = None):
-        self.config = model_config()
-        self.provider = provider or OpenAICompatProvider(self.config)
+        model_registry = load_registry()
+        self.provider = provider or OpenAICompatProvider(registry=model_registry)
         self.checkpoint_store = checkpoint_store
         self.compaction = compaction
         self.compaction_at = compaction_at
@@ -258,10 +258,9 @@ class AgentRuntime:
                             '只能基于已收集的证据交付，未覆盖的部分照实说明。')
         self.max_context_chars = max_context_chars
         self.max_tool_result_chars = max_tool_result_chars
-        chosen = self.config.model if not model or model == 'default' else model
-        if chosen not in self.config.models:
-            raise BusinessError(20001, '所选模型未配置，请刷新后选择可用模型')
-        self.model = chosen
+        self.model = model_registry.resolve_model(
+            model, 'agent', require_configured=False).spec.id
+
 
     async def run(self, prompt: str, *, history: Sequence[AgentMessage] = (),
                   on_event: Callable[[AgentEvent], None] | None = None,

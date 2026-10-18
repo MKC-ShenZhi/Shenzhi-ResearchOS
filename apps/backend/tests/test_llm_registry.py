@@ -22,7 +22,7 @@ class RegistryTests(unittest.TestCase):
         ]:
             registry = self.load(env)
             resolved = registry.resolve_model(None)
-            self.assertEqual((resolved.spec.id, resolved.provider.spec.id), (model, provider))
+            self.assertEqual((resolved.spec.id, resolved.provider.spec.id), (f'{provider}/{model}', provider))
 
     def test_legacy_allowed_models_belong_to_legacy_provider(self):
         registry = self.load({'DASHSCOPE_API_KEY': 'dash', 'DEEPSEEK_API_KEY': 'deep',
@@ -41,7 +41,7 @@ class RegistryTests(unittest.TestCase):
         registry = self.load({'ZHIPU_API_KEY': 'glm'})
         self.assertFalse(any(item.provider_id == 'zhipu' for item in registry.list_models()))
         registry = self.load({'ZHIPU_API_KEY': 'glm', 'ZHIPU_MODEL': 'custom-glm'})
-        self.assertEqual(registry.default_model().id, 'custom-glm')
+        self.assertEqual(registry.default_model().id, 'zhipu/custom-glm')
         with self.assertRaisesRegex(BusinessError, 'Tool Calling'):
             registry.resolve_model('custom-glm', 'agent')
         registry = self.load({'ZHIPU_MODEL': 'glm-4-plus'})
@@ -84,7 +84,7 @@ class RegistryTests(unittest.TestCase):
             with self.assertRaisesRegex(BusinessError, '禁用'):
                 registry.resolve_model('disabled')
             registry = self.load({'AI_MODEL_REGISTRY_FILE': file.name, 'AI_DEFAULT_MODEL': 'deepseek-chat'})
-            self.assertEqual(registry.default_model().id, 'deepseek-chat')
+            self.assertEqual(registry.default_model().id, 'deepseek/deepseek-chat')
 
     def test_invalid_default_and_url_are_configuration_errors(self):
         for env in [{'AI_DEFAULT_MODEL': 'missing'}, {'DEEPSEEK_BASE_URL': 'http://untrusted.example'},

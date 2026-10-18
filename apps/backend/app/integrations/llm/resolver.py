@@ -49,16 +49,17 @@ def load_registry() -> ModelRegistry:
     names = {provider: os.getenv(f'{provider.upper()}_MODEL', default).strip()
              for provider, default in default_names.items()}
     models: list[ModelSpec] = []
-    # Legacy provider first preserves old raw IDs. Colliding upstream IDs on another
-    # provider get qualified IDs; explicit declarations can choose any stable ID.
+    aliases: dict[str, str] = {}
+    # Persist qualified IDs so changing default credentials never rebinds a saved
+    # model to a different provider. Raw IDs remain explicit legacy aliases.
     for provider in dict.fromkeys([legacy, 'dashscope', 'deepseek', 'zhipu']):
         upstreams = [names[provider]]
         if provider == legacy:
             upstreams += [item.strip() for item in os.getenv('AI_ALLOWED_MODELS', '').split(',')]
         for upstream in dict.fromkeys(filter(None, upstreams)):
-            model_id = upstream if not any(item.id == upstream for item in models) else f'{provider}/{upstream}'
+            model_id = f'{provider}/{upstream}'
             models.append(model_definition(model_id, provider, upstream))
-    aliases: dict[str, str] = {}
+            aliases.setdefault(upstream, model_id)
     defaults: dict[str, str] = {}
     path = os.getenv('AI_MODEL_REGISTRY_FILE', '').strip()
     if path:
@@ -71,7 +72,10 @@ def load_registry() -> ModelRegistry:
             raise RegistryConfigError('声明文件存在重复 Provider ID')
         providers = [item for item in providers if item.id not in {p.id for p in custom.providers}] + custom.providers
         models = [item for item in models if item.id not in {m.id for m in custom.models}] + custom.models
-        aliases, defaults = custom.aliases, dict(custom.defaults)
+        aliases = {alias: target for alias, target in aliases.items()
+                   if alias not in {model.id for model in custom.models}}
+        aliases.update(custom.aliases)
+        defaults = dict(custom.defaults)
     # Explicit defaults take precedence over file defaults and legacy order.
     for purpose, env in [('chat', 'AI_DEFAULT_MODEL'), ('agent', 'AI_AGENT_DEFAULT_MODEL')]:
         if os.getenv(env, '').strip():
