@@ -1,7 +1,7 @@
 """Server-only provider settings. Keys never appear in the public config."""
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 
@@ -10,7 +10,7 @@ DEFAULT_OPENREVIEW_API_BASE_URL = 'https://api2.openreview.net'
 
 @dataclass(frozen=True)
 class ModelConfig:
-    key: str
+    key: str = field(repr=False)
     base_url: str
     model: str
     models: tuple[str, ...]
@@ -27,17 +27,13 @@ class PaperResourceConfig:
 
 
 def model_config() -> ModelConfig:
-    dashscope = bool(os.getenv('DASHSCOPE_API_KEY', '').strip())
-    prefix = 'DASHSCOPE' if dashscope else 'DEEPSEEK'
-    default_url = ('https://dashscope.aliyuncs.com/compatible-mode/v1'
-                   if dashscope else 'https://api.deepseek.com/v1')
-    model = os.getenv(f'{prefix}_MODEL', 'qwen-plus' if dashscope else 'deepseek-chat').strip()
-    models = tuple(dict.fromkeys([model, *filter(None, (
-        item.strip() for item in os.getenv('AI_ALLOWED_MODELS', '').split(',')
-    ))]))
-    return ModelConfig(os.getenv(f'{prefix}_API_KEY', '').strip(),
-                       os.getenv(f'{prefix}_BASE_URL', default_url).rstrip('/'),
-                       model, models, 'platform' if dashscope else 'deepseek')
+    # Compatibility facade for older server-side integrations and tests.
+    from app.integrations.llm.resolver import load_registry
+    registry = load_registry()
+    resolved = registry.resolve_model(None, require_configured=False)
+    return ModelConfig(resolved.key, resolved.base_url, resolved.spec.id,
+                       tuple(item.id for item in registry.list_models()),
+                       resolved.provider.spec.id)
 
 
 def _positive_float(name: str, default: float) -> float:

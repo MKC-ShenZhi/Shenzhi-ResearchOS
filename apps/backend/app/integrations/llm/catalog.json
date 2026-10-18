@@ -1,0 +1,127 @@
+{
+  "providers": [
+    {
+      "id": "dashscope",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key_env": "DASHSCOPE_API_KEY"
+    },
+    {
+      "id": "deepseek",
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    {
+      "id": "zhipu",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "api_key_env": "ZHIPU_API_KEY"
+    }
+  ],
+  "models": [
+    {
+      "id": "dashscope/qwen-plus",
+      "provider_id": "dashscope",
+      "upstream_model": "qwen-plus",
+      "label": "通义 Plus",
+      "brand": "platform",
+      "capabilities": {
+        "tool_calling": true,
+        "thinking": "enable_thinking",
+        "stream_options": true,
+        "max_output_tokens": 32768
+      }
+    },
+    {
+      "id": "dashscope/qwen-max",
+      "provider_id": "dashscope",
+      "upstream_model": "qwen-max",
+      "label": "通义 Max",
+      "brand": "platform",
+      "capabilities": {
+        "tool_calling": true,
+        "thinking": "none",
+        "stream_options": true,
+        "max_output_tokens": 32768
+      }
+    },
+    {
+      "id": "dashscope/qwen-turbo",
+      "provider_id": "dashscope",
+      "upstream_model": "qwen-turbo",
+      "label": "通义 Turbo",
+      "brand": "platform",
+      "capabilities": {
+        "tool_calling": true,
+        "thinking": "none",
+        "stream_options": true,
+        "max_output_tokens": 32768
+      }
+    },
+    {
+      "id": "dashscope/deepseek-v3",
+      "provider_id": "dashscope",
+      "upstream_model": "deepseek-v3",
+      "label": "DeepSeek V3",
+      "brand": "deepseek",
+      "capabilities": {
+        "reasoning": false,
+        "temperature": true,
+        "chat_max_tokens": 4096,
+        "max_output_tokens": 32768,
+        "tool_calling": true,
+        "stream_options": true
+      }
+    },
+    {
+      "id": "dashscope/deepseek-r1",
+      "provider_id": "dashscope",
+      "upstream_model": "deepseek-r1",
+      "label": "DeepSeek R1",
+      "brand": "deepseek",
+      "capabilities": {
+        "reasoning": true,
+        "temperature": false,
+        "chat_max_tokens": 8192,
+        "max_output_tokens": 32768,
+        "tool_calling": false,
+        "stream_options": true
+      }
+    },
+    {
+      "id": "deepseek/deepseek-chat",
+      "provider_id": "deepseek",
+      "upstream_model": "deepseek-chat",
+      "label": "DeepSeek Chat",
+      "brand": "deepseek",
+      "capabilities": {
+        "tool_calling": true,
+        "stream_options": true,
+        "max_output_tokens": 8192
+      }
+    },
+    {
+      "id": "deepseek/deepseek-reasoner",
+      "provider_id": "deepseek",
+      "upstream_model": "deepseek-reasoner",
+      "label": "DeepSeek Reasoner",
+      "brand": "deepseek",
+      "capabilities": {
+        "reasoning": true,
+        "temperature": false,
+        "chat_max_tokens": 8192,
+        "max_output_tokens": 32768,
+        "stream_options": true
+      }
+    },
+    {
+      "id": "zhipu/glm-4-plus",
+      "provider_id": "zhipu",
+      "upstream_model": "glm-4-plus",
+      "label": "GLM-4 Plus",
+      "brand": "zhipu",
+      "capabilities": {
+        "tool_calling": true,
+        "max_output_tokens": 4096
+      }
+    }
+  ]
+}
