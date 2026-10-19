@@ -28,6 +28,31 @@ class ReadingHistoryService:
                 set_={'last_viewed_at': now},
             ))
 
+    async def mark_read(self, user_id: str, paper_id: str) -> None:
+        now = datetime.now(timezone.utc)
+        async with session_scope() as session:
+            statement = insert(ReadingHistoryRow).values(
+                user_id=user_id, paper_id=paper_id, last_viewed_at=now, read_at=now,
+            )
+            await session.execute(statement.on_conflict_do_update(
+                index_elements=['user_id', 'paper_id'],
+                set_={'read_at': now},
+            ))
+
+    async def paper_status_ids(self, user_id: str, paper_ids: list[str]) -> tuple[list[str], list[str]]:
+        async with session_scope() as session:
+            rows = (await session.execute(
+                select(ReadingHistoryRow.paper_id, ReadingHistoryRow.read_at).where(
+                    ReadingHistoryRow.user_id == user_id,
+                    ReadingHistoryRow.paper_id.in_(paper_ids),
+                )
+            )).all()
+            found = {paper_id: read_at for paper_id, read_at in rows}
+        return (
+            [paper_id for paper_id in paper_ids if paper_id in found and found[paper_id] is not None],
+            [paper_id for paper_id in paper_ids if paper_id in found and found[paper_id] is None],
+        )
+
     async def list(self, user_id: str, page: int, page_size: int, query: str) -> ReadingHistoryResponse:
         async with session_scope() as session:
             rows = list(await session.scalars(

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.schemas.knowledge import PaperSummary, Provenance
-from app.services.reading_history import ReadingHistoryService
+from app.services.library.reading_history import ReadingHistoryService
 
 
 class FakeScalars:
@@ -69,7 +69,7 @@ class ReadingHistoryListTests(unittest.IsolatedAsyncioTestCase):
             yield session
 
         knowledge = BatchKnowledge(missing=missing)
-        with patch("app.services.reading_history.session_scope", fake_scope):
+        with patch("app.services.library.reading_history.session_scope", fake_scope):
             response = await ReadingHistoryService(knowledge).list(
                 "user-1", page, page_size, query,
             )

@@ -69,7 +69,7 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
 
   const active = checked.length > 0;
   return (
-    <div ref={rootRef} className={`relative inline-flex ${className}`.trim()}>
+    <div ref={rootRef} data-paper-card-interactive className={`relative inline-flex ${className}`.trim()}>
       <button
         type="button"
         onClick={() => { setOpen((value) => !value); setMessage(""); }}

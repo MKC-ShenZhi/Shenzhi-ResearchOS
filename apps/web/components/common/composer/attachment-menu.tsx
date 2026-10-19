@@ -18,7 +18,7 @@ import { feedPapers } from "@/features/knowledge/data-papers";
 import { scholars } from "@/features/knowledge/data-scholars";
 import { institutions } from "@/features/knowledge/data-institutions";
 import { projects } from "@/features/projects/data";
-import { uploadFile } from "@/clients/backend/uploads";
+import { uploadAgentFile } from "@/clients/backend/uploads";
 import type { ChatAttachment, ChatAttachmentKind } from "@/types/ai-search";
 
 interface RefItem {
@@ -94,7 +94,7 @@ function RefPanel({
 
   if (!expandable) {
     return (
-      <div className="w-64 rounded-xl border border-line bg-card p-1.5 shadow-pop">
+      <div className="w-full sm:w-64 rounded-xl border border-line bg-card p-1.5 shadow-pop">
         {groups.flatMap((group) =>
           group.items.map((item) => (
             <button
@@ -112,7 +112,7 @@ function RefPanel({
   }
 
   return (
-    <div className="w-64 rounded-xl border border-line bg-card p-1.5 shadow-pop">
+    <div className="w-full sm:w-64 rounded-xl border border-line bg-card p-1.5 shadow-pop">
       {groups.map((group) => {
         const open = expanded === group.label;
         return (
@@ -180,6 +180,7 @@ export function AttachmentMenu({
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const [open, setOpen] = useState(false);
+  const [expandedRef, setExpandedRef] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -220,7 +221,7 @@ export function AttachmentMenu({
       for (const file of list) {
         if (file.size > maxSizeMb * 1024 * 1024) { errors.push(`${file.name} 超过 ${maxSizeMb}MB`); continue; }
         try {
-          const result = await uploadFile(file);
+          const result = await uploadAgentFile(file);
           added.push({ kind: "file", file_id: result.file_id, title: file.name, warning: result.warning });
         } catch (error) { errors.push(error instanceof Error ? error.message : "上传失败"); }
       }
@@ -262,7 +263,7 @@ export function AttachmentMenu({
   ];
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="static sm:relative">
       <input
         ref={fileRef}
         type="file"
@@ -302,7 +303,7 @@ export function AttachmentMenu({
       {open && (
         <div
           className={cn(
-            "absolute left-0 z-[120] w-52 rounded-xl border border-line bg-card p-1.5 shadow-pop",
+            "absolute left-0 z-[120] w-60 max-w-[calc(100vw-4rem)] max-h-[50dvh] overflow-y-auto sm:overflow-visible sm:max-h-none sm:w-52 rounded-xl border border-line bg-card p-1.5 shadow-pop",
             popoverPosition(placement),
           )}
         >
@@ -329,13 +330,15 @@ export function AttachmentMenu({
             <div key={item.label} className="group/ref relative">
               <button
                 type="button"
+                aria-expanded={expandedRef === item.label}
+                onClick={() => setExpandedRef((current) => current === item.label ? null : item.label)}
                 className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-2 transition-colors hover:bg-chip group-hover/ref:bg-chip"
               >
                 <item.icon className="size-4 text-muted" strokeWidth={1.8} />
                 <span className="flex-1 text-left">{item.label}</span>
                 <ChevronRight className="size-3.5 text-faint" />
               </button>
-              <div className="invisible absolute bottom-0 left-full z-50 pl-1.5 opacity-0 transition-opacity duration-100 group-hover/ref:visible group-hover/ref:opacity-100">
+              <div className={cn(expandedRef === item.label ? "block" : "hidden", "sm:absolute sm:bottom-0 sm:left-full z-50 sm:pl-1.5 sm:group-hover/ref:block sm:group-focus-within/ref:block")}>
                 <RefPanel
                   groups={item.groups}
                   expandable={item.expandable}

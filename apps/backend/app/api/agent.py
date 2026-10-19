@@ -1,5 +1,6 @@
 """Agent HTTP 入口：产品会话、SSE run、运行配置、Web 工作区与产物文件。"""
 import json
+import logging
 from pathlib import PurePosixPath
 from typing import Literal
 from urllib.parse import quote
@@ -7,7 +8,9 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Query, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
+from app.api._support.upload_reader import read_upload
 from app.core.config import MAX_FILES, UPLOAD_ACCEPT, model_config
 from app.core.errors import BusinessError
 from app.core.identity import request_owner, require_bff
@@ -19,8 +22,11 @@ from app.schemas.agent import (
 )
 from app.services.agent_sessions.repository import agent_session_repository
 from app.services.agent_sessions.service import start_session_run
+from app.services.agent_uploads import agent_upload_store
+from app.services.uploads.parser import parse_document
 
 router = APIRouter(prefix='/api/v1/agent', tags=['agent'])
+logger = logging.getLogger(__name__)
 
 
 class AgentRunBody(BaseModel):
@@ -64,20 +70,40 @@ async def run(body: AgentRunBody, owner: str = Depends(request_owner)):
     runtime = agent_service.build_run_runtime(
         owner=owner, model=body.model, mode=body.mode,
         workspace_id=body.workspace_id,
-        forced_skills=body.skills, session_id=body.session_id)
+        forced_skills=body.skills, session_id=body.session_id, allow_shell=False)
     history = agent_service.decode_history(body.history)
-    attachments, warnings = agent_service.resolve_attachments(body.attachments, owner)
+    attachments, warnings, files = await agent_service.resolve_attachments(body.attachments, owner)
     meta = {'warnings': warnings} if warnings else None
+
+    async def cleanup(_result):
+        try:
+            await agent_upload_store.consume(owner, list(files))
+        except Exception:
+            logger.exception('Failed to delete consumed Agent attachment text')
 
     async def generate():
         async for name, data in agent_service.run_events(runtime, body.prompt + attachments,
                                                          history, meta=meta, owner=owner,
-                                                         session_id=body.session_id):
+                                                         session_id=body.session_id,
+                                                         on_complete=cleanup):
             yield f'event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'
 
     return StreamingResponse(generate(), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache, no-transform',
                                       'X-Accel-Buffering': 'no'})
+
+
+@router.post('/uploads')
+async def upload_agent_attachment(request: Request, owner: str = Depends(request_owner)):
+    filename, data = await read_upload(request)
+    parsed = await run_in_threadpool(parse_document, data, filename)
+    return ok(await agent_upload_store.save(owner, filename, parsed))
+
+
+@router.get('/uploads/{file_id}')
+async def get_agent_attachment(file_id: str, owner: str = Depends(request_owner)):
+    item = await agent_upload_store.get(owner, file_id)
+    return ok({key: value for key, value in item.items() if key not in ('text', 'owner', 'expires_at')})
 
 
 @router.post('/run/{run_id}/steer')
@@ -101,7 +127,7 @@ async def stop(run_id: str, owner: str = Depends(request_owner)):
 @router.post('/sessions')
 async def create_agent_session(body: AgentSessionCreate, owner: str = Depends(request_owner)):
     settings = {
-        'model': body.model, 'mode': body.mode, 'attachments': body.attachments,
+        'model': body.model, 'mode': body.mode,
         'skills': body.skills, 'workspace_id': body.workspace_id,
     }
     session = await agent_session_repository.create(
@@ -156,7 +182,7 @@ async def run_agent_session(
     events = await start_session_run(
         owner=owner, session_id=session_id, prompt=body.prompt, model=body.model,
         mode=body.mode, attachments=body.attachments, workspace_id=body.workspace_id,
-        skills=body.skills,
+        skills=body.skills, allow_shell=False,
     )
 
     async def generate():
@@ -169,19 +195,27 @@ async def run_agent_session(
 
 
 @router.get('/session/{session_id}/file')
-def session_file(session_id: str, path: str, download: bool = False,
-                 owner: str = Depends(request_owner)):
+async def session_file(session_id: str, path: str, download: bool = False,
+                       owner: str = Depends(request_owner)):
     """会话工作区文件（agent 产物）：inline 预览或 attachment 下载。"""
+    # Do not let a retained workspace directory recreate access after its DB
+    # session has been deleted.  The existence/owner check is deliberately at
+    # the HTTP boundary, before resolving the physical path.
+    await agent_session_repository.get(session_id, owner)
     content, media_type = agent_service.read_session_file(owner, session_id, path)
     filename = PurePosixPath(path).name or 'file'
     disposition = 'attachment' if download else 'inline'
     return Response(
         content, media_type=media_type,
-        headers={'Content-Disposition': f"{disposition}; filename*=UTF-8''{quote(filename)}"})
+        headers={
+            'Content-Disposition': f"{disposition}; filename*=UTF-8''{quote(filename)}",
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
+        })
 
 
 @router.get('/assets/{session_id}/{path:path}')
-def session_asset(session_id: str, path: str, owner: str = Depends(request_owner)):
+async def session_asset(session_id: str, path: str, owner: str = Depends(request_owner)):
     """会话工作区图片产物（报告内嵌图）：稳定 URL，供报告 markdown 直接 <img src> 引用。
 
     与 /session/{id}/file 的差别只在 URL 形态：产物路径进 path 段而非 query，同一张图恒定
@@ -196,10 +230,13 @@ def session_asset(session_id: str, path: str, owner: str = Depends(request_owner
     报告缩略图/预览链路失效），同时附 CSP `default-src 'none'` 关掉脚本与外部请求，
     只放行内联样式（图形本身的 fill/stroke/<style> 需要）；其余图片类型无活动内容，不加 CSP。
     """
+    await agent_session_repository.get(session_id, owner)
     content, media_type = agent_service.read_session_file(owner, session_id, path)
     filename = PurePosixPath(path).name or 'asset'
     headers = {
-        'Cache-Control': 'private, max-age=300',  # 会话私有产物：共享缓存不得留存
+        # Deletion must take effect for a previously copied URL as well; a
+        # browser cache must not keep serving a retained session artifact.
+        'Cache-Control': 'private, no-store',
         'Content-Disposition': f"inline; filename*=UTF-8''{quote(filename)}",
         # media_type 只看后缀（read_session_file 不做字节嗅探），禁掉嗅探避免伪装后缀被当活动内容执行
         'X-Content-Type-Options': 'nosniff',

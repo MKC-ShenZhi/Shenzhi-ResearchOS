@@ -26,6 +26,7 @@ import {
 import { ComposerShell, type ComposerSkill } from "@/components/common/composer/composer";
 import type { WorkspaceFile } from "@/components/common/composer/attachment-menu";
 import { AppShell } from "@/components/common/layout/app-shell";
+import { useAuth } from "@/components/auth/auth-provider";
 import type { ChatAttachment, ChatConfig } from "@/types/ai-search";
 import { takeAgentLaunch } from "./launch-store";
 import { notifyAgentSessionsChanged } from "./session-events";
@@ -94,8 +95,10 @@ interface QuoteDraft { text: string }
 interface SteerNote { text: string; kind: "steer" | "follow_up" | "system" }
 
 interface Turn {
+  id: string;
   role: "user" | "assistant";
   content: string;
+  attachments?: ChatAttachment[];
   reasoning: string;
   /** 过程流的全部状态（思考 / 正文 / 工具按到达顺序交错）；渲染与持久化都从它派生。 */
   stream: StreamState;
@@ -109,6 +112,13 @@ interface Turn {
   stopped?: boolean;
   /** 终态原因（timeout / cancelled / max_turns…）：同一句"已停止"说不清是到点了还是你停的。 */
   stopReason?: string;
+}
+
+function newTurnId(prefix: string) {
+  const random = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}-${random}`;
 }
 
 /** 终态原因 → 人话（stop_reason 是后端枚举：StopReason）。 */
@@ -212,6 +222,8 @@ function ReportSummary({ text, sources, onOpen }: {
 export function ShenzhiAiPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { session, isPending } = useAuth();
+  const identityKey = isPending ? null : (session?.user?.id ?? null);
   const sessionId = searchParams.get("session") ?? "";
   const launchId = searchParams.get("launch");
   const [agentConfig, setAgentConfig] = useState<AgentConfig>(FALLBACK_CONFIG);
@@ -241,6 +253,13 @@ export function ShenzhiAiPage() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
   const loadedSessionRef = useRef<string | null>(null);
+  const sessionGenerationRef = useRef(0);
+  const runContextRef = useRef<{
+    sessionId: string;
+    generation: number;
+    assistantId: string;
+    controller: AbortController;
+  } | null>(null);
 
   useEffect(() => {
     fetchAgentConfig().then((config) => {
@@ -252,29 +271,45 @@ export function ShenzhiAiPage() {
   }, []);
 
   useEffect(() => {
+    if (isPending) return;
     if (!sessionId) {
       router.replace("/");
       return;
     }
+    const generation = sessionGenerationRef.current + 1;
+    sessionGenerationRef.current = generation;
+    const previousRun = runContextRef.current;
+    const previousRunId = runIdRef.current;
+    if (previousRunId) void stopAgentRun(previousRunId).catch(() => {});
+    if (previousRun) {
+      previousRun.controller.abort();
+      runContextRef.current = null;
+    }
     if (loadedSessionRef.current && loadedSessionRef.current !== sessionId) {
-      if (runIdRef.current) void stopAgentRun(runIdRef.current).catch(() => {});
       abortRef.current?.abort();
     }
+    runIdRef.current = null;
+    abortRef.current = null;
     loadedSessionRef.current = sessionId;
     let active = true;
     queueMicrotask(() => {
-      if (!active) return;
+      if (!active || generation !== sessionGenerationRef.current) return;
       setRunning(false);
       setLoadingSession(true);
       setHydratedSessionId(null);
       setRunError(null);
+      setTurns([]);
+      setWorkspace(null);
+      setAttachments([]);
+      setSelectedSkills([]);
       void getAgentSession(sessionId).then((session) => {
-        if (!active) return;
+        if (!active || generation !== sessionGenerationRef.current) return;
         setSessionTitle(session.title);
         setTurns(session.turns.flatMap((turn) => [
-          { role: "user" as const, content: turn.user_content, reasoning: "",
+          { id: `${turn.id}:user`, role: "user" as const, content: turn.user_content, reasoning: "",
+            attachments: (turn.settings.attachments ?? []) as ChatAttachment[],
             stream: initialStreamState(), steers: [] },
-          { role: "assistant" as const, content: turn.assistant_content,
+          { id: `${turn.id}:assistant`, role: "assistant" as const, content: turn.assistant_content,
             reasoning: turn.reasoning ?? "", stream: fromStoredTurn(turn),
             steers: turn.steers ?? [], report: turn.report ?? undefined,
             sources: turn.sources, question: turn.question ?? undefined,
@@ -284,20 +319,21 @@ export function ShenzhiAiPage() {
         const settings = session.settings ?? {};
         setModel(settings.model || "default");
         if (settings.mode) setMode(settings.mode);
-        setAttachments((settings.attachments ?? []) as ChatAttachment[]);
+        // Session settings describe past turns; sent files must not reappear in the composer.
+        setAttachments([]);
         setSelectedSkills((settings.skills ?? []).map((name) => ({ name, description: "" })));
         setWorkspace(settings.workspace_id
           ? { id: settings.workspace_id, name: "会话工作区", files: 0 } : null);
         setHydratedSessionId(session.id);
       }).catch((cause) => {
-        if (!active) return;
+        if (!active || generation !== sessionGenerationRef.current) return;
         setRunError(cause instanceof Error ? cause.message : "会话不存在或无权访问");
       }).finally(() => {
-        if (active) setLoadingSession(false);
+        if (active && generation === sessionGenerationRef.current) setLoadingSession(false);
       });
     });
     return () => { active = false; };
-  }, [sessionId, router]);
+  }, [identityKey, isPending, sessionId, router]);
 
   useEffect(() => {
     if (stickRef.current) {
@@ -305,9 +341,18 @@ export function ShenzhiAiPage() {
     }
   }, [turns]);
 
-  const patchAssistant = useCallback((patch: (turn: Turn) => Turn) => {
+  const patchAssistant = useCallback((context: {
+    sessionId: string;
+    generation: number;
+    assistantId: string;
+  }, patch: (turn: Turn) => Turn) => {
+    const current = runContextRef.current;
+    if (!current || current.sessionId !== context.sessionId
+      || current.generation !== context.generation
+      || context.generation !== sessionGenerationRef.current
+      || current.assistantId !== context.assistantId) return;
     setTurns((previous) => {
-      const index = previous.map((turn) => turn.role).lastIndexOf("assistant");
+      const index = previous.findIndex((turn) => turn.id === context.assistantId);
       if (index === -1) return previous;
       const next = [...previous];
       next[index] = patch(previous[index]);
@@ -349,20 +394,34 @@ export function ShenzhiAiPage() {
   const runPrompt = useCallback(async (runInput: AgentRunInput) => {
     const prompt = runInput.prompt.trim();
     if (!prompt || running || !sessionId) return;
+    const generation = sessionGenerationRef.current;
+    const userId = newTurnId("user");
+    const assistantId = newTurnId("assistant");
+    const context = { sessionId, generation, assistantId };
     setTurns((previous) => [...previous,
-      { role: "user", content: prompt, reasoning: "", stream: initialStreamState(), steers: [] },
-      { role: "assistant", content: "", reasoning: "", stream: initialStreamState(), steers: [] }]);
+      { id: userId, role: "user", content: prompt, attachments: runInput.attachments as ChatAttachment[],
+        reasoning: "", stream: initialStreamState(), steers: [] },
+      { id: assistantId, role: "assistant", content: "", reasoning: "", stream: initialStreamState(), steers: [] }]);
     setInput("");
+    setAttachments([]);
     setRunError(null);
     setSteerError(null);
     setRunning(true);
     runIdRef.current = null;
     const controller = new AbortController();
     abortRef.current = controller;
+    runContextRef.current = { ...context, controller };
+    const isCurrent = () => {
+      const current = runContextRef.current;
+      return current?.controller === controller
+        && current.sessionId === sessionId
+        && current.generation === sessionGenerationRef.current;
+    };
+    let accepted = false;
     try {
       await streamAgentSessionRun(sessionId, runInput, {
-        onRunStart: (runId) => { runIdRef.current = runId; },
-        onDelta: (text, reasoning, turn) => patchAssistant((current) => {
+        onRunStart: (runId) => { accepted = true; if (isCurrent()) runIdRef.current = runId; },
+        onDelta: (text, reasoning, turn) => patchAssistant(context, (current) => {
           // 状态机全在 timeline.ts（可测）。这里只负责把它与页面的 Turn 接起来。
           return {
             ...current,
@@ -372,27 +431,28 @@ export function ShenzhiAiPage() {
           };
         }),
         onMeta: (data) => {
-          if (data.warnings?.length) patchAssistant((turn) => ({ ...turn, warnings: data.warnings }));
+          if (data.warnings?.length) patchAssistant(context, (turn) => ({ ...turn, warnings: data.warnings }));
         },
-        onMessage: (text, kind) => patchAssistant((turn) => ({
+        onMessage: (text, kind) => patchAssistant(context, (turn) => ({
           ...turn, steers: [...turn.steers, { text, kind }],
         })),
-        onCompaction: ({ before_chars, after_chars }) => patchAssistant((turn) => ({
+        onCompaction: ({ before_chars, after_chars }) => patchAssistant(context, (turn) => ({
           ...turn, steers: [...turn.steers, {
             kind: "system", text: `上下文已压缩（${before_chars} → ${after_chars} 字符）`,
           }],
         })),
-        onToolCall: (activity) => patchAssistant((turn) => ({
+        onToolCall: (activity) => patchAssistant(context, (turn) => ({
           ...turn,
           stream: applyToolCall(turn.stream, activity),
         })),
-        onToolEnd: (toolCallId, isError, durationMs, summary) => patchAssistant((turn) => ({
+        onToolEnd: (toolCallId, isError, durationMs, summary) => patchAssistant(context, (turn) => ({
           ...turn,
           // 回填到同一个工具对象：工具行据此从"转圈"变"完成"
           stream: applyToolEnd(turn.stream, toolCallId, { done: true, isError, durationMs, summary }),
         })),
         onResult: (result: AgentRunResult) => {
-          patchAssistant((turn) => {
+          if (!isCurrent()) return;
+          patchAssistant(context, (turn) => {
           const sources = result.output?.sources;
           return {
             ...turn,
@@ -408,19 +468,27 @@ export function ShenzhiAiPage() {
             content: result.question ? "" : turn.content || result.final_text || "",
           };
           });
-          notifyAgentSessionsChanged();
+          if (isCurrent()) notifyAgentSessionsChanged();
         },
       }, controller.signal);
     } catch (error) {
+      if (!accepted && isCurrent()) {
+        setTurns((previous) => previous.filter((turn) => turn.id !== userId && turn.id !== assistantId));
+        setInput(prompt);
+        setAttachments(runInput.attachments as ChatAttachment[]);
+      }
       if ((error as Error).name === "AbortError") {
-        patchAssistant((turn) => ({ ...turn, stopped: true }));
-      } else {
+        patchAssistant(context, (turn) => ({ ...turn, stopped: true }));
+      } else if (isCurrent()) {
         setRunError((error as Error).message || "连接失败，请稍后重试");
       }
     } finally {
-      setRunning(false);
-      abortRef.current = null;
-      runIdRef.current = null;
+      if (isCurrent()) {
+        setRunning(false);
+        abortRef.current = null;
+        runIdRef.current = null;
+        runContextRef.current = null;
+      }
     }
   }, [running, sessionId, patchAssistant]);
 
@@ -553,9 +621,9 @@ export function ShenzhiAiPage() {
 
 
   return <AppShell>
-    <div className="flex h-[calc(100vh-3.5rem)] lg:h-screen">
+    <div className="app-workspace-height flex min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-line px-6 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 sm:px-6">
           <h1 className="max-w-[45%] truncate text-base font-semibold">{sessionTitle}</h1>
           <div className="flex items-center gap-2">
             <span className="mr-1 hidden text-[11px] text-faint sm:inline">选中回答文本可引用追问</span>
@@ -570,7 +638,7 @@ export function ShenzhiAiPage() {
             </button>
           </div>
         </div>
-        <div ref={scrollRef} className="flex-1 overflow-y-auto"
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto"
           onMouseUp={captureQuote}
           onScroll={(event) => {
             const el = event.currentTarget;
@@ -578,7 +646,7 @@ export function ShenzhiAiPage() {
           }}>
           {/* 宽度按可用空间走，不再死卡 768px 居中：宽屏下左右两侧会留下大片死空白
               （用户反馈"死空白太多"）。上限放宽到 1100px 只防止超宽屏上单行过长难以阅读。 */}
-          <div className="mx-auto w-full max-w-[1100px] px-6 pt-8">
+          <div className="mx-auto w-full max-w-[1100px] px-4 pt-6 sm:px-6 sm:pt-8">
             {turns.length === 0 && !running && (
               <div className="mt-24 mb-16 text-center">
                 <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary-soft text-primary" aria-hidden>
@@ -596,12 +664,15 @@ export function ShenzhiAiPage() {
               </div>
             )}
             {turns.map((turn, index) => turn.role === "user"
-              ? <div key={index} className="mb-6 flex justify-end">
-                  <div className="max-w-[75%] whitespace-pre-wrap rounded-3xl bg-chip px-4 py-2.5 text-[15px] leading-7 text-ink">
-                    {turn.content}
+              ? <div key={turn.id} className="mb-6 flex justify-end">
+                  <div className="max-w-[90%] break-words sm:max-w-[75%] rounded-3xl bg-chip px-4 py-2.5 text-[15px] leading-7 text-ink">
+                    <div className="whitespace-pre-wrap">{turn.content}</div>
+                    {!!turn.attachments?.length && <div className="mt-2 flex flex-wrap gap-1.5">
+                      {turn.attachments.map((attachment, attachmentIndex) => <span key={`${turn.id}:attachment:${attachmentIndex}`} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-card px-2 py-1 text-xs text-muted" title={attachment.title ?? undefined}><FileText className="size-3.5 shrink-0" /><span className="truncate">{attachment.title || "附件"}</span></span>)}
+                    </div>}
                   </div>
                 </div>
-              : <div key={index} className="mb-8">
+              : <div key={turn.id} className="mb-8">
                   {/* 过程流：思考 / 正文 / 工具按到达顺序交错（pi 的结构）。空时不渲染任何盒子。 */}
                   <Timeline state={turn.stream} live={running && index === turns.length - 1} />
                   {turn.steers.map((note, noteIndex) => (
@@ -654,7 +725,7 @@ export function ShenzhiAiPage() {
             <div ref={bottomRef} />
           </div>
         </div>
-        <div className="px-6 pb-4">
+        <div className="shrink-0 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
           <div className="mx-auto w-full max-w-[1100px]">
             {workspace && (
               <div className="mb-1.5 flex items-center gap-2">

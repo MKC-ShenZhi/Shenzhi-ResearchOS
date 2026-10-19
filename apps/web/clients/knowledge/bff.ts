@@ -13,6 +13,9 @@ import type {
   KnowledgeOverviewResponse,
   KnowledgePersonalOverviewResponse,
   KnowledgePaperDetail,
+  KnowledgeTopic,
+  KnowledgeTopicListResponse,
+  KnowledgeCreator,
   KnowledgeScholarDetail,
   KnowledgeScholarSearchParams,
   KnowledgeScholarSearchResponse,
@@ -74,6 +77,10 @@ function toKnowledgeError(error: unknown): KnowledgeClientError {
   );
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 export class BffKnowledgeClient implements KnowledgeClient {
   async overview(): Promise<KnowledgeOverviewResponse> {
     try {
@@ -91,6 +98,34 @@ export class BffKnowledgeClient implements KnowledgeClient {
     }
   }
 
+  async topics(signal?: AbortSignal): Promise<KnowledgeTopicListResponse> {
+    try {
+      return await apiJson<KnowledgeTopicListResponse>("/knowledge/topics", { signal });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async topic(topicId: string, signal?: AbortSignal): Promise<KnowledgeTopic> {
+    try {
+      return await apiJson<KnowledgeTopic>(`/knowledge/topics/${encodeURIComponent(topicId)}`, { signal });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async creator(creatorId: string): Promise<KnowledgeCreator> {
+    try {
+      return await apiJson<KnowledgeCreator>(
+        `/knowledge/creators/${encodeURIComponent(creatorId)}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
   async overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse> {
     try {
       return await apiJson<KnowledgeMixedSearchResponse>("/knowledge/overview/search", {
@@ -102,10 +137,14 @@ export class BffKnowledgeClient implements KnowledgeClient {
     }
   }
 
-  async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {
+  async search(
+    params: KnowledgeSearchParams,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchResponse> {
     try {
       return await apiJson<KnowledgeSearchResponse>("/knowledge/search", {
         method: "POST",
+        signal,
         body: JSON.stringify({
           query: params.query,
           topK: params.topK,
@@ -119,6 +158,8 @@ export class BffKnowledgeClient implements KnowledgeClient {
         }),
       });
     } catch (error) {
+      // TanStack Query 需要保留原始 AbortError，才能把主动取消恢复为非错误状态。
+      if (isAbortError(error)) throw error;
       throw toKnowledgeError(error);
     }
   }

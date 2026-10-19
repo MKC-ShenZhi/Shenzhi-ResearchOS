@@ -241,12 +241,14 @@ class KnowledgeEntityAdapterTests(unittest.IsolatedAsyncioTestCase):
             limit=10,
         ))
 
-        self.assertEqual([payload['top_k'] for payload in client.search_payloads], [2, 2])
-        self.assertEqual(client.scholar_search, ('graph', 2, 0))
-        self.assertEqual(client.subject_search, ('graph', 0, 2))
-        self.assertEqual(client.funding_candidates, ('graph', 2, 0))
-        self.assertEqual(result.supported_types, ['paper', 'scholar', 'topic', 'funding', 'graph'])
-        self.assertEqual(result.unsupported_types, ['project', 'patent'])
+        # Graph has no query-based upstream endpoint; it must not duplicate
+        # the paper retrieval request.
+        self.assertEqual([payload['top_k'] for payload in client.search_payloads], [3])
+        self.assertEqual(client.scholar_search, ('graph', 3, 0))
+        self.assertEqual(client.subject_search, ('graph', 0, 3))
+        self.assertEqual(client.funding_candidates, ('graph', 3, 0))
+        self.assertEqual(result.supported_types, ['paper', 'scholar', 'topic', 'funding'])
+        self.assertEqual(result.unsupported_types, ['project', 'patent', 'graph'])
         self.assertIn('scholar', [item.type for item in result.results])
         self.assertIn('funding', [item.type for item in result.results])
         self.assertTrue(any(item.metadata.get('matchedBy') == 'topic' for item in result.results))
@@ -617,6 +619,9 @@ class KnowledgeEntityApiTests(unittest.IsolatedAsyncioTestCase):
             ('/api/v1/knowledge/scholars/search', {'q': ' '}),
             ('/api/v1/knowledge/subjects/search', {'subject': ' ', 'topK': 10}),
             ('/api/v1/knowledge/subjects/search', {'subject': 'graph', 'offset': 1000, 'limit': 10}),
+            ('/api/v1/knowledge/subjects/search', {'subject': 'graph', 'offset': -1}),
+            ('/api/v1/knowledge/subjects/search', {'subject': 'graph', 'limit': 0}),
+            ('/api/v1/knowledge/subjects/search', {'subject': 'graph', 'limit': 101}),
             ('/api/v1/knowledge/funding/search', {'funding': 'NSF', 'topK': 21}),
             ('/api/v1/knowledge/fundings/search', {'limit': 101}),
             ('/api/v1/knowledge/fundings/search', {'offset': -1}),
@@ -626,6 +631,17 @@ class KnowledgeEntityApiTests(unittest.IsolatedAsyncioTestCase):
                 response = await self.client.get(path, params=params)
                 self.assertEqual(response.status_code, 422)
                 self.assertEqual(response.json()['code'], 'INVALID_ARGUMENT')
+
+    async def test_subject_search_accepts_pagination_and_last_allowed_offset(self):
+        for offset, limit in [(0, 10), (10, 10), (999, 1)]:
+            with self.subTest(offset=offset):
+                response = await self.client.get(
+                    '/api/v1/knowledge/subjects/search',
+                    params={'subject': 'graph', 'offset': offset, 'limit': limit},
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(self.adapter.subject_search, ('graph', offset, limit))
+                self.assertEqual(response.json()['data']['total'], 327)
 
     async def test_funding_route_accepts_empty_query_as_browse_request(self):
         response = await self.client.get(

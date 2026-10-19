@@ -123,9 +123,9 @@ export function KnowledgeGraphWorkbench({ paperId, returnTo }: { paperId: string
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto lg:overflow-hidden">
       {/* 顶栏 */}
-      <header className="flex h-13 shrink-0 items-center gap-3 border-b border-line bg-card px-5 py-2.5">
+      <header className="flex min-h-13 flex-wrap shrink-0 items-center gap-2 lg:gap-3 border-b border-line bg-card px-5 py-2.5">
         <Link
           href={paperHref(paperId, { mode: "preserve", returnTo })}
           className="flex shrink-0 items-center gap-1.5 text-[13px] text-muted transition-colors hover:text-primary"
@@ -189,7 +189,7 @@ export function KnowledgeGraphWorkbench({ paperId, returnTo }: { paperId: string
       </header>
 
       {/* 三栏主体 */}
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div className="flex flex-1 flex-col lg:min-h-0 lg:flex-row">
         <aside className="order-2 w-full shrink-0 border-t border-line bg-card p-4 lg:order-1 lg:w-72 lg:border-r lg:border-t-0 lg:overflow-hidden">
           <GraphRelatedPanel
             centerTitle={centerTitle}

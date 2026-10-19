@@ -79,14 +79,18 @@ def decode_history(raw: Sequence[dict]) -> list[AgentMessage]:
         raise BusinessError(20001, 'history 消息格式无效') from exc
 
 
-def resolve_attachments(raw: Sequence[dict], owner: str) -> tuple[str, list[str]]:
-    """复用 Chat 的附件管线（uploads 落库 → attachment_context 组装文本）。"""
+async def resolve_attachments(raw: Sequence[dict], owner: str) -> tuple[str, list[str], dict[str, dict]]:
+    """Resolve short-lived parsed Agent uploads and assemble this turn's context."""
     from app.schemas.chat import ChatAttachment
+    from app.services.agent_uploads import agent_upload_store
     try:
         parsed = [ChatAttachment.model_validate(item) for item in raw]
     except Exception as exc:
         raise BusinessError(20001, 'attachments 格式无效') from exc
-    return attachment_context(parsed, owner, repository)
+    files = await agent_upload_store.get_many(
+        owner, [item.file_id or '' for item in parsed if item.kind == 'file'])
+    context, warnings = attachment_context(parsed, owner, repository, file_contexts=files)
+    return context, warnings, files
 
 
 def _web_search_tool() -> Tool:
@@ -119,7 +123,8 @@ def _web_search_tool() -> Tool:
 def build_run_runtime(*, owner: str, model: str | None = None, mode: str = 'fast',
                       workspace_id: str | None = None,
                       forced_skills: Sequence[str] = (),
-                      session_id: str | None = None) -> AgentRuntime:
+                      session_id: str | None = None,
+                      allow_shell: bool = True) -> AgentRuntime:
     """按单次请求组装 runtime：模型/温度 + 可选联网工具 + 可选 Web 工作区 + 强制技能。
 
     system 的各段落（工具清单/工作区提示/强制技能/挂载说明）按序追加、互不覆盖
@@ -151,7 +156,7 @@ def build_run_runtime(*, owner: str, model: str | None = None, mode: str = 'fast
         root = (ensure_session_workspace(owner, session_id) if session_id
                 else mount_workspace(workspace_id, owner).root)
         workspace = Workspace(root)
-        tools.extend(build_workspace_tools(workspace))
+        tools.extend(build_workspace_tools(workspace, allow_shell=allow_shell))
         mounted = mount_workspace_into(root, workspace_id, owner) if workspace_id else 0
         # 技能脚本随装载到位（渐进披露同样适用于脚本资产）：装载某技能后它的
         # scripts/ 才进工作区，而不是每个请求把整个技能库（实测 1.6MB）搬一遍。
@@ -162,7 +167,12 @@ def build_run_runtime(*, owner: str, model: str | None = None, mode: str = 'fast
         tools.append(image_search_tool(workspace_root=root, session_id=session_id))
         project_context = load_project_context(root)
         # 通用工作区说明：不点名任何具体业务的文件（研究状态、报告名归技能正文规定）
-        sections.append('工作区已就绪（read_file / write_file / edit_file / run_command 可用）。'
+        workspace_capabilities = 'read_file / write_file / edit_file'
+        if allow_shell:
+            workspace_capabilities += ' / run_command'
+        else:
+            workspace_capabilities += '；Web 安全策略已关闭任意 shell 执行'
+        sections.append(f'工作区已就绪（{workspace_capabilities}）。'
                         '中间状态与成果都写成工作区文件，完成后交付并给出文件路径。'
                         '\n技能脚本在装载该技能后同步到 <技能名>/scripts/（在工作区根下执行）。'
                         + (f'\n\n已挂载上传工作区的 {mounted} 个文件到工作区根。' if mounted else '')

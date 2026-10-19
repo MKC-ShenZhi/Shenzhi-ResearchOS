@@ -1,21 +1,17 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { getKnowledgeClient } from "@/clients/knowledge";
+import { useSearchRestorationScope } from "@/hooks/use-search-restoration";
 import { KnowledgeClientError } from "@/clients/knowledge";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
+import { useKnowledgeSearch } from "../use-knowledge-search";
+import { rememberSearchScroll, saveCurrentSearchScroll, useSearchScrollRestoration } from "../use-search-scroll-restoration";
 import { KnowledgeResultCard } from "./result-card";
-import { knowledgeQueryRetry } from "../../retry";
 import { KnowledgeSearchPagination } from "./search-pagination";
 import {
   KnowledgeSearchEmpty,
   KnowledgeSearchError,
   KnowledgeSearchSkeleton,
 } from "./search-states";
-
-async function fetchSearch(params: KnowledgeSearchParams) {
-  return getKnowledgeClient().search(params);
-}
 
 /** 论文搜索结果区 —— 负责 loading / empty / error 三种状态的区分 */
 export function KnowledgeResultsSection({
@@ -30,12 +26,9 @@ export function KnowledgeResultsSection({
   onPageChange: (page: number) => void;
 }) {
   const query = params.query.trim();
-  const { data, isPending, isFetching, isError, error, refetch } = useQuery({
-    queryKey: ["knowledge", "search", params],
-    queryFn: () => fetchSearch(params),
-    enabled: query.length > 0,
-    retry: knowledgeQueryRetry,
-  });
+  const { data, isPending, isError, error, refetch } = useKnowledgeSearch(params);
+  const scope = useSearchRestorationScope();
+  useSearchScrollRestoration(returnTo, Boolean(data?.results.length), scope);
 
   if (query.length === 0) {
     return (
@@ -45,11 +38,11 @@ export function KnowledgeResultsSection({
     );
   }
 
-  if (isPending || isFetching) {
+  if (isPending && !data) {
     return <KnowledgeSearchSkeleton count={4} />;
   }
 
-  if (isError) {
+  if (isError && !data) {
     const knowledgeError =
       error instanceof KnowledgeClientError
         ? error
@@ -65,14 +58,20 @@ export function KnowledgeResultsSection({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onClickCapture={(event) => rememberSearchScroll(event, returnTo, scope)}>
       <p className="px-1 text-sm text-muted">
         「{query}」的搜索结果 · 第 {page} 页 · 本页
         <span className="font-semibold text-ink"> {results.length}</span> 篇
       </p>
       <div className="space-y-4">
         {results.map((hit, index) => (
-          <KnowledgeResultCard key={hit.id} hit={hit} index={index} returnTo={returnTo} />
+          <KnowledgeResultCard
+            key={hit.id}
+            hit={hit}
+            index={index}
+            returnTo={returnTo}
+            onNavigate={() => saveCurrentSearchScroll(returnTo, scope)}
+          />
         ))}
       </div>
       <KnowledgeSearchPagination

@@ -82,25 +82,31 @@ export const useCollections = create<CollectionState>((set, get) => ({
     return response.folder_ids;
   },
   createFolder: async (name) => {
+    const generation = get().generation;
     const folder = await apiJson<CollectionFolder>("/collections/folders", {
       method: "POST",
       body: JSON.stringify({ name }),
     });
+    if (get().generation !== generation) return folder;
     set((state) => ({ folders: [...state.folders, folder] }));
     invalidateKnowledgeOverviewCache();
     return folder;
   },
   renameFolder: async (folderId, name) => {
+    const generation = get().generation;
     const folder = await apiJson<CollectionFolder>(`/collections/folders/${folderId}`, {
       method: "PATCH",
       body: JSON.stringify({ name }),
     });
+    if (get().generation !== generation) return folder;
     set((state) => ({ folders: state.folders.map((item) => item.id === folderId ? folder : item) }));
     invalidateKnowledgeOverviewCache();
     return folder;
   },
   deleteFolder: async (folderId) => {
+    const generation = get().generation;
     await apiJson<unknown>(`/collections/folders/${folderId}`, { method: "DELETE" });
+    if (get().generation !== generation) return;
     set((state) => ({
       folders: state.folders.filter((item) => item.id !== folderId),
       paperFolders: Object.fromEntries(
@@ -110,10 +116,12 @@ export const useCollections = create<CollectionState>((set, get) => ({
     invalidateKnowledgeOverviewCache();
   },
   updatePaperFolders: async (paperId, folderIds) => {
+    const generation = get().generation;
     await apiJson<unknown>(`/papers/${encodeURIComponent(paperId)}/collections`, {
       method: "PUT",
       body: JSON.stringify({ folder_ids: folderIds }),
     });
+    if (get().generation !== generation) return;
     set((state) => ({
       paperFolders: { ...state.paperFolders, [paperId]: folderIds },
       folders: state.folders.map((folder) => ({

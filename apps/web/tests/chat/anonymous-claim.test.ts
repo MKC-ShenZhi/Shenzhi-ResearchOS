@@ -105,4 +105,17 @@ test("coordinator attempts once per stable user and refreshes only after durable
   assert.match(coordinator, /onClick=\{migrate\}/);
   assert.match(coordinator, /暂不迁移/);
   assert.doesNotMatch(coordinator, /requestNewChat/);
+
+  const appShell = readFileSync(
+    "components/common/layout/app-shell.tsx",
+    "utf8",
+  );
+  assert.match(appShell, /import \{ AnonymousClaimCoordinator \} from "@\/features\/chat\/components\/anonymous-claim-coordinator"/);
+  assert.match(appShell, /<AnonymousClaimCoordinator \/>/);
+
+  const agentChat = readFileSync(
+    "features/chat/components/agent-chat.tsx",
+    "utf8",
+  );
+  assert.doesNotMatch(agentChat, /AnonymousClaimCoordinator/);
 });

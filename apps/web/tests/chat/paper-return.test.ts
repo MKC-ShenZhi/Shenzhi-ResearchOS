@@ -10,6 +10,11 @@ import {
   navigateBackFromPaper,
   PAPER_DETAIL_FALLBACK_ROUTE,
 } from "../../features/papers/[id]/paper-back-navigation";
+import {
+  initialRenderedPageCount,
+  isFinalPageVisible,
+  nextRenderedPageCount,
+} from "../../features/papers/[id]/components/pdf-pagination.js";
 import type { ChatReference } from "../../types/ai-search";
 
 const paper: ChatReference = {
@@ -189,6 +194,13 @@ test("unified detail, graph and compatibility links preserve opaque IDs and safe
   assert.equal(paperDoiUrl("https://doi.org/10.1234/example"), "https://doi.org/10.1234/example");
 });
 
+test("Topic paper links preserve subject and page in returnTo", () => {
+  const returnTo = "/knowledge/topics?subject=Agent&page=4";
+  const href = paperHref("paper:agent", { mode: "create", source: returnTo });
+
+  assert.equal(new URL(href, "https://local.test").searchParams.get("returnTo"), returnTo);
+});
+
 test("paper journey uses one real detail and graph implementation with compatibility redirects", () => {
   const detailPage = readFileSync("features/papers/[id]/PaperDetailPage.tsx", "utf8");
   const assistant = readFileSync("features/papers/[id]/components/paper-assistant-panel.tsx", "utf8");
@@ -244,7 +256,10 @@ test("PDF reader keeps only zoom and download controls without a hidden header s
   assert.match(topbar, /aria-label="Zoom Out"/);
   assert.match(topbar, /aria-label="Zoom In"/);
   assert.match(topbar, /aria-label="Download PDF"/);
-  assert.match(topbar, /download="paper\.pdf"/);
+  assert.match(topbar, /&download=true/);
+  assert.match(topbar, /\sdownload\s/);
+  assert.doesNotMatch(topbar, /download="paper\.pdf"/);
+  assert.doesNotMatch(pdf, /download=true/);
   assert.match(topbar, /controlsVisible && \(/);
   assert.doesNotMatch(topbar, /aria-hidden/);
   assert.doesNotMatch(topbar, /invisible/);
@@ -263,7 +278,29 @@ test("PDF reader keeps only zoom and download controls without a hidden header s
   assert.match(documentView, /react-pdf\/dist\/Page\/TextLayer\.css/);
   assert.match(documentView, /renderTextLayer=\{true\}/);
   assert.match(documentView, /renderAnnotationLayer=\{false\}/);
+  assert.match(documentView, /IntersectionObserver/);
+  assert.match(documentView, /rootMargin: "1000px 0px"/);
+  assert.match(documentView, /onFirstPageReady/);
+  assert.match(documentView, /pageNumber === 1/);
+  assert.match(pdf, /contentWidth > 0/);
+  assert.match(pdf, /updateState\("rendering"\)/);
   assert.doesNotMatch(documentView, /PdfHighlight|pdfTextRangeToRects|highlightRects|ResizeObserver/);
+});
+
+test("PDF reader pagination starts small and grows in bounded batches", () => {
+  assert.equal(initialRenderedPageCount(2), 2);
+  assert.equal(initialRenderedPageCount(20), 3);
+  assert.equal(nextRenderedPageCount(3, 20), 6);
+  assert.equal(nextRenderedPageCount(6, 8), 8);
+  assert.equal(nextRenderedPageCount(8, 8), 8);
+  assert.equal(isFinalPageVisible(
+    { top: 800, bottom: 1800, height: 1000 },
+    { top: 0, bottom: 900, height: 900 },
+  ), false);
+  assert.equal(isFinalPageVisible(
+    { top: 600, bottom: 1600, height: 1000 },
+    { top: 0, bottom: 900, height: 900 },
+  ), true);
 });
 
 test("Paper Detail uses a slim reader header and a proportional dual workspace", () => {
@@ -271,6 +308,7 @@ test("Paper Detail uses a slim reader header and a proportional dual workspace",
   const topbar = readFileSync("features/papers/[id]/components/paper-topbar.tsx", "utf8");
   const abstract = readFileSync("features/papers/[id]/components/paper-abstract-view.tsx", "utf8");
   const rightPanel = readFileSync("features/papers/[id]/components/right-panel.tsx", "utf8");
+  const layoutStyles = readFileSync("styles/globals.css", "utf8");
 
   assert.match(topbar, /h-14/);
   assert.match(topbar, /grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/);
@@ -283,9 +321,18 @@ test("Paper Detail uses a slim reader header and a proportional dual workspace",
   assert.match(abstract, /paper\.authors/);
   assert.match(abstract, /paper\.citationCount/);
   assert.match(abstract, /paper\.referenceCount/);
-  assert.match(detailPage, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(26rem,42%\)\]/);
-  assert.ok(detailPage.indexOf("lg:grid-cols-[minmax(0,1fr)_minmax(26rem,42%)]") < detailPage.indexOf("<PaperTopbar"));
+  assert.match(detailPage, /className="paper-detail-layout/);
+  assert.ok(detailPage.indexOf('className="paper-detail-layout') < detailPage.indexOf("<PaperTopbar"));
+  assert.match(detailPage, /MIN_READER_WIDTH = 420/);
+  assert.match(detailPage, /MIN_ASSISTANT_WIDTH = 360/);
+  assert.match(detailPage, /DEFAULT_ASSISTANT_WIDTH_PERCENT = 42/);
+  assert.match(detailPage, /setPointerCapture/);
+  assert.match(detailPage, /aria-label="展开 Assistant"/);
+  assert.match(layoutStyles, /minmax\(420px,\s*1fr\)/);
+  assert.match(layoutStyles, /minmax\(360px,\s*min\(var\(--assistant-width\),\s*calc\(100% - 432px\)\)\)/);
+  assert.match(layoutStyles, /data-assistant-collapsed="true"/);
   assert.doesNotMatch(`${detailPage}\n${rightPanel}`, /lg:w-\[360px\]|xl:w-96/);
+  assert.match(rightPanel, /aria-label="收起 Assistant"/);
   assert.match(rightPanel, /value="assistant"/);
   assert.match(rightPanel, /value="notes"/);
   assert.match(rightPanel, /value="similar"/);

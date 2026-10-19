@@ -32,16 +32,28 @@ test("Scholar search exposes initial, loading, empty and error states without mo
 
 test("Scholar result, paper and coauthor links preserve opaque IDs", () => {
   const scholarId = "author:legacy/何恺明?source=kb";
-  const href = scholarHref(scholarId);
+  const returnTo = "/knowledge/scholars?q=Hinton";
+  const href = scholarHref(scholarId, returnTo);
   const segment = new URL(href, "https://local.test").pathname
     .slice("/knowledge/scholars/".length);
 
   assert.equal(scholarIdFromRouteParam(segment), scholarId);
-  assert.match(card, /scholarHref\(scholar\.id\)/);
-  assert.match(detail, /paperHref\(paper\.id, \{ mode: "create", source: returnTo \}\)/);
-  assert.match(detail, /scholarHref\(coauthor\.id\)/);
+  assert.equal(new URL(href, "https://local.test").searchParams.get("returnTo"), returnTo);
+  assert.match(card, /scholarHref\(scholar\.id, returnTo\)/);
+  assert.match(detail, /paperHref\(paper\.id, \{ mode: "create", source: currentPath \}\)/);
+  assert.match(detail, /scholarHref\(coauthor\.id, safeReturnTo\)/);
   assert.match(route, /scholarIdFromRouteParam\(scholarId\)/);
+  assert.match(route, /normalizeInternalReturnTo\(query\.returnTo\)/);
   assert.doesNotMatch(`${card}\n${detail}\n${route}`, /decodeURIComponent/);
+});
+
+test("Scholar search restores q, preserves it in returnTo and keeps cached data visible", () => {
+  assert.match(browser, /searchParams\.get\("q"\)/);
+  assert.match(browser, /router\.replace\(`\/knowledge\/scholars/);
+  assert.match(browser, /ScholarCard key=\{scholar\.id\} scholar=\{scholar\} returnTo=\{returnTo\}/);
+  assert.match(browser, /isPending && !data/);
+  assert.doesNotMatch(browser, /isPending \|\| isFetching/);
+  assert.match(detail, /href=\{safeReturnTo\}/);
 });
 
 test("Scholar detail hides absent optional sections and keeps a recoverable error state", () => {

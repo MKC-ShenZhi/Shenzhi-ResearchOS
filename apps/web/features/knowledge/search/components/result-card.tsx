@@ -5,11 +5,14 @@ import { motion } from "framer-motion";
 import { ArrowRight, Network, Users } from "lucide-react";
 import type { KnowledgePaperHit } from "@/clients/knowledge";
 import { PaperThumbnail } from "@/components/common/paper-thumbnail";
+import { PAPER_CARD_INTERACTION_CLASS, usePaperCardNavigation } from "@/components/common/use-paper-card-navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { paperHref } from "@/lib/navigation/paper";
 import { getPaperThumbnailUrl } from "@/lib/paper-thumbnail";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
+import { PaperReadBadge } from "@/features/knowledge/papers/components/paper-read-badge";
+import { usePaperReadStatus } from "@/features/knowledge/papers/use-paper-read-status";
 
 const VENUE_VARIANT = ["violet", "amber", "green"] as const;
 
@@ -24,36 +27,30 @@ export function KnowledgeResultCard({
   returnTo,
   historyMode = false,
   lastViewedAt,
+  onNavigate,
 }: {
   hit: KnowledgePaperHit;
   index: number;
   returnTo: string;
   historyMode?: boolean;
   lastViewedAt?: string;
+  onNavigate?: () => void;
 }) {
   const authors = hit.authors.length ? hit.authors.join(" · ") : "未知作者";
+  const status = usePaperReadStatus(hit.id);
+  const detailHref = paperHref(hit.id, { mode: "create", source: returnTo });
+  const cardNavigation = usePaperCardNavigation(detailHref, hit.title, onNavigate);
 
   return (
     <motion.article
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.06 }}
-      className={`rounded-2xl bg-card p-6 shadow-card ${historyMode ? "cursor-pointer transition-colors hover:bg-card/80" : ""}`}
-      onClick={(event) => {
-        if (!historyMode || (event.target as HTMLElement).closest("a, button")) return;
-        window.location.href = paperHref(hit.id, { mode: "create", source: returnTo });
-      }}
-      onKeyDown={(event) => {
-        if (historyMode && (event.key === "Enter" || event.key === " ")) {
-          event.preventDefault();
-          window.location.href = paperHref(hit.id, { mode: "create", source: returnTo });
-        }
-      }}
-      role={historyMode ? "link" : undefined}
-      tabIndex={historyMode ? 0 : undefined}
+      className={`@container rounded-2xl bg-card p-6 shadow-card ${PAPER_CARD_INTERACTION_CLASS}`}
+      {...cardNavigation}
     >
-      <div className="flex gap-5">
-        <div className="min-w-0 flex-1">
+      <div className="grid grid-cols-1 gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(240px,34cqw,320px)]">
+        <div className="col-span-full min-w-0">
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
               <span className="text-faint">{hit.year ?? "—"}</span>
@@ -62,6 +59,7 @@ export function KnowledgeResultCard({
               ) : (
                 <span className="text-[11px] text-faint">暂无会议</span>
               )}
+              {status && <PaperReadBadge status={status} />}
             </div>
             {!historyMode && (
               <CollectionPicker className="shrink-0" paperId={hit.id} />
@@ -75,63 +73,66 @@ export function KnowledgeResultCard({
 
           {/* 标题 */}
           <Link
-            href={paperHref(hit.id, { mode: "create", source: returnTo })}
+            href={detailHref}
             className="group mt-2 block"
           >
             <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
               {hit.title}
             </h3>
           </Link>
+        </div>
 
+        <div className="min-w-0">
           {/* 摘要 */}
           {hit.abstract && (
-            <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted">
+            <p className="line-clamp-4 text-sm leading-relaxed text-muted @min-[600px]:line-clamp-6">
               {hit.abstract}
             </p>
           )}
-
-          {/* 底部：关键词 + 操作 */}
-          <div className="mt-4 flex items-end justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {(hit.keywords.length ? hit.keywords : hit.subjects).slice(0, 5).map((tag) => (
-                  <span key={tag} className="text-[13px] text-muted">
-                    #{tag}
-                  </span>
-                ))}
-                {!hit.keywords.length && !hit.subjects.length && (
-                  <span className="text-[11px] text-faint">暂无关键词</span>
-                )}
-              </div>
-            </div>
-            {historyMode ? (
-              <time dateTime={lastViewedAt} className="shrink-0 text-xs text-faint">
-                上次浏览：{lastViewedAt ? formatLastViewedAt(lastViewedAt) : "未知"}
-              </time>
-            ) : (
-              <div className="flex shrink-0 items-center gap-2">
-                <Link href={paperHref(hit.id, { mode: "create", source: returnTo })}>
-                  <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-xs">
-                    论文详情
-                    <ArrowRight className="size-3.5" />
-                  </Button>
-                </Link>
-                <Link href={paperHref(hit.id, { mode: "create", source: returnTo, graph: true })}>
-                  <Button size="sm" className="h-8 rounded-lg px-3 text-xs">
-                    <Network className="size-3.5" />
-                    关系图谱
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </div>
         </div>
 
-        <PaperThumbnail
-          src={getPaperThumbnailUrl(hit.id)}
-          title={hit.title}
-          className="hidden min-h-[128px] w-[168px] shrink-0 sm:block"
-        />
+        <div className="hidden w-full max-w-[320px] justify-self-center self-start @min-[400px]:block @min-[600px]:max-w-none">
+          <PaperThumbnail
+            src={getPaperThumbnailUrl(hit.id)}
+            title={hit.title}
+          />
+        </div>
+
+        {/* 底部：关键词 + 操作 */}
+        <div className="col-span-full flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0 flex-1 basis-40">
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {(hit.keywords.length ? hit.keywords : hit.subjects).slice(0, 5).map((tag) => (
+                <span key={tag} className="text-[13px] text-muted">
+                  #{tag}
+                </span>
+              ))}
+              {!hit.keywords.length && !hit.subjects.length && (
+                <span className="text-[11px] text-faint">暂无关键词</span>
+              )}
+            </div>
+          </div>
+          {historyMode ? (
+            <time dateTime={lastViewedAt} className="ml-auto shrink-0 text-xs text-faint">
+              上次浏览：{lastViewedAt ? formatLastViewedAt(lastViewedAt) : "未知"}
+            </time>
+          ) : (
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <Link href={detailHref}>
+                <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-xs">
+                  论文详情
+                  <ArrowRight className="size-3.5" />
+                </Button>
+              </Link>
+              <Link href={paperHref(hit.id, { mode: "create", source: returnTo, graph: true })}>
+                <Button size="sm" className="h-8 rounded-lg px-3 text-xs">
+                  <Network className="size-3.5" />
+                  关系图谱
+                </Button>
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
     </motion.article>
   );

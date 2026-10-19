@@ -119,6 +119,10 @@ class WorkspaceToolTests(unittest.IsolatedAsyncioTestCase):
         message = await self.call('run_command', command='exit 3')
         self.assertIn('退出码: 3', message)
 
+    async def test_web_workspace_policy_hides_shell_tool(self):
+        tools = {tool.spec.name for tool in build_workspace_tools(self.ws, allow_shell=False)}
+        self.assertEqual(tools, {'read_file', 'write_file', 'edit_file'})
+
     async def test_command_timeout(self):
         import sys
         sleep_cmd = 'sleep 5' if sys.platform != 'win32' else \
@@ -133,7 +137,9 @@ class WorkspaceToolTests(unittest.IsolatedAsyncioTestCase):
         from app.services.agent.workspace import MAX_COMMAND_TIMEOUT_S
         with mock_patch('app.services.agent.workspace.subprocess.run') as run:
             run.return_value = sp.CompletedProcess(args=[], returncode=0, stdout='', stderr='')
-            await self.call('run_command', command='echo ok', timeout_s=999_999)
+            # The API tool uses the async executor; the synchronous path remains
+            # as a CLI compatibility surface and shares the same clamp policy.
+            self.ws.exec('echo ok', timeout_s=999_999)
             self.assertEqual(run.call_args.kwargs['timeout'], MAX_COMMAND_TIMEOUT_S)  # 不以 999999 下发
         with self.assertRaises(BusinessError):
             await self.call('run_command', command='echo ok', timeout_s=-5)

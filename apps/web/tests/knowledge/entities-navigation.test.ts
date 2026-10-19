@@ -39,17 +39,17 @@ const relatedSearch = readFileSync(
   "utf8",
 );
 
-test("Knowledge sidebar exposes exactly the six V1 capability entries", () => {
+test("Knowledge sidebar exposes five capability entries and papers separately", () => {
   const block = sidebar.match(/const KNOWLEDGE_SUB_NAV = \[([\s\S]*?)\];/)?.[1] ?? "";
   const labels = [...block.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(labels, [
     "论文库",
-    "我的文献",
     "学者库",
     "主题库",
     "项目基金库",
     "关系图谱",
   ]);
+  assert.match(sidebar, /const MY_PAPERS_NAV:[\s\S]*?label: "我的文献"/);
   assert.doesNotMatch(block, /专利库|研究机构/);
 });
 
@@ -123,6 +123,8 @@ test("Funding URL-dependent state is isolated and restoration failures stay visi
   assert.match(fundingPage, /Suspense/);
   assert.match(fundingBrowser, /fundingQuery\.isSuccess/);
   assert.match(fundingBrowser, /fundingRestoreQuery\.isError/);
+  assert.match(fundingBrowser, /returnTo=\{returnTo\}/);
+  assert.doesNotMatch(fundingBrowser, /isPending \|\| .*isFetching/);
 });
 
 test("Patent compatibility route is unavailable and does not render mock data", () => {
@@ -142,4 +144,9 @@ test("Topic keeps the real paper result presentation", () => {
   assert.match(relatedSearch, /KnowledgeSearchSkeleton/);
   assert.match(relatedSearch, /KnowledgeSearchError/);
   assert.match(relatedSearch, /KnowledgeSearchEmpty/);
+  assert.match(relatedSearch, /useCurrentInternalPath/);
+  assert.match(relatedSearch, /returnTo=\{returnTo\}/);
+  assert.match(relatedSearch, /source: subjectFromUrl/);
+  assert.match(relatedSearch, /isPending && !data/);
+  assert.doesNotMatch(relatedSearch, /isPending \|\| isFetching/);
 });

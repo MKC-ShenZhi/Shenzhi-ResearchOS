@@ -4,6 +4,7 @@ import { KnowledgeClientError, type KnowledgeClient } from "./client";
 import {
   buildMockGraph,
   MOCK_PAPERS,
+  MOCK_TOPICS,
   mockPaperDetail,
 } from "./mock-data";
 import type {
@@ -23,7 +24,19 @@ import type {
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
   KnowledgeSubjectSearchResponse,
+  KnowledgeTopic,
+  KnowledgeTopicListResponse,
+  KnowledgeCreator,
 } from "./types";
+
+const MOCK_CREATOR: KnowledgeCreator = {
+  id: "shenzhi",
+  name: "ShenZhi",
+  avatarUrl: "/brand/logo-night.png",
+  bio: "深知 ShenZhi · Research OS，整理和维护面向科研工作的知识主题。",
+  topicCount: MOCK_TOPICS.length,
+  isVerified: true,
+};
 
 const MOCK_SCHOLAR: KnowledgeScholarDetail = {
   id: "author:mock:geoffrey-hinton",
@@ -82,8 +95,18 @@ function scenarioFromQuery(query: string): MockScenario | null {
   return null;
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timeout = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timeout);
+      reject(signal.reason);
+    }, { once: true });
+  });
 }
 
 /**
@@ -101,8 +124,8 @@ export class MockKnowledgeClient implements KnowledgeClient {
     this.latencyMs = options.latencyMs ?? 400;
   }
 
-  private async wait(): Promise<void> {
-    if (this.latencyMs > 0) await delay(this.latencyMs);
+  private async wait(signal?: AbortSignal): Promise<void> {
+    if (this.latencyMs > 0) await delay(this.latencyMs, signal);
   }
 
   private throwIfNeeded(query = ""): MockScenario | null {
@@ -153,6 +176,37 @@ export class MockKnowledgeClient implements KnowledgeClient {
     return { authRequired: false, folders: [], recentPapers: [] };
   }
 
+  async topics(signal?: AbortSignal): Promise<KnowledgeTopicListResponse> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded();
+    if (scenario === "zero_results") return { items: [], total: 0, categories: [] };
+    const items = MOCK_TOPICS.filter((topic) => topic.enabled);
+    return {
+      items,
+      total: items.length,
+      categories: [...new Set(items.map((topic) => topic.category))],
+    };
+  }
+
+  async topic(topicId: string, signal?: AbortSignal): Promise<KnowledgeTopic> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded(topicId);
+    if (scenario === "zero_results") throw KnowledgeClientError.notFound("未找到对应主题");
+    const topic = MOCK_TOPICS.find((item) => item.id === topicId && item.enabled);
+    if (!topic) throw KnowledgeClientError.notFound("未找到对应主题");
+    return topic;
+  }
+
+  async creator(creatorId: string): Promise<KnowledgeCreator> {
+    await this.wait();
+    if (this.scenario === "timeout") throw KnowledgeClientError.timeout();
+    if (this.scenario === "upstream_unavailable") throw KnowledgeClientError.unavailable();
+    if (creatorId.trim().toLowerCase() !== MOCK_CREATOR.id) {
+      throw KnowledgeClientError.notFound("未找到对应创作者");
+    }
+    return MOCK_CREATOR;
+  }
+
   async overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse> {
     await this.wait();
     const scenario = this.throwIfNeeded(params.query);
@@ -185,8 +239,11 @@ export class MockKnowledgeClient implements KnowledgeClient {
     };
   }
 
-  async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {
-    await this.wait();
+  async search(
+    params: KnowledgeSearchParams,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchResponse> {
+    await this.wait(signal);
     const scenario = this.throwIfNeeded(params.query);
 
     const text = params.query.trim().toLowerCase();

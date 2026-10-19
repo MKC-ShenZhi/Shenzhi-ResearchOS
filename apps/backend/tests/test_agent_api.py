@@ -12,6 +12,8 @@ from app.main import app
 from app.services.agent import AgentRuntime
 from app.services.agent.provider import Finish, TextDelta, ToolCallEvent
 from app.services.agent.types import StopReason, ToolCall
+from app.services.agent_sessions.entities import AgentSession
+from app.services.agent_sessions.repository import agent_session_repository
 from tests.test_agent import FakeProvider, make_echo
 
 
@@ -95,6 +97,9 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         owner = f"anon:{self.OWNER_ID}"
         with tempfile.TemporaryDirectory() as tmp:
             with patch.object(workspace, 'WORKSPACE_ROOT', Path(tmp)):
+                agent_session_repository.sessions['ses_file1'] = AgentSession(
+                    id='ses_file1', owner=owner, title='文件测试会话',
+                )
                 root = service.ensure_session_workspace(owner, 'ses_file1')
                 (root / 'rag_review.md').write_text('# 报告\n正文', encoding='utf-8')
                 (root / 'data.bin').write_bytes(b'\x00\x01\xff')
@@ -133,6 +138,15 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
                                                  params={'path': 'rag_review.md'}, headers=other)
                     self.assertEqual(forbidden.status_code, 404)
 
+                    # Database deletion revokes the retained workspace URL;
+                    # the physical directory is intentionally not removed here.
+                    deleted = await client.delete('/api/v1/agent/sessions/ses_file1',
+                                                  headers=self.OWNER)
+                    self.assertEqual(deleted.status_code, 200)
+                    after_delete = await client.get('/api/v1/agent/session/ses_file1/file',
+                                                    params={'path': 'rag_review.md'}, headers=self.OWNER)
+                    self.assertEqual(after_delete.status_code, 404)
+
     OWNER_ID = '00000000-0000-4000-8000-000000000001'
 
     # 真实 1x1 RGBA PNG 字节（IHDR/IDAT/IEND + CRC 齐全，非占位文本）：报告图产物直出用
@@ -148,7 +162,11 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         self.addCleanup(tmp.cleanup)
-        root = service.ensure_session_workspace(f'anon:{self.OWNER_ID}', session_id)
+        owner = f'anon:{self.OWNER_ID}'
+        agent_session_repository.sessions[session_id] = AgentSession(
+            id=session_id, owner=owner, title='资源测试会话',
+        )
+        root = service.ensure_session_workspace(owner, session_id)
         (root / 'figures').mkdir(exist_ok=True)
         (root / 'figures' / 'chart-1.png').write_bytes(self.PNG_1X1)
         return root
@@ -163,7 +181,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
                                         headers=self.OWNER)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.headers['content-type'].split(';')[0], 'image/png')
-            self.assertEqual(response.headers['cache-control'], 'private, max-age=300')
+            self.assertEqual(response.headers['cache-control'], 'private, no-store')
             self.assertIn('inline', response.headers['content-disposition'])
             self.assertEqual(response.content, self.PNG_1X1)
 

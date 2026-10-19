@@ -6,7 +6,7 @@ import { SettingsTabs } from "./components/settings-tabs";
 export function SettingsPage() {
   return (
     <AppShell>
-      <div className="mx-auto max-w-[960px] px-8 py-10">
+      <div className="mx-auto max-w-[960px] px-4 py-6 sm:px-8 sm:py-10">
         <Suspense>
           <SettingsTabs />
         </Suspense>

@@ -16,7 +16,6 @@ import type { ChatAttachment, ChatModelId, ChatReplyMode, ComposerSubmitPayload,
 import type { ComposerEntryMode } from "@/types";
 import { DEFAULT_CHAT_MODEL } from "../services/model-catalog";
 import { useAuth } from "@/components/auth/auth-provider";
-import { AnonymousClaimCoordinator } from "./anonymous-claim-coordinator";
 
 const SUGGESTIONS = [
   "帮我总结一下扩散模型在机器人控制中的最新进展",
@@ -57,7 +56,6 @@ export function AgentChat(props: AgentChatProps) {
 
   return (
     <>
-      <AnonymousClaimCoordinator />
       <ChatWorkspace
         key={identityScope}
         {...props}

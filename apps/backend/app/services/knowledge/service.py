@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-from app.integrations.knowledge.adapter import KnowledgeAdapter
+import asyncio
+
+from app.integrations.knowledge.adapter import KnowledgeAdapter, paper_summary
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
+from app.services.knowledge.cache import (
+    PaperDetailTTLCache,
+    shared_paper_detail_cache,
+)
 from app.schemas.knowledge import (
     KnowledgeError,
     FundingSearchRequest,
@@ -65,8 +71,18 @@ class KnowledgeServiceError(Exception):
 class KnowledgeService:
     """Thin business boundary shared by the API and future backend callers."""
 
-    def __init__(self, adapter: KnowledgeAdapter | None = None):
+    def __init__(
+        self,
+        adapter: KnowledgeAdapter | None = None,
+        *,
+        paper_detail_cache: PaperDetailTTLCache | None = None,
+    ):
         self.adapter = adapter or KnowledgeAdapter()
+        # Default production services share one process-local cache. Injected adapters
+        # remain isolated unless their caller explicitly supplies a cache.
+        self.paper_detail_cache = paper_detail_cache or (
+            shared_paper_detail_cache if adapter is None else None
+        )
 
     async def search(self, request: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
         try:
@@ -132,16 +148,35 @@ class KnowledgeService:
             raise KnowledgeServiceError.from_integration_error(error) from error
 
     async def get_paper(self, paper_id: str) -> PaperDetail:
+        if self.paper_detail_cache is not None:
+            cached = self.paper_detail_cache.get(paper_id)
+            if cached is not None:
+                return cached
         try:
-            return await self.adapter.paper(paper_id)
+            detail = await self.adapter.paper(paper_id)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
+        if self.paper_detail_cache is not None:
+            self.paper_detail_cache.set(paper_id, detail)
+        return detail
 
     async def batch_get_papers(self, paper_ids: list[str]) -> list[PaperSummary]:
-        try:
-            return await self.adapter.batch_papers(paper_ids)
-        except KnowledgeIntegrationError as error:
-            raise KnowledgeServiceError.from_integration_error(error) from error
+        if not paper_ids:
+            return []
+        # Folder lists and reading history share the detail cache with paper pages.
+        # Keep concurrent fetches and the batch API's missing-paper behavior.
+        results = await asyncio.gather(
+            *(self.get_paper(paper_id) for paper_id in paper_ids),
+            return_exceptions=True,
+        )
+        summaries: list[PaperSummary] = []
+        for result in results:
+            if isinstance(result, KnowledgeServiceError) and result.error.code == 'NOT_FOUND':
+                continue
+            if isinstance(result, Exception):
+                raise result
+            summaries.append(paper_summary(result))
+        return summaries
 
     async def get_graph(self, paper_id: str, *, depth: int = 1) -> PaperGraph:
         try:

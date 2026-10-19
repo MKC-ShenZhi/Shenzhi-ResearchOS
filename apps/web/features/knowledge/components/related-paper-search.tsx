@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Search } from "lucide-react";
 import { getKnowledgeClient, KnowledgeClientError } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { knowledgeQueryRetry } from "@/features/knowledge/retry";
 import { KnowledgeResultCard } from "@/features/knowledge/search/components/result-card";
 import {
@@ -55,12 +56,18 @@ async function fetchRelatedPapers(
 
 export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {
   const copy = COPY[kind];
-  const returnTo = usePathname();
+  const pathname = usePathname();
+  const returnTo = useCurrentInternalPath();
   const router = useRouter();
   const searchParams = useSearchParams();
   const subjectFromUrl = searchParams.get("subject")?.trim() ?? "";
   const pageFromUrl = normalizePage(searchParams.get("page"));
-  const [query, setQuery] = useState("");
+  const [queryDraft, setQueryDraft] = useState({
+    source: subjectFromUrl,
+    value: subjectFromUrl,
+  });
+  const query = queryDraft.source === subjectFromUrl ? queryDraft.value : subjectFromUrl;
+  const setQuery = (value: string) => setQueryDraft({ source: subjectFromUrl, value });
   const activeQuery = subjectFromUrl;
   const { data, isPending, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["knowledge", kind, activeQuery, pageFromUrl],
@@ -71,7 +78,7 @@ export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    router.push(topicUrl(returnTo, query.trim(), 1));
+    router.push(topicUrl(pathname, query.trim(), 1));
   };
 
   const results = data?.results ?? [];
@@ -81,7 +88,7 @@ export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {
   const goToPage = (nextPage: number) => {
     if (!subjectFromUrl || totalPages === 0) return;
     const boundedPage = Math.max(1, Math.min(nextPage, totalPages, MAX_PAGE));
-    router.push(topicUrl(returnTo, subjectFromUrl, boundedPage));
+    router.push(topicUrl(pathname, subjectFromUrl, boundedPage));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const submitPage = (event: React.FormEvent<HTMLFormElement>) => {
@@ -119,9 +126,9 @@ export function RelatedPaperSearch({ kind }: { kind: RelatedPaperSearchKind }) {
           <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-line bg-card/40 px-6 text-center text-sm text-muted">
             {copy.idle}
           </div>
-        ) : isPending || isFetching ? (
+        ) : isPending && !data ? (
           <KnowledgeSearchSkeleton count={4} />
-        ) : isError ? (
+        ) : isError && !data ? (
           <KnowledgeSearchError
             error={error instanceof KnowledgeClientError
               ? error

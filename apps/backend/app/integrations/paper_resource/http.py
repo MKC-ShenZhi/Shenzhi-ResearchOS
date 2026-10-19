@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -17,7 +18,10 @@ from app.integrations.paper_resource.base import (
 
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 MAX_REDIRECTS = 3
-_CONTENT_RANGE_TOTAL = re.compile(r'^bytes\s+\d+-\d+/(\d+|\*)$', re.IGNORECASE)
+_CONTENT_RANGE = re.compile(
+    r'^bytes\s+(\d+)-(\d+)/(\d+|\*)$',
+    re.IGNORECASE,
+)
 
 
 class HTTPProvider(PDFProvider):
@@ -51,7 +55,23 @@ class HTTPProvider(PDFProvider):
         url: str,
         *,
         range_header: str | None = None,
+        if_range: str | None = None,
     ) -> ProviderFetch:
+        return await self.open_with_headers(
+            url,
+            range_header=range_header,
+            if_range=if_range,
+        )
+
+    async def open_with_headers(
+        self,
+        url: str,
+        *,
+        range_header: str | None = None,
+        if_range: str | None = None,
+        extra_headers: Mapping[str, str] | None = None,
+    ) -> ProviderFetch:
+        """Open a PDF while adding trusted server-side request headers."""
         normalized = normalize_public_http_url(url)
         if normalized is None:
             return ProviderFetch(ProviderValidation(
@@ -70,6 +90,8 @@ class HTTPProvider(PDFProvider):
                 client,
                 normalized,
                 range_header=range_header,
+                if_range=if_range,
+                extra_headers=extra_headers,
             )
             if response is None:
                 await client.aclose()
@@ -77,7 +99,11 @@ class HTTPProvider(PDFProvider):
                     url=final_url,
                     reason='resource_unavailable',
                 ))
-            validation = self._classify(final_url, response)
+            validation = self._classify(
+                final_url,
+                response,
+                requested_range=range_header,
+            )
             if not validation.available:
                 await response.aclose()
                 await client.aclose()
@@ -86,6 +112,11 @@ class HTTPProvider(PDFProvider):
                 validation,
                 client=client,
                 response=response,
+                max_body_bytes=_max_response_body_bytes(
+                    response,
+                    self.max_size_bytes,
+                ),
+                expected_body_bytes=_expected_response_body_bytes(response),
             )
         except httpx.TimeoutException:
             await client.aclose()
@@ -106,14 +137,19 @@ class HTTPProvider(PDFProvider):
         url: str,
         *,
         range_header: str | None,
+        if_range: str | None,
+        extra_headers: Mapping[str, str] | None,
     ) -> tuple[httpx.Response | None, str]:
         current_url = url
-        headers = {
+        headers = dict(extra_headers or {})
+        headers.update({
             'Accept': 'application/pdf',
             'Accept-Encoding': 'identity',
-        }
+        })
         if range_header is not None:
             headers['Range'] = _validate_pdf_range(range_header)
+        if if_range is not None:
+            headers['If-Range'] = if_range
         for redirect_count in range(MAX_REDIRECTS + 1):
             request = client.build_request('GET', current_url, headers=headers)
             response = await client.send(request, stream=True)
@@ -129,10 +165,23 @@ class HTTPProvider(PDFProvider):
             await response.aclose()
             if next_url is None:
                 return None, current_url
+            if _origin(next_url) != _origin(current_url):
+                headers = {
+                    name: value
+                    for name, value in headers.items()
+                    if name.lower() not in {'authorization', 'cookie'}
+                }
+                client.cookies.clear()
             current_url = next_url
         return None, current_url
 
-    def _classify(self, url: str, response: httpx.Response) -> ProviderValidation:
+    def _classify(
+        self,
+        url: str,
+        response: httpx.Response,
+        *,
+        requested_range: str | None,
+    ) -> ProviderValidation:
         headers = dict(response.headers)
         if not 200 <= response.status_code < 300:
             return ProviderValidation(
@@ -151,6 +200,25 @@ class HTTPProvider(PDFProvider):
                 status_code=response.status_code,
                 headers=headers,
             )
+
+        if response.status_code == 206:
+            content_range = _parse_content_range(
+                response.headers.get('content-range')
+            )
+            if (
+                content_range is None
+                or not _content_range_matches_request(
+                    content_range,
+                    requested_range,
+                )
+            ):
+                return ProviderValidation(
+                    url=url,
+                    reason='resource_unavailable',
+                    content_type=content_type,
+                    status_code=response.status_code,
+                    headers=headers,
+                )
 
         size_bytes = _resource_size(response)
         if size_bytes is not None and size_bytes > self.max_size_bytes:
@@ -187,6 +255,18 @@ def _validate_pdf_range(value: str) -> str:
     return value
 
 
+def _origin(url: str) -> tuple[str, str, int | None]:
+    parsed = urlsplit(url)
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme.lower() == 'https' else 80
+    return (
+        parsed.scheme.lower(),
+        (parsed.hostname or '').lower().rstrip('.'),
+        port,
+    )
+
+
 def _content_type(value: str | None) -> str | None:
     if value is None or not value.strip():
         return None
@@ -204,9 +284,64 @@ def _positive_int(value: str | None) -> int | None:
 
 
 def _resource_size(response: httpx.Response) -> int | None:
-    content_range = response.headers.get('content-range')
-    if content_range:
-        match = _CONTENT_RANGE_TOTAL.fullmatch(content_range.strip())
-        if match and match.group(1) != '*':
-            return _positive_int(match.group(1))
+    if response.status_code == 206:
+        content_range = _parse_content_range(response.headers.get('content-range'))
+        return content_range[2] if content_range is not None else None
     return _positive_int(response.headers.get('content-length'))
+
+
+def _parse_content_range(
+    value: str | None,
+) -> tuple[int, int, int | None] | None:
+    if value is None:
+        return None
+    match = _CONTENT_RANGE.fullmatch(value.strip())
+    if match is None:
+        return None
+    start, end = int(match[1]), int(match[2])
+    total = None if match[3] == '*' else int(match[3])
+    if end < start or (total is not None and total <= end):
+        return None
+    return start, end, total
+
+
+def _content_range_matches_request(
+    content_range: tuple[int, int, int | None],
+    requested_range: str | None,
+) -> bool:
+    if requested_range is None:
+        return True
+    spec = _validate_pdf_range(requested_range).removeprefix('bytes=')
+    start, end, total = content_range
+    if spec.startswith('-'):
+        suffix_length = int(spec[1:])
+        if total is None:
+            return end - start + 1 <= suffix_length
+        return (
+            end == total - 1
+            and start == max(total - suffix_length, 0)
+        )
+    requested_start, _, requested_end = spec.partition('-')
+    return (
+        start == int(requested_start)
+        and (not requested_end or end <= int(requested_end))
+    )
+
+
+def _expected_response_body_bytes(response: httpx.Response) -> int | None:
+    if response.status_code == 206:
+        content_range = _parse_content_range(response.headers.get('content-range'))
+        if content_range is not None:
+            return content_range[1] - content_range[0] + 1
+        return None
+    return _positive_int(response.headers.get('content-length'))
+
+
+def _max_response_body_bytes(
+    response: httpx.Response,
+    max_size_bytes: int,
+) -> int:
+    expected = _expected_response_body_bytes(response)
+    if response.status_code == 206 and expected is not None:
+        return min(expected, max_size_bytes)
+    return max_size_bytes

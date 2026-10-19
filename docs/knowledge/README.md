@@ -88,7 +88,7 @@ PAPER_MAX_SIZE_MB=150
 | 论文图谱 | `GET /api/v1/knowledge/graph?paperId=...&depth=1\|2` | `GET /api/kg/graph?paperId=...&depth=1\|2` |
 | 学者搜索 | `GET /api/v1/knowledge/scholars/search?q=...&limit=20&offset=0` | `GET /api/retrieval/scholars/search?q=...&limit=20&offset=0` |
 | 学者详情 | `GET /api/v1/knowledge/scholars/{scholarId}` | `GET /api/retrieval/scholars/{scholar_id}` |
-| 主题关联论文 | `GET /api/v1/knowledge/subjects/search?subject=...&topK=10` | `GET /api/retrieval/search/by-subject?subject=...&top_k=10` |
+| 主题关联论文 | `GET /api/v1/knowledge/subjects/search?subject=...&offset=0&limit=10` | `GET /api/retrieval/search/by-subject?subject=...&offset=0&limit=10` |
 | Funding 候选检索 | `GET /api/v1/knowledge/fundings/search?q=...&limit=20&offset=0` | `GET /api/retrieval/fundings/search?q=...&limit=20&offset=0` |
 | Funding 关联论文 | `GET /api/v1/knowledge/funding/search?funding=...&topK=10` | `GET /api/retrieval/search/by-funding?funding=...&top_k=10` |
 | PDF 字节流 | `GET /api/v1/paper-resource/pdf?paperId=...` | `pdf_url` 对应资源 |
@@ -115,6 +115,11 @@ PDF 源站；因此 PDF 的超时、404 或格式异常不会阻塞详情与摘�
 端点不接受任意 URL，并透传合法的单段 Range。Backend 不保存或缓存 PDF，
 也不创建下载任务。
 
+PDF 响应使用可信论文标题生成文件名，替换非法字符、限制 UTF-8 字节长度，
+空标题回退为论文 ID。默认返回 `inline`；下载按钮使用同一端点的
+`download=true` 参数获取 `attachment`。两种模式均覆盖上游文件名，提供 ASCII
+`filename` 回退和 UTF-8 `filename*`，预览和 Range 行为保持一致。
+
 Search 请求使用 `query`、`topK`、`offset`、`yearFrom`、`yearTo`、`venue`、
 `author`、`keyword`、`subject`。论文检索页固定 `topK=20`，并按
 `offset=(page-1)*20` 请求；响应通过 `hasMore` 表示是否存在下一页。当前外部
@@ -123,6 +128,14 @@ Search 请求使用 `query`、`topK`、`offset`、`yearFrom`、`yearTo`、`venue
 计算 `hasMore`。未携带 `offset` 的 Knowledge2Chat 请求仍保持原有 `top_k` 行为。
 其余筛选字段只在 adapter 边界映射为外部 API 所需字段（例如 `year_gte`、
 `conference`）。
+
+论文搜索页的查询词、页码及筛选条件由 URL 恢复。进入论文详情或关系图谱前，
+结果区复用统一搜索恢复的认证身份，按完整搜索条件在 `sessionStorage` 保存滚动位置，
+支持标题、详情/图谱链接及整卡鼠标或键盘打开；返回后等待实际结果
+渲染，再恢复一次并清除记录。记录最多保留 30 分钟；用户开始滚动、重新搜索、
+修改筛选、翻页或主动清空会取消来源与目标条件的旧位置恢复；查询词、筛选及页码
+继续由统一 URL 导航恢复机制管理。禁用存储时正常导航，继续使用安全 `returnTo`
+返回来源，不改变详情与图谱的返回策略。
 
 图谱 `depth` 只支持 `1 | 2`，默认值为 `1`。Backend 可以返回异构节点和边；
 前端保持 `kind`、`relation` 为开放字符串，未知值使用默认展示。
@@ -165,6 +178,9 @@ Knowledge 查询最多自动重试一次；`TIMEOUT`、`RATE_LIMITED`、
 也必须遵守 `retryable` 和最多一次的上限，不能无限重试。
 
 ## 页面范围
+
+Topic Catalog、分页上限、错误重试、数据核对与本地验收见
+[Topic V2 稳定性与维护约定](TOPIC-V2-STABILITY.md)。
 
 | 路由 | 行为 |
 |---|---|

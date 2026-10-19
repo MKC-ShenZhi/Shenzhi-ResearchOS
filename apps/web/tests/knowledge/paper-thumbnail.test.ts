@@ -22,7 +22,7 @@ test("paper thumbnail falls back for missing or failed sources without retrying 
     THUMBNAIL_SOURCE,
     /if \(imageSrc !== PAPER_THUMBNAIL_FALLBACK_SRC\)[\s\S]*?setFailedSrc\(imageSrc\)/,
   );
-  assert.match(THUMBNAIL_SOURCE, /className="object-cover"/);
+  assert.match(THUMBNAIL_SOURCE, /className="object-contain"/);
 });
 
 test("paper thumbnail fallback is a lightweight WebP asset", () => {

@@ -83,7 +83,7 @@ CORS 响应头导致浏览器拒绝加载。端点只接受可信 `paperId`，�
 配置项为 `PAPER_RESOURCE_TIMEOUT`（秒）与
 `PAPER_MAX_SIZE_MB`（可获取资源大小上限）。
 
-当前仅支持 **单进程 / 单 worker**，Session 与解析后的附件为临时内存数据，重启清空。
+配置 `CHAT_DATABASE_URL` 后，Agent 会话及待发送附件的解析文本可跨后端实例读取。Agent 附件源文件不入库；临时文本在对话运行结束并写入记录后删除，未发送的记录 24 小时后失效，并由上传请求及维护命令清理。旧 Chat 附件和未配置数据库时的会话仍依赖进程内存。
 
 Python 环境与依赖统一使用 [uv](https://docs.astral.sh/uv/) 管理。新增依赖使用：
 
@@ -96,5 +96,32 @@ uv add <package>
 ```bash
 uv add --dev <package>
 ```
+
+## 首页论文发现快照
+
+首页论文发现使用随应用发布的版本化内容快照，`GET /api/v1/discovery/papers` 默认返回 12 篇并通过 cursor 分页。服务端以 `Asia/Shanghai` 日期作为确定性随机种子，每天仅在相同优先级内生成一套全局一致的新顺序；内容快照版本与日期共同构成浏览快照版本。cursor 同时绑定内容版本、排序日期和偏移量，因此同一天所有请求顺序一致，跨过北京时间午夜的既有翻页仍沿用开始浏览时的顺序。普通首页请求不访问知识底座，也不把这批静态候选冒充每日新增或个性化推荐。
+
+从仓库根目录重复执行下列无网络命令，可基于正式 seed 刷新 FastAPI 快照，并仅发布入选论文对应的 300 张 WebP 静态图：
+
+```bash
+python3 scripts/publish_home_discovery.py
+python3 scripts/publish_home_discovery.py --check
+```
+
+输入保持在 `data/discovery/home-seed-300.json`，部署产物为：
+
+- `apps/backend/app/data/home_discovery_snapshot.json`
+- `apps/web/public/paper-thumbnails/*.webp`
+
+部署新版本仍需按常规流程执行数据库迁移：
+
+```bash
+cd apps/backend
+uv run --locked --env-file .env alembic upgrade head
+```
+
+当前没有把候选内容刷新绑定到自动调度；每日变化只重新计算现有候选的稳定顺序，不重新抓取知识底座。需要换批时显式更新 seed 并重新执行发布命令。已有 `daily_recommendations` 表保留为历史迁移兼容，不再承载首页请求。
+
+`agent_uploads` 临时文本表及匿名 Chat 会话仍按原维护策略清理。
 
 维护说明：[Chat 架构、协议与配置](../../docs/chat/README.md)。

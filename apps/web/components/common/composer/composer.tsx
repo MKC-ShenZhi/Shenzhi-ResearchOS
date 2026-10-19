@@ -119,7 +119,7 @@ function RightSubmenuRow({
         />
       </button>
       {open && (
-        <div className="absolute bottom-0 left-full z-[130] pl-1">
+        <div className="relative z-[130] max-w-full sm:absolute sm:bottom-0 sm:left-full sm:pl-1">
           {children}
         </div>
       )}
@@ -154,7 +154,7 @@ function PlusMenu({
   const placement = usePopoverPlacement(open, ref, 200);
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    <div ref={ref} className="static shrink-0 sm:relative">
       <button
         type="button"
         aria-label="更多选项"
@@ -172,7 +172,7 @@ function PlusMenu({
       {open && (
         <div
           className={cn(
-            "absolute left-0 z-[120] w-44 rounded-2xl border border-line bg-card p-1.5 shadow-pop",
+            "absolute left-0 z-[120] w-60 max-w-[calc(100vw-3rem)] max-h-[50dvh] overflow-y-auto rounded-2xl sm:w-44 sm:max-h-none sm:overflow-visible border border-line bg-card p-1.5 shadow-pop",
             popoverPosition(placement),
           )}
         >
@@ -186,7 +186,7 @@ function PlusMenu({
             value={skills?.length ? `${skills.length} 个可用` : "即将上线"}
           >
             {skills?.length ? (
-              <div className="max-h-64 w-72 overflow-y-auto rounded-xl border border-line bg-card p-1.5 shadow-pop">
+              <div className="max-h-64 w-full sm:w-72 overflow-y-auto rounded-xl border border-line bg-card p-1.5 shadow-pop">
                 {onToggleSkill
                   ? skills.map((skill) => {
                       const selected = selectedSkills?.includes(skill.name);
@@ -401,7 +401,7 @@ export function ComposerShell({
               onClick={() =>
                 setAttachments(attachments.filter((_, idx) => idx !== i))
               }
-              className="rounded-full bg-chip px-2.5 py-1 text-[11px] text-ink-2 hover:bg-panel"
+              className="max-w-full break-words rounded-full bg-chip px-2.5 py-1 text-[11px] text-ink-2 hover:bg-panel"
               disabled={uploading || busy || disabled}
               title={item.warning ? `${item.warning} · 点击移除` : "移除"}
             >
@@ -437,10 +437,10 @@ export function ComposerShell({
         placeholder={placeholder}
         rows={2}
         maxLength={2000}
-        className="min-h-[3.25rem] w-full resize-none bg-transparent px-0.5 text-[15px] leading-relaxed text-ink outline-none placeholder:text-faint"
+        className="min-h-[3.25rem] w-full resize-none bg-transparent px-0.5 text-base sm:text-[15px] leading-relaxed text-ink outline-none placeholder:text-faint"
       />
 
-      <div className="mt-1.5 flex items-center gap-1.5">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {modeSwitch && <SearchModeSwitch mode={entryMode} onChange={setEntryMode} />}
         {isSmartSearch && <>
           <PlusMenu webSearch={webSearch} onWebSearchChange={setWebSearch} skills={skills}
@@ -463,7 +463,7 @@ export function ComposerShell({
           />
         </>}
         {isSmartSearch && (
-          <div ref={controlRef} className="relative min-w-0 shrink">
+          <div ref={controlRef} className="static min-w-0 shrink sm:relative">
             <ComposerControlPicker
               model={model}
               onModelChange={setModel}

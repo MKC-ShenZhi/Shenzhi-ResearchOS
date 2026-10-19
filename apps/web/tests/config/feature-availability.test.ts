@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   comingSoonRedirectPath,
   isUnavailableFeatureHref,
   isUnavailableFeatureRoute,
 } from "../../lib/feature-availability";
+
+const sidebar = readFileSync(
+  "components/common/layout/app-sidebar.tsx",
+  "utf8",
+);
 
 test("keeps currently released research routes available", () => {
   const availableRoutes = [
@@ -69,4 +75,14 @@ test("allows only the formal Agent Session Chat route", () => {
 
 test("builds a one-time coming-soon notice redirect", () => {
   assert.equal(comingSoonRedirectPath(), "/?notice=coming-soon");
+});
+
+test("sidebar hides unavailable navigation while preserving session history", () => {
+  assert.match(
+    sidebar,
+    /const availableSubNav = subNav\.filter\([\s\S]*?!isUnavailableFeatureHref\(item\.href\)/,
+  );
+  assert.match(sidebar, /if \(isUnavailableFeatureHref\(href\)\) return null;/);
+  assert.match(sidebar, /availableSubNav\.map/);
+  assert.match(sidebar, /<SidebarChatHistory collapsed=\{collapsed\} \/>/);
 });
