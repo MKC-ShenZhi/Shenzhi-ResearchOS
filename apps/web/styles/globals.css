@@ -94,36 +94,66 @@
  * 视觉探索预设 —— 仅替换语义色与阴影，不改变布局、字号、间距或圆角。
  * ShenZhi 使用上方基线；其余预设均可通过 html[data-theme] 整体替换。
  */
+/* 极简黑白：用表面、边框和灰阶建立层次，品牌装饰也保持中性。 */
 html[data-theme="gpt"] {
-  --color-background: #f7f7f8;
-  --color-sidebar: #efeff0;
+  --color-background: #fafafa;
+  --color-sidebar: #f2f2f2;
   --color-card: #ffffff;
-  --color-primary: #0d8f73;
-  --color-primary-deep: #08745d;
+  --color-primary: #202020;
+  --color-primary-deep: #080808;
   --color-primary-foreground: #ffffff;
-  --color-primary-soft: #e3f2ed;
-  --color-agent: #0d8f73;
-  --color-agent-soft: #e3f2ed;
-  --color-brand-violet: #6e62a6;
-  --color-brand-cyan: #0d8f73;
-  --color-brand-gold: #d9a521;
-  --color-ink: #202123;
-  --color-ink-2: #444654;
-  --color-muted: #6e6e80;
-  --color-faint: #a2a2ad;
-  --color-chip: #ececf1;
-  --color-panel: #f0f0f2;
-  --color-line: #dedee3;
-  --color-danger: #d84b4b;
-  --color-danger-soft: #fae7e7;
-  --color-success: #0d8f73;
-  --color-success-soft: #e3f2ed;
-  --shadow-card: 0 1px 3px rgb(32 33 35 / 0.06);
-  --shadow-pop: 0 10px 30px rgb(32 33 35 / 0.12);
-  --surface-card-image: linear-gradient(180deg, rgb(255 255 255 / 0.72), rgb(247 247 248 / 0.28));
-  --surface-panel-image: linear-gradient(145deg, rgb(13 143 115 / 0.035), transparent 54%);
-  --surface-sidebar-image: linear-gradient(180deg, rgb(255 255 255 / 0.42), transparent 42%);
-  --surface-chip-image: linear-gradient(135deg, rgb(13 143 115 / 0.045), transparent);
+  --color-primary-soft: #e8e8e8;
+  --color-agent: #404040;
+  --color-agent-soft: #ededed;
+  --color-brand-violet: #525252;
+  --color-brand-cyan: #404040;
+  --color-brand-gold: #737373;
+  --color-ink: #202020;
+  --color-ink-2: #454545;
+  --color-muted: #626262;
+  --color-faint: #666666;
+  --color-chip: #ebebeb;
+  --color-panel: #f5f5f5;
+  --color-line: #d6d6d6;
+  --color-danger: #b33c35;
+  --color-danger-soft: #fbecea;
+  --color-success: #276740;
+  --color-success-soft: #e5f0e7;
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.05);
+  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.12);
+  --page-wallpaper: none;
+  --surface-card-image: none;
+  --surface-panel-image: none;
+  --surface-sidebar-image: none;
+  --surface-chip-image: none;
+}
+
+html[data-theme="gpt"].dark {
+  --color-background: #181818;
+  --color-sidebar: #202020;
+  --color-card: #262626;
+  --color-primary: #e8e8e8;
+  --color-primary-deep: #ffffff;
+  --color-primary-foreground: #181818;
+  --color-primary-soft: #383838;
+  --color-agent: #d2d2d2;
+  --color-agent-soft: #333333;
+  --color-brand-violet: #bcbcbc;
+  --color-brand-cyan: #d2d2d2;
+  --color-brand-gold: #aaaaaa;
+  --color-ink: #ededed;
+  --color-ink-2: #d0d0d0;
+  --color-muted: #b0b0b0;
+  --color-faint: #ababab;
+  --color-chip: #363636;
+  --color-panel: #2d2d2d;
+  --color-line: #484848;
+  --color-danger: #f09b92;
+  --color-danger-soft: #422b2b;
+  --color-success: #8cc7a0;
+  --color-success-soft: #20352a;
+  --shadow-card: 0 2px 6px rgb(0 0 0 / 0.2);
+  --shadow-pop: 0 16px 40px rgb(0 0 0 / 0.4);
 }
 
 html[data-theme="claude"] {
@@ -756,19 +786,19 @@ html[data-theme="custom"] {
 
 /* 浅色探索主题需要让组件材质也明显跟随主色，而不只改变页面壁纸。
  * 保持在 Tailwind cascade layer 之外，确保能覆盖对应背景工具类。 */
-html:not(.dark):not([data-theme="shenzhi"]) :where(.bg-card) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]) :where(.bg-card) {
   background-color: color-mix(in srgb, var(--color-card) 88%, var(--color-primary) 12%);
 }
 
-html:not(.dark):not([data-theme="shenzhi"]) :where(.bg-sidebar) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]) :where(.bg-sidebar) {
   background-color: color-mix(in srgb, var(--color-sidebar) 82%, var(--color-primary) 18%);
 }
 
-html:not(.dark):not([data-theme="shenzhi"]) :where(.bg-panel) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]) :where(.bg-panel) {
   background-color: color-mix(in srgb, var(--color-panel) 78%, var(--color-primary) 22%);
 }
 
-html:not(.dark):not([data-theme="shenzhi"]) :where(.bg-chip) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]) :where(.bg-chip) {
   background-color: color-mix(in srgb, var(--color-chip) 84%, var(--color-primary) 16%);
 }
 
@@ -798,4 +828,29 @@ html:not(.dark):not([data-theme="shenzhi"]) :where(.bg-chip) {
   &:hover::-webkit-scrollbar-thumb {
     background-color: var(--color-line);
   }
+}
+
+/* 兼容现有写死白字的主操作（导航、聊天气泡、发送键），仅影响本预设。 */
+html[data-theme="gpt"] :where(.bg-primary.text-white) {
+  color: var(--color-primary-foreground);
+}
+
+html[data-theme="gpt"] :where(.bg-ink.text-white) {
+  color: var(--color-background);
+}
+
+html[data-theme="gpt"] :focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* AI 标识沿用主操作前景；黑白预设去掉组件自身的品牌渐变。 */
+html[data-theme="gpt"] :where(.from-primary.to-agent.text-white) {
+  background-color: var(--color-primary);
+  background-image: none;
+  color: var(--color-primary-foreground);
+}
+
+html[data-theme="gpt"] :where([class~="hover:bg-agent"][class~="hover:text-white"]):hover {
+  color: var(--color-background);
 }

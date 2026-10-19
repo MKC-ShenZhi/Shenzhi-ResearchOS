@@ -12,7 +12,7 @@ import {
   type CustomThemeAppearance,
   type CustomThemeConfig,
 } from "@/lib/custom-theme";
-import { isDarkThemePreset, isThemePreset, type ThemePreset } from "@/lib/theme-presets";
+import { isDarkThemePreset, isThemePreset, supportsThemeMode, type ThemePreset } from "@/lib/theme-presets";
 
 export type { ThemeMode } from "@/clients/settings/types";
 
@@ -38,7 +38,7 @@ function apply(mode: ThemeMode, preset: ThemePreset, customTheme: CustomThemeCon
   const dark =
     isDarkThemePreset(preset) ||
     (preset === "custom" && customTheme.appearance === "dark") ||
-    (preset === "shenzhi" &&
+    (supportsThemeMode(preset) &&
       (mode === "dark" || (mode === "system" && prefersDark())));
   applyCustomVariables(preset === "custom" ? customTheme : null);
   document.documentElement.dataset.theme = preset;
@@ -179,7 +179,7 @@ if (typeof window !== "undefined") {
     .matchMedia("(prefers-color-scheme: dark)")
     .addEventListener("change", () => {
       const { mode, preset } = useThemeStore.getState();
-      if (mode === "system" && preset === "shenzhi") {
+      if (mode === "system" && supportsThemeMode(preset)) {
         apply(mode, preset, useThemeStore.getState().customTheme);
       }
     });

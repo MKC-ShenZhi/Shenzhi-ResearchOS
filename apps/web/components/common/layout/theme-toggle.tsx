@@ -3,8 +3,18 @@
 import { useSyncExternalStore } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useThemeStore } from "@/stores/theme";
-import { isDarkThemePreset } from "@/lib/theme-presets";
+import { isDarkThemePreset, supportsThemeMode } from "@/lib/theme-presets";
 import { cn } from "@/lib/utils";
+
+function subscribeSystemTheme(onChange: () => void) {
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+
+function getSystemDark() {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
 
 /**
  * 日/夜模式切换(移动端顶栏)—— 点击在日间/夜间间显式切换,
@@ -23,17 +33,18 @@ export function ThemeToggle({ className }: { className?: string }) {
     () => false,
   );
 
+  const systemDark = useSyncExternalStore(subscribeSystemTheme, getSystemDark, () => false);
+
   const dark =
     mounted &&
     ((preset === "custom" && customTheme.appearance === "dark") ||
       isDarkThemePreset(preset) ||
-      (preset === "shenzhi" &&
+      (supportsThemeMode(preset) &&
         (mode === "dark" ||
-          (mode === "system" &&
-            window.matchMedia("(prefers-color-scheme: dark)").matches))));
+          (mode === "system" && systemDark))));
 
   const toggleAppearance = () => {
-    if (preset === "shenzhi") {
+    if (supportsThemeMode(preset)) {
       setMode(dark ? "light" : "dark");
       return;
     }

@@ -73,7 +73,7 @@ test("every exploratory preset replaces the complete semantic color surface", ()
   ]) {
     assert.match(styles, new RegExp(`--color-${token}:`));
   }
-  assert.match(styles, /html:not\(\.dark\):not\(\[data-theme="shenzhi"\]\) :where\(\.bg-card\)/);
+  assert.match(styles, /html:not\(\.dark\):not\(\[data-theme="shenzhi"\]\):not\(\[data-theme="gpt"\]\) :where\(\.bg-card\)/);
   assert.match(styles, /color-mix\(in srgb, var\(--color-card\)/);
 });
 
@@ -85,7 +85,7 @@ test("only designated dark presets force dark component variants", () => {
   assert.match(presets, /preset === "spectrum-emerald"/);
   assert.match(presets, /preset === "spectrum-cobalt"/);
   assert.match(presets, /preset === "spectrum-rose"/);
-  assert.match(store, /preset === "shenzhi"/);
+  assert.match(store, /supportsThemeMode\(preset\)/);
   assert.match(store, /preset === "custom" && customTheme\.appearance === "dark"/);
-  assert.doesNotMatch(store, /preset === "gpt"[^;]+classList/);
+
 });

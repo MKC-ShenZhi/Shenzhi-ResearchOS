@@ -17,7 +17,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useThemeStore, type ThemeMode } from "@/stores/theme";
-import { THEME_PRESETS } from "@/lib/theme-presets";
+import { supportsThemeMode, THEME_PRESETS } from "@/lib/theme-presets";
 import { cn } from "@/lib/utils";
 import { McpIcon } from "@/features/settings/components/settings-tabs";
 import { useSidebarStore } from "@/stores/sidebar";
@@ -136,8 +136,8 @@ export function SettingsMenu({ collapsed }: { collapsed: boolean }) {
             {preset === "custom" && <div className="mt-2"><CustomThemeControls compact /></div>}
           </div>
 
-          {/* 深知原版继续支持日间 / 夜间 / 跟随系统 */}
-          {preset === "shenzhi" && <div className="flex items-center gap-1 border-t border-line px-1 pb-1 pt-2.5">
+          {/* 自适应预设支持日间 / 夜间 / 跟随系统 */}
+          {supportsThemeMode(preset) && <div className="flex items-center gap-1 border-t border-line px-1 pb-1 pt-2.5">
             {MODE_OPTIONS.map((opt) => (
               <button
                 key={opt.mode}
