@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import Script from "next/script";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { FeatureAvailabilityProvider } from "@/components/common/feature-availability-provider";
 import { ThemeStoreHydrator } from "@/components/common/theme-store-hydrator";
@@ -24,10 +23,11 @@ const themeScript = `(function(){try{var q=new URLSearchParams(location.search).
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="zh-CN" data-theme="shenzhi" suppressHydrationWarning>
+      <head>
+        {/* 必须随 HTML 解析立即执行；next/script 会等客户端运行时启动，可能晚于首屏绘制。 */}
+        <script id="shenzhi-theme" dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body suppressHydrationWarning>
-        <Script id="shenzhi-theme" strategy="beforeInteractive">
-          {themeScript}
-        </Script>
         <FeatureAvailabilityProvider>
           <AuthProvider>
             <ThemeStoreHydrator />

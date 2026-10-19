@@ -10,6 +10,7 @@
 - 沿用 `ThemePreset`、Zustand、`data-theme`、`.dark` 与现有语义 CSS Token。参考分支独有的变量按当前 `primary/primary-soft/agent/chip/panel` 等语义适配，不直接引入参考 CSS，也不增加主题引擎。
 - `MODE_THEME_PRESETS` 定义支持日间、夜间、跟随系统的预设，供 Store、移动按钮和两个设置入口共用。首屏脚本从同一注册表生成预设名单，和 Store 使用相同的模式判定。
 - 继续使用 `shenzhi-theme` 和 `shenzhi-theme-preset` 存储偏好；首帧保持 SSR 默认状态，挂载后同步 Store。系统媒体查询变化会实时应用到支持模式的预设，移动端按钮同步更新图标且不会跳到 Apple。
+- 首屏主题脚本放在根布局 `<head>` 的原生内联 `<script>` 中，随 HTML 解析直接执行，不等待 Next.js 客户端运行时。选择自定义预设时同步保存配置与生成的 CSS 变量，确保刷新首屏和 Store 水合后配色一致。
 - `custom-theme.ts` 的生成与清理机制保持不变；切换离开自定义主题仍清除全部内联变量，防止覆盖预设。测试覆盖这一过程。
 
 ## 组件兼容范围

@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import test from "node:test";
+import type { ReactNode } from "react";
+import * as jsxRuntime from "react/jsx-runtime";
+import { renderToStaticMarkup } from "react-dom/server";
+import Script from "next/script";
 import ts from "typescript";
 import { createStore } from "zustand/vanilla";
 import * as presets from "../../lib/theme-presets";
@@ -33,11 +37,40 @@ function browser(preset: string, mode: Mode, systemDark: boolean) {
   return { context, root, classes, storage, properties, systemChange: (dark: boolean) => { media.matches = dark; onSystemChange(); } };
 }
 
+function renderLayout() {
+  const source = ts.transpileModule(readFileSync("app/layout.tsx", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const passthrough = ({ children }: { children: ReactNode }) => children;
+  const dependencies: Record<string, unknown> = {
+    "react/jsx-runtime": jsxRuntime,
+    "next/script": { default: Script },
+    "@/lib/theme-presets": presets,
+    "@/styles/globals.css": {},
+    "@/components/auth/auth-provider": { AuthProvider: passthrough },
+    "@/components/common/feature-availability-provider": { FeatureAvailabilityProvider: passthrough },
+    "@/components/common/theme-store-hydrator": { ThemeStoreHydrator: () => null },
+    "@/providers/query-provider": { QueryProvider: passthrough },
+  };
+  const exports: { default?: (props: { children: ReactNode }) => ReactNode } = {};
+  runInNewContext(source, {
+    exports,
+    require: (id: string) => {
+      assert.ok(id in dependencies, `Unexpected layout import: ${id}`);
+      return dependencies[id];
+    },
+  });
+  assert.ok(exports.default);
+  return renderToStaticMarkup(exports.default({ children: "page content" }));
+}
+
+const layoutHtml = renderLayout();
+
 function firstPaint(browserState: ReturnType<typeof browser>) {
-  const layout = readFileSync("app/layout.tsx", "utf8");
-  const template = layout.match(/const themeScript = (`[^`]+`);/)?.[1];
-  assert.ok(template);
-  const script = runInNewContext(template, { ...presets, JSON });
+  const head = layoutHtml.match(/<head>([\s\S]*?)<\/head>/)?.[1];
+  assert.ok(head, "theme initialization must be in the rendered head before body content");
+  const script = head.match(/<script id="shenzhi-theme">([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(script, "theme initialization must execute inline without waiting for Next.js runtime");
   runInNewContext(script, browserState.context);
 }
 
@@ -60,6 +93,18 @@ function loadStore(browserState: ReturnType<typeof browser>) {
   assert.ok(exports.hydrateThemeStoreFromStorage);
   return { store: exports.useThemeStore, hydrate: exports.hydrateThemeStoreFromStorage };
 }
+
+test("theme initializes before body content without the Next.js runtime", () => {
+  const state = browser("custom", "system", false);
+  const config = { accent: "#315EFB", appearance: "dark" } as const;
+  const variables = customTheme.createCustomThemeVariables(config);
+  state.storage.set(customTheme.CUSTOM_THEME_STORAGE_KEY, JSON.stringify(config));
+  state.storage.set(customTheme.CUSTOM_THEME_VARS_STORAGE_KEY, JSON.stringify(variables));
+  firstPaint(state);
+  assert.equal(state.root.dataset.theme, "custom");
+  assert.ok(state.classes.has("dark"));
+  assert.deepEqual(Object.fromEntries(state.properties), variables);
+});
 
 test("mode-aware presets agree at first paint, hydration, and system changes", () => {
   for (const preset of presets.MODE_THEME_PRESETS) {
