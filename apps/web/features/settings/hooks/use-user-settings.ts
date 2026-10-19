@@ -25,8 +25,6 @@ export function useUserSettings() {
   const activeUserIdRef = useRef<string | null>(userId);
   const themeMode = useThemeStore((state) => state.mode);
   const setThemeMode = useThemeStore((state) => state.setMode);
-  const themePreset = useThemeStore((state) => state.preset);
-  const setThemePreset = useThemeStore((state) => state.setPreset);
   // Match the server render first; hydrate the browser preference in the deferred effect below.
   const [locale, setLocaleState] = useState<SettingsLocale>("zh-CN");
   const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
@@ -124,7 +122,6 @@ export function useUserSettings() {
   return {
     locale,
     themeMode,
-    themePreset,
     notifications,
     loading,
     notice,
@@ -132,7 +129,6 @@ export function useUserSettings() {
     isAuthenticated: Boolean(userId),
     setLocale,
     setTheme,
-    setThemePreset,
     setNotifications: setNotificationPreferences,
   };
 }
