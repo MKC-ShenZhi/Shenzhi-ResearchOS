@@ -14,6 +14,7 @@ const customTheme = readFileSync("lib/custom-theme.ts", "utf8");
 const themeIds = [
   "shenzhi",
   "gpt",
+  "warm-teal",
   "claude",
   "alphaxiv",
   "apple-light",
@@ -73,7 +74,7 @@ test("every exploratory preset replaces the complete semantic color surface", ()
   ]) {
     assert.match(styles, new RegExp(`--color-${token}:`));
   }
-  assert.match(styles, /html:not\(\.dark\):not\(\[data-theme="shenzhi"\]\):not\(\[data-theme="gpt"\]\) :where\(\.bg-card\)/);
+  assert.match(styles, /html:not\(\.dark\):not\(\[data-theme="shenzhi"\]\):not\(\[data-theme="gpt"\]\):not\(\[data-theme="warm-teal"\]\) :where\(\.bg-card\)/);
   assert.match(styles, /color-mix\(in srgb, var\(--color-card\)/);
 });
 

@@ -1,6 +1,7 @@
 export const THEME_PRESETS = [
   { id: "shenzhi", label: "深知", description: "现有方案" },
   { id: "gpt", label: "极简黑白", description: "克制灰阶 · 日夜自适应" },
+  { id: "warm-teal", label: "青绿", description: "暖白青绿 · 日夜自适应" },
   { id: "claude", label: "Claude", description: "温暖书写感" },
   { id: "alphaxiv", label: "alphaXiv", description: "学术编辑感" },
   { id: "apple-light", label: "Apple 浅色", description: "通透冷光" },
@@ -31,7 +32,7 @@ export function isDarkThemePreset(preset: ThemePreset) {
 }
 
 /** 支持日间、夜间及跟随系统；其他探索预设保持原有固定外观。 */
-export const MODE_THEME_PRESETS: readonly ThemePreset[] = ["shenzhi", "gpt"];
+export const MODE_THEME_PRESETS: readonly ThemePreset[] = ["shenzhi", "gpt", "warm-teal"];
 
 export function supportsThemeMode(preset: ThemePreset) {
   return MODE_THEME_PRESETS.includes(preset);

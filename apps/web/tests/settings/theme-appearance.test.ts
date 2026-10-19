@@ -147,3 +147,26 @@ test("black and white has neutral complete surfaces and AA reading/action contra
     assert.ok(contrast(palette["--color-primary"], palette["--color-primary-soft"]) >= 4.5);
   }
 });
+
+
+test("teal preserves warm whites, neutral dark surfaces, and AA text contrast", () => {
+  const light = tokens('html[data-theme="warm-teal"]');
+  const dark = { ...light, ...tokens('html[data-theme="warm-teal"].dark') };
+  assert.equal(light["--color-background"], "#fbfaf4");
+  assert.equal(light["--color-primary"], "#1c7783");
+  assert.equal(dark["--color-primary"], "#7bd4d8");
+  for (const palette of [light, dark]) {
+    for (const key of customTheme.CUSTOM_THEME_VARIABLES) assert.ok(palette[key], key);
+    for (const surface of ["background", "sidebar", "card", "chip", "panel"]) {
+      for (const text of ["ink", "ink-2", "muted", "faint"]) assert.ok(contrast(palette[`--color-${text}`], palette[`--color-${surface}`]) >= 4.5, `${text} on ${surface}`);
+    }
+    for (const action of ["primary", "primary-deep"]) assert.ok(contrast(palette["--color-primary-foreground"], palette[`--color-${action}`]) >= 4.5);
+    assert.ok(contrast(palette["--color-primary"], palette["--color-primary-soft"]) >= 4.5);
+  }
+  for (const surface of ["background", "sidebar", "card", "chip", "panel", "line"]) {
+    const value = dark[`--color-${surface}`];
+    assert.equal(value.slice(1, 3), value.slice(3, 5), surface);
+    assert.equal(value.slice(3, 5), value.slice(5, 7), surface);
+  }
+  assert.doesNotMatch(css, /@import[^;]*warm-teal/);
+});

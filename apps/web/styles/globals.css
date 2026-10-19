@@ -156,6 +156,68 @@ html[data-theme="gpt"].dark {
   --shadow-pop: 0 16px 40px rgb(0 0 0 / 0.4);
 }
 
+/* 来自 feature/color 的暖白 + Teal；夜间采用中性 Gray，映射到当前语义令牌。 */
+html[data-theme="warm-teal"] {
+  --color-background: #fbfaf4;
+  --color-sidebar: #f1f2ed;
+  --color-card: #ffffff;
+  --color-primary: #1c7783;
+  --color-primary-deep: #176b76;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #e4f2f1;
+  --color-agent: #1c7783;
+  --color-agent-soft: #e4f2f1;
+  --color-brand-violet: #4f46e5;
+  --color-brand-cyan: #1c7783;
+  --color-brand-gold: #d8b65c;
+  --color-ink: #091717;
+  --color-ink-2: #263737;
+  --color-muted: #5e706e;
+  --color-faint: #5e706e;
+  --color-chip: #edf0eb;
+  --color-panel: #f1f2ed;
+  --color-line: #dee4df;
+  --color-danger: #b33c35;
+  --color-danger-soft: #fbecea;
+  --color-success: #276740;
+  --color-success-soft: #e5f0e7;
+  --shadow-card: 0 2px 6px rgb(0 0 0 / 0.05);
+  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.12);
+  --page-wallpaper: none;
+  --surface-card-image: none;
+  --surface-panel-image: none;
+  --surface-sidebar-image: none;
+  --surface-chip-image: none;
+}
+
+html[data-theme="warm-teal"].dark {
+  --color-background: #151515;
+  --color-sidebar: #1b1b1b;
+  --color-card: #222222;
+  --color-primary: #7bd4d8;
+  --color-primary-deep: #9ae1e3;
+  --color-primary-foreground: #102525;
+  --color-primary-soft: #233638;
+  --color-agent: #7bd4d8;
+  --color-agent-soft: #233638;
+  --color-brand-violet: #a5b4fc;
+  --color-brand-cyan: #7bd4d8;
+  --color-brand-gold: #d8b65c;
+  --color-ink: #f0f0f0;
+  --color-ink-2: #d2d2d2;
+  --color-muted: #a8a8a8;
+  --color-faint: #a8a8a8;
+  --color-chip: #2a2a2a;
+  --color-panel: #1b1b1b;
+  --color-line: #393939;
+  --color-danger: #f09b92;
+  --color-danger-soft: #422b2b;
+  --color-success: #8cc7a0;
+  --color-success-soft: #20352a;
+  --shadow-card: 0 2px 6px rgb(0 0 0 / 0.2);
+  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.4);
+}
+
 html[data-theme="claude"] {
   --color-background: #f7f5f2;
   --color-sidebar: #eeeae4;
@@ -764,6 +826,7 @@ html[data-theme="custom"] {
   }
 
   html[data-theme="gpt"] ::selection,
+  html[data-theme="warm-teal"] ::selection,
   html[data-theme="claude"] ::selection,
   html[data-theme="alphaxiv"] ::selection,
   html[data-theme="apple-light"] ::selection,
@@ -786,19 +849,19 @@ html[data-theme="custom"] {
 
 /* 浅色探索主题需要让组件材质也明显跟随主色，而不只改变页面壁纸。
  * 保持在 Tailwind cascade layer 之外，确保能覆盖对应背景工具类。 */
-html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]) :where(.bg-card) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]) :where(.bg-card) {
   background-color: color-mix(in srgb, var(--color-card) 88%, var(--color-primary) 12%);
 }
 
-html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]) :where(.bg-sidebar) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]) :where(.bg-sidebar) {
   background-color: color-mix(in srgb, var(--color-sidebar) 82%, var(--color-primary) 18%);
 }
 
-html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]) :where(.bg-panel) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]) :where(.bg-panel) {
   background-color: color-mix(in srgb, var(--color-panel) 78%, var(--color-primary) 22%);
 }
 
-html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]) :where(.bg-chip) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]) :where(.bg-chip) {
   background-color: color-mix(in srgb, var(--color-chip) 84%, var(--color-primary) 16%);
 }
 
@@ -830,27 +893,33 @@ html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]) :where(.bg-c
   }
 }
 
-/* 兼容现有写死白字的主操作（导航、聊天气泡、发送键），仅影响本预设。 */
-html[data-theme="gpt"] :where(.bg-primary.text-white) {
+/* 兼容现有写死白字的主操作（导航、聊天气泡、发送键），仅影响这两个自适应预设。 */
+html:is([data-theme="gpt"], [data-theme="warm-teal"]) :where(.bg-primary.text-white) {
   color: var(--color-primary-foreground);
 }
 
-html[data-theme="gpt"] :where(.bg-ink.text-white) {
+html:is([data-theme="gpt"], [data-theme="warm-teal"]) :where(.bg-ink.text-white) {
   color: var(--color-background);
 }
 
-html[data-theme="gpt"] :focus-visible {
+html:is([data-theme="gpt"], [data-theme="warm-teal"]) :focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
 /* AI 标识沿用主操作前景；黑白预设去掉组件自身的品牌渐变。 */
-html[data-theme="gpt"] :where(.from-primary.to-agent.text-white) {
+html:is([data-theme="gpt"], [data-theme="warm-teal"]) :where(.from-primary.to-agent.text-white) {
   background-color: var(--color-primary);
   background-image: none;
   color: var(--color-primary-foreground);
 }
 
-html[data-theme="gpt"] :where([class~="hover:bg-agent"][class~="hover:text-white"]):hover {
+html:is([data-theme="gpt"], [data-theme="warm-teal"]) :where([class~="hover:bg-agent"][class~="hover:text-white"]):hover {
   color: var(--color-background);
+}
+
+/* 现有智能搜索入口写死的紫色状态，在两个自适应主题中使用语义强调色。 */
+html:is([data-theme="gpt"], [data-theme="warm-teal"]) :where(.bg-violet-100.text-violet-800) {
+  background-color: var(--color-agent-soft);
+  color: var(--color-agent);
 }
