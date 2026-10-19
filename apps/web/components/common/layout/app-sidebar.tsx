@@ -88,24 +88,13 @@ const PROJECT_SUB_NAV = projects.map((p) => ({
 
 const subscribeHydration = () => () => {};
 
-/** 路径所属主标题栏目(取首段):/knowledge/papers → /knowledge,/ → / */
-function sectionOf(path: string): string {
-  const seg = path.split("/")[1];
-  return seg ? `/${seg}` : "/";
-}
-
-function NavLink({ item, collapsed, mobile = false }: { item: NavItem; collapsed: boolean; mobile?: boolean }) {
+function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const pathname = usePathname();
   const setCollapsed = useSidebarStore((s) => s.setCollapsed);
   const active = item.matchPrefix
     ? pathname.startsWith(item.matchPrefix)
     : pathname === item.href;
   const Icon = item.icon;
-  /** 展开态:点击当前所在主标题时折叠侧边栏;点击其他主标题仅跳转 */
-  const collapseIfSameSection = () => {
-    if (!mobile && sectionOf(item.href) === sectionOf(pathname)) setCollapsed(true);
-  };
-
   const inner = (
     <>
       <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
@@ -164,7 +153,6 @@ function NavLink({ item, collapsed, mobile = false }: { item: NavItem; collapsed
       scroll={false}
       title={collapsed ? item.label : undefined}
       aria-current={active ? "page" : undefined}
-      onClick={collapseIfSameSection}
       className={cn(
         "flex h-10 shrink-0 items-center rounded-xl transition-colors",
         "gap-3 px-3",
@@ -180,10 +168,9 @@ function NavLink({ item, collapsed, mobile = false }: { item: NavItem; collapsed
 
 /**
  * 可展开导航项 —— 展开状态存于全局 store,切换到其他条目后仍保持展开。
- * 折叠/展开规则(与 NavLink / 设置菜单一致):
+ * 折叠/展开规则:
  * - 侧边栏展开时,点击主标题:副标题折叠则展开并跳转(有主标题页跳主标题页,
- *   没有则跳第一个副标题页);副标题已展开且当前处于同一主标题下,则折叠侧边栏;
- *   副标题已展开但处于其他栏目,仅按跳转逻辑跳转;
+ *   没有则跳第一个副标题页);副标题已展开时仅按跳转逻辑跳转;
  * - 侧边栏折叠(图标栏)时,点击图标先跳转;再次点击当前栏目的图标,
  *   则展开侧边栏并展开副标题。
  * 右侧箭头只收起/展开副标题,不跳转。
@@ -195,7 +182,6 @@ function ExpandableNav({
   subNav,
   collapsed,
   footer,
-  mobile = false,
 }: {
   href: string;
   label: string;
@@ -204,7 +190,6 @@ function ExpandableNav({
   collapsed: boolean;
   /** 子栏目列表末尾的附加内容(如「新建项目」) */
   footer?: React.ReactNode;
-  mobile?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -242,12 +227,8 @@ function ExpandableNav({
       setExpanded(href, true);
       if (pathname !== dest) navigate(dest);
     } else if (routeActive) {
-      // Knowledge 子页面点击主标题返回总览;其他栏目保持原有折叠行为
-      if (href === "/knowledge" && pathname !== href) {
-        navigate(href);
-      } else if (!mobile) {
-        setCollapsed(true);
-      }
+      // 当前栏目子页面点击主标题时返回栏目主页
+      if (pathname !== dest) navigate(dest);
     } else if (pathname !== dest) {
       // 副标题展开但处于其他栏目:仅跳转
       navigate(dest);
@@ -532,28 +513,28 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
           </p>
         )}
         {RESEARCH_NAV.map((item) => (
-          <NavLink key={item.label} item={item} collapsed={collapsed} mobile={mobileOpen} />
+          <NavLink key={item.label} item={item} collapsed={collapsed} />
         ))}
         <ExpandableNav
           href="/agents"
           label="AI 助手"
           icon={Sparkles}
           subNav={AGENT_SUB_NAV}
-          collapsed={collapsed} mobile={mobileOpen}
+          collapsed={collapsed}
         />
         <ExpandableNav
           href="/knowledge"
           label="知识库"
           icon={Library}
           subNav={KNOWLEDGE_SUB_NAV}
-          collapsed={collapsed} mobile={mobileOpen}
+          collapsed={collapsed}
         />
         <ExpandableNav
           href="/projects"
           label="科研项目"
           icon={Layers}
           subNav={PROJECT_SUB_NAV}
-          collapsed={collapsed} mobile={mobileOpen}
+          collapsed={collapsed}
           footer={
             <button
               type="button"
@@ -571,7 +552,7 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
           label="投稿"
           icon={Send}
           subNav={SUBMIT_SUB_NAV}
-          collapsed={collapsed} mobile={mobileOpen}
+          collapsed={collapsed}
         />
         <React.Suspense fallback={null}>
           <SidebarChatHistory collapsed={collapsed} />
@@ -580,7 +561,7 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
 
       <div className="mt-4 flex shrink-0 flex-col gap-0.5 [&>div]:mt-0">
         {!isUnavailableFeatureHref(MY_PAPERS_NAV.href) && (
-          <NavLink item={MY_PAPERS_NAV} collapsed={collapsed} mobile={mobileOpen} />
+          <NavLink item={MY_PAPERS_NAV} collapsed={collapsed} />
         )}
 
         {/* 设置(悬停显示选项栏) */}

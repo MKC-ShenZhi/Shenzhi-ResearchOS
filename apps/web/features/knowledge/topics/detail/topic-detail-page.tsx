@@ -37,10 +37,10 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-6">
         <div className="max-w-md text-center">
-          <h1 className="text-2xl font-semibold text-foreground">
+          <h1 className="text-2xl font-semibold text-ink">
             {notFound ? "没有找到这个主题" : "主题加载失败"}
           </h1>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          <p className="mt-3 text-sm leading-6 text-muted">
             {notFound
               ? "该主题可能已下线，或者链接中的主题编号不正确。"
               : "暂时无法取得主题信息，请稍后重新尝试。"}
@@ -48,7 +48,7 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
           <div className="mt-6 flex justify-center gap-3">
             <Link
               href={squareHref}
-              className="inline-flex h-9 items-center rounded-lg border border-line px-4 text-sm font-medium text-foreground"
+              className="inline-flex h-9 items-center rounded-lg border border-line px-4 text-sm font-medium text-ink"
             >
               返回主题广场
             </Link>
@@ -76,7 +76,7 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
       <div className="mx-auto max-w-[980px]">
         <Link
           href={squareHref}
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-primary"
+          className="inline-flex items-center gap-2 text-sm text-muted transition hover:text-primary"
         >
           <ArrowLeft className="size-4" />
           返回主题广场
@@ -87,21 +87,21 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
             <TopicCover key={topic.imagePath} imagePath={topic.imagePath} name={topic.nameZh} sizes="(min-width: 768px) 240px, 96px" eager />
           </div>
           <div className="min-w-0 [overflow-wrap:anywhere]">
-            <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground md:text-[30px]">
+            <h1 className="text-2xl font-semibold leading-tight tracking-tight text-ink md:text-[30px]">
               {topic.nameZh}
             </h1>
-            <p className="mt-1 text-sm leading-5 text-muted-foreground md:text-[15px]">
+            <p className="mt-1 text-sm leading-5 text-muted md:text-[15px]">
               {topic.nameEn}
             </p>
-            <span className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary/5 px-2.5 py-1 text-xs text-muted-foreground">
+            <span className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary/5 px-2.5 py-1 text-xs text-muted">
               <Tag className="size-3 shrink-0" />
               {topic.category}
             </span>
           </div>
-          <p className="col-span-2 line-clamp-3 min-w-0 whitespace-pre-line text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere] md:col-span-1 md:mt-3 md:text-[15px]" title={description}>
+          <p className="col-span-2 line-clamp-3 min-w-0 whitespace-pre-line text-sm leading-6 text-muted [overflow-wrap:anywhere] md:col-span-1 md:mt-3 md:text-[15px]" title={description}>
             {description}
           </p>
-          <p className="col-span-2 min-w-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere] md:col-span-1 md:mt-3 md:text-[13px]">
+          <p className="col-span-2 min-w-0 text-xs leading-5 text-muted [overflow-wrap:anywhere] md:col-span-1 md:mt-3 md:text-[13px]">
             创建者：{typeof topic.author === "string" ? topic.author : topic.author.name}
           </p>
         </article>

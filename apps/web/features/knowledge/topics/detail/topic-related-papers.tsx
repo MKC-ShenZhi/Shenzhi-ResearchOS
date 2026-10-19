@@ -71,11 +71,11 @@ export function TopicRelatedPapers({
         <div>
           <h2
             id="topic-related-papers"
-            className="text-xl font-semibold tracking-tight text-foreground"
+            className="text-xl font-semibold tracking-tight text-ink"
           >
             相关论文
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted">
             {data
               ? "共 " + total.toLocaleString() + " 篇论文"
               : isError ? "暂时无法统计相关论文" : "正在统计相关论文"}
@@ -105,7 +105,7 @@ export function TopicRelatedPapers({
 
           <div
             ref={loadMoreRef}
-            className="flex min-h-20 items-center justify-center border-t border-line pt-4 text-sm text-muted-foreground"
+            className="flex min-h-20 items-center justify-center border-t border-line pt-4 text-sm text-muted"
           >
             {isFetchingNextPage ? (
               <span className="inline-flex items-center gap-2">
