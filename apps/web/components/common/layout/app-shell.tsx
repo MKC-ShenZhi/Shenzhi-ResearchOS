@@ -27,7 +27,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const viewportRef = useVisualViewport<HTMLDivElement>();
 
   return (
-    <div ref={viewportRef} className="theme-page min-h-dvh bg-background">
+    <div ref={viewportRef} className="min-h-dvh bg-background">
       <Suspense fallback={null}>
         <SearchNavigationRecorder />
       </Suspense>

@@ -10,18 +10,15 @@ import {
   KeyRound,
   Monitor,
   Moon,
-  Palette,
   Settings,
   Sparkles,
   Sun,
   UserRound,
 } from "lucide-react";
 import { useThemeStore, type ThemeMode } from "@/stores/theme";
-import { supportsThemeMode, THEME_PRESETS } from "@/lib/theme-presets";
 import { cn } from "@/lib/utils";
 import { McpIcon } from "@/features/settings/components/settings-tabs";
 import { useSidebarStore } from "@/stores/sidebar";
-import { CustomThemeControls } from "@/components/common/custom-theme-controls";
 
 /** 设置选项,自上而下与设置页 Tab 顺序一致,点击跳转对应 Tab */
 const MENU_ITEMS = [
@@ -34,7 +31,7 @@ const MENU_ITEMS = [
   { label: "通知", icon: Bell, href: "/settings?tab=notifications" },
 ];
 
-const MODE_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
+const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "日间", icon: Sun },
   { mode: "dark", label: "夜间", icon: Moon },
   { mode: "system", label: "跟随系统", icon: Monitor },
@@ -44,8 +41,6 @@ const MODE_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
 export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean; mobile?: boolean }) {
   const mode = useThemeStore((s) => s.mode);
   const setMode = useThemeStore((s) => s.setMode);
-  const preset = useThemeStore((s) => s.preset);
-  const setPreset = useThemeStore((s) => s.setPreset);
   // persist 的主题在客户端水合后才可读,避免水合不一致
   const mounted = useSyncExternalStore(
     () => () => undefined,
@@ -108,37 +103,9 @@ export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean
             </Link>
           ))}
 
-          <div className="mt-1.5 border-t border-line px-1 pb-1 pt-2.5">
-            <div className="mb-2 flex items-center gap-2 px-1 text-xs font-medium text-muted">
-              <Palette className="size-3.5" strokeWidth={1.8} />
-              视觉风格
-            </div>
-            <div className="scrollbar-subtle grid max-h-64 grid-cols-2 gap-1 overflow-y-auto pr-1">
-              {THEME_PRESETS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-label={`切换到${option.label}风格`}
-                  aria-pressed={mounted && preset === option.id}
-                  onClick={() => setPreset(option.id)}
-                  className={cn(
-                    "min-w-0 cursor-pointer rounded-lg px-2 py-1.5 text-left transition-colors",
-                    mounted && preset === option.id
-                      ? "bg-primary-soft text-primary"
-                      : "text-ink-2 hover:bg-chip",
-                  )}
-                >
-                  <span className="block truncate text-xs font-medium">{option.label}</span>
-                  <span className="block truncate text-[10px] text-muted">{option.description}</span>
-                </button>
-              ))}
-            </div>
-            {preset === "custom" && <div className="mt-2"><CustomThemeControls compact /></div>}
-          </div>
-
-          {/* 自适应预设支持日间 / 夜间 / 跟随系统 */}
-          {supportsThemeMode(preset) && <div className="flex items-center gap-1 border-t border-line px-1 pb-1 pt-2.5">
-            {MODE_OPTIONS.map((opt) => (
+          {/* 主题:日间 / 夜间 / 跟随系统 */}
+          <div className="mt-1.5 flex items-center gap-1 border-t border-line px-1 pb-1 pt-2.5">
+            {THEME_OPTIONS.map((opt) => (
               <button
                 key={opt.mode}
                 type="button"
@@ -156,7 +123,7 @@ export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean
                 <opt.icon className="size-4" strokeWidth={1.8} />
               </button>
             ))}
-          </div>}
+          </div>
         </div>
       </div>
     </div>
