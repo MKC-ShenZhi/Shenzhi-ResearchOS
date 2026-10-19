@@ -39,33 +39,30 @@ export function PaperCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: (index % 12) * 0.03 }}
-      className={`@container rounded-2xl bg-card p-6 shadow-card [contain-intrinsic-size:auto_260px] [content-visibility:auto] ${PAPER_CARD_INTERACTION_CLASS}`}
+      className={`@container rounded-2xl bg-card p-6 shadow-card [overflow-wrap:anywhere] [contain-intrinsic-size:auto_260px] [content-visibility:auto] ${PAPER_CARD_INTERACTION_CLASS}`}
       {...cardNavigation}
     >
-      <div className={layout === "feed" ? "grid grid-cols-1 gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(240px,34cqw,320px)]" : "grid grid-cols-1 gap-y-4"}>
-        <div className="col-span-full min-w-0">
+      <div className={layout === "feed" ? "grid grid-cols-1 items-start gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(200px,30cqw,280px)]" : "grid grid-cols-1 gap-y-4"}>
+        <div className="min-w-0">
           {/* 元信息行 */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
             <span className="text-faint">{paper.date}</span>
             <Badge variant={VENUE_VARIANT[paper.venueTone]}>{paper.venue}</Badge>
             {status && <PaperReadBadge status={status} />}
-            <span className="flex items-center gap-1.5 text-muted">
-              <Users className="size-3.5 text-faint" />
-              {paper.authors}
+            <span className="flex min-w-0 items-center gap-1.5 text-muted">
+              <Users className="size-3.5 shrink-0 text-faint" />
+              <span className="min-w-0">{paper.authors}</span>
             </span>
           </div>
 
           {/* 标题 */}
           <Link href={detailHref} className="group mt-2 block">
-            <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
+            <h3 className="line-clamp-2 text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
               {paper.title}
             </h3>
           </Link>
-        </div>
-
-        <div className="min-w-0">
           {/* 摘要 */}
-          <p className="line-clamp-3 text-sm leading-relaxed text-muted @min-[600px]:line-clamp-5">
+          <p className="mt-3 line-clamp-4 text-sm leading-relaxed text-muted">
             {paper.abstract}
           </p>
 
@@ -81,8 +78,8 @@ export function PaperCard({
         </div>
 
         {layout === "feed" && (
-          <div className="block w-full max-w-[320px] justify-self-center self-start @min-[600px]:max-w-none">
-            <PaperThumbnail src={paper.thumbnailUrl} title={paper.title} eager={index < 2} />
+          <div className="w-full max-w-[280px] justify-self-center self-start">
+            <PaperThumbnail src={paper.thumbnailUrl} title={paper.title} eager={index < 2} aspectRatio={7 / 5} />
             {paper.citations !== undefined && (
               <div className="mt-2 flex items-center justify-end gap-1 text-xs text-muted">
                 <TrendingUp className="size-3 text-primary" />
@@ -94,14 +91,14 @@ export function PaperCard({
 
         {/* 底部操作行 */}
         <div className="col-span-full flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-x-4 gap-y-1">
+          <div className="min-w-0 flex flex-wrap gap-x-4 gap-y-1">
             {paper.tags.map((tag) => (
               <span key={tag} className="text-[13px] text-muted">
                 #{tag}
               </span>
             ))}
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               onClick={() => toggleLike(paper.id)}
