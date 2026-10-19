@@ -16,11 +16,11 @@ export function AnnualCitations({
   const max = Math.max(1, ...citations.map((item) => item.count));
   return (
     <section
-      className="rounded-2xl border border-line bg-card p-5 sm:p-6"
+      className="min-w-0 lg:border-l lg:border-line lg:pl-10"
       aria-labelledby="citations-title"
     >
       <div className="flex items-center justify-between gap-2">
-        <h2 id="citations-title" className="text-base font-semibold text-ink">
+        <h2 id="citations-title" className="text-lg font-semibold text-ink">
           年度引用
         </h2>
         <span className="text-xs tabular-nums text-muted">
@@ -32,29 +32,29 @@ export function AnnualCitations({
       </p>
       {citations.length ? (
         <>
-          <div className="relative mt-7 border-b border-line">
+          <div className="relative mt-4 border-b border-line">
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 flex flex-col justify-between pb-5"
+              className="pointer-events-none absolute inset-0 flex flex-col justify-between pb-10"
             >
-              <div className="border-t border-dashed border-line" />
-              <div className="border-t border-dashed border-line" />
-              <div className="border-t border-dashed border-line" />
+              <div className="border-t border-line/60" />
+              <div className="border-t border-line/60" />
+              <div className="border-t border-line/60" />
             </div>
-            <div className="relative flex gap-3 px-1 sm:gap-4">
+            <div className="relative flex gap-3 px-1 sm:gap-6">
               {citations.map(({ year, count }) => (
                 <div key={year} className="min-w-0 flex-1 text-center">
-                  <div className="flex h-40 flex-col justify-end">
-                    <span className="mb-2 text-[11px] font-medium tabular-nums text-ink-2">
+                  <div className="flex h-36 flex-col justify-end">
+                    <span className="mb-2 text-xs font-medium tabular-nums text-ink-2">
                       {count.toLocaleString("en-US")}
                     </span>
                     <div
-                      className="mx-auto w-full max-w-12 rounded-t bg-primary/80 transition-colors hover:bg-primary"
+                      className="mx-auto w-full max-w-10 rounded-t-sm bg-primary/70"
                       style={{ height: `${(count / max) * 120}px` }}
                       aria-hidden="true"
                     />
                   </div>
-                  <p className="py-2.5 text-[11px] tabular-nums text-muted">
+                  <p className="py-2.5 text-xs tabular-nums text-muted">
                     {year}
                   </p>
                 </div>
@@ -78,12 +78,12 @@ export function AnnualCitations({
               ))}
             </tbody>
           </table>
-          <p className="mt-4 text-[11px] leading-5 text-muted">
+          <p className="mt-3 text-xs leading-5 text-muted">
             仅展示已提供年份；缺失年份不补零。2026 年为截至演示更新时的数据。
           </p>
         </>
       ) : (
-        <div className="flex min-h-48 flex-col items-center justify-center text-muted">
+        <div className="flex min-h-32 flex-col items-center justify-center text-muted">
           <BarChart3 aria-hidden="true" className="size-7 text-faint" />
           <p className="mt-3 text-sm">暂无年度引用数据</p>
         </div>

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { AlertCircle, Building2, RotateCw } from "lucide-react";
+import { AlertCircle, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -36,8 +36,8 @@ export function ScholarAvatar({
       className={cn(
         "relative flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-primary/10 bg-primary-soft font-medium tracking-wide text-primary",
         large
-          ? "size-24 text-3xl sm:size-28"
-          : "size-16 text-xl sm:size-20 sm:text-2xl",
+          ? "size-20 text-2xl sm:size-28 sm:text-3xl"
+          : "size-12 text-lg sm:size-14 sm:text-xl",
       )}
     >
       {hasImage ? (
@@ -45,7 +45,7 @@ export function ScholarAvatar({
           src={src}
           alt={`${scholarName(scholar)}的演示头像`}
           fill
-          sizes={large ? "112px" : "80px"}
+          sizes={large ? "112px" : "56px"}
           unoptimized
           className="object-cover"
           onError={() => setFailedSrc(src)}
@@ -74,19 +74,19 @@ export function Affiliations({
   return (
     <div
       className={cn(
-        "space-y-1.5 text-sm leading-relaxed text-muted",
-        compact && "text-[13px]",
+        "space-y-1 text-sm leading-relaxed text-ink-2",
+        compact && "text-[13px] leading-5",
       )}
     >
       {affiliations.map((item, i) => (
-        <p className="flex items-start gap-2" key={`${item.institution}-${i}`}>
-          <Building2
-            aria-hidden="true"
-            className="mt-0.5 size-3.5 shrink-0 text-faint"
-          />
-          <span className="min-w-0 break-words">
-            {[item.position, item.institution].filter(Boolean).join(" · ")}
-          </span>
+        <p className="break-words" key={`${item.institution}-${i}`}>
+          {item.institution?.trim()}
+          {item.position?.trim() ? (
+            <span className="text-muted">
+              {item.institution?.trim() ? " · " : ""}
+              {item.position.trim()}
+            </span>
+          ) : null}
         </p>
       ))}
     </div>
@@ -103,27 +103,35 @@ export function ScholarMetrics({
   return (
     <dl
       className={cn(
-        "grid grid-cols-2 divide-x divide-line",
-        compact ? "gap-4" : "gap-6",
+        "flex flex-wrap",
+        compact ? "gap-x-6 gap-y-2" : "gap-x-10 gap-y-4 sm:gap-x-12",
       )}
     >
       {[
-        ["论文总数", scholar.metrics?.paper_count],
-        ["总引用次数", scholar.metrics?.citation_count],
-      ].map(([label, value]) => (
-        <div key={String(label)} className="min-w-0 pl-4 first:pl-0">
-          <dt className="text-xs text-muted">{label}</dt>
-          <dd
-            className={cn(
-              "mt-1.5 break-words font-semibold tabular-nums tracking-tight text-ink",
-              compact ? "text-lg" : "text-3xl",
-              typeof value !== "number" && "text-sm font-normal text-muted",
-            )}
+        { label: "论文总数", value: scholar.metrics?.paper_count },
+        { label: "总引用次数", value: scholar.metrics?.citation_count },
+      ].map(({ label, value }) => {
+        const formatted = formatScholarMetric(value);
+        return (
+          <div
+            key={label}
+            className={cn("min-w-0", compact && "flex items-baseline gap-2")}
           >
-            {formatScholarMetric(typeof value === "number" ? value : null)}
-          </dd>
-        </div>
-      ))}
+            <dt className={cn("text-xs text-muted", compact && "order-2")}>
+              {label}
+            </dt>
+            <dd
+              className={cn(
+                "break-words font-semibold tabular-nums tracking-tight text-ink",
+                compact ? "text-base" : "mt-1 text-[28px] leading-9",
+                formatted === "暂无数据" && "text-sm font-normal text-muted",
+              )}
+            >
+              {formatted}
+            </dd>
+          </div>
+        );
+      })}
     </dl>
   );
 }
@@ -136,17 +144,17 @@ export function ScholarLoading({ cards = false }: { cards?: boolean }) {
         {Array.from({ length: cards ? 6 : 2 }, (_, i) => (
           <div
             key={i}
-            className="animate-pulse rounded-2xl border border-line bg-card p-6"
+            className="animate-pulse rounded-xl border border-line bg-card p-5"
           >
             <div className="flex gap-4">
-              <div className="size-16 rounded-full bg-chip" />
+              <div className="size-14 rounded-full bg-chip" />
               <div className="flex-1 space-y-3 py-2">
                 <div className="h-4 w-1/2 rounded bg-chip" />
                 <div className="h-3 w-3/4 rounded bg-chip" />
               </div>
             </div>
-            <div className="mt-5 h-16 rounded-lg bg-chip" />
-            <div className="mt-5 h-6 w-1/2 rounded bg-chip" />
+            <div className="mt-4 h-10 rounded bg-chip" />
+            <div className="mt-4 h-5 w-1/2 rounded bg-chip" />
           </div>
         ))}
       </div>

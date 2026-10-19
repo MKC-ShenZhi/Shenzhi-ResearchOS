@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, UsersRound, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { useClearSearchRestoration } from "@/hooks/use-search-restoration";
@@ -55,16 +55,18 @@ export function ScholarsBrowser() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-5 py-8 sm:px-8 lg:py-12 xl:px-12">
+    <div className="mx-auto w-full max-w-[1200px] px-5 py-7 sm:px-8 lg:py-8 xl:px-12">
       <header className="flex flex-wrap items-start justify-between gap-5">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-            Researchers
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink">
-            学者库
-          </h1>
-          <p className="mt-3 text-sm leading-6 text-muted">
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-semibold tracking-tight text-ink">
+              学者库
+            </h1>
+            <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted">
+              Researchers
+            </span>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-muted">
             从学者出发，了解研究与成果。
           </p>
         </div>
@@ -73,7 +75,7 @@ export function ScholarsBrowser() {
       <form
         onSubmit={submit}
         role="search"
-        className="mt-7 flex items-center gap-2 rounded-xl border border-line bg-card p-2 shadow-card focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 sm:gap-3"
+        className="mt-5 flex items-center gap-2 rounded-lg border border-line bg-card p-1.5 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 sm:gap-3"
       >
         <Search
           aria-hidden="true"
@@ -104,9 +106,8 @@ export function ScholarsBrowser() {
           搜索
         </Button>
       </form>
-      <div className="mb-5 mt-8 flex items-center justify-between gap-3 border-b border-line pb-4">
+      <div className="mb-4 mt-6 flex items-center justify-between gap-3 border-b border-line pb-3">
         <h2 className="flex items-center gap-2 text-sm font-medium text-ink">
-          <UsersRound aria-hidden="true" className="size-4 text-muted" />
           {committedQuery ? "搜索结果" : "浏览示例学者"}
         </h2>
         <p aria-live="polite" className="text-xs text-muted">
@@ -129,7 +130,7 @@ export function ScholarsBrowser() {
           </Button>
         </div>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid items-stretch gap-4 md:grid-cols-2">
           {data?.map((scholar) => (
             <ScholarCard
               key={scholar.scholar_id}
@@ -139,7 +140,7 @@ export function ScholarsBrowser() {
           ))}
         </div>
       )}
-      <p className="mt-8 text-center text-xs leading-6 text-muted">
+      <p className="mt-6 text-center text-xs leading-6 text-muted">
         人物、机构与学术统计均为虚构演示内容，未经知识底座验证。
       </p>
     </div>
