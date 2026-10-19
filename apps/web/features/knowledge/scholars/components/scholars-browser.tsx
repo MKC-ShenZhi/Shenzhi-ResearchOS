@@ -1,110 +1,147 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
-import { getKnowledgeClient, KnowledgeClientError } from "@/clients/knowledge";
+import { Search, UsersRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { useClearSearchRestoration } from "@/hooks/use-search-restoration";
-import { knowledgeQueryRetry } from "@/features/knowledge/retry";
-import {
-  KnowledgeSearchError,
-  KnowledgeSearchSkeleton,
-} from "@/features/knowledge/search/components/search-states";
+import { useScholarProvider } from "../provider";
 import { ScholarCard } from "./scholar-card";
+import { DemoBadge, ScholarError, ScholarLoading } from "./profile-parts";
 
-/** Scholar Search 正式入口；不读取原型学者数据。 */
 export function ScholarsBrowser() {
   const router = useRouter();
   const clearRestoration = useClearSearchRestoration("/knowledge/scholars");
   const searchParams = useSearchParams();
   const committedQuery = searchParams.get("q")?.trim() ?? "";
   const returnTo = useCurrentInternalPath();
+  const provider = useScholarProvider();
   const [queryDraft, setQueryDraft] = useState({
     source: committedQuery,
     value: committedQuery,
   });
-  const query = queryDraft.source === committedQuery ? queryDraft.value : committedQuery;
-  const setQuery = (value: string) => setQueryDraft({ source: committedQuery, value });
-  const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: ["knowledge", "scholars", "search", committedQuery],
-    queryFn: () => getKnowledgeClient().searchScholars({ query: committedQuery }),
-    enabled: committedQuery.length > 0,
-    retry: knowledgeQueryRetry,
+  const query =
+    queryDraft.source === committedQuery ? queryDraft.value : committedQuery;
+  const setQuery = (value: string) =>
+    setQueryDraft({ source: committedQuery, value });
+  const { data, isPending, isError, refetch } = useQuery({
+    queryKey: ["scholars-v2", provider.cacheKey, "search", committedQuery],
+    queryFn: ({ signal }) => provider.search(committedQuery, signal),
   });
 
-  const submit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  function navigate(value: string) {
     const next = new URLSearchParams();
-    const normalizedQuery = query.trim();
-    if (!normalizedQuery) clearRestoration();
-    if (normalizedQuery) next.set("q", normalizedQuery);
+    // 保留预览主题，其余搜索状态由本功能管理。
+    const theme = searchParams.get("theme");
+    if (theme) next.set("theme", theme);
+    const normalized = value.trim();
+    if (!normalized) clearRestoration();
+    else next.set("q", normalized);
     const serialized = next.toString();
     router.replace(`/knowledge/scholars${serialized ? `?${serialized}` : ""}`, {
       scroll: false,
     });
-  };
-
-  const results = data?.results ?? [];
+    setQueryDraft({ source: normalized, value: normalized });
+  }
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    navigate(query);
+  }
+  function clear() {
+    setQuery("");
+    navigate("");
+  }
 
   return (
-    <div className="mx-auto w-full max-w-[980px] px-6 py-8 lg:px-8">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">学者库</h1>
-        <p className="mt-1.5 text-sm text-muted">按姓名搜索学者并查看真实论文成果与合作信息</p>
+    <div className="mx-auto w-full max-w-[1200px] px-5 py-8 sm:px-8 lg:py-12 xl:px-12">
+      <header className="flex flex-wrap items-start justify-between gap-5">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
+            Researchers
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink">
+            学者库
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-muted">
+            从学者出发，了解研究与成果。
+          </p>
+        </div>
+        <DemoBadge />
       </header>
-
-      <form onSubmit={submit} className="mt-6 flex gap-3 rounded-2xl bg-card p-4 shadow-card">
-        <label className="relative min-w-0 flex-1">
+      <form
+        onSubmit={submit}
+        role="search"
+        className="mt-7 flex items-center gap-2 rounded-xl border border-line bg-card p-2 shadow-card focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 sm:gap-3"
+      >
+        <Search
+          aria-hidden="true"
+          className="ml-2 size-5 shrink-0 text-muted sm:ml-3"
+        />
+        <label className="min-w-0 flex-1">
           <span className="sr-only">搜索学者姓名</span>
-          <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-faint" />
           <input
+            type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索学者姓名，例如 Geoffrey Hinton"
-            className="h-11 w-full rounded-xl border border-line bg-panel pl-10 pr-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
+            placeholder="搜索中文或英文姓名"
+            className="h-10 w-full min-w-0 bg-transparent text-sm text-ink outline-none placeholder:text-faint [&::-webkit-search-cancel-button]:hidden"
           />
         </label>
-        <Button type="submit" className="h-11 px-5" disabled={!query.trim() && !committedQuery}>
-          <Search />
+        {query || committedQuery ? (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="清空搜索"
+            onClick={clear}
+          >
+            <X />
+          </Button>
+        ) : null}
+        <Button type="submit" className="h-10 px-4 sm:px-6">
           搜索
         </Button>
       </form>
-
-      <main className="mt-6">
-        {!committedQuery ? (
-          <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-line bg-card/40 px-6 text-center text-sm text-muted">
-            输入学者姓名开始搜索
-          </div>
-        ) : isPending && !data ? (
-          <KnowledgeSearchSkeleton count={4} />
-        ) : isError && !data ? (
-          <KnowledgeSearchError
-            error={error instanceof KnowledgeClientError
-              ? error
-              : new KnowledgeClientError("UNKNOWN", "学者搜索失败")}
-            onRetry={() => void refetch()}
-          />
-        ) : results.length === 0 ? (
-          <div className="rounded-2xl bg-card p-12 text-center shadow-card">
-            <p className="text-sm font-medium text-ink-2">未找到与「{committedQuery}」匹配的学者</p>
-            <p className="mt-2 text-xs text-faint">请尝试完整姓名或英文姓名</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="px-1 text-sm text-muted">
-              「{committedQuery}」的学者结果 · {results.length} 位
-            </p>
-            <div className="grid gap-4 md:grid-cols-2">
-              {results.map((scholar) => (
-                <ScholarCard key={scholar.id} scholar={scholar} returnTo={returnTo} />
-              ))}
-            </div>
-          </div>
-        )}
-      </main>
+      <div className="mb-5 mt-8 flex items-center justify-between gap-3 border-b border-line pb-4">
+        <h2 className="flex items-center gap-2 text-sm font-medium text-ink">
+          <UsersRound aria-hidden="true" className="size-4 text-muted" />
+          {committedQuery ? "搜索结果" : "浏览示例学者"}
+        </h2>
+        <p aria-live="polite" className="text-xs text-muted">
+          {data ? `${data.length} 位学者` : isError ? "加载失败" : "正在加载…"}
+        </p>
+      </div>
+      {isPending && !data ? (
+        <ScholarLoading cards />
+      ) : isError && !data ? (
+        <ScholarError onRetry={() => void refetch()} />
+      ) : data?.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-line bg-card/50 px-5 py-16 text-center">
+          <Search className="mx-auto size-7 text-faint" />
+          <p className="mt-4 break-words text-sm font-medium text-ink">
+            未找到与「{committedQuery}」匹配的学者
+          </p>
+          <p className="mt-2 text-sm text-muted">请尝试完整姓名或英文姓名</p>
+          <Button variant="outline" className="mt-5" onClick={clear}>
+            清空搜索，浏览全部
+          </Button>
+        </div>
+      ) : (
+        <div className="grid gap-5 md:grid-cols-2">
+          {data?.map((scholar) => (
+            <ScholarCard
+              key={scholar.scholar_id}
+              scholar={scholar}
+              returnTo={returnTo}
+            />
+          ))}
+        </div>
+      )}
+      <p className="mt-8 text-center text-xs leading-6 text-muted">
+        人物、机构与学术统计均为虚构演示内容，未经知识底座验证。
+      </p>
     </div>
   );
 }

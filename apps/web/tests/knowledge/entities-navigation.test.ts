@@ -88,7 +88,7 @@ test("Knowledge dashboard uses the real overview client and preserves capability
 
 test("formal Scholar and Funding paths no longer import prototype entity data", () => {
   assert.doesNotMatch(scholarBrowser, /data-scholars/);
-  assert.match(scholarBrowser, /searchScholars/);
+  assert.match(scholarBrowser, /provider.search\(committedQuery, signal\)/);
   assert.doesNotMatch(fundingPage, /data-funding|RelatedPaperSearch/);
   assert.match(fundingPage, /FundingBrowser/);
 });
