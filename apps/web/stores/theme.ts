@@ -121,6 +121,9 @@ export const useThemeStore = create<ThemeState>()((set) => ({
     set({ preset });
     const { mode, customTheme } = useThemeStore.getState();
     apply(mode, preset, customTheme);
+    if (preset === "custom") {
+      persistCustomTheme(customTheme);
+    }
     try {
       localStorage.setItem(PRESET_STORAGE_KEY, preset);
     } catch {

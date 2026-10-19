@@ -112,6 +112,42 @@ test("existing fixed presets and custom appearance keep their behavior", () => {
   assert.ok(state.classes.has("dark"));
 });
 
+test("selecting custom persists the palette for matching first paint and hydration after reload", () => {
+  for (const config of [customTheme.DEFAULT_CUSTOM_THEME, { accent: "#315EFB", appearance: "dark" } as const]) {
+    const state = browser("shenzhi", "system", true);
+    if (config !== customTheme.DEFAULT_CUSTOM_THEME) {
+      state.storage.set(customTheme.CUSTOM_THEME_STORAGE_KEY, JSON.stringify(config));
+    }
+    const { store, hydrate } = loadStore(state);
+    hydrate();
+    assert.equal(state.storage.has(customTheme.CUSTOM_THEME_VARS_STORAGE_KEY), false);
+
+    store.getState().setPreset("custom");
+    const expectedVariables = customTheme.createCustomThemeVariables(config);
+    assert.equal(state.storage.get("shenzhi-theme-preset"), "custom");
+    assert.deepEqual(JSON.parse(state.storage.get(customTheme.CUSTOM_THEME_STORAGE_KEY) ?? "null"), config);
+    assert.deepEqual(JSON.parse(state.storage.get(customTheme.CUSTOM_THEME_VARS_STORAGE_KEY) ?? "null"), expectedVariables);
+    assert.deepEqual(Object.fromEntries(state.properties), expectedVariables);
+
+    // A reload has fresh DOM and Store state, retaining only localStorage.
+    const reloaded = browser("shenzhi", "system", true);
+    state.storage.forEach((value, key) => reloaded.storage.set(key, value));
+    firstPaint(reloaded);
+    const expectedDark = config.appearance === "dark";
+    assert.equal(reloaded.root.dataset.theme, "custom");
+    assert.equal(reloaded.classes.has("dark"), expectedDark);
+    assert.deepEqual(Object.fromEntries(reloaded.properties), expectedVariables);
+
+    const refreshed = loadStore(reloaded);
+    assert.equal(refreshed.store.getState().preset, "shenzhi");
+    refreshed.hydrate();
+    assert.equal(refreshed.store.getState().preset, "custom");
+    assert.equal(reloaded.root.dataset.theme, "custom");
+    assert.equal(reloaded.classes.has("dark"), expectedDark);
+    assert.deepEqual(Object.fromEntries(reloaded.properties), expectedVariables);
+  }
+});
+
 const css = readFileSync("styles/globals.css", "utf8");
 function tokens(selector: string) {
   const block = css.slice(css.indexOf(`${selector} {`)).split("}")[0];
