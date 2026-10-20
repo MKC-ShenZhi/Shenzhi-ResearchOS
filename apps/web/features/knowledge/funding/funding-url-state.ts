@@ -34,3 +34,15 @@ export function buildFundingUrl(
   const serialized = next.toString();
   return `/knowledge/funding${serialized ? `?${serialized}` : ""}`;
 }
+
+export function fundingLibraryHref(query: string): string {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set("q", query.trim());
+  return `/knowledge/funding${params.size ? `?${params}` : ""}`;
+}
+
+export function fundingDetailHref(id: string, name: string, query = ""): string {
+  const params = new URLSearchParams({ name });
+  if (query.trim()) params.set("q", query.trim());
+  return `/knowledge/funding/${encodeURIComponent(id)}?${params}`;
+}

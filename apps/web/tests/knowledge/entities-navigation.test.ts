@@ -25,6 +25,10 @@ const fundingUrlState = readFileSync(
   "features/knowledge/funding/funding-url-state.ts",
   "utf8",
 );
+const fundingDetailPage = readFileSync(
+  "features/knowledge/funding/FundDetailPage.tsx",
+  "utf8",
+);
 const patentsPage = readFileSync("features/knowledge/patents/PatentsPage.tsx", "utf8");
 const commonAttachmentMenu = readFileSync(
   "components/common/composer/attachment-menu.tsx",
@@ -93,16 +97,16 @@ test("formal Scholar and Funding paths no longer import prototype entity data", 
   assert.match(fundingPage, /FundingBrowser/);
 });
 
-test("Funding page uses candidate search without legacy entity fields", () => {
+test("Funding library uses candidate search and displays real summaries as cards", () => {
   assert.match(fundingBrowser, /searchFundings/);
-  assert.match(fundingBrowser, /searchByFunding/);
-  assert.match(fundingBrowser, /\.name/);
+  assert.match(fundingBrowser, /<FundCard/);
   assert.match(fundingBrowser, /results\.length < /);
-  assert.doesNotMatch(fundingBrowser, /grantNo|pi|institution|amount|period|category|status/);
+  assert.match(readFileSync("features/knowledge/funding/components/fund-card.tsx", "utf8"), /funding\.name/);
+  assert.match(readFileSync("features/knowledge/funding/components/fund-card.tsx", "utf8"), /funding\.paperCount/);
   assert.doesNotMatch(fundingPage, /data-funding|FundingTable|FundingPanel/);
 });
 
-test("Funding page uses the project-funding name and URL-backed selection state", () => {
+test("Funding library supports search and redirects legacy selected-fund URLs", () => {
   assert.match(fundingBrowser, /项目基金库/);
   assert.match(sidebar, /label: "项目基金库"/);
   assert.match(dashboard, /title: "项目基金库"/);
@@ -115,15 +119,22 @@ test("Funding page uses the project-funding name and URL-backed selection state"
   assert.match(fundingBrowser, /query: fundingId!/);
   assert.match(fundingBrowser, /candidate\.id === fundingId/);
   assert.match(fundingBrowser, /key=\{searchParams\.toString\(\)\}/);
-  assert.equal((fundingBrowser.match(/searchByFunding\(/g) ?? []).length, 1);
-  assert.doesNotMatch(fundingBrowser, /relatedPaperQuery\.isPending \|\| relatedPaperQuery\.isFetching/);
+  assert.match(fundingBrowser, /fundingDetailHref\(restoredFunding\.id, restoredFunding\.name, urlQuery\)/);
+  assert.doesNotMatch(fundingBrowser, /selectedFundingState|searchByFunding/);
+  assert.match(fundingDetailPage, /searchByFunding\(fundingName!, FUNDING_RELATED_PAPER_LIMIT\)/);
+  assert.match(fundingDetailPage, /const fundingName = urlName \?\? summaryQuery\.data\?\.name \?\? null/);
+  assert.match(fundingDetailPage, /enabled: Boolean\(fundingName\)/);
+  assert.match(fundingDetailPage, /科研基金项目元信息/);
+  assert.match(fundingDetailPage, /FUND_DETAIL_METADATA\.projectName/);
+  assert.doesNotMatch(fundingDetailPage, /projectName<\/h1>/);
 });
 
 test("Funding URL-dependent state is isolated and restoration failures stay visible", () => {
   assert.match(fundingPage, /Suspense/);
-  assert.match(fundingBrowser, /fundingQuery\.isSuccess/);
   assert.match(fundingBrowser, /fundingRestoreQuery\.isError/);
-  assert.match(fundingBrowser, /returnTo=\{returnTo\}/);
+  assert.match(fundingDetailPage, /KnowledgeSearchSkeleton/);
+  assert.match(fundingDetailPage, /KnowledgeSearchError/);
+  assert.match(fundingDetailPage, /KnowledgeSearchEmpty/);
   assert.doesNotMatch(fundingBrowser, /isPending \|\| .*isFetching/);
 });
 

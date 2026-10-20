@@ -1,28 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { getKnowledgeClient, KnowledgeClientError } from "@/clients/knowledge";
-import type { KnowledgeFundingSummary } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
-import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { useClearSearchRestoration } from "@/hooks/use-search-restoration";
 import { knowledgeQueryRetry } from "@/features/knowledge/retry";
-import { KnowledgeResultCard } from "@/features/knowledge/search/components/result-card";
-import {
-  KnowledgeSearchEmpty,
-  KnowledgeSearchError,
-  KnowledgeSearchSkeleton,
-} from "@/features/knowledge/search/components/search-states";
+import { KnowledgeSearchError } from "@/features/knowledge/search/components/search-states";
+import { FundCard } from "./fund-card";
 import {
   buildFundingUrl,
+  fundingDetailHref,
   type FundingSearchParamsLike,
   readFundingUrlState,
 } from "../funding-url-state";
 
 const FUNDING_PAGE_SIZE = 20;
+const FUNDING_GRID_CLASS = "grid grid-cols-1 gap-4 lg:grid-cols-2";
 
 export function FundingBrowser() {
   const searchParams = useSearchParams();
@@ -33,20 +29,14 @@ function FundingBrowserContent({ searchParams }: { searchParams: FundingSearchPa
   const router = useRouter();
   const clearRestoration = useClearSearchRestoration("/knowledge/funding");
   const { query: urlQuery, fundingId } = readFundingUrlState(searchParams);
-  const returnTo = useCurrentInternalPath();
   const [queryDraft, setQueryDraft] = useState({ source: urlQuery, value: urlQuery });
-  const [selectedFundingState, setSelectedFundingState] = useState<
-    KnowledgeFundingSummary | null | undefined
-  >();
   const query = queryDraft.source === urlQuery ? queryDraft.value : urlQuery;
-  const committedQuery = urlQuery;
-  const setQuery = (value: string) => setQueryDraft({ source: urlQuery, value });
 
   const fundingQuery = useInfiniteQuery({
-    queryKey: ["knowledge", "fundings", committedQuery],
+    queryKey: ["knowledge", "fundings", urlQuery],
     initialPageParam: 0,
     queryFn: ({ pageParam }) => getKnowledgeClient().searchFundings({
-      query: committedQuery,
+      query: urlQuery,
       limit: FUNDING_PAGE_SIZE,
       offset: pageParam,
     }),
@@ -59,7 +49,6 @@ function FundingBrowserContent({ searchParams }: { searchParams: FundingSearchPa
   const candidateFromList = fundingId
     ? fundings.find((candidate) => candidate.id === fundingId) ?? null
     : null;
-
   const fundingRestoreQuery = useQuery({
     queryKey: ["knowledge", "funding-restore", fundingId],
     queryFn: async () => {
@@ -74,76 +63,106 @@ function FundingBrowserContent({ searchParams }: { searchParams: FundingSearchPa
     retry: knowledgeQueryRetry,
   });
 
-  const restoredFunding = fundingId
-    ? candidateFromList ?? fundingRestoreQuery.data ?? null
-    : null;
-  const selectedFunding = selectedFundingState === undefined
-    ? restoredFunding
-    : selectedFundingState;
-
-  const relatedPaperQuery = useQuery({
-    queryKey: ["knowledge", "funding-related", selectedFunding?.id, selectedFunding?.name],
-    queryFn: () => getKnowledgeClient().searchByFunding(selectedFunding!.name, 20),
-    enabled: selectedFunding !== null,
-    retry: knowledgeQueryRetry,
-  });
-
-  const updateFundingUrl = (nextQuery: string, nextFundingId: string | null) => {
-    if (!nextQuery.trim() && !nextFundingId) clearRestoration();
-    router.replace(buildFundingUrl(searchParams, nextQuery, nextFundingId), { scroll: false });
-  };
+  const restoredFunding = candidateFromList ?? fundingRestoreQuery.data ?? null;
+  useEffect(() => {
+    if (fundingId && restoredFunding) {
+      router.replace(fundingDetailHref(restoredFunding.id, restoredFunding.name, urlQuery), { scroll: false });
+    }
+  }, [fundingId, restoredFunding, router, urlQuery]);
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextQuery = query.trim();
-    setSelectedFundingState(null);
-    updateFundingUrl(nextQuery, null);
-  };
-
-  const selectFunding = (funding: KnowledgeFundingSummary | null) => {
-    setSelectedFundingState(funding);
-    updateFundingUrl(committedQuery, funding?.id ?? null);
+    if (!nextQuery) clearRestoration();
+    router.replace(buildFundingUrl(searchParams, nextQuery, null), { scroll: false });
   };
 
   const fundingError = fundingQuery.error instanceof KnowledgeClientError
     ? fundingQuery.error
     : new KnowledgeClientError("UNKNOWN", "基金检索失败");
-  const relatedPaperError = relatedPaperQuery.error instanceof KnowledgeClientError
-    ? relatedPaperQuery.error
-    : new KnowledgeClientError("UNKNOWN", "关联论文检索失败");
   const fundingRestoreError = fundingRestoreQuery.error instanceof KnowledgeClientError
     ? fundingRestoreQuery.error
     : new KnowledgeClientError("UNKNOWN", "基金恢复失败");
 
   return (
-    <div className="mx-auto w-full max-w-[1080px] px-6 py-8 lg:px-8">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">项目基金库</h1>
-        <p className="mt-1.5 text-sm text-muted">浏览知识底座中的基金信息，并查看关联论文</p>
-      </header>
+    <main className="min-h-screen bg-background px-4 py-7 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1180px]">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-ink">项目基金库</h1>
+            <p className="mt-1.5 text-sm text-muted">浏览基金项目并探索关联科研论文</p>
+          </div>
+          <span className="w-fit rounded-full border border-line bg-card px-3 py-1 text-xs font-medium text-muted">
+            Mock Demo · 演示数据
+          </span>
+        </header>
 
-      <form onSubmit={submit} className="mt-6 flex gap-3 rounded-2xl bg-card p-4 shadow-card">
-        <label className="relative min-w-0 flex-1">
-          <span className="sr-only">搜索基金名称或 ID</span>
-          <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-faint" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索基金名称或 ID…"
-            className="h-11 w-full rounded-xl border border-line bg-panel pl-10 pr-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
-          />
-        </label>
-        <Button type="submit" className="h-11 px-5" disabled={!query.trim() && committedQuery === ""}>
-          <Search />
-          搜索
-        </Button>
-      </form>
+        <form onSubmit={submit} className="mt-6 flex gap-3 rounded-2xl bg-card p-4 shadow-card">
+          <label className="relative min-w-0 flex-1">
+            <span className="sr-only">搜索基金名称或 ID</span>
+            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-faint" />
+            <input
+              value={query}
+              onChange={(event) => setQueryDraft({ source: urlQuery, value: event.target.value })}
+              placeholder="搜索基金名称或 ID…"
+              className="h-11 w-full rounded-xl border border-line bg-panel pl-10 pr-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
+            />
+          </label>
+          <Button type="submit" className="h-11 px-5" disabled={!query.trim() && urlQuery === ""}>
+            <Search />
+            搜索
+          </Button>
+        </form>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-        <section aria-label="基金列表" className="min-w-0">
-          <h2 className="mb-3 px-1 text-sm font-semibold text-ink">基金</h2>
+        {fundingId && !restoredFunding && fundingQuery.isSuccess && fundingRestoreQuery.isError ? (
+          <div className="mt-6">
+            <KnowledgeSearchError error={fundingRestoreError} onRetry={() => void fundingRestoreQuery.refetch()} />
+          </div>
+        ) : fundingId && !restoredFunding && fundingRestoreQuery.isSuccess ? (
+          <p className="mt-6 rounded-2xl border border-line bg-card px-5 py-4 text-sm text-muted">
+            无法恢复此基金信息，请从基金列表中重新选择。
+          </p>
+        ) : null}
+
+        <section aria-label="基金列表" className="mt-5">
+          <div className="mb-3 flex items-center justify-between gap-4 border-b border-line/70 pb-2">
+            <h2 className="text-sm font-semibold text-ink">浏览基金项目</h2>
+            {fundingQuery.isPending ? (
+              <span className="text-xs text-muted">加载中…</span>
+            ) : !fundingQuery.isError ? (
+              <span className="text-xs tabular-nums text-muted">
+                {fundings.length} 个基金
+              </span>
+            ) : null}
+          </div>
           {fundingQuery.isPending ? (
-            <KnowledgeSearchSkeleton count={4} />
+            <div className={FUNDING_GRID_CLASS} aria-busy="true" aria-label="正在加载基金">
+              {Array.from({ length: 6 }, (_, index) => (
+                <div key={index} className="space-y-3 rounded-2xl bg-card p-5 shadow-card">
+                  <div className="flex justify-between gap-3">
+                    <div className="size-10 animate-pulse rounded-xl bg-chip" />
+                    <div className="size-4 animate-pulse rounded bg-chip" />
+                  </div>
+                  <div className="space-y-2 pt-1">
+                    <div className="h-5 w-5/6 animate-pulse rounded bg-chip" />
+                    <div className="h-3 w-2/3 animate-pulse rounded bg-chip" />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 w-full animate-pulse rounded bg-chip" />
+                    <div className="h-4 w-4/5 animate-pulse rounded bg-chip" />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 w-32 animate-pulse rounded bg-chip" />
+                    <div className="h-3 w-48 animate-pulse rounded bg-chip" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 border-t border-line/50 pt-3">
+                    <div className="h-8 animate-pulse rounded bg-chip" />
+                    <div className="h-8 animate-pulse rounded bg-chip" />
+                    <div className="h-8 animate-pulse rounded bg-chip" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : fundingQuery.isError ? (
             <KnowledgeSearchError error={fundingError} onRetry={() => void fundingQuery.refetch()} />
           ) : fundings.length === 0 ? (
@@ -152,87 +171,27 @@ function FundingBrowserContent({ searchParams }: { searchParams: FundingSearchPa
             </div>
           ) : (
             <>
-              <div className="space-y-2">
-                {fundings.map((funding) => {
-                  const selected = selectedFunding?.id === funding.id;
-                  return (
-                    <button
-                      key={funding.id}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => selectFunding(selected ? null : funding)}
-                      className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${
-                        selected
-                          ? "border-primary bg-primary-soft"
-                          : "border-transparent bg-card shadow-card hover:border-line"
-                      }`}
-                    >
-                      <p className="truncate text-sm font-semibold text-ink">{funding.name}</p>
-                      <p className="mt-1 text-xs text-muted">关联论文 {funding.paperCount} 篇</p>
-                    </button>
-                  );
-                })}
+              <div className={FUNDING_GRID_CLASS}>
+                {fundings.map((funding) => (
+                  <FundCard key={funding.id} funding={funding} query={urlQuery} />
+                ))}
               </div>
-              {fundingQuery.hasNextPage && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-4 w-full"
-                  disabled={fundingQuery.isFetchingNextPage}
-                  onClick={() => void fundingQuery.fetchNextPage()}
-                >
-                  {fundingQuery.isFetchingNextPage ? "加载中…" : "加载更多"}
-                </Button>
-              )}
-            </>
-          )}
-        </section>
-
-        <section aria-label="基金关联论文" className="min-w-0">
-          {!selectedFunding ? (
-            fundingRestoreQuery.isError ? (
-              <KnowledgeSearchError
-                error={fundingRestoreError}
-                onRetry={() => void fundingRestoreQuery.refetch()}
-              />
-            ) : (
-              <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-line bg-card/40 px-6 text-center text-sm text-muted">
-                {fundingId && fundingQuery.isSuccess && fundingRestoreQuery.isPending
-                  ? "正在恢复基金…"
-                  : "选择一个基金查看关联论文"}
-              </div>
-            )
-          ) : (
-            <>
-              <header className="mb-4">
-                <h2 className="truncate text-lg font-semibold text-ink">{selectedFunding.name}</h2>
-                <p className="mt-1 text-sm text-muted">关联论文</p>
-              </header>
-              {relatedPaperQuery.isPending ? (
-                <KnowledgeSearchSkeleton count={3} />
-              ) : relatedPaperQuery.isError ? (
-                <KnowledgeSearchError
-                  error={relatedPaperError}
-                  onRetry={() => void relatedPaperQuery.refetch()}
-                />
-              ) : relatedPaperQuery.data?.results.length === 0 ? (
-                <KnowledgeSearchEmpty query={selectedFunding.name} />
-              ) : (
-                <div className="space-y-4">
-                  {relatedPaperQuery.data?.results.map((paper, index) => (
-                    <KnowledgeResultCard
-                      key={paper.id}
-                      hit={paper}
-                      index={index}
-                      returnTo={returnTo}
-                    />
-                  ))}
+              {fundingQuery.hasNextPage ? (
+                <div className="mt-6 flex justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={fundingQuery.isFetchingNextPage}
+                    onClick={() => void fundingQuery.fetchNextPage()}
+                  >
+                    {fundingQuery.isFetchingNextPage ? "加载中…" : "加载更多基金"}
+                  </Button>
                 </div>
-              )}
+              ) : null}
             </>
           )}
         </section>
       </div>
-    </div>
+    </main>
   );
 }
