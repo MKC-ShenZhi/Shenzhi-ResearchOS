@@ -2,17 +2,18 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Plus, ThumbsUp, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, Plus, TrendingUp, Users } from "lucide-react";
 import { PaperThumbnail } from "@/components/common/paper-thumbnail";
 import { PAPER_CARD_INTERACTION_CLASS, usePaperCardNavigation } from "@/components/common/use-paper-card-navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
+import { PaperCollectorCount } from "@/features/knowledge/interactions/components/paper-collector-count";
+import { PaperLikeButton } from "@/features/knowledge/interactions/components/paper-like-button";
 import { PaperReadBadge } from "@/features/knowledge/papers/components/paper-read-badge";
 import { usePaperReadStatus } from "@/features/knowledge/papers/use-paper-read-status";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { paperHref } from "@/lib/navigation/paper";
-import { useUserPreferences } from "@/stores/user-preferences";
 import type { FeedPaper } from "@/types";
 
 const VENUE_VARIANT = { violet: "violet", amber: "amber", green: "green" } as const;
@@ -28,8 +29,6 @@ export function PaperCard({
   layout?: "feed" | "explore";
 }) {
   const returnTo = useCurrentInternalPath();
-  const { likedPapers, toggleLike } = useUserPreferences();
-  const liked = !!likedPapers[paper.id];
   const status = usePaperReadStatus(paper.id);
   const detailHref = paperHref(paper.id, { mode: "create", source: returnTo });
   const cardNavigation = usePaperCardNavigation(detailHref, paper.title);
@@ -39,7 +38,7 @@ export function PaperCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: (index % 12) * 0.03 }}
-      className={`@container rounded-2xl bg-card p-6 shadow-card [overflow-wrap:anywhere] [contain-intrinsic-size:auto_260px] [content-visibility:auto] ${PAPER_CARD_INTERACTION_CLASS}`}
+      className={`@container relative rounded-2xl bg-card p-6 shadow-card [overflow-wrap:anywhere] [contain-intrinsic-size:auto_260px] [content-visibility:auto] has-[[data-collection-picker-open]]:z-40 has-[[data-collection-picker-open]]:[content-visibility:visible] ${PAPER_CARD_INTERACTION_CLASS}`}
       {...cardNavigation}
     >
       <div className={layout === "feed" ? "grid grid-cols-1 items-start gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(200px,30cqw,280px)]" : "grid grid-cols-1 gap-y-4"}>
@@ -99,17 +98,8 @@ export function PaperCard({
             ))}
           </div>
           <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => toggleLike(paper.id)}
-              className={
-                "flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] transition-colors " +
-                (liked ? "text-primary" : "text-muted hover:bg-chip")
-              }
-            >
-              <ThumbsUp className="size-4" fill={liked ? "currentColor" : "none"} />
-              {paper.likes !== undefined && paper.likes + (liked ? 1 : 0)}
-            </button>
+            <PaperLikeButton paperId={paper.id} />
+            <PaperCollectorCount paperId={paper.id} />
             <CollectionPicker paperId={paper.id} />
             {layout === "feed" && (
               <Link href={detailHref}>

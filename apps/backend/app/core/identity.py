@@ -64,6 +64,21 @@ def require_user(request: Request) -> RequestIdentity:
     return identity
 
 
+def require_stats_service(request: Request) -> None:
+    """Read-only platform statistics identity for the Knowledge Base daily sync.
+
+    Deliberately separate from the BFF secret and from every user session: this
+    credential only opens the aggregate statistics routes and can never be used
+    to read per-user data.
+    """
+    token = os.getenv('STATS_SERVICE_TOKEN', '').strip()
+    if not token:
+        raise BusinessError(10002, '统计服务凭据未配置', 503)
+    supplied = request.headers.get('x-shenzhi-stats-token', '')
+    if not secrets.compare_digest(supplied, token):
+        raise BusinessError(10001, '无效的统计服务凭据', 401)
+
+
 def request_owner(request: Request) -> str:
     """Chat compatibility adapter; other modules may depend on request_identity directly."""
     identity = request_identity(request)

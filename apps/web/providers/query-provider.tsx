@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { InteractionSync } from "./interaction-sync";
 import { ReadStatusSync } from "./read-status-sync";
 
 export function QueryProvider({ children }: { children: ReactNode }) {
@@ -17,5 +18,11 @@ export function QueryProvider({ children }: { children: ReactNode }) {
       }),
   );
 
-  return <QueryClientProvider client={client}><ReadStatusSync />{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <ReadStatusSync />
+      <InteractionSync />
+      {children}
+    </QueryClientProvider>
+  );
 }

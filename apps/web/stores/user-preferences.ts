@@ -6,55 +6,33 @@ import { persist } from "zustand/middleware";
 interface UserPreferencesState {
   /** 已关注的学者 id 集合 */
   followedScholars: Record<string, boolean>;
-  /** 已关注的主题 id 集合；登录关注接口接入后可由服务端状态覆盖 */
-  followedTopics: Record<string, boolean>;
-  /** 已点赞的论文 id 集合 */
-  likedPapers: Record<string, boolean>;
-  /** 已收藏的论文 id 集合 */
-  bookmarkedPapers: Record<string, boolean>;
   /** 已收藏的机构 id 集合 */
   bookmarkedInstitutions: Record<string, boolean>;
   toggleFollow: (scholarId: string, defaultFollowing?: boolean) => void;
-  toggleTopicFollow: (topicId: string, defaultFollowing?: boolean) => void;
-  toggleLike: (paperId: string) => void;
-  toggleBookmark: (paperId: string) => void;
   toggleInstitutionBookmark: (
     institutionId: string,
     defaultBookmarked?: boolean,
   ) => void;
 }
 
+const CURRENT_VERSION = 2;
+
+/**
+ * 浏览器本地偏好只保留界面级状态。
+ *
+ * 论文收藏、论文点赞和主题关注都由服务端账号数据承载：本地不再保存
+ * followedTopics / likedPapers / bookmarkedPapers，也不把历史本地值导入账号。
+ */
 export const useUserPreferences = create<UserPreferencesState>()(
   persist(
     (set) => ({
       followedScholars: { "yoshua-bengio": true, "pieter-abbeel": true },
-      followedTopics: {},
-      likedPapers: {},
-      bookmarkedPapers: {},
       bookmarkedInstitutions: {},
       toggleFollow: (scholarId, defaultFollowing = false) =>
         set((s) => ({
           followedScholars: {
             ...s.followedScholars,
             [scholarId]: !(s.followedScholars[scholarId] ?? defaultFollowing),
-          },
-        })),
-      toggleTopicFollow: (topicId, defaultFollowing = false) =>
-        set((s) => ({
-          followedTopics: {
-            ...s.followedTopics,
-            [topicId]: !(s.followedTopics[topicId] ?? defaultFollowing),
-          },
-        })),
-      toggleLike: (paperId) =>
-        set((s) => ({
-          likedPapers: { ...s.likedPapers, [paperId]: !s.likedPapers[paperId] },
-        })),
-      toggleBookmark: (paperId) =>
-        set((s) => ({
-          bookmarkedPapers: {
-            ...s.bookmarkedPapers,
-            [paperId]: !s.bookmarkedPapers[paperId],
           },
         })),
       toggleInstitutionBookmark: (institutionId, defaultBookmarked = false) =>
@@ -67,6 +45,21 @@ export const useUserPreferences = create<UserPreferencesState>()(
           },
         })),
     }),
-    { name: "shenzhi-user-preferences" },
+    {
+      name: "shenzhi-user-preferences",
+      version: CURRENT_VERSION,
+      // v1 stored topic follows, paper likes and paper bookmarks in the browser.
+      // All three are server-owned now, so stale values are dropped rather than
+      // silently imported into the signed-in account.
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Record<string, unknown>;
+        if (version < 2) {
+          delete state.followedTopics;
+          delete state.likedPapers;
+          delete state.bookmarkedPapers;
+        }
+        return state as unknown as UserPreferencesState;
+      },
+    },
   ),
 );

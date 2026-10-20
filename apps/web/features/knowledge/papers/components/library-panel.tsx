@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { History, LoaderCircle, Network, Square } from "lucide-react";
 import { ApiError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -23,6 +24,7 @@ export function LibraryPanel({
   onFolderClick: (folderId: number) => void;
 }) {
   const { folders, loading, loadFolders, createFolder, renameFolder, deleteFolder } = useCollections();
+  const queryClient = useQueryClient();
   const identityKey = useCollections((state) => state.identityKey);
   const [dialog, setDialog] = useState<"create" | "rename" | "delete" | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -42,7 +44,13 @@ export function LibraryPanel({
 
   async function submitDialog() {
     if (dialog === "delete" && editingId !== null) {
-      try { await deleteFolder(editingId); if (selectedFolderId === editingId) onFolderClick(folders.find((folder) => folder.id !== editingId)?.id ?? 0); setDialog(null); }
+      try {
+        await deleteFolder(editingId);
+        // Deleting a folder can remove the last collection of several papers.
+        void queryClient.invalidateQueries({ queryKey: ["paper-interaction"] });
+        if (selectedFolderId === editingId) onFolderClick(folders.find((folder) => folder.id !== editingId)?.id ?? 0);
+        setDialog(null);
+      }
       catch (reason) { setError(reason instanceof ApiError && reason.status === 401 ? "该功能需要登录后使用，请先登录" : "删除失败，请重试"); }
       return;
     }

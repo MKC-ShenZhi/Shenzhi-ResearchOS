@@ -213,3 +213,8 @@ multistep、会议浏览、ID resolver、Deep Research 或 Auto Research。
 Mock 只由 `NEXT_PUBLIC_KNOWLEDGE_SOURCE=mock` 显式启用，适用于 unit test、
 component test 和 demo fixture。真实 BFF 请求失败、Backend 未配置 upstream
 或 upstream 不可用时，都保持真实错误状态，不自动返回 Mock 数据。
+
+## 收藏人数、点赞与主题关注
+
+用户级收藏/点赞/关注、平台级每日统计快照与知识底座只读接口见
+[收藏人数、论文点赞与主题关注](INTERACTIONS-AND-STATS.md)。

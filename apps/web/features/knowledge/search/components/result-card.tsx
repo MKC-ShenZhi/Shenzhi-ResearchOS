@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { paperHref } from "@/lib/navigation/paper";
 import { getPaperThumbnailUrl } from "@/lib/paper-thumbnail";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
+import { PaperCollectorCount } from "@/features/knowledge/interactions/components/paper-collector-count";
+import { PaperLikeButton } from "@/features/knowledge/interactions/components/paper-like-button";
 import { PaperReadBadge } from "@/features/knowledge/papers/components/paper-read-badge";
 import { usePaperReadStatus } from "@/features/knowledge/papers/use-paper-read-status";
 
@@ -46,7 +48,7 @@ export function KnowledgeResultCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.06 }}
-      className={`@container rounded-2xl bg-card p-6 shadow-card ${PAPER_CARD_INTERACTION_CLASS}`}
+      className={`@container relative rounded-2xl bg-card p-6 shadow-card has-[[data-collection-picker-open]]:z-40 ${PAPER_CARD_INTERACTION_CLASS}`}
       {...cardNavigation}
     >
       <div className="grid grid-cols-1 gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(240px,34cqw,320px)]">
@@ -117,7 +119,9 @@ export function KnowledgeResultCard({
               上次浏览：{lastViewedAt ? formatLastViewedAt(lastViewedAt) : "未知"}
             </time>
           ) : (
-            <div className="ml-auto flex shrink-0 items-center gap-2">
+            <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <PaperLikeButton paperId={hit.id} />
+              <PaperCollectorCount paperId={hit.id} />
               <Link href={detailHref}>
                 <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-xs">
                   论文详情

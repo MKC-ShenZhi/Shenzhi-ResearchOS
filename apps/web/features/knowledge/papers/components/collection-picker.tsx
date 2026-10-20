@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bookmark, Check, LoaderCircle, MoreHorizontal, Plus, X } from "lucide-react";
 import { ApiError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
+import { useRefreshPaperInteraction } from "@/features/knowledge/interactions/use-refresh-paper-interaction";
 import { useCollections } from "@/stores/collections";
 
 export function CollectionPicker({ paperId, className = "", iconOnly = false }: { paperId: string; className?: string; iconOnly?: boolean }) {
@@ -14,22 +15,39 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const { session, isPending } = useAuth();
+  const { session, isPending: isAuthPending, openLogin } = useAuth();
+  const refreshInteraction = useRefreshPaperInteraction(paperId);
   const identityKey = useCollections((state) => state.identityKey);
   const { folders, paperFolders, loadFolders, loadPaperFolders, createFolder, updatePaperFolders } = useCollections();
   const checked = paperFolders[paperId] ?? [];
 
+  const promptLogin = useCallback(() => {
+    setOpen(false);
+    setMessage("");
+    openLogin({
+      notice: "登录后即可收藏论文",
+      // 登录成功只把论文上下文带回选择器，收藏仍需用户确认。
+      onSuccess: () => setOpen(true),
+    });
+  }, [openLogin]);
+
   useEffect(() => {
-    if (isPending || !session?.user?.id || identityKey !== session.user.id) return;
+    if (isAuthPending || !session?.user?.id || identityKey !== session.user.id) return;
     void loadPaperFolders(paperId).catch(() => {});
-  }, [identityKey, isPending, loadPaperFolders, paperId, session?.user?.id]);
+  }, [identityKey, isAuthPending, loadPaperFolders, paperId, session?.user?.id]);
 
   useEffect(() => {
     if (!open) return;
     void Promise.all([loadFolders(), loadPaperFolders(paperId)])
       .then(([, folderIds]) => setSelected(folderIds))
-      .catch((error) => setMessage(error instanceof ApiError && error.status === 401 ? "该功能需要登录后使用，请先登录" : "收藏信息加载失败"));
-  }, [loadFolders, loadPaperFolders, open, paperId]);
+      .catch((error) => {
+        if (error instanceof ApiError && error.status === 401) {
+          promptLogin();
+          return;
+        }
+        setMessage("收藏信息加载失败");
+      });
+  }, [loadFolders, loadPaperFolders, open, paperId, promptLogin]);
 
   useEffect(() => {
     if (!open) return;
@@ -49,7 +67,7 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
       setName("");
       setMessage("");
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) setMessage("该功能需要登录后使用，请先登录");
+      if (error instanceof ApiError && error.status === 401) promptLogin();
       else setMessage(error instanceof ApiError && error.status === 409 ? "名称已存在" : "创建文件夹失败");
     }
   }
@@ -60,19 +78,35 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
     try {
       await updatePaperFolders(paperId, selected);
       setOpen(false);
+      // 人数以服务端重新统计的结果为准。
+      void refreshInteraction();
     } catch (error) {
-      setMessage(error instanceof ApiError && error.status === 401 ? "该功能需要登录后使用，请先登录" : "操作失败，请重试");
+      if (error instanceof ApiError && error.status === 401) promptLogin();
+      else setMessage("操作失败，请重试");
     } finally {
       setSaving(false);
     }
   }
 
+  function handleTrigger() {
+    if (isAuthPending) return;
+    setMessage("");
+    if (!session) {
+      openLogin({
+        notice: "登录后即可收藏论文",
+        onSuccess: () => setOpen(true),
+      });
+      return;
+    }
+    setOpen((value) => !value);
+  }
+
   const active = checked.length > 0;
   return (
-    <div ref={rootRef} data-paper-card-interactive className={`relative inline-flex ${className}`.trim()}>
+    <div ref={rootRef} data-paper-card-interactive data-collection-picker-open={open || undefined} className={`relative inline-flex ${className}`.trim()}>
       <button
         type="button"
-        onClick={() => { setOpen((value) => !value); setMessage(""); }}
+        onClick={handleTrigger}
         aria-expanded={open}
         aria-label={iconOnly ? "收藏" : undefined}
         title={iconOnly ? "收藏" : undefined}

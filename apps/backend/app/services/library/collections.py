@@ -184,6 +184,46 @@ class CollectionService:
             if not exists:
                 session.add(CollectionItemRow(folder_id=target_folder_id, paper_id=paper_id))
 
+    async def collector_counts(self, paper_ids: list[str]) -> dict[str, int]:
+        """Distinct users per paper across every folder.
+
+        One user holding the same paper in three folders counts once; moving a
+        paper between folders does not change the number.
+        """
+        ids = list(dict.fromkeys(paper_ids))
+        if not ids:
+            return {}
+        async with session_scope() as session:
+            rows = await session.execute(
+                select(
+                    CollectionItemRow.paper_id,
+                    func.count(func.distinct(CollectionFolderRow.user_id)),
+                )
+                .join(CollectionFolderRow, CollectionFolderRow.id == CollectionItemRow.folder_id)
+                .where(CollectionItemRow.paper_id.in_(ids))
+                .group_by(CollectionItemRow.paper_id)
+            )
+            return {paper_id: int(total) for paper_id, total in rows}
+
+    async def paper_folder_map(self, user_id: str, paper_ids: list[str]) -> dict[str, list[int]]:
+        """Personal folder membership for a visible list, without one query per card."""
+        ids = list(dict.fromkeys(paper_ids))
+        if not ids:
+            return {}
+        async with session_scope() as session:
+            rows = await session.execute(
+                select(CollectionItemRow.paper_id, CollectionItemRow.folder_id)
+                .join(CollectionFolderRow, CollectionFolderRow.id == CollectionItemRow.folder_id)
+                .where(
+                    CollectionFolderRow.user_id == user_id,
+                    CollectionItemRow.paper_id.in_(ids),
+                )
+            )
+            membership: dict[str, list[int]] = {}
+            for paper_id, folder_id in rows:
+                membership.setdefault(paper_id, []).append(folder_id)
+        return {paper_id: sorted(folder_ids) for paper_id, folder_ids in membership.items()}
+
     async def _folder(self, session, user_id: str, folder_id: int) -> CollectionFolderRow:
         row = await session.scalar(select(CollectionFolderRow).where(
             CollectionFolderRow.id == folder_id, CollectionFolderRow.user_id == user_id,

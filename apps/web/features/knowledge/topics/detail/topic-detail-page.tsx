@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ArrowLeft, RotateCw, Tag } from "lucide-react";
 import { KnowledgeClientError } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
+import { TopicFollowButton } from "@/features/knowledge/interactions/components/topic-follow-button";
+import { TopicFollowerCount } from "@/features/knowledge/interactions/components/topic-follower-count";
 import { TopicCover } from "../topic-cover";
 import { TopicRelatedPapers } from "./topic-related-papers";
 import { useTopicDetail } from "./use-topic-detail";
@@ -93,10 +95,14 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
             <p className="mt-1 text-sm leading-5 text-muted md:text-[15px]">
               {topic.nameEn}
             </p>
-            <span className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary/5 px-2.5 py-1 text-xs text-muted">
-              <Tag className="size-3 shrink-0" />
-              {topic.category}
-            </span>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary/5 px-2.5 py-1 text-xs text-muted">
+                <Tag className="size-3 shrink-0" />
+                {topic.category}
+              </span>
+              <TopicFollowerCount topicId={topic.id} />
+              <TopicFollowButton topicId={topic.id} className="h-7" />
+            </div>
           </div>
           <p className="col-span-2 line-clamp-3 min-w-0 whitespace-pre-line text-sm leading-6 text-muted [overflow-wrap:anywhere] md:col-span-1 md:mt-3 md:text-[15px]" title={description}>
             {description}
