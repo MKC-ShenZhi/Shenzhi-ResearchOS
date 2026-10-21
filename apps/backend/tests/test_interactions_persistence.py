@@ -3,6 +3,7 @@
 import os
 import unittest
 import uuid
+from unittest.mock import AsyncMock
 
 from sqlalchemy import delete, select
 
@@ -13,6 +14,7 @@ from app.models.interactions import PaperLikeRow, TopicFollowRow
 from app.services.library.collections import CollectionService
 from app.services.library.paper_likes import PaperLikeService
 from app.services.library.topic_follows import TopicFollowService
+from app.schemas.knowledge import PaperSummary, Provenance
 from app.services.user.account_deletion import AccountDeletionService
 
 
@@ -60,6 +62,11 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
 
         # One user holding the same paper in three folders counts once.
         await collections.update_paper_folders(self.user_a, self.paper_id, folder_ids)
+        collections.knowledge.batch_get_papers = AsyncMock(return_value=[
+            PaperSummary(id=self.paper_id, title='Collected paper', provenance=Provenance(external_id=self.paper_id)),
+        ])
+        collected = await collections.collected_papers(self.user_a, 1, 20)
+        self.assertEqual((collected.total, [item.paper_id for item in collected.items]), (1, [self.paper_id]))
         self.assertEqual(await collections.collector_counts([self.paper_id]), {self.paper_id: 1})
         self.assertEqual(
             await collections.paper_folder_map(self.user_a, [self.paper_id]),

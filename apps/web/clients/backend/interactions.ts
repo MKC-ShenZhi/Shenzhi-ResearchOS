@@ -1,5 +1,5 @@
 import { apiJson } from "./http";
-import type { KnowledgePaperDetail } from "@/clients/knowledge";
+import type { CollectionPaperListResponse, KnowledgePaperDetail } from "@/clients/knowledge";
 
 /**
  * 论文收藏/点赞与主题关注的服务端状态。
@@ -264,6 +264,10 @@ export async function unfollowTopic(topicId: string): Promise<TopicFollowState> 
 
 export function fetchMyLikes(page = 1, pageSize = 20): Promise<LikedPaperListResponse> {
   return apiJson<LikedPaperListResponse>(`/likes?page=${page}&page_size=${pageSize}`);
+}
+
+export function fetchMyCollectedPapers(page = 1, pageSize = 20): Promise<CollectionPaperListResponse> {
+  return apiJson<CollectionPaperListResponse>(`/collections/papers?page=${page}&page_size=${pageSize}`);
 }
 
 export function fetchMyTopicFollows(): Promise<TopicFollowListResponse> {

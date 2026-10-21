@@ -128,6 +128,34 @@ class CollectionService:
         }) for row in rows if row.paper_id in summaries_by_id]
         return CollectionPaperListResponse(items=items, total=total or 0, page=page, page_size=page_size)
 
+    async def collected_papers(self, user_id: str, page: int, page_size: int) -> CollectionPaperListResponse:
+        """One row per paper across this user's folders, newest collection first."""
+        async with session_scope() as session:
+            grouped = (
+                select(
+                    CollectionItemRow.paper_id.label('paper_id'),
+                    func.max(CollectionItemRow.created_at).label('added_at'),
+                )
+                .join(CollectionFolderRow, CollectionFolderRow.id == CollectionItemRow.folder_id)
+                .where(CollectionFolderRow.user_id == user_id)
+                .group_by(CollectionItemRow.paper_id)
+                .subquery()
+            )
+            rows = list(await session.execute(
+                select(grouped.c.paper_id, grouped.c.added_at)
+                .order_by(grouped.c.added_at.desc(), grouped.c.paper_id)
+                .offset((page - 1) * page_size).limit(page_size)
+            ))
+            total = await session.scalar(select(func.count()).select_from(grouped))
+        summaries = await self.knowledge.batch_get_papers([paper_id for paper_id, _ in rows])
+        summaries_by_id = {paper.id: paper for paper in summaries}
+        items = [CollectionPaperItem.model_validate({
+            **summaries_by_id[paper_id].model_dump(),
+            'paper_id': paper_id,
+            'added_at': added_at,
+        }) for paper_id, added_at in rows if paper_id in summaries_by_id]
+        return CollectionPaperListResponse(items=items, total=total or 0, page=page, page_size=page_size)
+
     async def paper_folders(self, user_id: str, paper_id: str) -> list[int]:
         await self.ensure_default_folders(user_id)
         async with session_scope() as session:
