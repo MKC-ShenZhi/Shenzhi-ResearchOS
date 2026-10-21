@@ -74,6 +74,30 @@ class KnowledgeBaseClient:
         )
         return cast(UpstreamScholarSearchResponse, body)
 
+    async def search_scholar_profiles(
+        self, query: str, *, limit: int = 20, offset: int = 0
+    ) -> dict[str, Any]:
+        return await self._request_json(
+            'GET', '/api/v1/scholars/search',
+            params={'q': query, 'limit': limit, 'offset': offset},
+            validate=lambda value: isinstance(value.get('items'), list),
+        )
+
+    async def scholar_profile(self, scholar_id: str) -> dict[str, Any]:
+        return await self._request_json(
+            'GET', f'/api/v1/scholars/{quote(scholar_id, safe="")}',
+            validate=lambda value: isinstance(value.get('scholar_id'), str),
+        )
+
+    async def scholar_papers(
+        self, scholar_id: str, *, limit: int = 20, offset: int = 0
+    ) -> dict[str, Any]:
+        return await self._request_json(
+            'GET', f'/api/v1/scholars/{quote(scholar_id, safe="")}/papers',
+            params={'limit': limit, 'offset': offset},
+            validate=lambda value: isinstance(value.get('items'), list),
+        )
+
     async def paper_summary(self) -> UpstreamPaperSummaryResponse:
         body = await self._request_json(
             'GET',

@@ -22,6 +22,7 @@ from app.schemas.knowledge import (
     PersonalRecentPaper,
     RelatedPaperSearchRequest,
     ScholarSearchRequest,
+    ScholarPapersRequest,
 )
 from app.schemas.topic import KnowledgeTopicListResponse
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
@@ -237,6 +238,69 @@ async def overview_search(
 
     try:
         response = await service.mixed_search(search_request)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+# V2 paths cannot collide with the existing retrieval Scholar API or its cache.
+@router.get('/scholar-profiles/search')
+async def search_scholar_profiles(
+    request: Request,
+    q: str | None = Query(default=None),
+    limit: str = Query(default='20'),
+    offset: str = Query(default='0'),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        params = ScholarSearchRequest(query=q, limit=int(limit), offset=int(offset))
+    except (ValidationError, TypeError, ValueError):
+        return invalid_argument(request, '学者检索参数不合法')
+    try:
+        response = await service.search_scholar_profiles(params)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+# Query ID avoids ambiguity when an opaque ID itself ends in /papers.
+@router.get('/scholar-profile-papers')
+async def scholar_profile_papers(
+    request: Request,
+    scholar_id: str = Query(alias='scholarId'),
+    limit: str = Query(default='20'),
+    offset: str = Query(default='0'),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        params = ScholarPapersRequest(limit=int(limit), offset=int(offset))
+        if not scholar_id.strip():
+            raise ValueError('empty scholar ID')
+    except (ValidationError, TypeError, ValueError):
+        return invalid_argument(request, '学者论文分页参数不合法')
+    try:
+        response = await service.get_scholar_papers(scholar_id, limit=params.limit, offset=params.offset)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/scholar-profiles/{scholar_id:path}')
+async def scholar_profile(
+    scholar_id: str,
+    request: Request,
+    _credential: None = Depends(require_bff),
+):
+    if not scholar_id.strip():
+        return invalid_argument(request, 'scholarId 不能为空')
+    try:
+        response = await service.get_scholar_profile(scholar_id)
     except KnowledgeServiceError as error:
         return _error_payload(error, request)
     except Exception as error:

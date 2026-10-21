@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { ScholarsBrowser } from "@/features/knowledge/scholars/components/scholars-browser";
 
-/** 沿用正式路由，V2 预览由学者局部 Provider 供数。 */
+/** 沿用正式路由，V2 通过学者 Provider 使用产品学者 API。 */
 export function ScholarsPage() {
   return (
     <div className="flex min-h-[calc(100vh)] items-stretch">

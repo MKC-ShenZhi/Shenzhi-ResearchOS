@@ -22,18 +22,18 @@ const provider = createMockScholarProvider(0);
 const source = (path: string) => readFileSync(path, "utf8");
 
 test("V2 defaults to all six demo scholars; search matches Chinese or English names only", async () => {
-  assert.equal((await provider.search("")).length, 6);
+  assert.equal((await provider.search("")).items.length, 6);
   assert.equal(
-    (await provider.search("  林知遥  "))[0].scholar_id,
+    (await provider.search("  林知遥  ")).items[0].scholar_id,
     DEMO_SCHOLARS[0].scholar_id,
   );
   assert.equal(
-    (await provider.search("AVERY mORGAN"))[0].name_en,
+    (await provider.search("AVERY mORGAN")).items[0].name_en,
     "Avery Morgan",
   );
-  assert.equal((await provider.search("Chen")).length, 1);
-  assert.deepEqual(await provider.search("不存在的学者"), []);
-  assert.deepEqual(await provider.search("星澜大学"), []);
+  assert.equal((await provider.search("Chen")).items.length, 1);
+  assert.deepEqual((await provider.search("不存在的学者")).items, []);
+  assert.deepEqual((await provider.search("星澜大学")).items, []);
 });
 
 test("detail resolves only exact opaque IDs, preserves identities and returns not found", async () => {
@@ -48,10 +48,10 @@ test("detail resolves only exact opaque IDs, preserves identities and returns no
 });
 
 test("mock responses cannot mutate subsequent profile or publication results", async () => {
-  const first = (await provider.search(""))[0];
+  const first = (await provider.search("")).items[0];
   first.name_zh = "mutated";
   first.metrics!.citation_count = 999;
-  assert.equal((await provider.search(""))[0].name_zh, "林知遥");
+  assert.equal((await provider.search("")).items[0].name_zh, "林知遥");
   const detail = (await provider.detail(DEMO_SCHOLARS[0].scholar_id))!;
   detail.papers[0].authors.push("mutated");
   assert.ok(
@@ -86,7 +86,7 @@ test("missing metrics remain missing; genuine zero is displayed as zero", () => 
   assert.equal(formatScholarMetric(2460), "2,460");
 });
 
-test("citation window is 2022–2026; sparse years stay sparse and input stays unchanged", () => {
+test("citation window follows the latest supplied years; sparse years stay sparse and input stays unchanged", () => {
   const input = [
     { year: 2026, count: 0 },
     { year: 2021, count: 4 },
@@ -96,8 +96,10 @@ test("citation window is 2022–2026; sparse years stay sparse and input stays u
     { year: 2025, count: -1 },
   ];
   assert.deepEqual(recentCitations(input), [
+    { year: 2021, count: 4 },
     { year: 2024, count: 12 },
     { year: 2026, count: 0 },
+    { year: 2027, count: 5 },
   ]);
   assert.equal(input[0].year, 2026);
   assert.deepEqual(recentCitations(null), []);
@@ -163,7 +165,7 @@ test("V2 is locally isolated, handles loading/error/not-found and does not expos
   const publications = source(
     "features/knowledge/scholars/components/scholar-publications.tsx",
   );
-  assert.match(browser, /provider.search\(committedQuery, signal\)/);
+  assert.match(browser, /provider.search\(committedQuery, signal,/);
   assert.match(detail, /provider.detail\(scholarId, signal\)/);
   assert.doesNotMatch(
     browser + detail,
@@ -176,13 +178,13 @@ test("V2 is locally isolated, handles loading/error/not-found and does not expos
     "DemoBadge",
   ])
     assert.ok(browser.includes(text) && detail.includes(text));
-  assert.match(detail, /if \(!data\)/);
+  assert.match(detail, /if \(!data && !isPending && !isError\)/);
   assert.match(detail, /未找到该学者/);
   assert.match(detail, /href=\{safeReturnTo\}/);
   assert.match(browser, /searchParams.get\("q"\)/);
   assert.match(browser, /清空搜索/);
   assert.match(publications, /暂无可展示的论文成果/);
-  assert.doesNotMatch(publications, /paperHref|href=|onClick=/);
+  assert.match(publications, /!provider.isDemo && paper.platform_detail/);
   assert.match(
     source("features/knowledge/scholars/components/profile-parts.tsx"),
     /onError=/,

@@ -1,15 +1,15 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { createMockScholarProvider } from "./mock-provider";
+import { createRealScholarProvider } from "./real-provider";
 import type { ScholarProvider } from "./types";
 
-const mockProvider = createMockScholarProvider();
-const ScholarContext = createContext<ScholarProvider>(mockProvider);
+const realProvider = createRealScholarProvider();
+const ScholarContext = createContext<ScholarProvider>(realProvider);
 
 export function ScholarDataProvider({
   children,
-  provider = mockProvider,
+  provider = realProvider,
 }: {
   children: ReactNode;
   provider?: ScholarProvider;

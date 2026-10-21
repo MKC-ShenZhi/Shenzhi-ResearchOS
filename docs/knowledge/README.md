@@ -213,3 +213,8 @@ multistep、会议浏览、ID resolver、Deep Research 或 Auto Research。
 Mock 只由 `NEXT_PUBLIC_KNOWLEDGE_SOURCE=mock` 显式启用，适用于 unit test、
 component test 和 demo fixture。真实 BFF 请求失败、Backend 未配置 upstream
 或 upstream 不可用时，都保持真实错误状态，不自动返回 Mock 数据。
+
+
+## 学者库 V2 产品接口接入
+
+`feat/scholars-v2` 的 V2 页面现默认使用产品学者 API，经同一 ShenZhi BFF / FastAPI / Knowledge 集成边界接入。旧 retrieval Scholar API 继续供总览与混合搜索使用；上述旧接口表不代表 V2 画像契约。实现、真实 GET 证据、测试、配置及底座需求见 [学者库 V2 真实接入与联调](scholars-v2-integration.md)。V2 无词访问为搜索初始态，不能据此宣称全量目录已上线。

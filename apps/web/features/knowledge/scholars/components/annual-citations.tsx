@@ -1,10 +1,6 @@
 import { BarChart3 } from "lucide-react";
 import type { ScholarProfile } from "../types";
-import {
-  CITATION_END_YEAR,
-  CITATION_START_YEAR,
-  recentCitations,
-} from "../presentation";
+import { recentCitations } from "../presentation";
 
 /** 沿用项目纯 CSS 柱图方案；只绘制有效的已提供年份，不补零、不推导总引用。 */
 export function AnnualCitations({
@@ -24,7 +20,7 @@ export function AnnualCitations({
           年度引用
         </h2>
         <span className="text-xs tabular-nums text-muted">
-          {CITATION_START_YEAR}–{CITATION_END_YEAR}
+          {citations.length ? `${citations[0].year}–${citations[citations.length - 1].year}` : "暂无数据"}
         </span>
       </div>
       <p className="mt-1.5 text-xs leading-5 text-muted">
@@ -79,7 +75,7 @@ export function AnnualCitations({
             </tbody>
           </table>
           <p className="mt-3 text-xs leading-5 text-muted">
-            仅展示已提供年份；缺失年份不补零。2026 年为截至演示更新时的数据。
+            展示最近五个有统计的年份；缺失年份不补零，空值不视为零。
           </p>
         </>
       ) : (

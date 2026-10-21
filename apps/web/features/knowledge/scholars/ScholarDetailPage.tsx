@@ -5,7 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, UserRound } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { normalizeInternalReturnTo } from "@/lib/navigation/internal-return-to";
+import { knowledgeQueryRetry } from "../retry";
 import { useScholarProvider } from "./provider";
+import type { ScholarProfile } from "./types";
 import { scholarName } from "./presentation";
 import { ScholarBiography } from "./components/scholar-biography";
 import { AnnualCitations } from "./components/annual-citations";
@@ -31,6 +33,8 @@ export function ScholarDetailPage({
     normalizeInternalReturnTo(returnTo) ?? "/knowledge/scholars";
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["scholars-v2", provider.cacheKey, "detail", scholarId],
+    retry: knowledgeQueryRetry,
+    staleTime: 120_000,
     queryFn: ({ signal }) => provider.detail(scholarId, signal),
   });
   const backLink = (
@@ -43,21 +47,7 @@ export function ScholarDetailPage({
     </Link>
   );
 
-  if (isPending)
-    return (
-      <div className="mx-auto max-w-[1200px] space-y-7 px-5 py-8 sm:px-8 lg:py-10 xl:px-12">
-        {backLink}
-        <ScholarLoading />
-      </div>
-    );
-  if (isError)
-    return (
-      <div className="mx-auto max-w-[1200px] space-y-7 px-5 py-8 sm:px-8 lg:py-10 xl:px-12">
-        {backLink}
-        <ScholarError onRetry={() => void refetch()} />
-      </div>
-    );
-  if (!data)
+  if (!data && !isPending && !isError)
     return (
       <div className="mx-auto max-w-[1200px] px-5 py-8 sm:px-8 lg:py-10 xl:px-12">
         {backLink}
@@ -71,7 +61,7 @@ export function ScholarDetailPage({
           </p>
           <h1 className="mt-2 text-xl font-semibold text-ink">未找到该学者</h1>
           <p className="mt-3 text-sm text-muted">
-            此标识没有对应的演示资料，请返回学者库重新选择。
+            未找到此学者资料，请返回学者库重新选择。
           </p>
           <Link
             href={safeReturnTo}
@@ -86,17 +76,50 @@ export function ScholarDetailPage({
       </div>
     );
 
-  const { scholar, papers } = data;
+  const scholar = data?.scholar;
   const updatedAt =
-    scholar.updated_at && Number.isFinite(Date.parse(scholar.updated_at))
+    scholar?.updated_at && Number.isFinite(Date.parse(scholar.updated_at))
       ? scholar.updated_at
       : null;
   return (
     <div className="mx-auto w-full max-w-[1200px] px-5 py-8 sm:px-8 lg:py-10 xl:px-12">
       <div className="flex flex-wrap items-center justify-between gap-4">
         {backLink}
-        <DemoBadge />
+        {provider.isDemo ? <DemoBadge /> : null}
       </div>
+      {isPending ? (
+        <div className="mt-8"><ScholarLoading /></div>
+      ) : isError ? (
+        <div className="mt-8"><ScholarError onRetry={() => void refetch()} /></div>
+      ) : scholar ? (
+        <ScholarProfileSections scholar={scholar} />
+      ) : null}
+      {/* Keep publications mounted while profile loading/error state changes. */}
+      <div className="pt-8">
+        <ScholarPublications key={scholarId} scholarId={scholarId} />
+      </div>
+      {scholar ? <footer className="mt-8 border-t border-line pt-5 text-xs leading-6 text-muted">
+        <p>{provider.isDemo ? "人物、机构与学术统计均为虚构演示内容，未经知识底座验证。" : "学者资料来自知识底座。机构关系不代表当前任职；未提供的履历和指标不作推断。"}</p>
+        {scholar.citation_meta ? <p>引用来源：{scholar.citation_meta.source || "暂无数据"}；覆盖范围：{scholar.citation_meta.coverage || "暂无数据"}；统计截至：{scholar.citation_meta.as_of || "暂无数据"}</p> : null}
+        {updatedAt ? (
+          <p>
+            资料更新于{" "}
+            <time dateTime={updatedAt}>
+              {new Date(updatedAt).toLocaleDateString("zh-CN", {
+                timeZone: "UTC",
+              })}
+            </time>
+          </p>
+        ) : null}
+      </footer> : null}
+    </div>
+  );
+}
+
+
+function ScholarProfileSections({ scholar }: { scholar: ScholarProfile }) {
+  return (
+    <>
       <header className="mt-8 flex items-start gap-5 sm:gap-7">
         <ScholarAvatar scholar={scholar} large />
         <div className="min-w-0 flex-1">
@@ -118,30 +141,11 @@ export function ScholarDetailPage({
       </header>
       <div className="mt-6 flex flex-wrap items-end gap-x-8 gap-y-3 border-b border-line pb-6 sm:pl-[140px]">
         <ScholarMetrics scholar={scholar} />
-        <p className="max-w-80 text-xs leading-5 text-muted">
-          论文总数为去重论文数；总引用独立于年度引用统计。
-        </p>
       </div>
       <div className="grid items-start gap-8 border-b border-line py-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-10">
         <ScholarBiography key={scholar.scholar_id} scholar={scholar} />
         <AnnualCitations data={scholar.annual_citations} />
       </div>
-      <div className="pt-8">
-        <ScholarPublications papers={papers} />
-      </div>
-      <footer className="mt-8 border-t border-line pt-5 text-xs leading-6 text-muted">
-        <p>人物、机构与学术统计均为虚构演示内容，未经知识底座验证。</p>
-        {updatedAt ? (
-          <p>
-            演示资料更新于{" "}
-            <time dateTime={updatedAt}>
-              {new Date(updatedAt).toLocaleDateString("zh-CN", {
-                timeZone: "UTC",
-              })}
-            </time>
-          </p>
-        ) : null}
-      </footer>
-    </div>
+    </>
   );
 }

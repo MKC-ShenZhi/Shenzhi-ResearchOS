@@ -38,6 +38,10 @@ from app.schemas.knowledge import (
     OverviewGraphPreview,
     Provenance,
     ScholarDetail,
+    ScholarProfile,
+    ScholarProfilePage,
+    ScholarPapersPage,
+    ScholarPublication,
     ScholarPaper,
     ScholarReference,
     ScholarSearchRequest,
@@ -339,6 +343,32 @@ def map_scholar_detail(
     ))
 
 
+def map_scholar_profile(item: dict[str, Any]) -> ScholarProfile:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    # Project product fields explicitly. Never interpret raw OpenAlex JSON as a
+    # product profile or let unknown third-party fields enter the public schema.
+    values = {key: item[key] for key in ScholarProfile.model_fields if key in item}
+    values['scholar_id'] = _required_string(item, 'scholar_id')
+    for key in ('name_zh', 'name_en', 'bio_zh', 'bio_en', 'updated_at'):
+        values[key] = _optional_string(item.get(key))
+    avatar = _optional_string(item.get('avatar_path'))
+    # Relative upstream image paths have no same-origin meaning in ShenZhi.
+    values['avatar_path'] = avatar if avatar and avatar.startswith('https://') else None
+    result = _contract_model(lambda: ScholarProfile.model_validate(values))
+    years = [entry.year for entry in result.annual_citations or []]
+    if len(years) != len(set(years)):
+        raise KnowledgeIntegrationError.contract_violation()
+    return result
+
+
+def _profile_pagination(body: dict[str, Any], limit: int, offset: int) -> None:
+    if (type(body.get('limit')) is not int or body['limit'] != limit
+            or type(body.get('offset')) is not int or body['offset'] != offset
+            or not isinstance(body.get('items'), list) or len(body['items']) > limit):
+        raise KnowledgeIntegrationError.contract_violation()
+
+
 def map_paper_detail(
     item: dict[str, Any], *, retrieved_at: datetime | None = None
 ) -> PaperDetail:
@@ -552,6 +582,42 @@ class KnowledgeAdapter:
         return ScholarSearchResponse(results=[
             map_scholar_summary(item, retrieved_at=retrieved_at) for item in results
         ])
+
+    async def search_scholar_profiles(self, request: ScholarSearchRequest) -> ScholarProfilePage:
+        body = await self.client.search_scholar_profiles(
+            request.query, limit=request.limit, offset=request.offset
+        )
+        _profile_pagination(body, request.limit, request.offset)
+        total = body.get('total')
+        if total is not None and (type(total) is not int or total < 0):
+            raise KnowledgeIntegrationError.contract_violation()
+        items = [map_scholar_profile(item) for item in body['items']]
+        if len({item.scholar_id for item in items}) != len(items):
+            raise KnowledgeIntegrationError.contract_violation()
+        return ScholarProfilePage(
+            items=items, limit=request.limit, offset=request.offset, total=total,
+            has_more=(request.offset + len(items) < total if total is not None
+                      else len(items) == request.limit),
+        )
+
+    async def scholar_profile(self, scholar_id: str) -> ScholarProfile:
+        profile = map_scholar_profile(await self.client.scholar_profile(scholar_id))
+        if profile.scholar_id != scholar_id:
+            raise KnowledgeIntegrationError.contract_violation()
+        return profile
+
+    async def scholar_papers(
+        self, scholar_id: str, *, limit: int = 20, offset: int = 0
+    ) -> ScholarPapersPage:
+        body = await self.client.scholar_papers(scholar_id, limit=limit, offset=offset)
+        _profile_pagination(body, limit, offset)
+        return _contract_model(lambda: ScholarPapersPage(
+            items=[ScholarPublication(
+                **map_paper_detail(item).model_dump(),
+                platform_detail=item.get('external') is False,
+            ) for item in body['items']],
+            total=body.get('total'), limit=limit, offset=offset,
+        ))
 
     async def _funding_highlights(
         self, query: str | None, *, limit: int = 20, offset: int = 0

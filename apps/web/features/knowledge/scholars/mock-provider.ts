@@ -21,16 +21,28 @@ export function createMockScholarProvider(latencyMs = 180): ScholarProvider {
   }
   return {
     cacheKey: "mock-demo-v2",
-    async search(query, signal) {
+    isDemo: true,
+    supportsBrowse: true,
+    async search(query, signal, page = { limit: 20, offset: 0 }) {
       await wait(signal);
       const term = query.trim().toLocaleLowerCase();
-      return structuredClone(
+      const items = structuredClone(
         DEMO_SCHOLARS.filter((scholar) =>
           [scholar.name_zh, scholar.name_en].some((name) =>
             name?.toLocaleLowerCase().includes(term),
           ),
         ),
       );
+      return { items: items.slice(page.offset, page.offset + page.limit),
+        ...page, total: items.length, has_more: page.offset + page.limit < items.length };
+    },
+    async papers(id, limit, offset, signal) {
+      await wait(signal);
+      const papers = [...new Set(DEMO_SCHOLAR_PAPER_IDS[id] ?? [])].flatMap((paperId) => {
+        const paper = mockPaperDetail(paperId);
+        return paper ? [{ ...paper, platform_detail: false }] : [];
+      });
+      return structuredClone({ items: papers.slice(offset, offset + limit), total: papers.length, limit, offset });
     },
     async detail(id, signal) {
       await wait(signal);

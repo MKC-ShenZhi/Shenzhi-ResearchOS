@@ -7,6 +7,8 @@ import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { useClearSearchRestoration } from "@/hooks/use-search-restoration";
+import { knowledgeQueryRetry } from "../../retry";
+import { SCHOLAR_PAGE_SIZE, scholarPage } from "../url-state";
 import { useScholarProvider } from "../provider";
 import { ScholarCard } from "./scholar-card";
 import { DemoBadge, ScholarError, ScholarLoading } from "./profile-parts";
@@ -16,6 +18,7 @@ export function ScholarsBrowser() {
   const clearRestoration = useClearSearchRestoration("/knowledge/scholars");
   const searchParams = useSearchParams();
   const committedQuery = searchParams.get("q")?.trim() ?? "";
+  const page = scholarPage(searchParams.get("page"));
   const returnTo = useCurrentInternalPath();
   const provider = useScholarProvider();
   const [queryDraft, setQueryDraft] = useState({
@@ -26,12 +29,16 @@ export function ScholarsBrowser() {
     queryDraft.source === committedQuery ? queryDraft.value : committedQuery;
   const setQuery = (value: string) =>
     setQueryDraft({ source: committedQuery, value });
+  const canLoad = Boolean(committedQuery || provider.supportsBrowse);
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["scholars-v2", provider.cacheKey, "search", committedQuery],
-    queryFn: ({ signal }) => provider.search(committedQuery, signal),
+    queryKey: ["scholars-v2", provider.cacheKey, "search", committedQuery, page],
+    enabled: canLoad,
+    retry: knowledgeQueryRetry,
+    staleTime: 120_000,
+    queryFn: ({ signal }) => provider.search(committedQuery, signal, { limit: SCHOLAR_PAGE_SIZE, offset: (page - 1) * SCHOLAR_PAGE_SIZE }),
   });
 
-  function navigate(value: string) {
+  function navigate(value: string, nextPage = 1) {
     const next = new URLSearchParams();
     // 保留预览主题，其余搜索状态由本功能管理。
     const theme = searchParams.get("theme");
@@ -39,8 +46,9 @@ export function ScholarsBrowser() {
     const normalized = value.trim();
     if (!normalized) clearRestoration();
     else next.set("q", normalized);
+    if (normalized && nextPage > 1) next.set("page", String(nextPage));
     const serialized = next.toString();
-    router.replace(`/knowledge/scholars${serialized ? `?${serialized}` : ""}`, {
+    router.push(`/knowledge/scholars${serialized ? `?${serialized}` : ""}`, {
       scroll: false,
     });
     setQueryDraft({ source: normalized, value: normalized });
@@ -70,7 +78,7 @@ export function ScholarsBrowser() {
             从学者出发，了解研究与成果。
           </p>
         </div>
-        <DemoBadge />
+        {provider.isDemo ? <DemoBadge /> : null}
       </header>
       <form
         onSubmit={submit}
@@ -85,6 +93,7 @@ export function ScholarsBrowser() {
           <span className="sr-only">搜索学者姓名</span>
           <input
             type="search"
+            maxLength={200}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="搜索中文或英文姓名"
@@ -102,23 +111,27 @@ export function ScholarsBrowser() {
             <X />
           </Button>
         ) : null}
-        <Button type="submit" className="h-10 px-4 sm:px-6">
+        <Button type="submit" disabled={!query.trim()} className="h-10 px-4 sm:px-6">
           搜索
         </Button>
       </form>
       <div className="mb-4 mt-6 flex items-center justify-between gap-3 border-b border-line pb-3">
         <h2 className="flex items-center gap-2 text-sm font-medium text-ink">
-          {committedQuery ? "搜索结果" : "浏览示例学者"}
+          {committedQuery ? "搜索结果" : provider.supportsBrowse ? "浏览学者" : "搜索学者"}
         </h2>
         <p aria-live="polite" className="text-xs text-muted">
-          {data ? `${data.length} 位学者` : isError ? "加载失败" : "正在加载…"}
+          {data ? `${data.items.length} 位学者 · 第 ${page} 页${data.total != null ? ` · 共 ${data.total} 位` : ""}` : !canLoad ? "请输入姓名" : isError ? "加载失败" : "正在加载…"}
         </p>
       </div>
-      {isPending && !data ? (
+      {!canLoad ? (
+        <div role="status" className="rounded-2xl border border-dashed border-line p-12 text-center text-sm text-muted">
+          输入中文或英文姓名，搜索真实学者。当前数据源暂不支持无关键词浏览。
+        </div>
+      ) : isPending && !data ? (
         <ScholarLoading cards />
       ) : isError && !data ? (
         <ScholarError onRetry={() => void refetch()} />
-      ) : data?.length === 0 ? (
+      ) : data?.items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-line bg-card/50 px-5 py-16 text-center">
           <Search className="mx-auto size-7 text-faint" />
           <p className="mt-4 break-words text-sm font-medium text-ink">
@@ -126,12 +139,12 @@ export function ScholarsBrowser() {
           </p>
           <p className="mt-2 text-sm text-muted">请尝试完整姓名或英文姓名</p>
           <Button variant="outline" className="mt-5" onClick={clear}>
-            清空搜索，浏览全部
+            清空搜索
           </Button>
         </div>
       ) : (
         <div className="grid items-stretch gap-4 md:grid-cols-2">
-          {data?.map((scholar) => (
+          {data?.items.map((scholar) => (
             <ScholarCard
               key={scholar.scholar_id}
               scholar={scholar}
@@ -140,8 +153,15 @@ export function ScholarsBrowser() {
           ))}
         </div>
       )}
+      {canLoad && data ? (
+        <nav aria-label="学者列表分页" className="mt-6 flex flex-wrap items-center justify-center gap-4">
+          <Button variant="outline" disabled={page <= 1} onClick={() => navigate(committedQuery, page - 1)}>上一页</Button>
+          <span className="text-sm text-muted">第 {page} 页</span>
+          <Button variant="outline" disabled={!data.has_more} onClick={() => navigate(committedQuery, page + 1)}>下一页</Button>
+        </nav>
+      ) : null}
       <p className="mt-6 text-center text-xs leading-6 text-muted">
-        人物、机构与学术统计均为虚构演示内容，未经知识底座验证。
+        {provider.isDemo ? "人物、机构与学术统计均为虚构演示内容，未经知识底座验证。" : "数据来自知识底座；检索可能包含姓名片段匹配，请核对学者身份。未提供字段显示暂无数据。"}
       </p>
     </div>
   );

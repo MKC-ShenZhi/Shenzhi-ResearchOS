@@ -56,13 +56,15 @@ export async function apiJson<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
+  init.signal?.throwIfAborted();
   await ensureBackendIdentity();
+  init.signal?.throwIfAborted();
   const headers = requestHeaders(init.headers);
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(apiPath(path), { ...init, headers, signal: init.signal ?? AbortSignal.timeout(30000) });
+  const res = await fetch(apiPath(path), { ...init, headers, signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000) });
   const requestId = res.headers.get("X-Request-ID");
   if (res.status === 204) return undefined as T;
   let payload: unknown;

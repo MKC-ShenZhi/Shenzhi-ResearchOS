@@ -1,8 +1,5 @@
 import type { ScholarProfile } from "./types";
 
-export const CITATION_END_YEAR = 2026;
-export const CITATION_START_YEAR = CITATION_END_YEAR - 4;
-
 export function scholarName(scholar: ScholarProfile): string {
   return scholar.name_zh?.trim() || scholar.name_en?.trim() || "姓名暂缺";
 }
@@ -29,12 +26,18 @@ export function recentCitations(data: ScholarProfile["annual_citations"]) {
     .filter(
       (item): item is { year: number; count: number } =>
         Number.isInteger(item.year) &&
-        item.year >= CITATION_START_YEAR &&
-        item.year <= CITATION_END_YEAR &&
+        item.year > 0 &&
         typeof item.count === "number" &&
         Number.isFinite(item.count) &&
         item.count >= 0,
     )
     .slice()
-    .sort((a, b) => a.year - b.year);
+    .sort((a, b) => a.year - b.year)
+    .slice(-5);
+}
+
+/** Failed images, unsafe URLs and missing paths share the initials fallback. */
+export function scholarAvatarSource(value?: string | null, failedSrc?: string | null): string | null {
+  const src = value?.trim();
+  return src && src !== failedSrc && (src.startsWith("https://") || src.startsWith("/images/")) ? src : null;
 }

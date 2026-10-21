@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   formatScholarMetric,
+  scholarAvatarSource,
   scholarInitials,
   scholarName,
 } from "../presentation";
@@ -29,8 +30,7 @@ export function ScholarAvatar({
   large?: boolean;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const src = scholar.avatar_path?.trim();
-  const hasImage = src && src !== failedSrc;
+  const src = scholarAvatarSource(scholar.avatar_path, failedSrc);
   return (
     <span
       className={cn(
@@ -40,10 +40,10 @@ export function ScholarAvatar({
           : "size-12 text-lg sm:size-14 sm:text-xl",
       )}
     >
-      {hasImage ? (
+      {src ? (
         <Image
           src={src}
-          alt={`${scholarName(scholar)}的演示头像`}
+          alt={`${scholarName(scholar)}的头像`}
           fill
           sizes={large ? "112px" : "56px"}
           unoptimized
@@ -52,7 +52,7 @@ export function ScholarAvatar({
         />
       ) : (
         <span aria-label={`${scholarName(scholar)}的占位头像`}>
-          {scholarInitials(scholar.name_en)}
+          {scholarInitials(scholar.name_en || scholar.name_zh)}
         </span>
       )}
     </span>
@@ -70,7 +70,7 @@ export function Affiliations({
     (item) => item.institution?.trim() || item.position?.trim(),
   );
   if (!affiliations.length)
-    return <p className="text-sm text-muted">当前任职暂无数据</p>;
+    return <p className="text-sm text-muted">机构信息暂无数据</p>;
   return (
     <div
       className={cn(
@@ -108,7 +108,7 @@ export function ScholarMetrics({
       )}
     >
       {[
-        { label: "论文总数", value: scholar.metrics?.paper_count },
+        { label: "平台关联论文", value: scholar.metrics?.paper_count },
         { label: "总引用次数", value: scholar.metrics?.citation_count },
       ].map(({ label, value }) => {
         const formatted = formatScholarMetric(value);
@@ -170,7 +170,7 @@ export function ScholarError({ onRetry }: { onRetry: () => void }) {
     >
       <AlertCircle className="mx-auto size-7 text-muted" />
       <h2 className="mt-4 font-semibold text-ink">学者数据加载失败</h2>
-      <p className="mt-2 text-sm text-muted">暂时无法读取演示资料，请重试。</p>
+      <p className="mt-2 text-sm text-muted">暂时无法读取学者资料，请重试。</p>
       <Button className="mt-5" variant="outline" onClick={onRetry}>
         <RotateCw />
         重试
