@@ -98,7 +98,9 @@ test("sessions panel uses Better Auth session APIs", () => {
   assert.match(accountSessions, /SESSION_NOT_FRESH/);
   assert.match(accountSessions, /openLogin\(/);
   assert.match(accountSessions, /latest\.data\?\.user\.id !== currentUserId/);
-  assert.match(accountSessions, /await revokeOthers\(\)/);
+  assert.match(accountSessions, /await run\(retryAction, true\)/);
+  assert.match(accountSection, /key=\{userId\}/);
+  assert.doesNotMatch(accountSection, /key=\{session\.session\.token\}/);
   assert.doesNotMatch(readFileSync("lib/auth/server.ts", "utf8"), /freshAge:\s*0/);
 });
 
