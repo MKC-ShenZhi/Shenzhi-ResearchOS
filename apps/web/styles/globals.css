@@ -203,3 +203,15 @@
     transition: none;
   }
 }
+
+.paper-abstract-latex .it {
+  font-style: italic;
+}
+
+.paper-abstract-latex .bf {
+  font-weight: 700;
+}
+
+.paper-abstract-latex p + p {
+  margin-top: 1.75rem;
+}
