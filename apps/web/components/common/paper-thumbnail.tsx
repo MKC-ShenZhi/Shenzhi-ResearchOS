@@ -15,10 +15,12 @@ interface PaperThumbnailProps {
   title: string;
   className?: string;
   eager?: boolean;
+  /** Optional frame ratio; otherwise adapt to the loaded figure as before. */
+  aspectRatio?: number;
 }
 
 /** Preserve complete figures in a landscape frame, with a local fallback. */
-export function PaperThumbnail({ src, title, className, eager = false }: PaperThumbnailProps) {
+export function PaperThumbnail({ src, title, className, eager = false, aspectRatio }: PaperThumbnailProps) {
   const normalizedSrc = src?.trim() || null;
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [loadedImage, setLoadedImage] = useState<{ src: string; ratio: number } | null>(null);
@@ -30,7 +32,7 @@ export function PaperThumbnail({ src, title, className, eager = false }: PaperTh
       : PAPER_THUMBNAIL_FALLBACK_SRC;
   const isFallback = imageSrc === PAPER_THUMBNAIL_FALLBACK_SRC;
   // Give taller figures more height without letting extreme ratios dominate a card.
-  const aspectRatio = !isFallback && loadedImage?.src === imageSrc
+  const adaptiveAspectRatio = !isFallback && loadedImage?.src === imageSrc
     ? Math.max(4 / 3, Math.min(2, loadedImage.ratio))
     : 16 / 10;
 
@@ -40,7 +42,7 @@ export function PaperThumbnail({ src, title, className, eager = false }: PaperTh
         "group relative w-full overflow-hidden rounded-xl bg-chip",
         className,
       )}
-      style={{ aspectRatio }}
+      style={{ aspectRatio: aspectRatio ?? adaptiveAspectRatio }}
     >
       <Image
         ref={imageRef}
@@ -52,7 +54,7 @@ export function PaperThumbnail({ src, title, className, eager = false }: PaperTh
         className="object-contain"
         unoptimized={isFallback}
         onLoad={(event) => {
-          if (!isFallback) {
+          if (!isFallback && aspectRatio === undefined) {
             const { naturalWidth, naturalHeight } = event.currentTarget;
             if (naturalHeight > 0) {
               setLoadedImage({ src: imageSrc, ratio: naturalWidth / naturalHeight });
