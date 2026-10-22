@@ -1,6 +1,6 @@
 export const THEME_PRESETS = [
   { id: "shenzhi", label: "深知", description: "现有方案" },
-  { id: "gpt", label: "极简黑白", description: "克制灰阶 · 日夜自适应" },
+  { id: "gpt", label: "极致黑白", description: "克制灰阶 · 日夜自适应" },
   { id: "warm-teal", label: "青绿", description: "暖白青绿 · 日夜自适应" },
   { id: "claude", label: "Claude", description: "温暖书写感" },
   { id: "alphaxiv", label: "alphaXiv", description: "学术编辑感" },
@@ -21,6 +21,12 @@ export const THEME_PRESETS = [
 ] as const;
 
 export type ThemePreset = (typeof THEME_PRESETS)[number]["id"];
+
+/** Sidebar shortcuts are independent of the full settings catalog. */
+export const QUICK_THEME_PRESET_IDS = ["shenzhi", "gpt", "warm-teal", "apple-air-blue", "spectrum-gold"] as const satisfies readonly ThemePreset[];
+export const QUICK_THEME_PRESETS = QUICK_THEME_PRESET_IDS.map((id) => THEME_PRESETS.find((preset) => preset.id === id)!);
+// Keep custom recognized for stored preferences and first-paint initialization.
+export const VISIBLE_THEME_PRESETS = THEME_PRESETS.filter((preset) => preset.id !== "custom");
 
 export function isThemePreset(value: string | null): value is ThemePreset {
   return THEME_PRESETS.some((preset) => preset.id === value);

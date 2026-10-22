@@ -157,6 +157,38 @@ test("existing fixed presets and custom appearance keep their behavior", () => {
   assert.ok(state.classes.has("dark"));
 });
 
+test("all five quick themes persist through a fresh first paint and store hydration", () => {
+  for (const { id } of presets.QUICK_THEME_PRESETS) {
+    const state = browser("custom", "dark", true);
+    const { store, hydrate } = loadStore(state);
+    hydrate();
+    store.getState().setPreset(id);
+    assert.equal(state.storage.get("shenzhi-theme-preset"), id);
+    const reloaded = browser("shenzhi", "system", false);
+    state.storage.forEach((value, key) => reloaded.storage.set(key, value));
+    firstPaint(reloaded);
+    const refreshed = loadStore(reloaded);
+    refreshed.hydrate();
+    assert.equal(refreshed.store.getState().preset, id);
+    assert.equal(reloaded.root.dataset.theme, id);
+    assert.equal(reloaded.classes.has("dark"), presets.supportsThemeMode(id) || presets.isDarkThemePreset(id));
+    assert.equal(reloaded.properties.size, 0);
+  }
+});
+
+test("old custom storage including malformed palette data remains safe to initialize", () => {
+  for (const stored of ["{invalid", "null", JSON.stringify({ accent: "invalid", appearance: "unknown" })]) {
+    const state = browser("custom", "system", false);
+    state.storage.set(customTheme.CUSTOM_THEME_STORAGE_KEY, stored);
+    firstPaint(state);
+    const { store, hydrate } = loadStore(state);
+    hydrate();
+    assert.equal(store.getState().preset, "custom");
+    assert.equal(state.root.dataset.theme, "custom");
+    assert.equal(state.storage.get(customTheme.CUSTOM_THEME_STORAGE_KEY), stored, "initialization does not rewrite old data");
+  }
+});
+
 test("selecting custom persists the palette for matching first paint and hydration after reload", () => {
   for (const config of [customTheme.DEFAULT_CUSTOM_THEME, { accent: "#315EFB", appearance: "dark" } as const]) {
     const state = browser("shenzhi", "system", true);

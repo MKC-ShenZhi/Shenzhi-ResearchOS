@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import {
   BarChart3,
+  ArrowUpRight,
   Bell,
   Bot,
   KeyRound,
@@ -17,11 +18,10 @@ import {
   UserRound,
 } from "lucide-react";
 import { useThemeStore, type ThemeMode } from "@/stores/theme";
-import { supportsThemeMode, THEME_PRESETS } from "@/lib/theme-presets";
+import { supportsThemeMode, QUICK_THEME_PRESETS } from "@/lib/theme-presets";
 import { cn } from "@/lib/utils";
 import { McpIcon } from "@/features/settings/components/settings-tabs";
 import { useSidebarStore } from "@/stores/sidebar";
-import { CustomThemeControls } from "@/components/common/custom-theme-controls";
 
 /** 设置选项,自上而下与设置页 Tab 顺序一致,点击跳转对应 Tab */
 const MENU_ITEMS = [
@@ -106,8 +106,8 @@ export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean
               <Palette className="size-3.5" strokeWidth={1.8} />
               视觉风格
             </div>
-            <div className="scrollbar-subtle grid max-h-64 grid-cols-2 gap-1 overflow-y-auto pr-1">
-              {THEME_PRESETS.map((option) => (
+            <div className="grid grid-cols-2 gap-1">
+              {QUICK_THEME_PRESETS.map((option) => (
                 <button
                   key={option.id}
                   type="button"
@@ -125,8 +125,15 @@ export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean
                   <span className="block truncate text-[10px] text-muted">{option.description}</span>
                 </button>
               ))}
+              <Link
+                href="/settings?tab=profile#appearance"
+                onNavigate={() => document.getElementById("appearance")?.scrollIntoView({ block: "start" })}
+                className="min-w-0 rounded-lg px-2 py-1.5 text-left text-ink-2 transition-colors hover:bg-chip"
+              >
+                <span className="flex items-center gap-1 text-xs font-medium">更多配色<ArrowUpRight className="size-3" aria-hidden="true" /></span>
+                <span className="block text-[10px] text-muted">查看全部预设</span>
+              </Link>
             </div>
-            {preset === "custom" && <div className="mt-2"><CustomThemeControls compact /></div>}
           </div>
 
           {/* 自适应预设支持日间 / 夜间 / 跟随系统 */}

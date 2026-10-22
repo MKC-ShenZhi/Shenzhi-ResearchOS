@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { QUICK_THEME_PRESETS, VISIBLE_THEME_PRESETS, isThemePreset } from "../../lib/theme-presets";
 
 const presets = readFileSync("lib/theme-presets.ts", "utf8");
 const store = readFileSync("stores/theme.ts", "utf8");
@@ -33,12 +34,16 @@ const themeIds = [
   "custom",
 ];
 
-test("theme explorer exposes presets plus a custom palette", () => {
+test("quick themes are ordered independently; full settings hide only custom", () => {
   for (const id of themeIds) assert.match(presets, new RegExp(`id: "${id}"`));
-  assert.match(settingsMenu, /THEME_PRESETS\.map/);
-  assert.match(profilePanel, /THEME_PRESETS\.map/);
-  assert.match(settingsMenu, /CustomThemeControls/);
-  assert.match(profilePanel, /CustomThemeControls/);
+  assert.deepEqual(QUICK_THEME_PRESETS.map(({ id }) => id), ["shenzhi", "gpt", "warm-teal", "apple-air-blue", "spectrum-gold"]);
+  assert.deepEqual(QUICK_THEME_PRESETS.map(({ label }) => label), ["深知", "极致黑白", "青绿", "Air 冰蓝", "光谱·金"]);
+  assert.deepEqual(VISIBLE_THEME_PRESETS.map(({ id }) => id), themeIds.filter((id) => id !== "custom"));
+  assert.ok(isThemePreset("custom"));
+  assert.match(settingsMenu, /QUICK_THEME_PRESETS\.map/);
+  assert.match(profilePanel, /VISIBLE_THEME_PRESETS\.map/);
+  assert.doesNotMatch(settingsMenu, /CustomThemeControls|max-h-64|overflow-y-auto/);
+  assert.doesNotMatch(profilePanel, /CustomThemeControls/);
   assert.match(customControls, /type="color"/);
   assert.match(customControls, /CUSTOM_THEME_SWATCHES\.map/);
 });

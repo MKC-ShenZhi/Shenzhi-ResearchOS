@@ -12,12 +12,28 @@ const profileClient = readFileSync("clients/profile/index.ts", "utf8");
 const avatarOptions = readFileSync("clients/profile/avatar.ts", "utf8");
 const sidebar = readFileSync("components/common/layout/app-sidebar.tsx", "utf8");
 const userAvatar = readFileSync("components/common/user-avatar.tsx", "utf8");
+const menu = readFileSync("components/common/layout/settings-menu.tsx", "utf8");
 
 test("settings keeps all deep links and falls back invalid values to profile", () => {
   for (const value of ["profile", "subscription", "usage", "agent", "mcp", "api", "notifications"]) {
     assert.match(readFileSync("features/settings/components/tab-config.tsx", "utf8"), new RegExp(`value: "${value}"`));
   }
   assert.match(tabs, /isSettingsTab\(requestedTab\)[\s\S]*requestedTab : "profile"/);
+  for (const value of ["profile", "subscription", "usage", "agent", "mcp", "api", "notifications"]) {
+    assert.ok(menu.includes(`/settings?tab=${value}`));
+  }
+});
+
+test("more colors links to the mounted appearance section without suppressing hash scroll", () => {
+  assert.match(profile, /<Section id="appearance"/);
+  assert.match(profile, /scroll-mt-6/);
+  const moreLink = menu.match(/<Link\s+href="\/settings\?tab=profile#appearance"[\s\S]*?<\/Link>/)?.[0];
+  assert.ok(moreLink);
+  assert.doesNotMatch(moreLink, /scroll=\{false\}/);
+  assert.match(moreLink, /onNavigate=[\s\S]*scrollIntoView/);
+  assert.match(tabs, /active !== "profile"/);
+  assert.match(tabs, /requestAnimationFrame\([\s\S]*getElementById\("appearance"\)/);
+  assert.match(tabs, /removeEventListener\("hashchange"/);
 });
 
 test("profile and notifications no longer expose fabricated biography or notification detail", () => {
