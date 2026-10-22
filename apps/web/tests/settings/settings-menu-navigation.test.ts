@@ -27,13 +27,14 @@ function load(path: string, dependencies: Record<string, unknown>, globals: Reco
   return exports;
 }
 
-test("quick theme buttons select their IDs and more colors scrolls on repeated navigation", () => {
+test("quick theme buttons select their IDs; all links close and more colors scrolls on repeated navigation", () => {
   let selected = "custom";
+  let closed = 0;
   let scrolled = 0;
   let expanded = 0;
   const state = { mode: "system", preset: selected, setMode: () => {}, setPreset: (id: string) => { selected = id; } };
   const loaded = load("components/common/layout/settings-menu.tsx", {
-    react: { useSyncExternalStore: () => true },
+    react: { useId: () => "settings-menu", useSyncExternalStore: () => true },
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "next/link": { default: "a" },
     "next/navigation": { usePathname: () => "/settings" },
@@ -43,6 +44,7 @@ test("quick theme buttons select their IDs and more colors scrolls on repeated n
     "@/stores/theme": { useThemeStore: (selector: (value: typeof state) => unknown) => selector(state) },
     "@/stores/sidebar": { useSidebarStore: (selector: (value: unknown) => unknown) => selector({ setCollapsed: () => expanded++ }) },
     "@/features/settings/components/settings-tabs": {},
+    "./use-settings-menu-hover": { useSettingsMenuHover: () => ({ open: true, close: () => closed++ }) },
   }, { document: { getElementById: (id: string) => id === "appearance" ? { scrollIntoView: () => scrolled++ } : null } });
   const menu = loaded.SettingsMenu as (props: { collapsed: boolean }) => unknown;
   for (const collapsed of [false, true]) {
@@ -55,12 +57,13 @@ test("quick theme buttons select their IDs and more colors scrolls on repeated n
     });
     const links = tree.filter(({ type }) => type === "a");
     assert.deepEqual(links.map(({ props }) => props.href), ["/settings", ...["profile", "subscription", "usage", "agent", "mcp", "api", "notifications"].map((tab) => `/settings?tab=${tab}`), "/settings?tab=profile#appearance"]);
-    if (collapsed) (links[0].props.onClick as () => void)();
+    links.forEach(({ props }) => (props.onClick as () => void)());
     const more = links.at(-1)!;
     assert.equal(more.props.scroll, undefined);
     (more.props.onNavigate as () => void)();
     (more.props.onNavigate as () => void)();
   }
+  assert.equal(closed, 18);
   assert.equal(scrolled, 4);
   assert.equal(expanded, 1, "collapsed settings trigger retains expansion behavior");
 });

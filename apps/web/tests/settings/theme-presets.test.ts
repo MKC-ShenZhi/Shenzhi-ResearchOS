@@ -42,7 +42,7 @@ test("quick themes are ordered independently; full settings hide only custom", (
   assert.ok(isThemePreset("custom"));
   assert.match(settingsMenu, /QUICK_THEME_PRESETS\.map/);
   assert.match(profilePanel, /VISIBLE_THEME_PRESETS\.map/);
-  assert.doesNotMatch(settingsMenu, /CustomThemeControls|max-h-64|overflow-y-auto/);
+  assert.doesNotMatch(settingsMenu, /CustomThemeControls|max-h-64|overflow-y-auto|group-hover/);
   assert.doesNotMatch(profilePanel, /CustomThemeControls/);
   assert.match(customControls, /type="color"/);
   assert.match(customControls, /CUSTOM_THEME_SWATCHES\.map/);
