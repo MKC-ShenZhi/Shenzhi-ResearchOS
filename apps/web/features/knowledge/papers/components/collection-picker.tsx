@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bookmark, Check, LoaderCircle, MoreHorizontal, Plus, X } from "lucide-react";
 import { ApiError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -13,7 +14,10 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const { session, isPending } = useAuth();
   const identityKey = useCollections((state) => state.identityKey);
   const { folders, paperFolders, loadFolders, loadPaperFolders, createFolder, updatePaperFolders } = useCollections();
@@ -33,8 +37,80 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
 
   useEffect(() => {
     if (!open) return;
+    const updatePosition = () => {
+      const button = buttonRef.current;
+      const panel = panelRef.current;
+      if (!button || !panel) return;
+
+      const viewport = window.visualViewport;
+      const viewportLeft = viewport?.offsetLeft ?? 0;
+      const viewportTop = viewport?.offsetTop ?? 0;
+      const viewportWidth = viewport?.width ?? window.innerWidth;
+      const viewportHeight = viewport?.height ?? window.innerHeight;
+      const margin = 8;
+      const gap = 8;
+      const width = Math.min(288, Math.max(0, viewportWidth - margin * 2));
+      const buttonRect = button.getBoundingClientRect();
+      if (buttonRect.bottom <= viewportTop || buttonRect.top >= viewportTop + viewportHeight) {
+        setOpen(false);
+        return;
+      }
+      const scrollArea = panel.querySelector<HTMLElement>("[data-collection-list]");
+      const panelHeight = panel.scrollHeight + Math.max(
+        0,
+        (scrollArea?.scrollHeight ?? 0) - (scrollArea?.clientHeight ?? 0),
+      );
+      const spaceBelow = viewportTop + viewportHeight - margin - buttonRect.bottom - gap;
+      const spaceAbove = buttonRect.top - (viewportTop + margin) - gap;
+      const placeBelow = spaceBelow >= panelHeight || spaceBelow >= spaceAbove;
+      const availableHeight = Math.max(0, Math.min(
+        viewportHeight - margin * 2,
+        placeBelow ? spaceBelow : spaceAbove,
+      ));
+      const maxHeight = Math.min(panelHeight, availableHeight);
+      const left = Math.min(
+        Math.max(buttonRect.right - width, viewportLeft + margin),
+        viewportLeft + viewportWidth - margin - width,
+      );
+      const top = Math.min(
+        Math.max(
+          placeBelow ? buttonRect.bottom + gap : buttonRect.top - gap - maxHeight,
+          viewportTop + margin,
+        ),
+        viewportTop + viewportHeight - margin - maxHeight,
+      );
+
+      setPosition((current) => {
+        if (current?.top === top && current.left === left &&
+            current.width === width && current.maxHeight === maxHeight) return current;
+        return { top, left, width, maxHeight };
+      });
+    };
+
+    updatePosition();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updatePosition);
+    if (buttonRef.current) observer?.observe(buttonRef.current);
+    if (panelRef.current) observer?.observe(panelRef.current);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    window.visualViewport?.addEventListener("resize", updatePosition);
+    window.visualViewport?.addEventListener("scroll", updatePosition);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+      window.visualViewport?.removeEventListener("resize", updatePosition);
+      window.visualViewport?.removeEventListener("scroll", updatePosition);
+    };
+  }, [folders.length, message, open]);
+
+  useEffect(() => {
+    if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+      const target = event.target;
+      if (target instanceof Node &&
+          !rootRef.current?.contains(target) &&
+          !panelRef.current?.contains(target)) setOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
@@ -71,8 +147,9 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
   return (
     <div ref={rootRef} data-paper-card-interactive className={`relative inline-flex ${className}`.trim()}>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => { setOpen((value) => !value); setMessage(""); }}
+        onClick={() => { setPosition(null); setOpen((value) => !value); setMessage(""); }}
         aria-expanded={open}
         aria-label={iconOnly ? "收藏" : undefined}
         title={iconOnly ? "收藏" : undefined}
@@ -81,13 +158,23 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
         <Bookmark className="size-4" fill={active ? "currentColor" : "none"} />
         {!iconOnly && "收藏"}
       </button>
-      {open && (
-        <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-line bg-card p-3 shadow-card">
+      {open && createPortal(
+        <div
+          ref={panelRef}
+          className="fixed z-50 flex min-h-0 flex-col rounded-xl border border-line bg-card p-3 shadow-card"
+          style={{
+            top: position?.top ?? 0,
+            left: position?.left ?? 0,
+            width: position?.width ?? 288,
+            maxHeight: position?.maxHeight ?? window.innerHeight,
+            visibility: position ? "visible" : "hidden",
+          }}
+        >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-semibold text-ink">收藏到文件夹</span>
             <button type="button" onClick={() => setOpen(false)} aria-label="关闭" className="rounded-md p-1 text-faint hover:bg-chip hover:text-ink"><X className="size-4" /></button>
           </div>
-          <div className="max-h-64 space-y-1 overflow-y-auto">
+          <div data-collection-list className="min-h-0 flex-1 space-y-1 overflow-y-auto">
             {folders.length === 0 && <p className="py-3 text-center text-xs text-faint">暂无文件夹</p>}
             {folders.map((folder) => {
               const isChecked = selected.includes(folder.id);
@@ -124,7 +211,8 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
               确认
             </Button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
