@@ -1,4 +1,5 @@
 import { buildKnowledgeSearchUrl, readKnowledgeSearchUrlState } from "./search-url-state";
+import { buildConferenceDirectoryUrl, buildPaperBrowseUrl, readConferenceDirectoryState, readPaperBrowseState } from "./conferences/conference-state";
 
 const PREFIX = "shenzhi:paper-search-scroll:";
 const MAX_AGE_MS = 30 * 60_000;
@@ -7,7 +8,13 @@ type ScrollStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 function storageKey(returnTo: string, scope: string): string {
   const url = new URL(returnTo, "https://shenzhi-internal.invalid");
-  return PREFIX + encodeURIComponent(scope) + ":" + buildKnowledgeSearchUrl(readKnowledgeSearchUrlState(url.searchParams));
+  const browse = readPaperBrowseState(url.searchParams);
+  const href = url.pathname === "/knowledge/search/conferences"
+    ? buildConferenceDirectoryUrl(readConferenceDirectoryState(url.searchParams))
+    : browse.mode === "conference"
+    ? buildPaperBrowseUrl(browse.conference, browse.year, browse.page)
+    : buildKnowledgeSearchUrl(readKnowledgeSearchUrlState(url.searchParams));
+  return PREFIX + encodeURIComponent(scope) + ":" + href;
 }
 
 export function saveSearchScroll(storage: ScrollStorage, returnTo: string, top: number, now = Date.now(), scope = "anonymous"): void {

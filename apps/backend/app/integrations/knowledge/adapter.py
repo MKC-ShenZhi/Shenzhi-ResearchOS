@@ -15,6 +15,10 @@ from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.integrations.knowledge.schemas import UpstreamSearchPayload
 from app.schemas.knowledge import (
+    ConferenceSummary,
+    ConferenceListResponse,
+    PaperBrowseRequest,
+    PaperBrowseResponse,
     GraphEdge,
     GraphNode,
     FundingSearchRequest,
@@ -509,6 +513,44 @@ class KnowledgeAdapter:
 
     def __init__(self, client: Any | None = None):
         self.client = client or KnowledgeBaseClient()
+
+    async def conferences(self) -> ConferenceListResponse:
+        body = await self.client.conferences()
+        items = body.get('items') if isinstance(body, dict) else None
+        if not isinstance(items, list):
+            raise KnowledgeIntegrationError.contract_violation()
+
+        def map_conference(item: dict[str, Any]) -> ConferenceSummary:
+            name = _required_string(item, 'conference')
+            # Only actual years are navigable. Never fill gaps from min/maxYear.
+            if not isinstance(item.get('years'), list):
+                raise KnowledgeIntegrationError.contract_violation()
+            years = sorted(set(_int_list(item['years'])), reverse=True)
+            if any(year < 1000 or year > 9999 for year in years):
+                raise KnowledgeIntegrationError.contract_violation()
+            return _contract_model(lambda: ConferenceSummary(
+                name=name, paper_count=_required_int(item, 'count'),
+                years=years, year_count=len(years),
+            ))
+
+        return ConferenceListResponse(items=_object_list(items, map_conference))
+
+    async def browse_papers(self, request: PaperBrowseRequest) -> PaperBrowseResponse:
+        body = await self.client.browse_papers(
+            request.conference, request.year, limit=request.limit, offset=request.offset,
+        )
+        if not isinstance(body, dict) or not isinstance(body.get('items'), list):
+            raise KnowledgeIntegrationError.contract_violation()
+        response = _contract_model(lambda: PaperBrowseResponse(
+            results=[map_search_result(item) for item in body['items']],
+            total=_required_int(body, 'total'),
+            limit=_required_int(body, 'limit'),
+            offset=_required_int(body, 'offset'),
+        ))
+        if (response.limit != request.limit or response.offset != request.offset
+                or len(response.results) > response.limit):
+            raise KnowledgeIntegrationError.contract_violation()
+        return response
 
     async def search(self, request: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
         # The current upstream accepts larger top_k values but ignores offset

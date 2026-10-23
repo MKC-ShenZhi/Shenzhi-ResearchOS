@@ -40,6 +40,32 @@ export interface KnowledgeSubjectSearchResponse {
   total: number;
 }
 
+/** ShenZhi 产品契约；不暴露科研组原始会议字段。 */
+export interface KnowledgeConference {
+  name: string;
+  paperCount: number;
+  years: number[];
+  yearCount: number;
+}
+
+export interface KnowledgeConferenceListResponse {
+  items: KnowledgeConference[];
+}
+
+export interface KnowledgePaperBrowseParams {
+  conference: string;
+  year: number;
+  limit: number;
+  offset: number;
+}
+
+export interface KnowledgePaperBrowseResponse {
+  results: KnowledgePaperHit[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 /** 主题广场卡片；imagePath 使用前端可直接访问的 public 路径。 */
 export interface KnowledgeTopic {
   id: string;

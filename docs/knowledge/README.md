@@ -84,6 +84,8 @@ PAPER_MAX_SIZE_MB=150
 | 能力 | ShenZhi API | 外部 API |
 |---|---|---|
 | 论文检索 | `POST /api/v1/knowledge/search` | `POST /api/retrieval/search` |
+| 会议目录 | `GET /api/v1/knowledge/conferences` | `GET /api/papers/venues` |
+| 按会议和年份浏览论文 | `GET /api/v1/knowledge/papers?conference=...&year=...&limit=20&offset=0` | `GET /api/papers` |
 | 论文详情 | `GET /api/v1/knowledge/paper?paperId=...` | `GET /api/kg/paper?paperId=...` |
 | 论文图谱 | `GET /api/v1/knowledge/graph?paperId=...&depth=1\|2` | `GET /api/kg/graph?paperId=...&depth=1\|2` |
 | 学者搜索 | `GET /api/v1/knowledge/scholars/search?q=...&limit=20&offset=0` | `GET /api/retrieval/scholars/search?q=...&limit=20&offset=0` |
@@ -186,7 +188,8 @@ Topic Catalog、分页上限、错误重试、数据核对与本地验收见
 
 | 路由 | 行为 |
 |---|---|
-| `/knowledge/search` | 论文搜索、筛选、loading、zero-result、error |
+| `/knowledge/search` | 会议/年份浏览及原有关键词检索；通过 URL 隔离查询模式 |
+| `/knowledge/search/conferences` | 完整会议目录、名称搜索、实际年份筛选、排序与本地分页 |
 | `/knowledge/papers` | 我的文献、收藏、文件夹和阅读历史 |
 | `/knowledge/scholars` | 真实 Scholar Search；仅按姓名搜索 |
 | `/knowledge/scholars/[scholarId]` | 真实 Scholar Detail；空 optional section 隐藏 |
@@ -208,7 +211,10 @@ title、authors、venue、year、abstract 等元信息回答；该流程不使�
 产品导航；专利兼容路由只显示不可用状态。当前知识底座没有正式
 Patent、Project 实体 Search/Detail，也没有 Funding Detail。产品中的
 `/projects/[id]` 属于用户科研项目能力，不是 Knowledge Base Project。仍暂不包含
-multistep、会议浏览、ID resolver、Deep Research 或 Auto Research。
+multistep、ID resolver、Deep Research 或 Auto Research。
+
+论文库会议浏览的接口、缓存、数据边界和验收说明见
+[Paper Library V2](PAPER-LIBRARY-V2.md)。
 
 ## Mock 规则
 
