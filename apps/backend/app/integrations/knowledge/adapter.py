@@ -250,6 +250,7 @@ def map_search_result(
     title = _required_string(item, 'title')
     return _contract_model(lambda: PaperSearchResult(
         id=paper_id,
+        image_id=_optional_string(item.get('image_id')),
         title=title,
         abstract=_optional_string(item.get('abstract')),
         authors=_string_list(item.get('authors')),
