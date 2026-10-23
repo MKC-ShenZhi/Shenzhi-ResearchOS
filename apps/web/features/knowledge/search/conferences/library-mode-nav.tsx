@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { SearchNavigationLink } from "@/components/common/layout/search-navigation-link";
 
 export function LibraryModeNav({ mode }: { mode: "keyword" | "conference" }) {
   return (
@@ -9,10 +9,10 @@ export function LibraryModeNav({ mode }: { mode: "keyword" | "conference" }) {
         ["conference", "按会议浏览", "/knowledge/search?mode=conference"],
         ["keyword", "关键词检索", "/knowledge/search?mode=keyword"],
       ] as const).map(([value, label, href]) => (
-        <Link key={value} href={href} aria-current={mode === value ? "page" : undefined}
+        <SearchNavigationLink key={value} href={href} aria-current={mode === value ? "page" : undefined}
           className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${mode === value ? "bg-primary text-primary-foreground" : "text-muted hover:bg-panel hover:text-ink"}`}>
           {label}
-        </Link>
+        </SearchNavigationLink>
       ))}
     </nav>
   );

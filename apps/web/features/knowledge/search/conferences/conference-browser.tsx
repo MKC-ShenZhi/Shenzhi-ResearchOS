@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpRight } from "lucide-react";
 import type { KnowledgeConference } from "@/clients/knowledge";
+import { SearchNavigationLink } from "@/components/common/layout/search-navigation-link";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { useSearchRestorationScope } from "@/hooks/use-search-restoration";
 import { KnowledgeSearchHero } from "../components/search-hero";
@@ -45,7 +45,7 @@ export function ConferenceBrowser() {
     <section aria-labelledby="conference-navigation-title">
       <div className="mb-4 flex items-center justify-between gap-4">
         <h2 id="conference-navigation-title" className="text-lg font-semibold text-ink">会议导览</h2>
-        <Link href="/knowledge/search/conferences" className="flex min-h-10 items-center gap-1 text-sm font-medium text-primary">更多会议 <ArrowUpRight className="size-4" /></Link>
+        <SearchNavigationLink href="/knowledge/search/conferences" className="flex min-h-10 items-center gap-1 text-sm font-medium text-primary">更多会议 <ArrowUpRight className="size-4" /></SearchNavigationLink>
       </div>
       {conferences.isPending ? <ConferenceSkeleton /> : conferences.isError && !conferences.data ? (
         <ConferenceError error={conferences.error} onRetry={() => void conferences.refetch()} />

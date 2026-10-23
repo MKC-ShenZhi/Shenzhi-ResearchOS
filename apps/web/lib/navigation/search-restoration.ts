@@ -25,6 +25,22 @@ export function normalizeSearchRestorationHref(value: unknown): string | null {
 
 type NavigationStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const STORAGE_PREFIX = "shenzhi:search-navigation:v1:";
+const PAPER_SEARCH_PATH = "/knowledge/search";
+const PAPER_MODE_ENTRIES = ["/knowledge/search?mode=keyword", "/knowledge/search?mode=conference"] as const;
+
+/** Mode-only links are navigation entries; full query URLs remain authoritative. */
+function restorationPath(href: string): string | null {
+  if (Object.hasOwn(SEARCH_RESTORATION_ROUTES, href)) return href;
+  return PAPER_MODE_ENTRIES.some((entry) => entry === href) ? PAPER_SEARCH_PATH : null;
+}
+
+function paperModeEntry(href: string): string | null {
+  const url = new URL(href, "https://shenzhi-internal.invalid");
+  if (url.pathname !== PAPER_SEARCH_PATH) return null;
+  const mode = url.searchParams.get("mode");
+  const keyword = mode === "keyword" || (mode !== "conference" && Boolean(url.searchParams.get("q")?.trim()));
+  return PAPER_MODE_ENTRIES[keyword ? 0 : 1];
+}
 
 /** Storage boundary is injectable; no API responses or duplicate search state are kept. */
 export function createSearchRestoration(getStorage: () => NavigationStorage | null) {
@@ -50,6 +66,16 @@ export function createSearchRestoration(getStorage: () => NavigationStorage | nu
 
   function clearRecord(scope: string, path: string) {
     access((storage) => storage.removeItem(key(scope, path)));
+  }
+
+  function clearEntry(scope: string, entry: string) {
+    clearRecord(scope, entry);
+    if (entry === PAPER_SEARCH_PATH) {
+      for (const modeEntry of PAPER_MODE_ENTRIES) clearRecord(scope, modeEntry);
+    } else if (restorationPath(entry) === PAPER_SEARCH_PATH) {
+      const last = normalizeSearchRestorationHref(access((storage) => storage.getItem(key(scope, PAPER_SEARCH_PATH))));
+      if (last && paperModeEntry(last) === entry) clearRecord(scope, PAPER_SEARCH_PATH);
+    }
     notify();
   }
 
@@ -59,14 +85,21 @@ export function createSearchRestoration(getStorage: () => NavigationStorage | nu
       return () => { listeners.delete(listener); };
     },
     getHref(scope: string | null, href: string): string {
-      // Only bare registered navigation entries restore. Explicit URLs always win.
-      if (!scope || !Object.hasOwn(SEARCH_RESTORATION_ROUTES, href)) return href;
+      // Restoring a mode entry must never replace it with the other mode's URL.
+      const path = restorationPath(href);
+      if (!scope || !path) return href;
       const saved = normalizeSearchRestorationHref(access((storage) => storage.getItem(key(scope, href))));
-      return saved?.split("?", 1)[0] === href ? saved : href;
+      if (saved?.split("?", 1)[0] === path && (href === path || paperModeEntry(saved) === href)) return saved;
+      if (href !== path) {
+        // Existing v1 records only stored the last library URL, without mode slots.
+        const legacy = normalizeSearchRestorationHref(access((storage) => storage.getItem(key(scope, path))));
+        if (legacy && paperModeEntry(legacy) === href) return legacy;
+      }
+      return href;
     },
     record(scope: string, href: string) {
       // Clearing before the first auth response must not leave an old record behind.
-      for (const path of pendingClears) clearRecord(scope, path);
+      for (const path of pendingClears) clearEntry(scope, path);
       pendingClears.clear();
       // Auth changes do not turn the URL left by the previous user into a new record.
       // Kept across AppShell remounts; recording resumes when the URL changes.
@@ -77,12 +110,23 @@ export function createSearchRestoration(getStorage: () => NavigationStorage | nu
       const saved = normalizeSearchRestorationHref(href);
       if (!saved) return; // Visiting a bare route is different from explicitly clearing it.
       const path = saved.split("?", 1)[0];
+      if (path === PAPER_SEARCH_PATH) {
+        // Preserve an existing v1 query before a first visit to the other mode
+        // replaces the shared last-library URL.
+        const previous = normalizeSearchRestorationHref(access((storage) => storage.getItem(key(scope, path))));
+        const previousEntry = previous && paperModeEntry(previous);
+        if (previous && previousEntry && access((storage) => storage.getItem(key(scope, previousEntry))) === null) {
+          access((storage) => storage.setItem(key(scope, previousEntry), previous));
+        }
+      }
       access((storage) => storage.setItem(key(scope, path), saved));
+      const modeEntry = paperModeEntry(saved);
+      if (modeEntry) access((storage) => storage.setItem(key(scope, modeEntry), saved));
       notify();
     },
     clear(scope: string | null, path: string) {
-      if (!Object.hasOwn(SEARCH_RESTORATION_ROUTES, path)) return;
-      if (scope) clearRecord(scope, path);
+      if (!restorationPath(path)) return;
+      if (scope) clearEntry(scope, path);
       else pendingClears.add(path);
     },
   };

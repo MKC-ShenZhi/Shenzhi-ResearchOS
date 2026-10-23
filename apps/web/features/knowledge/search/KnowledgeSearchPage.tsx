@@ -60,7 +60,7 @@ function createSearchParams(
 function KeywordSearchContent() {
   const router = useRouter();
   const scope = useSearchRestorationScope();
-  const clearRestoration = useClearSearchRestoration("/knowledge/search");
+  const clearRestoration = useClearSearchRestoration("/knowledge/search?mode=keyword");
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const returnTo = useCurrentInternalPath();

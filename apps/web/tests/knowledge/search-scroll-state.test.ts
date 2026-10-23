@@ -64,3 +64,16 @@ test("scroll records use the existing navigation identity scopes", () => {
   assert.equal(readSearchScroll(storage, source, 101, "user:bob"), null);
   assert.equal(readSearchScroll(storage, source, 101, "user:alice"), 900);
 });
+
+test("directory results and keyword results never share scroll even with identical query and page", () => {
+  const storage = memoryStorage();
+  const directory = "/knowledge/search/conferences?q=robotics&page=2&sort=name&year=2022";
+  saveSearchScroll(storage, directory, 400, 100);
+  saveSearchScroll(storage, source, 1200, 100);
+  assert.equal(readSearchScroll(storage, directory, 101), 400);
+  assert.equal(readSearchScroll(storage, source, 101), 1200);
+  assert.equal(readSearchScroll(storage, directory.replace("2022", "2021"), 101), null);
+  assert.equal(readSearchScroll(storage, directory.replace("name", "count"), 101), null);
+  assert.equal(readSearchScroll(storage, directory.replace("page=2", "page=1"), 101), null);
+  assert.equal(readSearchScroll(storage, "/knowledge/search?q=robotics&page=2", 101), null);
+});

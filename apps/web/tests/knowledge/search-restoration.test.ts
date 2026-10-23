@@ -181,6 +181,77 @@ test("save and clear notify mounted links; unsubscribe removes the listener", ()
   assert.equal(notified, 2);
 });
 
+test("library modes and conference directory retain separate results across navigation and refresh", () => {
+  const { restoration, storage } = fixture();
+  const keyword = "/knowledge/search?q=graph&page=3&venue=AAAI";
+  const conference = "/knowledge/search?mode=conference&conference=CVPR&year=2025&page=2";
+  const directory = "/knowledge/search/conferences?q=graph&year=2022&sort=name&page=2";
+  restoration.record(scope, keyword);
+  restoration.record(scope, directory);
+  restoration.record(scope, conference);
+
+  const refreshed = createSearchRestoration(() => storage);
+  assert.equal(refreshed.getHref(scope, "/knowledge/search?mode=keyword"), keyword);
+  assert.equal(refreshed.getHref(scope, "/knowledge/search?mode=conference"), conference);
+  assert.equal(refreshed.getHref(scope, "/knowledge/search/conferences"), directory);
+  assert.equal(refreshed.getHref(scope, "/knowledge/search"), conference);
+  assert.equal(refreshed.getHref(scope, "/knowledge/search?q=new&page=1"), "/knowledge/search?q=new&page=1");
+  assert.equal(refreshed.getHref(scope, "/knowledge/search/conferences?q=new"), "/knowledge/search/conferences?q=new");
+  assert.equal(refreshed.getHref("user:bob", "/knowledge/search?mode=keyword"), "/knowledge/search?mode=keyword");
+});
+
+test("empty keyword state and clearing the directory never revive old search results", () => {
+  const { restoration, storage } = fixture();
+  const conference = "/knowledge/search?mode=conference&conference=AAAI&year=2022";
+  restoration.record(scope, "/knowledge/search?q=old&page=2");
+  restoration.record(scope, conference);
+  restoration.record(scope, "/knowledge/search/conferences?q=old&page=2");
+  restoration.clear(scope, "/knowledge/search/conferences");
+  restoration.record(scope, "/knowledge/search/conferences");
+  restoration.clear(scope, "/knowledge/search?mode=keyword");
+  restoration.record(scope, "/knowledge/search?mode=keyword");
+
+  const refreshed = createSearchRestoration(() => storage);
+  assert.equal(refreshed.getHref(scope, "/knowledge/search/conferences"), "/knowledge/search/conferences");
+  assert.equal(refreshed.getHref(scope, "/knowledge/search?mode=keyword"), "/knowledge/search?mode=keyword");
+  assert.equal(refreshed.getHref(scope, "/knowledge/search?mode=conference"), conference);
+  restoration.clear(scope, "/knowledge/search");
+  assert.equal(restoration.getHref(scope, "/knowledge/search?mode=conference"), "/knowledge/search?mode=conference");
+});
+
+test("legacy v1 keyword records remain readable without accepting a different mode", () => {
+  const { restoration, values } = fixture();
+  restoration.record(scope, paperSearch);
+  for (const key of values.keys()) if (key.includes("?mode=")) values.delete(key);
+  assert.equal(restoration.getHref(scope, "/knowledge/search?mode=keyword"), paperSearch);
+  assert.equal(restoration.getHref(scope, "/knowledge/search?mode=conference"), "/knowledge/search?mode=conference");
+  restoration.clear(scope, "/knowledge/search?mode=keyword");
+  assert.equal(restoration.getHref(scope, paperPath), paperPath);
+});
+
+test("the first conference visit migrates legacy keyword history before replacing the shared URL", () => {
+  const { restoration, values, storage } = fixture();
+  restoration.record(scope, paperSearch);
+  for (const key of values.keys()) if (key.includes("?mode=")) values.delete(key);
+  const upgraded = createSearchRestoration(() => storage);
+  upgraded.record(scope, "/knowledge/search?mode=conference&conference=AAAI&year=2026");
+  const refreshed = createSearchRestoration(() => storage);
+  assert.equal(refreshed.getHref(scope, "/knowledge/search?mode=keyword"), paperSearch);
+  assert.equal(refreshed.getHref(scope, "/knowledge/search"), "/knowledge/search?mode=conference&conference=AAAI&year=2026");
+});
+
+test("pending mode clears and account changes do not copy or revive another identity's queries", () => {
+  const { restoration, storage } = fixture();
+  restoration.record(scope, paperSearch);
+  const refreshed = createSearchRestoration(() => storage);
+  refreshed.clear(null, "/knowledge/search?mode=keyword");
+  refreshed.record(scope, "/projects");
+  assert.equal(refreshed.getHref(scope, "/knowledge/search?mode=keyword"), "/knowledge/search?mode=keyword");
+  refreshed.record(scope, paperSearch);
+  refreshed.record("user:bob", paperSearch);
+  assert.equal(refreshed.getHref("user:bob", "/knowledge/search?mode=keyword"), "/knowledge/search?mode=keyword");
+});
+
 test("shell records under Suspense, opt-in links retain Link behavior, and Features explicitly clear", () => {
   const source = (path: string) => readFileSync(path, "utf8");
   assert.match(source("components/common/layout/app-shell.tsx"), /<Suspense fallback=\{null\}>\s*<SearchNavigationRecorder/);

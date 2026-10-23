@@ -7,12 +7,19 @@ import { useSearchParams } from "next/navigation";
 import { ChevronRight, Search } from "lucide-react";
 import type { KnowledgeConference } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
+import { SearchNavigationLink } from "@/components/common/layout/search-navigation-link";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { useClearSearchRestoration, useSearchRestorationScope } from "@/hooks/use-search-restoration";
+import { discardSearchScroll, rememberSearchScroll, useSearchScrollRestoration } from "../use-search-scroll-restoration";
 import { conferenceQueryOptions } from "./conference-queries";
 import { ConferenceEmpty, ConferenceError, ConferenceSkeleton } from "./conference-states";
 import { buildConferenceDirectoryUrl, buildPaperBrowseUrl, CONFERENCE_PAGE_SIZE, filterConferences, readConferenceDirectoryState, type ConferenceDirectoryState } from "./conference-state";
 
 function ConferenceDirectoryContent() {
   const searchParams = useSearchParams();
+  const returnTo = useCurrentInternalPath();
+  const scope = useSearchRestorationScope();
+  const clearRestoration = useClearSearchRestoration("/knowledge/search/conferences");
   const state = readConferenceDirectoryState(searchParams);
   const query = useQuery(conferenceQueryOptions());
   const items = query.data?.items ?? [];
@@ -21,17 +28,22 @@ function ConferenceDirectoryContent() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / CONFERENCE_PAGE_SIZE));
   const page = Math.min(state.page, pageCount);
   const visible = filtered.slice((page - 1) * CONFERENCE_PAGE_SIZE, page * CONFERENCE_PAGE_SIZE);
+  useSearchScrollRestoration(returnTo, Boolean(query.data), scope);
   const update = (next: Partial<ConferenceDirectoryState>) => {
     // This is local filtering: Next's native History integration updates search
     // params without a server navigation. Read the current URL so consecutive
     // keystrokes/filter changes cannot overwrite each other before React renders.
     const current = readConferenceDirectoryState(new URLSearchParams(window.location.search));
-    window.history.replaceState(null, "", buildConferenceDirectoryUrl({ ...current, page: 1, ...next }));
+    const href = buildConferenceDirectoryUrl({ ...current, page: 1, ...next });
+    discardSearchScroll(returnTo, scope);
+    discardSearchScroll(href, scope);
+    if (href === "/knowledge/search/conferences") clearRestoration();
+    window.history.replaceState(null, "", href);
   };
 
-  return <div className="mx-auto max-w-[1120px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+  return <div className="mx-auto max-w-[1120px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8" onClickCapture={(event) => rememberSearchScroll(event, returnTo, scope)}>
     <nav aria-label="面包屑" className="mb-6 flex items-center gap-2 text-sm text-muted">
-      <Link href="/knowledge/search?mode=conference" className="hover:text-primary">论文库</Link><ChevronRight className="size-3.5" /><span aria-current="page">全部会议</span>
+      <SearchNavigationLink href="/knowledge/search?mode=conference" className="hover:text-primary">论文库</SearchNavigationLink><ChevronRight className="size-3.5" /><span aria-current="page">全部会议</span>
     </nav>
     <header><h1 className="text-2xl font-bold tracking-tight text-ink">全部会议</h1><p className="mt-2 text-sm text-muted">从已收录的学术会议出发，选择年份，发现感兴趣的论文。</p></header>
     <div className="my-6 grid gap-3 rounded-2xl border border-line bg-card p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
