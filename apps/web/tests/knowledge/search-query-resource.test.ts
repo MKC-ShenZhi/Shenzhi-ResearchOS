@@ -106,6 +106,7 @@ test("stale cache is visible while a background revalidation replaces it", async
     results: [{
       id: "paper:stale",
       title: "Cached paper",
+      imageId: null,
       abstract: null,
       authors: [],
       year: null,

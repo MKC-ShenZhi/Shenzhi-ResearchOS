@@ -14,7 +14,7 @@ function page(offset: number, count: number, total: number): KnowledgeSubjectSea
   return {
     total,
     results: Array.from({ length: count }, (_, index) => ({
-      id: `paper-${offset + index}`, title: `Paper ${offset + index}`, abstract: null,
+      id: `paper-${offset + index}`, imageId: null, title: `Paper ${offset + index}`, abstract: null,
       authors: [], year: null, venue: null, keywords: [], subjects: [], score: null,
       rank: offset + index + 1, provenance: { source: "fixture" },
     })),

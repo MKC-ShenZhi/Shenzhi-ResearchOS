@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/components/auth/auth-client";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
@@ -24,97 +24,89 @@ export function AccountSessions({
 }) {
   const t = accountMessages[locale];
   const { openLogin } = useAuth();
-  const [sessions, setSessions] = useState<ListedSession[]>([]);
-  const [busy, setBusy] = useState(false);
+  const [sessionList, setSessionList] = useState<{ token: string; items: ListedSession[] } | null>(null);
+  const [busy, setBusy] = useState<"load" | "revoke" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const activeScopeRef = useRef<object | null>(null);
+  const pendingRef = useRef(false);
+  const sessions = sessionList?.token === currentToken ? sessionList.items : [];
   const dateLocale = locale === "en" ? "en-US" : "zh-CN";
 
-  const load = useCallback(async () => {
-    setBusy(true);
-    try {
-      const result = await authClient.listSessions();
-      if (result.error) {
-        if (isAuthErrorCode(result.error, "SESSION_NOT_FRESH")) {
-          setError(t.sessionsReauthRequired);
-          openLogin({
-            notice: t.sessionsReauthNotice,
-            onSuccess: async () => {
-              setBusy(true);
-              try {
-                const latest = await authClient.getSession();
-                if (latest.data?.user.id !== currentUserId) {
-                  setError(t.reauthAccountMismatch);
-                  return;
-                }
-
-                const retry = await authClient.listSessions();
-                if (retry.error) {
-                  setError(getAuthErrorMessage(retry.error, t.sessionsLoadFailed, "session"));
-                  return;
-                }
-                setSessions(retry.data ?? []);
-                setError(null);
-              } catch {
-                setError(t.sessionsLoadFailed);
-              } finally {
-                setBusy(false);
-              }
-            },
-          });
-        } else {
-          setError(getAuthErrorMessage(result.error, t.sessionsLoadFailed, "session"));
-        }
-      } else {
-        setSessions(result.data ?? []);
-        setError(null);
-      }
-    } catch {
-      setError(t.sessionsLoadFailed);
-    } finally {
-      setBusy(false);
-    }
-  }, [currentUserId, openLogin, t]);
-
+  // Identity changes/unmounts invalidate pending requests and login callbacks.
+  // Token rotation keeps this instance alive so reauthentication can resume.
   useEffect(() => {
-    const timer = window.setTimeout(() => { void load(); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [load]);
+    const scope = {};
+    activeScopeRef.current = scope;
+    pendingRef.current = false;
+    return () => { activeScopeRef.current = null; };
+  }, [currentUserId]);
 
-  async function revokeOthers(): Promise<void> {
-    setBusy(true);
+  async function run(action: "load" | "revoke", reauthenticated = false): Promise<void> {
+    const scope = activeScopeRef.current;
+    if (!scope || pendingRef.current) return;
+    const isActive = () => activeScopeRef.current === scope;
+    const fallback = action === "load" ? t.sessionsLoadFailed : t.sessionsRevokeFailed;
+    pendingRef.current = true;
+    setBusy(action);
+    setError(null);
     try {
-      const result = await authClient.revokeOtherSessions();
-      if (result.error) {
-        if (isAuthErrorCode(result.error, "SESSION_NOT_FRESH")) {
-          setError(t.sessionsReauthRequired);
-          openLogin({
-            notice: t.sessionsReauthNotice,
-            onSuccess: async () => {
-              setBusy(true);
-              try {
-                const latest = await authClient.getSession();
-                if (latest.data?.user.id !== currentUserId) {
-                  setError(t.reauthAccountMismatch);
-                  return;
-                }
-                await revokeOthers();
-              } catch {
-                setError(t.sessionsRevokeFailed);
-              } finally {
-                setBusy(false);
-              }
-            },
-          });
-        } else {
-          setError(getAuthErrorMessage(result.error, t.sessionsRevokeFailed, "session"));
+      let token = currentToken;
+      if (reauthenticated) {
+        const latest = await authClient.getSession();
+        if (!isActive()) return;
+        if (latest.data?.user.id !== currentUserId) {
+          setSessionList(null);
+          setError(t.reauthAccountMismatch);
+          return;
         }
+        token = latest.data.session.token;
+      }
+
+      const handleError = (authError: unknown, message: string, retryAction: "load" | "revoke") => {
+        setSessionList(null);
+        if (isAuthErrorCode(authError, "SESSION_NOT_FRESH")) {
+          setError(t.sessionsReauthRequired);
+          if (!reauthenticated) {
+            openLogin({
+              notice: t.sessionsReauthNotice,
+              onSuccess: async () => {
+                if (isActive()) await run(retryAction, true);
+              },
+            });
+          }
+        } else {
+          // Real authentication failures still flow through authClient's global
+          // invalid-session event and AuthProvider's session refresh.
+          setError(getAuthErrorMessage(authError, message, "session"));
+        }
+      };
+
+      if (action === "revoke") {
+        const result = await authClient.revokeOtherSessions();
+        if (!isActive()) return;
+        if (result.error) {
+          handleError(result.error, t.sessionsRevokeFailed, "revoke");
+          return;
+        }
+      }
+
+      const result = await authClient.listSessions();
+      if (!isActive()) return;
+      if (result.error) {
+        handleError(result.error, t.sessionsLoadFailed, "load");
       } else {
-        await load();
+        setSessionList({ token, items: result.data ?? [] });
       }
     } catch {
-      setError(t.sessionsRevokeFailed);
+      if (isActive()) {
+        setSessionList(null);
+        setError(fallback);
+      }
     } finally {
-      setBusy(false);
+      if (isActive()) {
+        pendingRef.current = false;
+        setBusy(null);
+      }
     }
   }
 
@@ -125,15 +117,26 @@ export function AccountSessions({
           <p className="text-[13px] font-medium text-ink-2">{t.sessionsTitle}</p>
           <p className="mt-1 text-xs text-muted">{t.sessionsHint}</p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={busy || !sessions.some((item) => item.token !== currentToken)}
-          onClick={() => void revokeOthers()}
-        >
-          {busy ? t.revokeOthersBusy : t.revokeOthers}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy !== null}
+            onClick={() => void run("load")}
+          >
+            {busy === "load" ? t.sessionsLoading : t.viewSessions}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy !== null || !sessions.some((item) => item.token !== currentToken)}
+            onClick={() => void run("revoke")}
+          >
+            {busy === "revoke" ? t.revokeOthersBusy : t.revokeOthers}
+          </Button>
+        </div>
       </div>
       {error && <p role="alert" className="mt-3 text-xs text-danger">{error}</p>}
       <ul className="mt-3 divide-y divide-line">

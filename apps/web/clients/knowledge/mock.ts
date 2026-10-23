@@ -253,6 +253,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
         const score = Math.min(1, base + (index % 5) * 0.04);
         return {
           id: paper.id,
+          imageId: null,
           title: paper.title,
           abstract: paper.abstract,
           authors: paper.authors,

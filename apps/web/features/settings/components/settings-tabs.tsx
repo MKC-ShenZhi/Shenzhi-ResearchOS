@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserSettings } from "../hooks/use-user-settings";
@@ -26,6 +27,25 @@ function SettingsTabsForIdentity() {
   const requestedTab = params.get("tab");
   const active = isSettingsTab(requestedTab) ? requestedTab : "profile";
   const t = settingsMessages[settings.locale];
+
+  useEffect(() => {
+    // TabsContent mounts only the active panel. Wait until profile is committed
+    // before correcting Next's initial hash scroll from another tab/page.
+    if (active !== "profile") return;
+    let frame = 0;
+    const scrollToAppearance = () => {
+      cancelAnimationFrame(frame);
+      if (window.location.hash === "#appearance") {
+        frame = requestAnimationFrame(() => document.getElementById("appearance")?.scrollIntoView({ block: "start" }));
+      }
+    };
+    scrollToAppearance();
+    window.addEventListener("hashchange", scrollToAppearance);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("hashchange", scrollToAppearance);
+    };
+  }, [active, params]);
 
   return <>
     <h1 className="text-xl font-bold text-ink">{t.title}</h1>

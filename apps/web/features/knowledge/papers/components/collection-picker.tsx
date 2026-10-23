@@ -7,7 +7,17 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { useCollections } from "@/stores/collections";
 
-export function CollectionPicker({ paperId, className = "", iconOnly = false }: { paperId: string; className?: string; iconOnly?: boolean }) {
+export function CollectionPicker({
+  paperId,
+  className = "",
+  iconOnly = false,
+  onOpenChange,
+}: {
+  paperId: string;
+  className?: string;
+  iconOnly?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
   const [name, setName] = useState("");
@@ -18,6 +28,11 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
   const identityKey = useCollections((state) => state.identityKey);
   const { folders, paperFolders, loadFolders, loadPaperFolders, createFolder, updatePaperFolders } = useCollections();
   const checked = paperFolders[paperId] ?? [];
+
+  function changeOpen(nextOpen: boolean) {
+    setOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  }
 
   useEffect(() => {
     if (isPending || !session?.user?.id || identityKey !== session.user.id) return;
@@ -34,11 +49,14 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        onOpenChange?.(false);
+      }
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
+  }, [onOpenChange, open]);
 
   async function addFolder() {
     const value = name.trim();
@@ -59,7 +77,7 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
     setMessage("");
     try {
       await updatePaperFolders(paperId, selected);
-      setOpen(false);
+      changeOpen(false);
     } catch (error) {
       setMessage(error instanceof ApiError && error.status === 401 ? "该功能需要登录后使用，请先登录" : "操作失败，请重试");
     } finally {
@@ -72,7 +90,7 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
     <div ref={rootRef} data-paper-card-interactive className={`relative inline-flex ${className}`.trim()}>
       <button
         type="button"
-        onClick={() => { setOpen((value) => !value); setMessage(""); }}
+        onClick={() => { changeOpen(!open); setMessage(""); }}
         aria-expanded={open}
         aria-label={iconOnly ? "收藏" : undefined}
         title={iconOnly ? "收藏" : undefined}
@@ -82,10 +100,10 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
         {!iconOnly && "收藏"}
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-line bg-card p-3 shadow-card">
+        <div className="absolute right-0 top-full z-30 mt-2 w-[min(18rem,calc(100vw-4.5rem))] rounded-xl border border-line bg-card p-3 shadow-card">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-semibold text-ink">收藏到文件夹</span>
-            <button type="button" onClick={() => setOpen(false)} aria-label="关闭" className="rounded-md p-1 text-faint hover:bg-chip hover:text-ink"><X className="size-4" /></button>
+            <button type="button" onClick={() => changeOpen(false)} aria-label="关闭" className="rounded-md p-1 text-faint hover:bg-chip hover:text-ink"><X className="size-4" /></button>
           </div>
           <div className="max-h-64 space-y-1 overflow-y-auto">
             {folders.length === 0 && <p className="py-3 text-center text-xs text-faint">暂无文件夹</p>}
@@ -118,7 +136,7 @@ export function CollectionPicker({ paperId, className = "", iconOnly = false }: 
           </div>
           {message && <p className="mt-2 text-xs text-danger">{message}</p>}
           <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>取消</Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => changeOpen(false)}>取消</Button>
             <Button type="button" size="sm" onClick={() => void save()} disabled={saving}>
               {saving && <LoaderCircle className="size-3.5 animate-spin" />}
               确认

@@ -32,12 +32,10 @@ class UpstreamSearchResult(TypedDict):
     subjects: NotRequired[list[str] | str | None]
     score: NotRequired[int | float | str | None]
     rank: NotRequired[int | str | None]
-    # The new retrieval service returns these diagnostics/assets on search
-    # results.  They stay transport-only and are intentionally not exposed by
-    # ShenZhi's stable PaperSearchResult contract.
+    # Preserve the asset identifier separately from transport-only diagnostics.
+    image_id: NotRequired[str | None]
     source_scores: NotRequired[dict[str, Any] | None]
     retrieval_mode: NotRequired[str | None]
-    image_id: NotRequired[str | None]
     funding: NotRequired[list[str] | str | None]
 
 

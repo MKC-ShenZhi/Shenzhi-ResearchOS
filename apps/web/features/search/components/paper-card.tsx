@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Plus, ThumbsUp, TrendingUp, Users } from "lucide-react";
@@ -28,6 +29,7 @@ export function PaperCard({
   layout?: "feed" | "explore";
 }) {
   const returnTo = useCurrentInternalPath();
+  const [collectionPickerOpen, setCollectionPickerOpen] = useState(false);
   const { likedPapers, toggleLike } = useUserPreferences();
   const liked = !!likedPapers[paper.id];
   const status = usePaperReadStatus(paper.id);
@@ -39,7 +41,7 @@ export function PaperCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: (index % 12) * 0.03 }}
-      className={`@container rounded-2xl bg-card p-6 shadow-card [overflow-wrap:anywhere] [contain-intrinsic-size:auto_260px] [content-visibility:auto] ${PAPER_CARD_INTERACTION_CLASS}`}
+      className={`@container relative rounded-2xl bg-card p-6 shadow-card [overflow-wrap:anywhere] ${collectionPickerOpen ? "z-30" : ""} ${PAPER_CARD_INTERACTION_CLASS}`}
       {...cardNavigation}
     >
       <div className={layout === "feed" ? "grid grid-cols-1 items-start gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(200px,30cqw,280px)]" : "grid grid-cols-1 gap-y-4"}>
@@ -110,7 +112,7 @@ export function PaperCard({
               <ThumbsUp className="size-4" fill={liked ? "currentColor" : "none"} />
               {paper.likes !== undefined && paper.likes + (liked ? 1 : 0)}
             </button>
-            <CollectionPicker paperId={paper.id} />
+            <CollectionPicker className="order-last sm:order-none" paperId={paper.id} onOpenChange={setCollectionPickerOpen} />
             {layout === "feed" && (
               <Link href={detailHref}>
                 <Button size="sm" className="h-9 rounded-lg px-4 text-[13px]">
