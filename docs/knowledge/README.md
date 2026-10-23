@@ -102,7 +102,9 @@ Subject 关联检索和旧 Funding 关联检索上游返回的都是 Paper Resul
 检索返回独立的 `FundingSummary`，只包含 `id`、`name`、`paperCount` 和统一
 `provenance`。Funding 当前没有 Detail API，因此不能定义或推断 grant number、PI、
 金额、周期、项目状态、专利状态等实体字段，也不提供 `total` 或 `hasMore`。上游返回的 `source_scores`、
-`retrieval_mode`、`image_id` 等内部检索字段停留在 Adapter 边界之外。
+`retrieval_mode` 等诊断字段不进入公共契约。搜索结果真实的 `image_id` 映射为可空的
+`imageId`，供 Web 同源图片资源路由使用；不解析论文 ID，不推断详情接口的图片。
+部署、路径和开关说明见 [论文图片接入](PAPER-IMAGES.md)。
 
 论文详情中的 `pdf_url` 只由 Knowledge Integration 读取和映射，公共 Detail Contract
 仅保留 `pdfUrl`。`GET /api/v1/knowledge/paper` 不调用 `paper_resource` Service，也不访问
