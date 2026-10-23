@@ -43,30 +43,30 @@ export function ConferenceBrowser() {
     }} />
     <LibraryModeNav mode="conference" />
     <section aria-labelledby="conference-navigation-title">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <h2 id="conference-navigation-title" className="text-lg font-semibold text-ink">会议导览</h2>
-        <SearchNavigationLink href="/knowledge/search/conferences" className="flex min-h-10 items-center gap-1 text-sm font-medium text-primary">更多会议 <ArrowUpRight className="size-4" /></SearchNavigationLink>
+      <div className="mb-2 flex items-center justify-between gap-4">
+        <h2 id="conference-navigation-title" className="text-base font-semibold text-ink">会议导览</h2>
+        <SearchNavigationLink href="/knowledge/search/conferences" className="flex min-h-10 items-center gap-1 text-xs font-medium text-primary">更多会议 <ArrowUpRight className="size-3.5" /></SearchNavigationLink>
       </div>
-      {conferences.isPending ? <ConferenceSkeleton /> : conferences.isError && !conferences.data ? (
+      {conferences.isPending ? <ConferenceSkeleton compact /> : conferences.isError && !conferences.data ? (
         <ConferenceError error={conferences.error} onRetry={() => void conferences.refetch()} />
       ) : items.length === 0 ? <ConferenceEmpty>暂无收录会议，请稍后再来。</ConferenceEmpty> : <>
         {conferences.isError && <p role="status" className="mb-3 text-sm text-muted">会议更新失败，正在展示缓存数据。<button className="ml-2 text-primary" onClick={() => void conferences.refetch()}>重试</button></p>}
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-          <div className="flex min-h-56 flex-col justify-between rounded-2xl border border-primary/20 bg-primary-soft p-6">
-            <div><p className="text-xs font-medium tracking-wider text-primary">当前会议</p><h3 className="mt-4 break-words text-3xl font-bold text-ink">{selected?.name ?? state.conference}</h3></div>
-            {selected ? <dl className="mt-8 grid grid-cols-2 gap-4">
-              <div><dt className="text-xs text-muted">已收录论文</dt><dd className="mt-1 text-2xl font-semibold text-ink">{selected.paperCount.toLocaleString()}</dd></div>
-              <div><dt className="text-xs text-muted">已收录年份</dt><dd className="mt-1 text-2xl font-semibold text-ink">{selected.yearCount}</dd></div>
-            </dl> : <p className="mt-6 text-sm text-muted">未找到该会议，请选择其他会议或进入全部会议目录。</p>}
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+          <div className="flex min-h-40 flex-col justify-between rounded-xl border border-primary/20 bg-primary-soft p-4">
+            <div><p className="text-[11px] font-medium text-primary">当前会议</p><h3 className="mt-2 break-words text-xl font-semibold text-ink">{selected?.name ?? state.conference}</h3></div>
+            {selected ? <dl className="mt-4 grid grid-cols-2 gap-3">
+              <div><dt className="text-[11px] text-muted">已收录论文</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{selected.paperCount.toLocaleString()}</dd></div>
+              <div><dt className="text-[11px] text-muted">已收录年份</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{selected.yearCount}</dd></div>
+            </dl> : <p className="mt-4 text-xs text-muted">未找到该会议，请选择其他会议或进入全部会议目录。</p>}
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {FEATURED_CONFERENCES.map((name) => {
               const conference = items.find((item) => item.name === name);
               const available = conference && conference.paperCount > 0 && conference.years.length > 0;
               return <button key={name} type="button" disabled={!available} aria-pressed={selected?.name === name} onClick={() => conference && select(conference)}
-                className={`min-h-28 rounded-2xl border p-4 text-left transition-colors disabled:opacity-50 ${selected?.name === name ? "border-primary bg-primary-soft" : "border-line bg-card hover:border-primary/50"}`}>
-                <span className="block text-lg font-semibold text-ink">{name}</span>
-                <span className="mt-2 block text-xs text-muted">{conference ? `${conference.paperCount.toLocaleString()} 篇 · ${conference.yearCount} 个年份` : "暂未收录"}</span>
+                className={`min-h-20 rounded-xl border px-3 py-3 text-left transition-colors disabled:opacity-50 ${selected?.name === name ? "border-primary bg-primary-soft" : "border-line bg-card hover:border-primary/50"}`}>
+                <span className="block text-sm font-semibold text-ink">{name}</span>
+                <span className="mt-1 block text-[11px] leading-relaxed text-muted">{conference ? `${conference.paperCount.toLocaleString()} 篇 · ${conference.yearCount} 个年份` : "暂未收录"}</span>
               </button>;
             })}
           </div>
@@ -85,10 +85,10 @@ function ConferenceYears({ conference, year, onSelect }: { conference: Knowledge
   const visibleYears = expanded ? conference.years : conference.years.slice(0, 8);
   // A restored year stays visible even when it is outside the collapsed range.
   const years = visibleYears.includes(year) || !year ? visibleYears : [...visibleYears, year];
-  return <nav aria-label="收录年份" className="my-6 flex flex-wrap items-center gap-2">
-    <span className="mr-2 text-sm text-muted">收录年份</span>
-    {years.map((value) => <button key={value} type="button" aria-pressed={year === value} onClick={() => onSelect(value)} className={`min-h-10 rounded-xl px-4 text-sm ${year === value ? "bg-primary text-primary-foreground" : "border border-line bg-card text-muted hover:text-primary"}`}>{value}</button>)}
-    {conference.years.length > 8 && <button type="button" aria-expanded={expanded} className="min-h-10 px-3 text-sm text-primary" onClick={() => setExpanded((value) => !value)}>{expanded ? "收起年份" : "更多年份"}</button>}
+  return <nav aria-label="收录年份" className="my-4 flex flex-wrap items-center gap-1.5">
+    <span className="mr-1.5 text-xs text-muted">收录年份</span>
+    {years.map((value) => <button key={value} type="button" aria-pressed={year === value} onClick={() => onSelect(value)} className={`min-h-10 rounded-lg px-3 text-xs sm:min-h-9 ${year === value ? "bg-primary text-primary-foreground" : "border border-line bg-card text-muted hover:text-primary"}`}>{value}</button>)}
+    {conference.years.length > 8 && <button type="button" aria-expanded={expanded} className="min-h-10 px-2 text-xs text-primary sm:min-h-9" onClick={() => setExpanded((value) => !value)}>{expanded ? "收起年份" : "更多年份"}</button>}
   </nav>;
 }
 
