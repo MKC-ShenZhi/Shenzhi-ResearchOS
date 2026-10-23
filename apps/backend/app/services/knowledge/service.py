@@ -11,6 +11,9 @@ from app.services.knowledge.cache import (
     shared_paper_detail_cache,
 )
 from app.schemas.knowledge import (
+    ConferenceListResponse,
+    PaperBrowseRequest,
+    PaperBrowseResponse,
     KnowledgeError,
     FundingSearchRequest,
     FundingSearchResponse,
@@ -87,6 +90,18 @@ class KnowledgeService:
     async def search(self, request: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
         try:
             return await self.adapter.search(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def conferences(self) -> ConferenceListResponse:
+        try:
+            return await self.adapter.conferences()
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def browse_papers(self, request: PaperBrowseRequest) -> PaperBrowseResponse:
+        try:
+            return await self.adapter.browse_papers(request)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 

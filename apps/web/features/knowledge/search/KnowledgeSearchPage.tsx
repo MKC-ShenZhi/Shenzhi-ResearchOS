@@ -11,6 +11,9 @@ import type { KnowledgeSearchParams } from "@/clients/knowledge";
 import { KnowledgeFilterPanel } from "./components/filter-panel";
 import { KnowledgeResultsSection } from "./components/results-section";
 import { KnowledgeSearchHero } from "./components/search-hero";
+import { ConferenceBrowser } from "./conferences/conference-browser";
+import { LibraryModeNav } from "./conferences/library-mode-nav";
+import { readPaperBrowseState } from "./conferences/conference-state";
 import { discardSearchScroll } from "./use-search-scroll-restoration";
 import {
   KNOWLEDGE_SEARCH_PAGE_SIZE,
@@ -54,7 +57,7 @@ function createSearchParams(
  * 业务链路：页面 → KnowledgeClient 接口 → Next.js BFF → FastAPI。
  * 页面只依赖 clients/knowledge 的契约类型与 Client 工厂。
  */
-function KnowledgeSearchContent() {
+function KeywordSearchContent() {
   const router = useRouter();
   const scope = useSearchRestorationScope();
   const clearRestoration = useClearSearchRestoration("/knowledge/search");
@@ -100,7 +103,7 @@ function KnowledgeSearchContent() {
       // 请求与路由同步启动；相同 debounce 预取会直接复用同一个 in-flight 请求。
       void startKnowledgeSearch(queryClient, nextParams).catch(() => undefined);
     }
-    router.replace(buildKnowledgeSearchUrl({ query: text, filters, page: 1 }), {
+    router.replace(text ? buildKnowledgeSearchUrl({ query: text, filters, page: 1 }) : "/knowledge/search?mode=keyword", {
       scroll: false,
     });
   };
@@ -147,6 +150,8 @@ function KnowledgeSearchContent() {
           disabled={!draft.ready}
         />
 
+        <LibraryModeNav mode="keyword" />
+
         <button type="button" aria-expanded={filtersOpen} aria-controls="paper-search-filters" onClick={() => setFiltersOpen((open) => !open)} className="mt-4 flex min-h-10 items-center gap-2 rounded-xl border border-line bg-card px-4 text-sm text-ink lg:hidden">
           <SlidersHorizontal className="size-4" />{filtersOpen ? "收起筛选" : "展开筛选"}
         </button>
@@ -189,4 +194,14 @@ export function KnowledgeSearchPage() {
       <KnowledgeSearchContent />
     </Suspense>
   );
+}
+
+function KnowledgeSearchContent() {
+  const params = useSearchParams();
+  const queryClient = useQueryClient();
+  const mode = readPaperBrowseState(params).mode;
+  useEffect(() => {
+    if (mode === "conference") void cancelObsoleteKnowledgeSearches(queryClient, null);
+  }, [mode, queryClient]);
+  return mode === "keyword" ? <KeywordSearchContent /> : <ConferenceBrowser />;
 }

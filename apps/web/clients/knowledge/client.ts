@@ -1,6 +1,9 @@
 "use client";
 
 import type {
+  KnowledgeConferenceListResponse,
+  KnowledgePaperBrowseParams,
+  KnowledgePaperBrowseResponse,
   KnowledgeApiError,
   KnowledgeErrorCode,
   KnowledgeFundingSearchParams,
@@ -31,6 +34,8 @@ import type {
  * 显式配置用于开发、测试或 demo fixture。
  */
 export interface KnowledgeClient {
+  conferences(signal?: AbortSignal): Promise<KnowledgeConferenceListResponse>;
+  browsePapers(params: KnowledgePaperBrowseParams, signal?: AbortSignal): Promise<KnowledgePaperBrowseResponse>;
   /** 总览页公共统计；所有数字必须来自真实后端契约 */
   overview(): Promise<KnowledgeOverviewResponse>;
   /** 总览页个人文献统计；匿名会话返回 authRequired */

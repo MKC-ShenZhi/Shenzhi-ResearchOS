@@ -2,7 +2,8 @@ import { normalizeInternalReturnTo } from "./internal-return-to";
 
 /** Navigation parameters only. Features remain responsible for business validation. */
 export const SEARCH_RESTORATION_ROUTES: Readonly<Record<string, readonly string[]>> = {
-  "/knowledge/search": ["q", "page", "yearFrom", "yearTo", "venue", "author", "keyword", "subject"],
+  "/knowledge/search": ["mode", "conference", "year", "q", "page", "yearFrom", "yearTo", "venue", "author", "keyword", "subject"],
+  "/knowledge/search/conferences": ["q", "year", "sort", "page"],
   "/knowledge/scholars": ["q"],
   "/knowledge/topics": ["q", "category"],
   "/knowledge/funding": ["q", "funding"],

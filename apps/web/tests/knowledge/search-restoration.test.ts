@@ -41,11 +41,11 @@ test("sidebar return restores query, page and repeated filters without losing va
   assert.equal(restoration.getHref(scope, paperPath), paperSearch.replace("page=3", "page=4"));
 });
 
-test("all four registered routes save independently and retain their Feature URL state", () => {
+test("all registered routes save independently and retain their Feature URL state", () => {
   const { restoration } = fixture();
-  const searches = [paperSearch, "/knowledge/scholars?q=Hinton", "/knowledge/topics?q=llm&category=AI", "/knowledge/funding?q=NSF&funding=grant-1"];
+  const searches = [paperSearch, "/knowledge/scholars?q=Hinton", "/knowledge/topics?q=llm&category=AI", "/knowledge/funding?q=NSF&funding=grant-1", "/knowledge/search/conferences?q=AAAI&year=2022&sort=name&page=2"];
   for (const href of searches) restoration.record(scope, href);
-  assert.equal(Object.keys(SEARCH_RESTORATION_ROUTES).length, 4);
+  assert.equal(Object.keys(SEARCH_RESTORATION_ROUTES).length, 5);
   for (const href of searches) assert.equal(restoration.getHref(scope, href.split("?")[0]), href);
   assert.deepEqual(readTopicViewState(new URLSearchParams(searches[2].split("?")[1])), { query: "llm", category: "AI" });
   assert.deepEqual(readFundingUrlState(new URLSearchParams(searches[3].split("?")[1])), { query: "NSF", fundingId: "grant-1" });

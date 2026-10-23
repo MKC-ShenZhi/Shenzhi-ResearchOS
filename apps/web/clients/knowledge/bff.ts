@@ -3,6 +3,9 @@
 import { apiJson, ApiError } from "../backend/http";
 import { KnowledgeClientError, type KnowledgeClient } from "./client";
 import type {
+  KnowledgeConferenceListResponse,
+  KnowledgePaperBrowseParams,
+  KnowledgePaperBrowseResponse,
   KnowledgeErrorCode,
   KnowledgeFundingSearchParams,
   KnowledgeFundingSearchResponse,
@@ -82,6 +85,28 @@ function isAbortError(error: unknown): boolean {
 }
 
 export class BffKnowledgeClient implements KnowledgeClient {
+  async conferences(signal?: AbortSignal): Promise<KnowledgeConferenceListResponse> {
+    try {
+      return await apiJson<KnowledgeConferenceListResponse>("/knowledge/conferences", { signal });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async browsePapers(params: KnowledgePaperBrowseParams, signal?: AbortSignal): Promise<KnowledgePaperBrowseResponse> {
+    const query = new URLSearchParams({
+      conference: params.conference, year: String(params.year),
+      limit: String(params.limit), offset: String(params.offset),
+    });
+    try {
+      return await apiJson<KnowledgePaperBrowseResponse>(`/knowledge/papers?${query}`, { signal });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
   async overview(): Promise<KnowledgeOverviewResponse> {
     try {
       return await apiJson<KnowledgeOverviewResponse>("/knowledge/overview");

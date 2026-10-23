@@ -22,6 +22,8 @@ from app.integrations.knowledge.schemas import (
     UpstreamScholarResponse,
     UpstreamScholarSearchResponse,
     UpstreamSearchResponse,
+    UpstreamVenuesResponse,
+    UpstreamPaperBrowseResponse,
 )
 
 
@@ -62,6 +64,20 @@ class KnowledgeBaseClient:
             validate=lambda value: isinstance(value.get('results'), list),
         )
         return cast(UpstreamSearchResponse, body)
+
+    async def conferences(self) -> UpstreamVenuesResponse:
+        body = await self._request_json('GET', '/api/papers/venues', array_response=True)
+        return cast(UpstreamVenuesResponse, body)
+
+    async def browse_papers(
+        self, conference: str, year: int, *, limit: int, offset: int
+    ) -> UpstreamPaperBrowseResponse:
+        body = await self._request_json(
+            'GET', '/api/papers',
+            params={'conference': conference, 'year': year, 'limit': limit, 'offset': offset},
+            validate=lambda value: isinstance(value.get('items'), list),
+        )
+        return cast(UpstreamPaperBrowseResponse, body)
 
     async def search_scholars(
         self, query: str, *, limit: int = 20, offset: int = 0
@@ -174,6 +190,7 @@ class KnowledgeBaseClient:
         path: str,
         *,
         validate: Callable[[dict[str, Any]], bool] | None = None,
+        array_response: bool = False,
         **kwargs: Any,
     ) -> dict[str, Any]:
         started_at = perf_counter()
@@ -205,6 +222,10 @@ class KnowledgeBaseClient:
                 body = response.json()
             except (TypeError, ValueError) as exc:
                 raise KnowledgeIntegrationError.contract_violation() from exc
+            if array_response:
+                if not isinstance(body, list):
+                    raise KnowledgeIntegrationError.contract_violation()
+                body = {'items': body}
             if not isinstance(body, dict) or (validate is not None and not validate(body)):
                 raise KnowledgeIntegrationError.contract_violation()
         except KnowledgeIntegrationError as error:

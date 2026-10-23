@@ -49,6 +49,28 @@ class UpstreamSearchResponse(TypedDict):
     query_rewrite: NotRequired[dict[str, Any]]
 
 
+class UpstreamVenue(TypedDict):
+    conference: str
+    count: int | str
+    years: list[int | str]
+    minYear: NotRequired[int | str | None]
+    maxYear: NotRequired[int | str | None]
+    yearCount: NotRequired[int | str]
+    trackCount: NotRequired[int | str]
+
+
+class UpstreamVenuesResponse(TypedDict):
+    # Transport normalizes the upstream top-level array into this container.
+    items: list[UpstreamVenue]
+
+
+class UpstreamPaperBrowseResponse(TypedDict):
+    items: list[UpstreamSearchResult]
+    total: int | str
+    limit: int | str
+    offset: int | str
+
+
 class UpstreamScholarSearchResult(TypedDict):
     scholar_id: str
     name: str
