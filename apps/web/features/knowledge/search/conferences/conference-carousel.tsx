@@ -66,9 +66,7 @@ export function ConferenceCarousel({ items, onSelect }: {
       </AnimatePresence>
       {count === 0 && <p className="p-4 text-xs text-muted">暂无可浏览会议</p>}
     </div>
-    <div className="mt-2 flex min-h-7 flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
-      <span title={userPaused ? "已手动暂停" : paused ? "移出鼠标或结束键盘操作后，重新计时 15 秒" : "每 15 秒自动轮换一批，不改变当前会议"}>{count > 1 ? `第 ${currentIndex + 1} / ${count} 批 · ${paused ? "已暂停" : "15 秒换一批"}` : `共 ${batches[0]?.length ?? 0} 个可浏览会议`}</span>
-      {count > 1 && <div className="flex items-center gap-1">
+    {count > 1 && <div className="mt-2 flex min-h-7 items-center justify-end gap-1 text-[11px] text-muted">
         <button type="button" aria-label={userPaused ? "恢复自动轮换" : "暂停自动轮换"} aria-pressed={userPaused}
           onClick={() => setUserPaused((value) => !value)}
           className="flex min-h-7 items-center gap-1 rounded-md px-2 hover:bg-panel hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
@@ -78,7 +76,6 @@ export function ConferenceCarousel({ items, onSelect }: {
           className="flex min-h-7 items-center gap-1 rounded-md px-2 text-primary hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
           换一批 <ChevronRight className="size-3" />
         </button>
-      </div>}
-    </div>
+    </div>}
   </div>;
 }
