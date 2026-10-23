@@ -180,6 +180,8 @@ class ModelRegistry:
         result = []
         for model in self.list_models(purpose):
             provider = self.providers[model.provider_id]
+            if not provider.configured:
+                continue
             enabled = model.enabled and provider.configured
             result.append({
                 'value': model.id, 'label': model.label, 'provider': model.brand,
@@ -192,6 +194,8 @@ class ModelRegistry:
         return result
 
     def public_default(self, purpose: Purpose) -> str | None:
-        if not self.list_models(purpose):
+        models = self.public_models(purpose)
+        if not any(model['enabled'] for model in models):
             return None
-        return self.default_model(purpose).id
+        default = self.default_model(purpose).id
+        return default if any(model['value'] == default for model in models) else None

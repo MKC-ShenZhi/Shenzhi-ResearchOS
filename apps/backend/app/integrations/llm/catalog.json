@@ -14,6 +14,11 @@
       "id": "zhipu",
       "base_url": "https://open.bigmodel.cn/api/paas/v4",
       "api_key_env": "ZHIPU_API_KEY"
+    },
+    {
+      "id": "autodl",
+      "base_url": "https://www.autodl.art/api/v1",
+      "api_key_env": "AUTODL_API_KEY"
     }
   ],
   "models": [
@@ -121,6 +126,47 @@
       "capabilities": {
         "tool_calling": true,
         "max_output_tokens": 4096
+      }
+    },
+    {
+      "id": "autodl/DeepSeek-V4.1-Flash-1017",
+      "provider_id": "autodl",
+      "upstream_model": "DeepSeek-V4.1-Flash-1017",
+      "label": "DeepSeek V4.1 Flash · AutoDL",
+      "brand": "deepseek",
+      "description": "综合与工具调用首选",
+      "capabilities": {
+        "tool_calling": true,
+        "reasoning": true,
+        "stream_options": true,
+        "max_output_tokens": 32768
+      }
+    },
+    {
+      "id": "autodl/Qwen3.5-397B-A17B",
+      "provider_id": "autodl",
+      "upstream_model": "Qwen3.5-397B-A17B",
+      "label": "通义 Qwen3.5 397B · AutoDL",
+      "brand": "platform",
+      "description": "通用问答与工具调用备选",
+      "capabilities": {
+        "tool_calling": true,
+        "reasoning": true,
+        "stream_options": true,
+        "max_output_tokens": 32768
+      }
+    },
+    {
+      "id": "autodl/Kimi-K2.5",
+      "provider_id": "autodl",
+      "upstream_model": "Kimi-K2.5",
+      "label": "Kimi K2.5 · AutoDL",
+      "brand": "moonshot",
+      "description": "文本问答与工具调用备选",
+      "capabilities": {
+        "tool_calling": true,
+        "stream_options": true,
+        "max_output_tokens": 32768
       }
     }
   ]

@@ -7,7 +7,7 @@ import httpx
 
 from app.main import app
 from app.integrations.llm.provider import ModelProvider
-from app.integrations.llm.resolver import load_registry
+from app.integrations.llm.resolver import AUTODL_DEFAULT_MODELS, load_registry
 from app.services.chat import service as chat
 from app.services.chat.repository import repository
 
@@ -40,11 +40,41 @@ class ConfigApiTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ, {'ZHIPU_MODEL': 'unknown-version',
                                      'BACKEND_ALLOW_INSECURE_LOCAL_BFF': 'true'}, clear=True):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+                for purpose in ('chat', 'agent'):
+                    data = (await client.get(f'/api/v1/{purpose}/config')).json()['data']
+                    # Missing credentials now produce an empty directory, rather
+                    # than disabled legacy products. The public default is null.
+                    self.assertEqual(data['models'], [])
+                    self.assertIsNone(data['default_model'])
+        with patch.dict(os.environ, {'ZHIPU_API_KEY': 'glm-private', 'ZHIPU_MODEL': 'unknown-version',
+                                     'BACKEND_ALLOW_INSECURE_LOCAL_BFF': 'true'}, clear=True):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
                 chat_models = (await client.get('/api/v1/chat/config')).json()['data']['models']
-                agent_models = (await client.get('/api/v1/agent/config')).json()['data']['models']
-                self.assertTrue(all(not model['enabled'] for model in chat_models + agent_models))
-                self.assertTrue(any(model['value'] == 'zhipu/unknown-version' for model in chat_models))
-                self.assertFalse(any(model['value'] == 'zhipu/unknown-version' for model in agent_models))
+                self.assertEqual([m['value'] for m in chat_models], ['zhipu/unknown-version'])
+                self.assertEqual((await client.get('/api/v1/agent/config')).json()['data']['models'], [])
+
+    async def test_autodl_only_catalog_branding_capability_filter_and_no_key_in_response_or_logs(self):
+        env = {'AUTODL_API_KEY': 'autodl-private', 'BACKEND_ALLOW_INSECURE_LOCAL_BFF': 'true',
+               'AUTODL_MODELS': ','.join((*AUTODL_DEFAULT_MODELS, 'Untested-ID'))}
+        with patch.dict(os.environ, env, clear=True), self.assertLogs('app', level='INFO') as captured:
+            registry = load_registry()
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+                for purpose in ('chat', 'agent'):
+                    response = await client.get(f'/api/v1/{purpose}/config')
+                    self.assertEqual(response.status_code, 200)
+                    data = response.json()['data']
+                    expected = [f'autodl/{name}' for name in AUTODL_DEFAULT_MODELS]
+                    if purpose == 'chat':
+                        expected.append('autodl/Untested-ID')
+                    self.assertEqual([m['value'] for m in data['models']], expected)
+                    self.assertEqual(data['models'], registry.public_models(purpose))
+                    self.assertEqual(data['default_model'], f'autodl/{AUTODL_DEFAULT_MODELS[0]}')
+                    self.assertTrue(all(m['provider_id'] == 'autodl' for m in data['models']))
+                    self.assertEqual([m['brand'] for m in data['models'][:3]], ['deepseek', 'platform', 'moonshot'])
+                    self.assertTrue(all(m['provider'] == m['brand'] for m in data['models']))
+                    self.assertNotIn('autodl-private', response.text)
+                    self.assertNotIn('api_key', response.text)
+        self.assertNotIn('autodl-private', str(captured.output))
 
     async def test_glm_product_sse_and_client_cannot_override_credentials(self):
         await repository.clear()

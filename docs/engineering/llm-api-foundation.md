@@ -54,10 +54,10 @@ AI_MODEL_REGISTRY_FILE=
 ## 优先级、冲突和旧配置
 
 1. 内置 Provider 默认地址可被各自 `*_BASE_URL` 覆盖；Key 总是取各自环境变量。
-2. 注册每家 `*_MODEL`。DashScope 默认 `qwen-plus`，DeepSeek 默认 `deepseek-chat`，智谱无默认型号。没有 Key 的条目在 config 中禁用。
+2. 注册旧 Provider 的 `*_MODEL`。DashScope 默认 `qwen-plus`，DeepSeek 默认 `deepseek-chat`，智谱无默认型号。没有 Key 的条目仍可供服务端校验历史 ID，但不进入公开 config 目录。AutoDL 按下节的独立清单注册。
 3. `AI_ALLOWED_MODELS` 保持旧语义：作为额外型号，绑定有 Key 的 DashScope，否则绑定 DeepSeek。它不是多 Provider 全局白名单；新增多供应商型号优先使用 JSON 声明。
 4. `AI_MODEL_REGISTRY_FILE` 指向服务端 JSON 文件，相对路径以 Backend 工作目录为基准。自定义条目按 ID 覆盖自动生成条目（完整替换，不做字段合并）。文件内重复 Model / Provider ID、未知 Provider、冲突别名、未知字段、不支持协议、非法参数、非 HTTPS 地址均明确报配置错误。
-5. 默认模型优先级为 `AI_DEFAULT_MODEL` / `AI_AGENT_DEFAULT_MODEL` > 文件 `defaults` > 旧规则。有旧 Key 时，Chat 默认有 Key 的 DashScope，否则 DeepSeek；仅智谱配置有效时可默认选择智谱。无有效 Key 时保持旧默认候选的禁用展示。
+5. 默认模型优先级为 `AI_DEFAULT_MODEL` / `AI_AGENT_DEFAULT_MODEL` > 文件 `defaults` > 旧规则。有旧 Key 时，Chat 默认有 Key 的 DashScope，否则 DeepSeek；仅智谱或 AutoDL 配置有效时可默认选择其已配置模型。公开 `default_model` 只有在本次公开列表中存在时才返回，否则为 `null`。
 6. Agent 未单独指定默认时，共用具备 Tool Calling 的 Chat 默认；否则优先选择已配置、启用且具备 Agent 能力的条目。没有合适候选时明确不可用，不放行不支持的模型。显式默认模型不存在、禁用或不支持其用途会报配置错误；缺失凭据不会切到别家。
 
 环境覆盖与文件覆盖均是服务端部署配置；客户端不能提交地址、Key 或请求能力配置。所有端点必须为 HTTPS，禁止 URL 中的用户名、密码、查询参数及 fragment。自定义端点由部署者审查信任关系；本地 MockTransport 使用 HTTPS 虚拟域名，无外网依赖。
@@ -65,6 +65,38 @@ AI_MODEL_REGISTRY_FILE=
 新注册的自动 Model ID 为 `{provider_id}/{upstream_model}`，不会因为同名型号或另一家 Key 的存在而改变 Provider。旧裸名称通过显式生成的 aliases 兼容；发生同名时，旧优先供应商拥有裸名称别名，另一家用完整 ID。迁移历史白名单或修改旧 Key 优先关系前，应将历史裸名称固定为文件 aliases。已保存的完整 ID 始终指向明确供应商；如果该条目不再注册，则报错，不切换供应商。文件可给任意历史自定义 ID 建立一层别名，禁止链式 / 循环别名。`default` 是解析当前用途默认模型的保留值。
 
 Chat 创建与 Agent Runtime 构造保留离线测试注入体验，先验证型号及用途；真实 Adapter 发起请求前校验凭据。未知 / 禁用 / 不支持用途使用现有 `20001`，供应商未配置使用 `20004 / 503`。SSE 已开始后不自动切换模型，request_id 和业务错误协议不变。
+
+## AutoDL
+
+AutoDL 复用 OpenAI Chat Completions Adapter，不新增协议或 API 路由。真实验收后经用户授权，现有共享选择组件仅补齐通用品牌回退和空目录提交保护。在 `apps/backend/.env` 配置：
+
+```ini
+AUTODL_API_KEY=
+AUTODL_BASE_URL=https://www.autodl.art/api/v1
+AUTODL_MODELS=
+AI_DEFAULT_MODEL=autodl/DeepSeek-V4.1-Flash-1017
+AI_AGENT_DEFAULT_MODEL=autodl/DeepSeek-V4.1-Flash-1017
+```
+
+实际 Key 只放服务端环境文件。最后两行为启用 AutoDL 后的推荐值；没有 Key 时不要显式指向未注册的 AutoDL 默认模型。只配置 AutoDL Key、默认项留空时，也会按下表顺序选择 Chat 首项及首个支持工具调用的 Agent 模型。
+
+| 上游精确 ID / 默认顺序 | 品牌 | Chat | Agent | 实测推理字段 |
+| --- | --- | --- | --- | --- |
+| `DeepSeek-V4.1-Flash-1017` | deepseek | 是 | 是，首选 | reasoning_content |
+| `Qwen3.5-397B-A17B` | platform | 是 | 是，备选 | reasoning_content |
+| `Kimi-K2.5` | moonshot（通用图标回退） | 是 | 是，备选 | 本次未出现 |
+
+2026-10-24（Asia/Tokyo）对当前账号执行 `scripts/autodl_probe.py` 的 T0–T7 后才添加声明：三者均通过普通流式输出、usage、temperature=0.3、32768 输出上限的接受探测，以及不回传 reasoning_content 的两轮工具调用（各连续两次通过）。Chat 预算仍为 4096。DeepSeek 与 Qwen 的两种关闭思考参数也各通过两次工具往返，但基线 T5 已通过，因此不声明额外 thinking 策略或 request_params。推理声明不表示每次响应一定有思考片段；32768 只验证请求被接受并收到首块，未付费生成到该长度。详见[交付报告](autodl-provider-delivery.md)。
+
+`AUTODL_MODELS` 是区分大小写的上游 ID 列表，逗号分隔并清理两侧空白、重复项和空项；清理后为空时使用模块常量 `AUTODL_DEFAULT_MODELS`。仅 Key 非空才注册，ID 固定为 `autodl/<上游 ID>`，不生成裸名别名。清单之外的 ID 沿用保守 Chat 能力，`tool_calling=false`；部署者需确认这些型号的真实可用性。自定义文件在此之后按现有规则覆盖条目。`AUTODL_BASE_URL` 使用通用 HTTPS 校验。
+
+T0 没有 `GLM-5.1` 或 `DeepSeek-V3.2`，本批不注册，也不替换为其他版本。`gpt-*`、`claude-*`、`gemini-*` 存在参数差异风险；`*-cc` 为 Claude Code 专用，`*-codex` 为编码专用；MiniMax 可能把思考混入正文；图像模型不属于本任务范围，均不接入。
+
+### 模型菜单只展示已配置 Provider
+
+`public_models()` 过滤未配置凭据或未启用的 Provider；已配置 Provider 下显式禁用的模型保留 `enabled=false / reason=model_disabled`。这是对第一阶段“缺 Key 时展示灰色条目”的行为变更，服务端历史 ID 解析与旧 Provider 优先级不变。
+
+`public_default()` 仅返回当前公开列表中的默认 ID；目录为空或显式默认指向未配置 Provider 时返回 `null`，不把隐藏模型重新带回菜单。前端成功加载空目录时 AI 发送禁用，简单搜索仍可用；配置加载失败时仍使用原有 `CHAT_MODEL_CATALOG` 禁用占位，两者不可混淆。Chat 按 chat/streaming 过滤，Agent 额外要求 `tool_calling=true`。
 
 ## 声明第四家 OpenAI 兼容 Provider
 
@@ -117,7 +149,7 @@ Chat 创建与 Agent Runtime 构造保留离线测试注入体验，先验证型
 
 `thinking` 策略可为 `none`、`enable_thinking` 或 `thinking`。`request_params` 仅接受与策略一致的 `enable_thinking: boolean` 或 `thinking: {"type":"enabled|disabled"}`，禁止覆盖 model、messages、tools、stream、地址或凭据。Chat 仅发送显式 request_params；Agent 可按已声明策略开启思考，`AGENT_DISABLE_THINKING=true` 可关闭扩展。只有响应明确指出相关可选参数不支持时才摘掉该参数重试；任意 400 不降级 / 重试。原始错误体只作内部分类，不进入日志或公开异常。
 
-DeepSeek 推理型号的 Agent Tool Calling 暂时保守禁用：官方当前协议要求工具轮次回传完整 reasoning_content，而现有 Agent 历史契约没有保留该字段。本阶段不扩大历史协议修改；普通 Chat 可用。参考 [DeepSeek thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/)。GLM 入口参考 [智谱 OpenAI 兼容说明](https://docs.bigmodel.cn/cn/guide/develop/openai/introduction)；真实型号权限与能力以部署平台联调为准。
+DeepSeek 官方 Provider 推理型号的 Agent Tool Calling 暂时保守禁用：官方当前协议要求工具轮次回传完整 reasoning_content，而现有 Agent 历史契约没有保留该字段。本阶段不扩大历史协议修改；普通 Chat 可用。AutoDL 是独立渠道，V4.1 日期版仅因其 T5 实测通过而声明工具能力，不据此外推官方型号。参考 [DeepSeek thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/)。GLM 入口参考 [智谱 OpenAI 兼容说明](https://docs.bigmodel.cn/cn/guide/develop/openai/introduction)；真实型号权限与能力以部署平台联调为准。
 
 ## 验证与真实 API 边界
 

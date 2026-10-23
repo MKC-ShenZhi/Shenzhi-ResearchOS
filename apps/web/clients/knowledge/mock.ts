@@ -135,7 +135,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
     await this.wait(signal);
     const scenario = this.throwIfNeeded();
     const papers = scenario === "zero_results" ? [] : MOCK_PAPERS.filter((paper) => paper.venue === params.conference && paper.year === params.year);
-    return { results: papers.slice(params.offset, params.offset + params.limit).map((paper) => ({ ...paper, score: null, rank: null, provenance: { source: "mock" } })), total: papers.length, limit: params.limit, offset: params.offset };
+    return { results: papers.slice(params.offset, params.offset + params.limit).map((paper) => ({ ...paper, imageId: null, score: null, rank: null, provenance: { source: "mock" } })), total: papers.length, limit: params.limit, offset: params.offset };
   }
 
   private scenario: MockScenario;
