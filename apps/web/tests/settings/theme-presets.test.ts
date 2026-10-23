@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { QUICK_THEME_PRESETS, VISIBLE_THEME_PRESETS, isThemePreset } from "../../lib/theme-presets";
+import {
+  QUICK_THEME_PRESETS,
+  VISIBLE_THEME_PRESETS,
+  isDarkThemePreset,
+  isThemePreset,
+  supportsThemeMode,
+} from "../../lib/theme-presets";
 
 const presets = readFileSync("lib/theme-presets.ts", "utf8");
 const store = readFileSync("stores/theme.ts", "utf8");
@@ -16,6 +22,8 @@ const themeIds = [
   "shenzhi",
   "gpt",
   "warm-teal",
+  "blue-teal",
+  "shenzhi-green",
   "claude",
   "alphaxiv",
   "apple-light",
@@ -36,8 +44,9 @@ const themeIds = [
 
 test("quick themes are ordered independently; full settings hide only custom", () => {
   for (const id of themeIds) assert.match(presets, new RegExp(`id: "${id}"`));
-  assert.deepEqual(QUICK_THEME_PRESETS.map(({ id }) => id), ["shenzhi", "gpt", "warm-teal", "apple-air-blue", "spectrum-gold"]);
-  assert.deepEqual(QUICK_THEME_PRESETS.map(({ label }) => label), ["深知", "极致黑白", "青绿", "Air 冰蓝", "光谱·金"]);
+  assert.equal(QUICK_THEME_PRESETS.length, 5);
+  assert.deepEqual(QUICK_THEME_PRESETS.map(({ id }) => id), ["shenzhi", "gpt", "warm-teal", "blue-teal", "shenzhi-green"]);
+  assert.deepEqual(QUICK_THEME_PRESETS.map(({ label }) => label), ["深知", "极致黑白", "青绿", "墨蓝青绿", "深知绿"]);
   assert.deepEqual(VISIBLE_THEME_PRESETS.map(({ id }) => id), themeIds.filter((id) => id !== "custom"));
   assert.ok(isThemePreset("custom"));
   assert.match(settingsMenu, /QUICK_THEME_PRESETS\.map/);
@@ -46,6 +55,32 @@ test("quick themes are ordered independently; full settings hide only custom", (
   assert.doesNotMatch(profilePanel, /CustomThemeControls/);
   assert.match(customControls, /type="color"/);
   assert.match(customControls, /CUSTOM_THEME_SWATCHES\.map/);
+});
+
+test("brand themes expose the supplied colors and keep their light surfaces", () => {
+  for (const id of ["blue-teal", "shenzhi-green"] as const) {
+    assert.equal(isDarkThemePreset(id), false);
+    assert.equal(supportsThemeMode(id), false);
+  }
+
+  const blueTeal = styles.match(/html\[data-theme="blue-teal"\] \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(blueTeal, /--color-primary: #1e4d7a;/);
+  assert.match(blueTeal, /--color-agent: #0f766e;/);
+  assert.match(blueTeal, /--color-background: #f7f8fa;/);
+  assert.match(blueTeal, /--color-card: #ffffff;/);
+  assert.match(blueTeal, /--color-ink: #1f2937;/);
+
+  const shenzhiGreen = styles.match(/html\[data-theme="shenzhi-green"\] \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(shenzhiGreen, /--color-primary: #007f54;/);
+  assert.match(shenzhiGreen, /--color-brand-cyan: #009a61;/);
+  assert.match(shenzhiGreen, /--color-primary-deep: #006744;/);
+  assert.match(shenzhiGreen, /--color-background: #f5f8f6;/);
+  assert.match(shenzhiGreen, /--color-sidebar: #eff5f1;/);
+  assert.match(shenzhiGreen, /--color-card: #ffffff;/);
+  assert.match(shenzhiGreen, /--color-ink: #202b29;/);
+  assert.match(shenzhiGreen, /--color-muted: #66766e;/);
+
+  assert.match(styles, /:not\(\[data-theme="blue-teal"\]\):not\(\[data-theme="shenzhi-green"\]\) :where\(\.bg-card\)/);
 });
 
 test("theme preset persists locally and applies before first paint", () => {
@@ -79,7 +114,7 @@ test("every exploratory preset replaces the complete semantic color surface", ()
   ]) {
     assert.match(styles, new RegExp(`--color-${token}:`));
   }
-  assert.match(styles, /html:not\(\.dark\):not\(\[data-theme="shenzhi"\]\):not\(\[data-theme="gpt"\]\):not\(\[data-theme="warm-teal"\]\) :where\(\.bg-card\)/);
+  assert.match(styles, /html:not\(\.dark\):not\(\[data-theme="shenzhi"\]\):not\(\[data-theme="gpt"\]\):not\(\[data-theme="warm-teal"\]\):not\(\[data-theme="blue-teal"\]\):not\(\[data-theme="shenzhi-green"\]\) :where\(\.bg-card\)/);
   assert.match(styles, /color-mix\(in srgb, var\(--color-card\)/);
 });
 
