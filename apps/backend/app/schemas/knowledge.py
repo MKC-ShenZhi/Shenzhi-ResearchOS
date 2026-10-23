@@ -115,6 +115,11 @@ class KnowledgeSearchRequest(KnowledgeModel):
 
 class PaperSearchResult(KnowledgeModel):
     id: str
+    image_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices('imageId', 'image_id'),
+        serialization_alias='imageId',
+    )
     title: str
     abstract: str | None = None
     authors: list[str] = Field(default_factory=list)

@@ -64,6 +64,7 @@ export function ReadingHistory() {
   const asHit = (item: ReadingHistoryResponse["items"][number]): KnowledgePaperHit => ({
     ...item,
     id: item.paper_id,
+    imageId: null,
     score: null,
     rank: null,
   });

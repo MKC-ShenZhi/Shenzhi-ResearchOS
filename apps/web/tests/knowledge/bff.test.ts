@@ -65,6 +65,19 @@ test("BFF client unwraps the Search success envelope and preserves the request c
   }]);
 });
 
+test("BFF search preserves real nullable imageId without parsing paper ids", async () => {
+  const results = ["/images/ASPLOS_2026/10.1145_3779212.3790216_minimal.jpg", null]
+    .map((imageId) => ({
+      id: "paper:opaque-identifier", imageId, title: "Paper", abstract: null,
+      authors: [], year: null, venue: null, keywords: [], subjects: [],
+      score: null, rank: null, provenance: null,
+    }));
+  await withFetch(async () => jsonResponse({ code: 0, data: { results } }), async () => {
+    const response = await new BffKnowledgeClient().search(SEARCH_PARAMS);
+    assert.deepEqual(response.results, results);
+  });
+});
+
 test("BFF client requests Topic Catalog list and detail through stable routes", async () => {
   const requests: string[] = [];
   await withFetch(async (input) => {
