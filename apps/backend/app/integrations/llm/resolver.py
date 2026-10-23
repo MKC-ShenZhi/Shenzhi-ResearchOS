@@ -12,6 +12,12 @@ from app.integrations.llm.registry import (
 )
 
 CATALOG_PATH = Path(__file__).with_name('catalog.json')
+# Exact upstream IDs verified by scripts/autodl_probe.py; priority is intentional.
+AUTODL_DEFAULT_MODELS = (
+    'DeepSeek-V4.1-Flash-1017',
+    'Qwen3.5-397B-A17B',
+    'Kimi-K2.5',
+)
 
 
 def _read_catalog(path: Path) -> Catalog:
@@ -60,6 +66,11 @@ def load_registry() -> ModelRegistry:
             model_id = f'{provider}/{upstream}'
             models.append(model_definition(model_id, provider, upstream))
             aliases.setdefault(upstream, model_id)
+    if os.getenv('AUTODL_API_KEY', '').strip():
+        autodl_models = list(dict.fromkeys(item.strip() for item in
+                                         os.getenv('AUTODL_MODELS', '').split(',') if item.strip()))
+        for upstream in autodl_models or AUTODL_DEFAULT_MODELS:
+            models.append(model_definition(f'autodl/{upstream}', 'autodl', upstream))
     defaults: dict[str, str] = {}
     path = os.getenv('AI_MODEL_REGISTRY_FILE', '').strip()
     if path:
