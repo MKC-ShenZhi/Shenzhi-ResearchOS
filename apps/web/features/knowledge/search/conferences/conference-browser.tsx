@@ -17,7 +17,10 @@ import { LibraryModeNav } from "./library-mode-nav";
 import { ConferenceEmpty, ConferenceError, ConferenceSkeleton } from "./conference-states";
 import { ConferenceCarousel } from "./conference-carousel";
 import { conferenceQueryOptions, paperBrowseQueryOptions } from "./conference-queries";
-import { buildPaperBrowseUrl, PAPER_BROWSE_PAGE_SIZE, readPaperBrowseState, resolveConference, resolveConferenceYear } from "./conference-state";
+import { PAPER_BROWSE_PAGE_SIZE, readPaperBrowseState, resolveConference, resolveConferenceYear } from "./conference-state";
+import { normalizeConferenceBrowse, updateConferenceBrowse } from "./conference-navigation";
+
+const EMPTY_CONFERENCES: KnowledgeConference[] = [];
 
 export function ConferenceBrowser() {
   const router = useRouter();
@@ -25,18 +28,13 @@ export function ConferenceBrowser() {
   const [query, setQuery] = useState("");
   const state = readPaperBrowseState(params);
   const conferences = useQuery(conferenceQueryOptions());
-  const items = conferences.data?.items ?? [];
+  const items = conferences.data?.items ?? EMPTY_CONFERENCES;
   const selected = resolveConference(items, state.conference);
   const year = selected ? resolveConferenceYear(selected, state.year) : 0;
   const page = year === state.year ? state.page : 1;
   useEffect(() => {
-    if (selected && year && (state.conference !== selected.name || state.year !== year)) {
-      router.replace(buildPaperBrowseUrl(selected.name, year, page), { scroll: false });
-    }
-  }, [selected, year, page, state.conference, state.year, router]);
-  const select = (conference: KnowledgeConference, nextYear = conference.years[0]) => {
-    if (nextYear) router.push(buildPaperBrowseUrl(conference.name, nextYear), { scroll: false });
-  };
+    normalizeConferenceBrowse(items);
+  }, [items, params]);
 
   return <div className="mx-auto max-w-[1120px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
     <KnowledgeSearchHero initialQuery={query} onQueryChange={setQuery} onSearch={(text) => {
@@ -60,11 +58,11 @@ export function ConferenceBrowser() {
               <div><dt className="text-[11px] text-muted">已收录年份</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{selected.yearCount}</dd></div>
             </dl> : <p className="mt-4 text-xs text-muted">未找到该会议，请选择其他会议或进入全部会议目录。</p>}
           </div>
-          <ConferenceCarousel items={items} onSelect={select} />
+          <ConferenceCarousel items={items} onSelect={(conference) => updateConferenceBrowse(items, { conference: conference.name })} />
         </div>
         {selected && <>
-          <ConferenceYears key={selected.name} conference={selected} year={year} onSelect={(value) => select(selected, value)} />
-          {year ? <ConferencePapers conference={selected.name} year={year} page={page} onPageChange={(nextPage) => router.push(buildPaperBrowseUrl(selected.name, year, nextPage), { scroll: false })} /> : <ConferenceEmpty>该会议暂未提供可浏览的收录年份。</ConferenceEmpty>}
+          <ConferenceYears key={selected.name} conference={selected} year={year} onSelect={(value) => updateConferenceBrowse(items, { year: value })} />
+          {year ? <ConferencePapers conference={selected.name} year={year} page={page} onPageChange={(nextPage) => updateConferenceBrowse(items, { page: nextPage })} /> : <ConferenceEmpty>该会议暂未提供可浏览的收录年份。</ConferenceEmpty>}
         </>}
       </>}
     </section>
