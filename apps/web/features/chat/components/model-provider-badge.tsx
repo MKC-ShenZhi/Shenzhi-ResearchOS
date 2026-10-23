@@ -40,7 +40,7 @@ export function ModelProviderBadge({
   size?: "sm" | "md";
   className?: string;
 }) {
-  const meta = PROVIDER_META[provider];
+  const meta = PROVIDER_META[provider] ?? PROVIDER_META.platform;
   return (
     <span
       className={cn(

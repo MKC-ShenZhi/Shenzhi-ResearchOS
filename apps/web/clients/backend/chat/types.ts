@@ -1,10 +1,13 @@
+import type { ModelOption as ChatModelOption } from "../model-types";
+export type { ModelOption as ChatModelOption, ModelProvider } from "../model-types";
+
 /** Backend protocol types shared by Chat and its entry points. */
 export type ChatSessionType = "research" | "chat";
 export type ChatReplyMode = "fast" | "deep" | "idea" | "doubt";
 export interface KnowledgeCapability { enabled: boolean }
 export interface ChatCapabilities { knowledge: KnowledgeCapability }
 export type ChatModelId = string;
-export type ModelProvider = "openai" | "anthropic" | "google" | "deepseek" | "zhipu" | "platform";
+
 export type ChatAttachmentKind = "file" | "paper" | "patent" | "funding" | "scholar" | "institution" | "session" | "project";
 export interface ChatAttachment {
   kind: ChatAttachmentKind;
@@ -80,16 +83,9 @@ export interface StreamErrorEvent {
   category?: string;
   knowledge_code?: string;
 }
-export interface ChatModelOption {
-  value: ChatModelId;
-  label: string;
-  provider: ModelProvider;
-  enabled: boolean;
-  reason?: string;
-  description?: string;
-}
+
 export interface ChatConfig {
-  default_model?: string;
+  default_model?: string | null;
   quota_enforced?: boolean;
   models: ChatModelOption[];
   modes: ChatReplyMode[];

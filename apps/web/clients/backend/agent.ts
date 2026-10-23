@@ -1,3 +1,4 @@
+import type { ModelOption } from "./model-types";
 import { apiJson, apiPath } from "./http";
 import { readSseStream } from "./sse";
 
@@ -54,8 +55,8 @@ export interface AgentActivity {
 export interface AgentSkillInfo { name: string; description: string }
 
 export interface AgentConfig {
-  models: Array<{ value: string; label: string; enabled: boolean }>;
-  default_model: string;
+  models: ModelOption[];
+  default_model: string | null;
   skills: AgentSkillInfo[];
   upload: { max_size_mb: number; max_files: number; accept: string[] };
 }

@@ -618,14 +618,14 @@ export function ShenzhiAiPage() {
     void send(text);
   }, [running, send]);
 
-  const chatConfig = {
+  const chatConfig: ChatConfig = {
     models: agentConfig.models,
     default_model: agentConfig.default_model,
     modes: ["fast", "deep", "idea", "doubt"],
     quota: { used: 0, limit: 0, deep_used: 0, deep_limit: 0 },
     quota_enforced: false,
     upload: agentConfig.upload,
-  } as ChatConfig;
+  };
 
 
   return <AppShell>

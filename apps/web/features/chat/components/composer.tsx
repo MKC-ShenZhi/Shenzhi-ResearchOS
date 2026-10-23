@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { popoverPosition, usePopoverPlacement } from "@/lib/use-popover-placement";
 import { FALLBACK_CHAT_CONFIG } from "../services/chat-config";
-import { DEFAULT_CHAT_MODEL } from "../services/model-catalog";
+import { DEFAULT_CHAT_MODEL, selectAvailableModel } from "../services/model-catalog";
 import { AttachmentMenu } from "./attachment-menu";
 import { ComposerControlPicker } from "./composer-control-picker";
 import { questionSchema } from "@/lib/validations";
@@ -261,7 +261,6 @@ export function ComposerShell({
 }) {
   const isHome = variant === "home";
   const [uploading, setUploading] = useState(false);
-  const canSend = Boolean(value.trim()) && !busy && !disabled && !uploading;
 
   const [innerEntryMode, setInnerEntryMode] = useState<ComposerEntryMode>("ai");
   const [innerMode, setInnerMode] = useState<ChatReplyMode>("fast");
@@ -283,8 +282,10 @@ export function ComposerShell({
       ? (replyMode as "fast" | "deep")
       : innerDepth;
   const preferredModel = modelProp ?? innerModel;
-  const model = config.models.some((option) => option.value === preferredModel && option.enabled)
-    ? preferredModel : config.default_model ?? config.models.find((option) => option.enabled)?.value ?? preferredModel;
+  const model = selectAvailableModel(config, preferredModel);
+  const modelAvailable = config.models.some((option) => option.value === model && option.enabled);
+  const canSend = Boolean(value.trim()) && !busy && !disabled && !uploading
+    && (!isSmartSearch || modelAvailable);
   const webSearch = webSearchProp ?? innerWeb;
   const knowledgeEnabled = knowledgeEnabledProp ?? innerKnowledgeEnabled;
   const attachments = attachmentsProp ?? innerFiles;
@@ -326,7 +327,8 @@ export function ComposerShell({
 
   const submit = (intent?: ComposerEntryMode) => {
     const parsed = questionSchema.safeParse(value);
-    if (!parsed.success || busy || disabled || uploading) return;
+    if (!parsed.success || busy || disabled || uploading
+      || ((intent ?? entryMode) === "ai" && !modelAvailable)) return;
     onSend(buildPayload(intent));
   };
 
@@ -437,6 +439,7 @@ export function ComposerShell({
             <button
               type="button"
               aria-label="发送"
+              title={isSmartSearch && !modelAvailable ? "暂无可用模型，请检查模型配置" : undefined}
               onClick={() => submit()}
               disabled={!canSend}
               className={cn(

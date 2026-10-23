@@ -315,7 +315,6 @@ export function ComposerShell({
 }) {
   const isHome = variant === "home";
   const [uploading, setUploading] = useState(false);
-  const canSend = Boolean(value.trim()) && !busy && !disabled && !uploading;
 
   const [innerEntryMode, setInnerEntryMode] = useState<ComposerEntryMode>("ai");
   const [innerMode, setInnerMode] = useState<ChatReplyMode>("fast");
@@ -337,6 +336,9 @@ export function ComposerShell({
   const preferredModel = modelProp ?? innerModel;
   const model = config.models.some((option) => option.value === preferredModel && option.enabled)
     ? preferredModel : config.default_model ?? config.models.find((option) => option.enabled)?.value ?? preferredModel;
+  const modelAvailable = config.models.some((option) => option.value === model && option.enabled);
+  const canSend = Boolean(value.trim()) && !busy && !disabled && !uploading
+    && (!isSmartSearch || modelAvailable);
   const webSearch = webSearchProp ?? innerWeb;
   const attachments = attachmentsProp ?? innerFiles;
 
@@ -371,7 +373,8 @@ export function ComposerShell({
 
   const submit = (intent?: ComposerEntryMode) => {
     const parsed = questionSchema.safeParse(value);
-    if (!parsed.success || busy || disabled || uploading) return;
+    if (!parsed.success || busy || disabled || uploading
+      || ((intent ?? entryMode) === "ai" && !modelAvailable)) return;
     onSend(buildPayload(intent));
   };
 

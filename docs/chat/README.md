@@ -132,13 +132,15 @@ data: {"text":"正文增量","reasoning":"可选推理增量"}
 
 复制 `apps/backend/.env.example` 为 `.env`，用 `uvicorn app.main:app --env-file .env` 显式加载。
 
-- 有 `DASHSCOPE_API_KEY` 时使用 DashScope 的 URL / 默认模型；否则使用 `DEEPSEEK_*`。两套配置不交叉拼接。
-- `DASHSCOPE_MODEL` 默认 `qwen-plus`；`DEEPSEEK_MODEL` 默认 `deepseek-chat`。
-- `AI_ALLOWED_MODELS` 是同一选定 Provider 的额外模型白名单，默认模型自动加入。UI 读取 `/chat/config`，不能任意请求未配置模型。
-- 普通模型 `max_tokens=4096`，temperature 按回答模式为 0.3 / 0.6 / 1.0 / 0.85。
-- `reasoner/r1/qwen3` 模型 `max_tokens=8192`，不传 temperature。
-- `AI_TIMEOUT_SEC` 默认 90 秒（连接超时 10 秒）；追问请求最多 10 秒。401/403/429、超时、异常流和提前 EOF 都标准化处理，不向前端返回密钥或原始供应商错误体。
-- 未配置 Key 明确报错，正式代码没有模拟回复。付费 Provider 的实际可用性需要部署环境另行联调。
+- Chat 和 Agent 使用同一 [LLM Registry 与配置加载器](../engineering/llm-api-foundation.md)，保留各自的流式 Adapter。
+- DashScope、DeepSeek、智谱可同时配置；模型绑定自己的 Provider，不再使用全局单一地址与 Key。
+- 只有旧环境变量时，默认仍为有 Key 的 DashScope，否则 DeepSeek；`AI_ALLOWED_MODELS` 继续绑定旧优先 Provider。智谱需显式设置 `ZHIPU_MODEL` 和 Key。
+- `AI_DEFAULT_MODEL` / `AI_AGENT_DEFAULT_MODEL` 可明确指定默认模型；扩展模型及能力通过服务端 `AI_MODEL_REGISTRY_FILE` 声明。
+- 新会话保存稳定的 `provider/model` ID，旧裸名称与 `default` 仍可解析；历史自定义名称可声明兼容别名。前端根据 config 返回的 aliases 保留历史选择。
+- Token、temperature、thinking、Tool Calling、stream_options 由能力元数据控制，不再用模型名正则推测。Chat 默认 4096，已声明推理模型可为 8192；Agent 保留独立预算，并受各模型输出上限约束。
+- `AI_TIMEOUT_SEC` 默认 90 秒（连接超时 10 秒）；追问解析 Chat 默认模型，最多 10 秒。401/403/429、超时、异常流和提前 EOF 都标准化处理，不返回密钥或原始供应商错误体。
+- 前端模型可用性仅来自 Backend config；加载失败时保留禁用展示，不宣称模型可用，也不提示虚构的订阅要求。
+- 未配置 Key 时，config 返回禁用项，真实 Provider 调用明确报错。会话创建与 Runtime 构造仍可用于离线注入测试，凭据校验发生在真实 Adapter 发起请求前。
 
 Web 仅配置 `BUSINESS_BACKEND_URL` 和 `BACKEND_BFF_SECRET`。模型/搜索 Key 禁止写入 Web 或任何 `NEXT_PUBLIC_*`。
 
