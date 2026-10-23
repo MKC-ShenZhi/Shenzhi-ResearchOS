@@ -1,9 +1,16 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import type { KnowledgePaperDetail } from "@/clients/knowledge";
 import { Badge } from "@/components/ui/badge";
 import { paperDoiUrl } from "@/lib/navigation/paper";
+import { HtmlGenerator, parse } from "latex.js";
+import "katex/dist/katex.min.css";
 
 export function PaperAbstractView({ paper }: { paper: KnowledgePaperDetail }) {
   const doiUrl = paperDoiUrl(paper.doi);
+  const abstract = paper.abstract ?? "";
+  const hasAbstract = abstract.trim().length > 0;
 
   return (
     <section
@@ -29,9 +36,13 @@ export function PaperAbstractView({ paper }: { paper: KnowledgePaperDetail }) {
 
       <div className="mt-12 max-w-3xl">
         <h2 className="text-base font-semibold text-ink">Abstract</h2>
-        <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-muted">
-          {paper.abstract?.trim() || "当前论文暂无摘要"}
-        </p>
+        {hasAbstract ? (
+          <LatexAbstractContent key={abstract} abstract={abstract} />
+        ) : (
+          <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-muted">
+            当前论文暂无摘要
+          </p>
+        )}
       </div>
       {(paper.keywords.length > 0 || paper.subjects.length > 0) && (
         <section className="mt-10 max-w-3xl border-t border-line pt-5">
@@ -43,5 +54,48 @@ export function PaperAbstractView({ paper }: { paper: KnowledgePaperDetail }) {
         </section>
       )}
     </section>
+  );
+}
+
+function LatexAbstractContent({ abstract }: { abstract: string }) {
+  const renderedAbstractRef = useRef<HTMLDivElement>(null);
+  const fallbackRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    const container = renderedAbstractRef.current;
+    const fallback = fallbackRef.current;
+    if (!container || !fallback) return;
+
+    try {
+      const generator = new HtmlGenerator({ hyphenate: false });
+      parse(abstract, { generator });
+      container.replaceChildren(generator.domFragment());
+      container.hidden = false;
+      fallback.hidden = true;
+    } catch (error) {
+      console.error("Failed to render paper abstract with LaTeX.js.", error);
+      container.replaceChildren();
+      container.hidden = true;
+      fallback.hidden = false;
+    }
+
+    return () => container.replaceChildren();
+  }, [abstract]);
+
+  return (
+    <>
+      <div
+        ref={renderedAbstractRef}
+        aria-label="论文摘要内容"
+        className="paper-abstract-latex mt-4 max-w-full overflow-x-auto whitespace-pre-wrap text-sm leading-7 text-muted"
+        hidden
+      />
+      <p
+        ref={fallbackRef}
+        className="mt-4 whitespace-pre-wrap text-sm leading-7 text-muted"
+      >
+        {abstract}
+      </p>
+    </>
   );
 }

@@ -8,6 +8,9 @@ import {
   mockPaperDetail,
 } from "./mock-data";
 import type {
+  KnowledgeConferenceListResponse,
+  KnowledgePaperBrowseParams,
+  KnowledgePaperBrowseResponse,
   KnowledgeFundingSearchParams,
   KnowledgeFundingSearchResponse,
   KnowledgeFundingSummary,
@@ -116,6 +119,25 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
  * 仅在 getKnowledgeClient() 显式配置 source=mock 时启用；正式运行走 BFF。
  */
 export class MockKnowledgeClient implements KnowledgeClient {
+  async conferences(signal?: AbortSignal): Promise<KnowledgeConferenceListResponse> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded();
+    if (scenario === "zero_results") return { items: [] };
+    const names = [...new Set(MOCK_PAPERS.map((paper) => paper.venue).filter((name): name is string => Boolean(name)))];
+    return { items: names.map((name) => {
+      const papers = MOCK_PAPERS.filter((paper) => paper.venue === name);
+      const years = [...new Set(papers.map((paper) => paper.year).filter((year): year is number => year !== null))].sort((a, b) => b - a);
+      return { name, paperCount: papers.length, years, yearCount: years.length };
+    }) };
+  }
+
+  async browsePapers(params: KnowledgePaperBrowseParams, signal?: AbortSignal): Promise<KnowledgePaperBrowseResponse> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded();
+    const papers = scenario === "zero_results" ? [] : MOCK_PAPERS.filter((paper) => paper.venue === params.conference && paper.year === params.year);
+    return { results: papers.slice(params.offset, params.offset + params.limit).map((paper) => ({ ...paper, score: null, rank: null, provenance: { source: "mock" } })), total: papers.length, limit: params.limit, offset: params.offset };
+  }
+
   private scenario: MockScenario;
   private latencyMs: number;
 
@@ -253,6 +275,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
         const score = Math.min(1, base + (index % 5) * 0.04);
         return {
           id: paper.id,
+          imageId: null,
           title: paper.title,
           abstract: paper.abstract,
           authors: paper.authors,

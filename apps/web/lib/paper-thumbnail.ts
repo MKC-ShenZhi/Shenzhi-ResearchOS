@@ -1,17 +1,17 @@
-const ARXIV_PAPER_ID_PATTERN =
-  /^paper:(\d{4}\.\d{4,5}(?:v[1-9]\d*)?)$/;
-
-/** Extracts a modern arXiv identifier without changing the opaque paper id. */
-export function extractArxivId(paperId: string): string | null {
-  return ARXIV_PAPER_ID_PATTERN.exec(paperId)?.[1] ?? null;
+/** Shared by the URL resolver and resource route; never decode a second time. */
+export function isPaperImagePath(path: string[]): boolean {
+  return path.length > 0 && path.length <= 16 &&
+    path.every((part) => part.length <= 255 && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(part)) &&
+    /\.(png|jpe?g|webp)$/i.test(path[path.length - 1]);
 }
 
-/** Returns a same-origin local thumbnail URL when the MVP feature is enabled. */
-export function getPaperThumbnailUrl(paperId: string): string | null {
-  if (process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED !== "true") {
+/** Adapt only real upstream image identifiers; paper ids remain opaque. */
+export function getPaperThumbnailUrl(imageId: string | null | undefined): string | null {
+  if (process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED !== "true" ||
+      !imageId?.startsWith("/images/")) {
     return null;
   }
 
-  const arxivId = extractArxivId(paperId);
-  return arxivId === null ? null : `/api/paper-thumbnail/${arxivId}`;
+  const path = imageId.slice("/images/".length).split("/");
+  return isPaperImagePath(path) ? `/api/paper-images/${path.join("/")}` : null;
 }

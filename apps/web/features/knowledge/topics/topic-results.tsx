@@ -19,14 +19,14 @@ export function TopicResults({ topics, returnTo }: { topics: KnowledgeTopic[]; r
       {groupTopics(displayedTopics).map(([category, items]) => (
         <section key={category}>
           <div className="mb-3 flex items-center justify-between gap-4">
-            <h2 className="text-2xl font-semibold tracking-tight text-foreground">{category}</h2>
-            <span className="text-sm text-muted-foreground">{totals.get(category)} 个主题</span>
+            <h2 className="text-2xl font-semibold tracking-tight text-ink">{category}</h2>
+            <span className="text-sm text-muted">{totals.get(category)} 个主题</span>
           </div>
           <TopicGrid topics={items} returnTo={returnTo} />
         </section>
       ))}
       <div className="flex flex-col items-center gap-3">
-        <p role="status" className="text-sm text-muted-foreground">已显示 {displayedTopics.length} / {topics.length} 个主题</p>
+        <p role="status" className="text-sm text-muted">已显示 {displayedTopics.length} / {topics.length} 个主题</p>
         {displayedTopics.length < topics.length ? (
           <Button type="button" variant="outline" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>加载更多主题</Button>
         ) : null}

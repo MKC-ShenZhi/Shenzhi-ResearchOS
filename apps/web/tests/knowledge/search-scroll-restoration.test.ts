@@ -139,6 +139,23 @@ test("new searches, filters and pagination can invalidate restoration before the
   unmount();
 });
 
+test("directory conference activation restores its exact filtered page once, independently of keyword results", (t) => {
+  const b = browser(t);
+  const directory = "/knowledge/search/conferences?q=robot&page=2&sort=name";
+  const destination = "/knowledge/search?mode=conference&conference=RSS&year=2025";
+  rememberSearchScroll(b.click(destination), directory);
+  assert.equal(readSearchScroll(b.storage, directory), 1250);
+  assert.equal(readSearchScroll(b.storage, "/knowledge/search?q=robot&page=2"), null);
+  const unmount = b.mount(true, directory);
+  b.frame(); b.frame();
+  assert.deepEqual(b.scrolls, [{ top: 1250, behavior: "instant" }]);
+  assert.equal(readSearchScroll(b.storage, directory), null);
+  unmount();
+  rememberSearchScroll(b.click(destination, { ctrlKey: true }), directory);
+  rememberSearchScroll(b.click("/knowledge/search?mode=keyword"), directory);
+  assert.equal(readSearchScroll(b.storage, directory), null);
+});
+
 test("blocked session storage access still allows navigation and rendering", (t) => {
   const b = browser(t);
   Object.defineProperty(b.win, "sessionStorage", { get: () => { throw new Error("SecurityError"); } });

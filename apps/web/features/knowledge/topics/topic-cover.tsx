@@ -14,6 +14,6 @@ export function TopicCover({ imagePath, name, sizes, eager = false, className = 
   return imagePath && !failed ? (
     <Image src={imagePath} alt={`${name}主题封面`} fill sizes={sizes} loading={eager ? "eager" : "lazy"} className={`object-cover ${className}`} onError={() => setFailed(true)} />
   ) : (
-    <div role="img" aria-label={`${name}默认封面`} className="absolute inset-0 bg-gradient-to-br from-primary/20 via-primary/5 to-accent/20" />
+    <div role="img" aria-label={`${name}默认封面`} className="absolute inset-0 bg-gradient-to-br from-primary/20 via-primary/5 to-brand-cyan/20" />
   );
 }

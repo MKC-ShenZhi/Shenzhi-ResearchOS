@@ -26,7 +26,7 @@ export function TopicSearch({ value, onSearch }: { value: string; onSearch: (val
 
   return (
     <form className="relative w-full" role="search" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}>
-      <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+      <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-faint" />
       <Input
         value={draftValue}
         onChange={(event) => setDraftValue(event.target.value)}
@@ -36,10 +36,10 @@ export function TopicSearch({ value, onSearch }: { value: string; onSearch: (val
         type="text"
         placeholder="搜索主题"
         aria-label="搜索主题"
-        className="h-12 rounded-full border-slate-200 bg-slate-50/70 pl-12 pr-28 text-base shadow-none transition focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-primary/20"
+        className="h-12 rounded-full border-line bg-panel pl-12 pr-28 text-base text-ink shadow-none transition placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
       />
       <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-        {draftValue ? <button type="button" onClick={clearSearch} aria-label="清除搜索" className="rounded-full p-2 text-muted-foreground hover:text-foreground"><X className="size-4" /></button> : null}
+        {draftValue ? <button type="button" onClick={clearSearch} aria-label="清除搜索" className="rounded-full p-2 text-faint hover:text-ink"><X className="size-4" /></button> : null}
         <button type="submit" aria-label="搜索" className="rounded-full p-2 text-primary hover:bg-primary/10"><Search className="size-4" /></button>
       </div>
     </form>

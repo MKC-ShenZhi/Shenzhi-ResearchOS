@@ -40,6 +40,7 @@ SEARCH_RESPONSE = {
             'subjects': [],
             'score': 0.022,
             'rank': 1,
+            'image_id': '/images/CVPR_2026/2605.05077v2.png',
         },
     ],
     'state': {'step': 0},
@@ -119,6 +120,22 @@ class KnowledgeMappingTests(unittest.TestCase):
             SEARCH_RESPONSE['results'][0], retrieved_at=datetime(2026, 9, 1)
         )
         self.assertEqual(naive.provenance.retrieved_at.tzinfo, timezone.utc)
+
+    def test_search_mapping_preserves_real_nullable_image_id_and_public_alias(self):
+        for image_id in ('/images/CVPR_2026/2605.05077v2.png', None):
+            with self.subTest(image_id=image_id):
+                item = {**SEARCH_RESPONSE['results'][0], 'image_id': image_id}
+                result = map_search_result(item, retrieved_at=self.retrieved_at)
+                self.assertEqual(result.id, PAPER_ID)
+                self.assertEqual(result.image_id, image_id)
+                public = result.model_dump(by_alias=True)
+                self.assertEqual(public['imageId'], image_id)
+                self.assertNotIn('image_id', public)
+        missing = dict(SEARCH_RESPONSE['results'][0])
+        missing.pop('image_id')
+        self.assertIsNone(map_search_result(missing).image_id)
+        with self.assertRaises(KnowledgeIntegrationError):
+            map_search_result({**missing, 'image_id': 123})
 
     def test_detail_mapping_turns_empty_strings_and_unknown_counts_into_null(self):
         detail = map_paper_detail(DETAIL_RESPONSE, retrieved_at=self.retrieved_at)
@@ -778,6 +795,8 @@ class KnowledgeApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(search_response.status_code, 200, search_response.text)
         search_data = search_response.json()['data']
         self.assertEqual(search_data['results'][0]['id'], PAPER_ID)
+        self.assertEqual(search_data['results'][0]['imageId'], SEARCH_RESPONSE['results'][0]['image_id'])
+        self.assertNotIn('image_id', search_data['results'][0])
         self.assertFalse(search_data['hasMore'])
         self.assertEqual(search_data['results'][0]['provenance']['externalId'], PAPER_ID)
         self.assertNotIn('paper_id', search_data['results'][0])
