@@ -81,3 +81,18 @@ test("paper cards keep the existing detail navigation and load thumbnails on mob
   assert.equal(PAPER_CARD_SOURCE.match(/href=\{detailHref\}/g)?.length, 3);
   assert.doesNotMatch(PAPER_CARD_SOURCE, /hidden w-full max-w-\[320px\]/);
 });
+
+test("home static thumbnails bypass the knowledge image flag", () => {
+  const originalValue = process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
+  try {
+    for (const flag of ["false", "true"]) {
+      process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = flag;
+      assert.equal(mapDiscoveryPaper(discoveryPaper()).thumbnailUrl, "/paper-thumbnails/2604.17730v1.webp");
+    }
+    assert.match(PAPER_CARD_SOURCE, /<PaperThumbnail src=\{paper\.thumbnailUrl\}/);
+    assert.doesNotMatch(PAPER_CARD_SOURCE, /getPaperThumbnailUrl|imageId|PAPER_THUMBNAIL_ENABLED/);
+  } finally {
+    if (originalValue === undefined) delete process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
+    else process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = originalValue;
+  }
+});
