@@ -5,14 +5,74 @@ import unittest
 from unittest.mock import patch
 
 from app.core.errors import BusinessError
-from app.integrations.llm.registry import Catalog, ModelRegistry, RegistryConfigError
-from app.integrations.llm.resolver import load_registry
+from app.integrations.llm.registry import Capabilities, Catalog, ModelRegistry, RegistryConfigError
+from app.integrations.llm.resolver import AUTODL_DEFAULT_MODELS, load_registry
 
 
 class RegistryTests(unittest.TestCase):
     def load(self, env):
         with patch.dict(os.environ, env, clear=True):
             return load_registry()
+
+    def test_autodl_key_gates_registration_and_empty_allowlist_uses_verified_defaults(self):
+        for env in ({}, {'AUTODL_API_KEY': '  ', 'AUTODL_MODELS': 'Kimi-K2.5'}):
+            self.assertFalse(any(m.provider_id == 'autodl' for m in self.load(env).models.values()))
+        self.assertEqual(AUTODL_DEFAULT_MODELS,
+                         ('DeepSeek-V4.1-Flash-1017', 'Qwen3.5-397B-A17B', 'Kimi-K2.5'))
+        for value in ('', '  , , '):
+            registry = self.load({'AUTODL_API_KEY': 'autodl-private', 'AUTODL_MODELS': value})
+            self.assertEqual([m.upstream_model for m in registry.models.values() if m.provider_id == 'autodl'],
+                             list(AUTODL_DEFAULT_MODELS))
+            self.assertEqual(registry.default_model().id, f'autodl/{AUTODL_DEFAULT_MODELS[0]}')
+            self.assertEqual(registry.default_model('agent').id, f'autodl/{AUTODL_DEFAULT_MODELS[0]}')
+
+    def test_autodl_allowlist_preserves_case_deduplicates_and_unknown_is_conservative(self):
+        registry = self.load({'AUTODL_API_KEY': 'autodl-private',
+                              'AUTODL_MODELS': ' , Untested-ID , Kimi-K2.5,Untested-ID, ,Kimi-K2.5, '})
+        self.assertEqual([m.upstream_model for m in registry.models.values() if m.provider_id == 'autodl'],
+                         ['Untested-ID', 'Kimi-K2.5'])
+        self.assertEqual(registry.resolve_model('autodl/Untested-ID').spec.capabilities, Capabilities())
+        self.assertEqual(registry.default_model().id, 'autodl/Untested-ID')
+        self.assertEqual(registry.default_model('agent').id, 'autodl/Kimi-K2.5')
+        with self.assertRaisesRegex(BusinessError, 'Tool Calling'):
+            registry.resolve_model('autodl/Untested-ID', 'agent')
+        for bare in ('Untested-ID', 'Kimi-K2.5'):
+            with self.assertRaisesRegex(BusinessError, '未注册'):
+                registry.resolve_model(bare)
+
+    def test_autodl_explicit_defaults_override_order_and_old_providers_keep_priority(self):
+        env = {'AUTODL_API_KEY': 'autodl-private'}
+        registry = self.load({**env, 'AI_DEFAULT_MODEL': 'autodl/Kimi-K2.5',
+                              'AI_AGENT_DEFAULT_MODEL': 'autodl/Qwen3.5-397B-A17B'})
+        self.assertEqual(registry.default_model().id, 'autodl/Kimi-K2.5')
+        self.assertEqual(registry.default_model('agent').id, 'autodl/Qwen3.5-397B-A17B')
+        for legacy, expected in [('DEEPSEEK_API_KEY', 'deepseek/deepseek-chat'),
+                                 ('DASHSCOPE_API_KEY', 'dashscope/qwen-plus')]:
+            self.assertEqual(self.load({**env, legacy: 'legacy-private'}).default_model().id, expected)
+
+    def test_autodl_endpoint_override_is_https_and_uses_existing_validation(self):
+        registry = self.load({'AUTODL_API_KEY': 'autodl-private', 'AUTODL_BASE_URL': 'https://proxy.example/v1/'})
+        self.assertEqual(registry.resolve_model(None).base_url, 'https://proxy.example/v1')
+        with self.assertRaises(RegistryConfigError):
+            self.load({'AUTODL_API_KEY': 'autodl-private', 'AUTODL_BASE_URL': 'http://proxy.example/v1'})
+
+    def test_public_catalog_hides_unconfigured_defaults_but_keeps_disabled_models(self):
+        registry = self.load({})
+        for purpose in ('chat', 'agent'):
+            self.assertEqual(registry.public_models(purpose), [])
+            self.assertIsNone(registry.public_default(purpose))
+        registry = self.load({'AUTODL_API_KEY': 'autodl-private', 'AI_DEFAULT_MODEL': 'deepseek-chat'})
+        self.assertIsNone(registry.public_default('chat'))
+        self.assertTrue(registry.public_models('chat'))
+        # Configured Provider with an explicitly disabled model retains the hint.
+        registry = ModelRegistry(Catalog.model_validate({
+            'providers': [{'id': 'p', 'base_url': 'https://p.example', 'api_key_env': 'P_KEY'}],
+            'models': [{'id': 'disabled', 'provider_id': 'p', 'upstream_model': 'm',
+                        'label': 'Disabled', 'enabled': False}],
+        }), {'P_KEY': 'test-private'})
+        self.assertEqual(registry.public_models('chat')[0]['reason'], 'model_disabled')
+        self.assertFalse(registry.public_models('chat')[0]['enabled'])
+        self.assertIsNone(registry.public_default('chat'))
 
     def test_legacy_dashscope_and_deepseek_defaults(self):
         for env, model, provider in [

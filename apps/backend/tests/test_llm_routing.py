@@ -9,7 +9,7 @@ import httpx
 
 from app.core.errors import BusinessError
 from app.integrations.llm.provider import ModelProvider
-from app.integrations.llm.resolver import load_registry
+from app.integrations.llm.resolver import AUTODL_DEFAULT_MODELS, load_registry
 from app.services.agent.provider import OpenAICompatProvider, ModelRequest, TextDelta, ToolCallEvent
 from app.services.agent.runtime import AgentRuntime
 
@@ -22,6 +22,57 @@ def sse(delta, finish='stop'):
 
 
 class RoutingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_autodl_both_adapters_preserve_exact_wire_routing(self):
+        with patch.dict(os.environ, {**ENV, 'AUTODL_API_KEY': 'autodl-private'}, clear=True):
+            registry = load_registry()
+        seen = []
+
+        def handler(request):
+            self.assertEqual(request.url.host, 'www.autodl.art')
+            self.assertEqual(request.url.path, '/api/v1/chat/completions')
+            self.assertEqual(request.headers['authorization'], 'Bearer autodl-private')
+            seen.append(json.loads(request.content))
+            return httpx.Response(200, text=sse({'content': '正文', 'reasoning_content': '思考'}))
+
+        transport = httpx.MockTransport(handler)
+        chat = ModelProvider(registry=registry, transport=transport)
+        agent = OpenAICompatProvider(registry=registry, transport=transport)
+        with self.assertLogs('app', level='INFO') as logs:
+            for upstream in AUTODL_DEFAULT_MODELS:
+                model = f'autodl/{upstream}'
+                self.assertEqual([e async for e in chat.stream([], model, 'fast')],
+                                 [{'text': '正文', 'reasoning': '思考'}])
+                self.assertIn(TextDelta('正文'), [e async for e in agent.stream(ModelRequest(model, []))])
+                self.assertEqual([p['model'] for p in seen[-2:]], [upstream] * 2)
+                self.assertEqual(seen[-2]['max_tokens'], 4096)
+                self.assertEqual(seen[-1]['max_tokens'], 32768)
+                self.assertEqual(seen[-1]['stream_options'], {'include_usage': True})
+        self.assertNotIn('autodl-private', str(logs.output))
+
+    async def test_autodl_declared_disable_thinking_params_reach_agent(self):
+        # All built-ins passed T5 without extensions. A deployment may explicitly
+        # declare a tested strategy; both supported parameter shapes must survive.
+        for strategy, value in [('enable_thinking', False), ('thinking', {'type': 'disabled'})]:
+            with self.subTest(strategy=strategy), tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
+                json.dump({'models': [{
+                    'id': 'autodl/Kimi-K2.5', 'provider_id': 'autodl', 'upstream_model': 'Kimi-K2.5',
+                    'label': 'Kimi', 'capabilities': {'tool_calling': True, 'thinking': strategy},
+                    'request_params': {strategy: value},
+                }]}, file)
+                file.flush()
+                with patch.dict(os.environ, {'AUTODL_API_KEY': 'autodl-private',
+                                             'AI_MODEL_REGISTRY_FILE': file.name}, clear=True):
+                    registry = load_registry()
+                seen = []
+
+                def handler(request):
+                    seen.append(json.loads(request.content))
+                    return httpx.Response(200, text=sse({'content': 'ok'}))
+
+                provider = OpenAICompatProvider(registry=registry, transport=httpx.MockTransport(handler))
+                _ = [e async for e in provider.stream(ModelRequest('autodl/Kimi-K2.5', []))]
+                self.assertEqual(seen[0][strategy], value)
+
     async def test_three_providers_host_bearer_model_and_streaming(self):
         with patch.dict(os.environ, ENV, clear=True):
             registry = load_registry()
