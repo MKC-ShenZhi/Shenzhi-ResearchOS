@@ -15,8 +15,9 @@ import { KnowledgeSearchPagination } from "../components/search-pagination";
 import { rememberSearchScroll, saveCurrentSearchScroll, useSearchScrollRestoration } from "../use-search-scroll-restoration";
 import { LibraryModeNav } from "./library-mode-nav";
 import { ConferenceEmpty, ConferenceError, ConferenceSkeleton } from "./conference-states";
+import { ConferenceCarousel } from "./conference-carousel";
 import { conferenceQueryOptions, paperBrowseQueryOptions } from "./conference-queries";
-import { buildPaperBrowseUrl, FEATURED_CONFERENCES, PAPER_BROWSE_PAGE_SIZE, readPaperBrowseState, resolveConference, resolveConferenceYear } from "./conference-state";
+import { buildPaperBrowseUrl, PAPER_BROWSE_PAGE_SIZE, readPaperBrowseState, resolveConference, resolveConferenceYear } from "./conference-state";
 
 export function ConferenceBrowser() {
   const router = useRouter();
@@ -59,17 +60,7 @@ export function ConferenceBrowser() {
               <div><dt className="text-[11px] text-muted">已收录年份</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{selected.yearCount}</dd></div>
             </dl> : <p className="mt-4 text-xs text-muted">未找到该会议，请选择其他会议或进入全部会议目录。</p>}
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {FEATURED_CONFERENCES.map((name) => {
-              const conference = items.find((item) => item.name === name);
-              const available = conference && conference.paperCount > 0 && conference.years.length > 0;
-              return <button key={name} type="button" disabled={!available} aria-pressed={selected?.name === name} onClick={() => conference && select(conference)}
-                className={`min-h-20 rounded-xl border px-3 py-3 text-left transition-colors disabled:opacity-50 ${selected?.name === name ? "border-primary bg-primary-soft" : "border-line bg-card hover:border-primary/50"}`}>
-                <span className="block text-sm font-semibold text-ink">{name}</span>
-                <span className="mt-1 block text-[11px] leading-relaxed text-muted">{conference ? `${conference.paperCount.toLocaleString()} 篇 · ${conference.yearCount} 个年份` : "暂未收录"}</span>
-              </button>;
-            })}
-          </div>
+          <ConferenceCarousel items={items} onSelect={select} />
         </div>
         {selected && <>
           <ConferenceYears key={selected.name} conference={selected} year={year} onSelect={(value) => select(selected, value)} />

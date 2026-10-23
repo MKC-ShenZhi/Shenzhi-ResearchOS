@@ -4,6 +4,28 @@ import type { KnowledgeConference } from "../../../../clients/knowledge/types";
 export const FEATURED_CONFERENCES = ["AAAI", "CVPR", "ICML", "ACL", "NeurIPS", "ICLR"] as const;
 export const CONFERENCE_PAGE_SIZE = 21;
 export const PAPER_BROWSE_PAGE_SIZE = 20;
+export const CONFERENCE_BATCH_SIZE = 6;
+export const CONFERENCE_ROTATION_MS = 15_000;
+export const CONFERENCE_SELECTION_FEEDBACK_MS = 800;
+
+/** Stable batches of browsable records; preserve aliases and duplicate names. */
+export function buildConferenceBatches(items: KnowledgeConference[]) {
+  const available = items.map((conference, index) => ({ conference, key: `${index}:${conference.name}` }))
+    .filter(({ conference }) => conference.paperCount > 0 && conference.years.length > 0);
+  const featured = FEATURED_CONFERENCES.flatMap((name) => {
+    const match = available.find(({ conference }) => conference.name === name);
+    return match ? [match] : [];
+  });
+  const featuredKeys = new Set(featured.map(({ key }) => key));
+  const remaining = available.filter(({ key }) => !featuredKeys.has(key))
+    .sort((a, b) => b.conference.paperCount - a.conference.paperCount || a.conference.name.localeCompare(b.conference.name, "en") || a.key.localeCompare(b.key, "en"));
+  const ordered = [...featured, ...remaining];
+  const batches: typeof ordered[] = [];
+  for (let index = 0; index < ordered.length; index += CONFERENCE_BATCH_SIZE) {
+    batches.push(ordered.slice(index, index + CONFERENCE_BATCH_SIZE));
+  }
+  return batches;
+}
 
 interface Params { get(name: string): string | null }
 
