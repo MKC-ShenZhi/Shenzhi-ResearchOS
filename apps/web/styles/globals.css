@@ -218,6 +218,74 @@ html[data-theme="warm-teal"].dark {
   --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.4);
 }
 
+/* 墨蓝青绿：固定浅色，以沉稳墨蓝承载主操作、青绿标识 AI 能力。 */
+html[data-theme="blue-teal"] {
+  --color-background: #f7f8fa;
+  --color-sidebar: #edf2f6;
+  --color-card: #ffffff;
+  --color-primary: #1e4d7a;
+  --color-primary-deep: #173e63;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #e6eef5;
+  --color-agent: #0f766e;
+  --color-agent-soft: #dff0ee;
+  --color-brand-violet: #4f46a5;
+  --color-brand-cyan: #0f766e;
+  --color-brand-gold: #b7791f;
+  --color-ink: #1f2937;
+  --color-ink-2: #465568;
+  --color-muted: #647286;
+  --color-faint: #94a0b0;
+  --color-chip: #eef2f5;
+  --color-panel: #edf2f6;
+  --color-line: #d9e1e8;
+  --color-danger: #c2413b;
+  --color-danger-soft: #fbe7e5;
+  --color-success: #0f766e;
+  --color-success-soft: #dff0ee;
+  --shadow-card: 0 2px 6px rgb(31 41 55 / 0.05);
+  --shadow-pop: 0 12px 32px rgb(31 41 55 / 0.12);
+  --page-wallpaper: none;
+  --surface-card-image: none;
+  --surface-panel-image: none;
+  --surface-sidebar-image: none;
+  --surface-chip-image: none;
+}
+
+/* 深知绿：固定浅色，使用品牌绿层级区分主操作、悬停和 AI 强调。 */
+html[data-theme="shenzhi-green"] {
+  --color-background: #f5f8f6;
+  --color-sidebar: #eff5f1;
+  --color-card: #ffffff;
+  --color-primary: #007f54;
+  --color-primary-deep: #006744;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #e1f1e8;
+  --color-agent: #007f54;
+  --color-agent-soft: #dcf3e7;
+  --color-brand-violet: #526b63;
+  --color-brand-cyan: #009a61;
+  --color-brand-gold: #a9791a;
+  --color-ink: #202b29;
+  --color-ink-2: #40514b;
+  --color-muted: #66766e;
+  --color-faint: #92a098;
+  --color-chip: #e8f0eb;
+  --color-panel: #eff5f1;
+  --color-line: #d7e2dc;
+  --color-danger: #bd403c;
+  --color-danger-soft: #f9e7e5;
+  --color-success: #007f54;
+  --color-success-soft: #dcf3e7;
+  --shadow-card: 0 2px 6px rgb(32 43 41 / 0.05);
+  --shadow-pop: 0 12px 32px rgb(32 43 41 / 0.12);
+  --page-wallpaper: none;
+  --surface-card-image: none;
+  --surface-panel-image: none;
+  --surface-sidebar-image: none;
+  --surface-chip-image: none;
+}
+
 html[data-theme="claude"] {
   --color-background: #f7f5f2;
   --color-sidebar: #eeeae4;
@@ -827,6 +895,8 @@ html[data-theme="custom"] {
 
   html[data-theme="gpt"] ::selection,
   html[data-theme="warm-teal"] ::selection,
+  html[data-theme="blue-teal"] ::selection,
+  html[data-theme="shenzhi-green"] ::selection,
   html[data-theme="claude"] ::selection,
   html[data-theme="alphaxiv"] ::selection,
   html[data-theme="apple-light"] ::selection,
@@ -849,19 +919,19 @@ html[data-theme="custom"] {
 
 /* 浅色探索主题需要让组件材质也明显跟随主色，而不只改变页面壁纸。
  * 保持在 Tailwind cascade layer 之外，确保能覆盖对应背景工具类。 */
-html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]) :where(.bg-card) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]):not([data-theme="blue-teal"]):not([data-theme="shenzhi-green"]) :where(.bg-card) {
   background-color: color-mix(in srgb, var(--color-card) 88%, var(--color-primary) 12%);
 }
 
-html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]) :where(.bg-sidebar) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]):not([data-theme="blue-teal"]):not([data-theme="shenzhi-green"]) :where(.bg-sidebar) {
   background-color: color-mix(in srgb, var(--color-sidebar) 82%, var(--color-primary) 18%);
 }
 
-html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]) :where(.bg-panel) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]):not([data-theme="blue-teal"]):not([data-theme="shenzhi-green"]) :where(.bg-panel) {
   background-color: color-mix(in srgb, var(--color-panel) 78%, var(--color-primary) 22%);
 }
 
-html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]) :where(.bg-chip) {
+html:not(.dark):not([data-theme="shenzhi"]):not([data-theme="gpt"]):not([data-theme="warm-teal"]):not([data-theme="blue-teal"]):not([data-theme="shenzhi-green"]) :where(.bg-chip) {
   background-color: color-mix(in srgb, var(--color-chip) 84%, var(--color-primary) 16%);
 }
 
