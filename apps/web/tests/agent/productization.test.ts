@@ -27,7 +27,7 @@ test("simple search hides Agent-only controls without clearing their state", () 
 test("Agent conversation restores Backend turns and runs without browser-supplied history", () => {
   const source = readFileSync("features/agent-chat/shenzhi-ai-page.tsx", "utf8");
   assert.match(source, /getAgentSession\(sessionId\)/);
-  assert.match(source, /session\.turns\.flatMap/);
+  assert.match(source, /storedTurns\(session\.turns\)/);
   assert.match(source, /const runPrompt = useCallback/);
   assert.match(source, /streamAgentSessionRun\(sessionId, runInput/);
   assert.match(source, /takeAgentLaunch/);
