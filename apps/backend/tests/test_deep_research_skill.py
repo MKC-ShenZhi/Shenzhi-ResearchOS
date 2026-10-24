@@ -83,7 +83,7 @@ class DeepResearchRuntimeTests(unittest.TestCase):
         self.assertIn('工作单元：证据槽', forced.system)
         self.assertIn('## 参考来源', forced.system)
 
-        plain = agent_service.build_run_runtime(owner=f'anon:{OWNER_ID}')
+        plain = agent_service.build_run_runtime(owner=f'anon:{OWNER_ID}', mode='deep')
         self.assertTrue(REQUIRED_TOOLS <= set(plain.registry.tools))
         self.assertIn('<available_skills>', plain.system)
         self.assertNotIn('工作单元：证据槽', plain.system)
