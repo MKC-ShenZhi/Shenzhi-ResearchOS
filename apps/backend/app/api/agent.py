@@ -34,8 +34,8 @@ class AgentRunBody(BaseModel):
     prompt: str = Field(min_length=1, max_length=10_000)
     history: list[dict] = Field(default_factory=list, max_length=200)
     model: str | None = None
-    # 默认 fast。预算对齐 SZDR 的实测形态（900 秒 / 120 次工具调用，见 policies.py）：
-    # deadline 是上限不是目标，快问题照样快回；mode 只影响温度等资源倾向。
+    # 默认 fast：180 秒 / 12 次工具调用，其余模式保持 900 秒 / 120 次（见 policies.py）。
+    # mode 决定温度、运行预算，以及未显式选择技能时的快速回答技能与工具集。
     mode: Literal['fast', 'deep', 'idea', 'doubt'] = 'fast'
     attachments: list[dict] = Field(default_factory=list, max_length=MAX_FILES)
     workspace_id: str | None = None
