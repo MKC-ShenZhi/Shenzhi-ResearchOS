@@ -34,7 +34,8 @@ from app.services.agent.tools import Tool, ToolOutput, tool
 MAX_PDF_BYTES = 90_000_000
 # 单次全文返回上限。**刻意不用 ×3**：单条结果越大，越容易撞上下文预算
 # （实测每篇 18 万字符 × 几篇就直接溢出），需要更多时让模型翻页重取。
-MAX_TEXT_CHARS = 60_000
+DEFAULT_TEXT_CHARS = 7000
+MAX_TEXT_CHARS = 7000
 MAX_HTML_BYTES = 6_000_000
 REQUEST_TIMEOUT_S = 60.0
 _UA = {'user-agent': 'ShenZhiResearchOS/1.0 (+research assistant)'}
@@ -47,7 +48,7 @@ class ReadPaperArgs(BaseModel):
     paper_id: str | None = None
     page_from: int | None = None      # 从第几页开始（1-based）
     page_to: int | None = None        # 读到第几页（含）
-    max_chars: int | None = None      # 文本上限，缺省 60000
+    max_chars: int | None = None      # 单次约 7000 字符，读实验/结果章节请用 page_from/page_to 定位
 
 
 def pdf_candidates(url: str) -> list[str]:
@@ -115,27 +116,32 @@ def _paginate(pages: list[str], page_from: int | None, page_to: int | None,
     parts: list[str] = []
     used = 0
     cut_page: int | None = None
+    read_to = start - 1
     for page_no, text in selected:
         body = (text or '').strip()
         if not body:
             continue
         block = f'--- p.{page_no} ---\n{body}'
-        if used + len(block) > max_chars:
-            remain = max_chars - used
+        separator_chars = 2 if parts else 0
+        remain = max_chars - used - separator_chars
+        if len(block) > remain:
+            cut_page = page_no
             if remain > 200:
                 parts.append(block[:remain])
-                cut_page = page_no
+                read_to = page_no
             break
         parts.append(block)
-        used += len(block)
+        used += separator_chars + len(block)
+        read_to = page_no
     text = '\n\n'.join(parts)
     meta: dict[str, Any] = {
         'pages_total': total,
-        'pages_read': f'{start}-{end}',
+        'pages_read': f'{start}-{read_to}',
         'text_chars': len(text),
     }
-    if cut_page is not None or used < sum(len((p or '').strip()) for _, p in selected):
+    if cut_page is not None:
         meta['truncated'] = {'by': 'max_chars', 'at_page': cut_page, 'limit': max_chars}
+        meta['next_page_from'] = cut_page
     return text, meta
 
 
@@ -144,7 +150,8 @@ def read_paper_tool(*, knowledge: Any = None, transport: httpx.BaseTransport | N
 
     @tool(name='read_paper',
           description='读取一个 URL 或论文的 PDF 全文，返回带页号的文本；无 PDF 可达时'
-                      '退回抓取该页正文（此时 pdf=false）。',
+                      '退回抓取该页正文（此时 pdf=false）。'
+                      '单次约 7000 字符，读实验/结果章节请用 page_from/page_to 定位。',
           params=ReadPaperArgs, timeout_s=120.0,
           snippet='读 PDF 全文（带页号）或退回网页正文')
     async def read_paper(args: ReadPaperArgs) -> str | ToolOutput:
@@ -152,7 +159,8 @@ def read_paper_tool(*, knowledge: Any = None, transport: httpx.BaseTransport | N
         paper_id = (args.paper_id or '').strip()
         if not target and not paper_id:
             raise BusinessError(20001, 'read_paper 需要 url 或 paper_id 之一')
-        max_chars = max(200, min(args.max_chars or MAX_TEXT_CHARS, MAX_TEXT_CHARS))
+        requested_chars = args.max_chars if args.max_chars is not None else DEFAULT_TEXT_CHARS
+        max_chars = max(200, min(requested_chars, MAX_TEXT_CHARS))
         # paper_id 优先走知识库的 pdf_url；异步知识库调用保留在事件循环中。
         resolved = await _resolve_pdf_url(knowledge, paper_id or target)
         return await asyncio.to_thread(_read_paper_sync, args, target, resolved,

@@ -30,10 +30,10 @@ from app.services.knowledge.service import KnowledgeService, KnowledgeServiceErr
 from app.services.chat.knowledge_query import normalize_knowledge_query
 from app.schemas.knowledge import KnowledgeSearchRequest
 
-ABSTRACT_CHARS = 800
+ABSTRACT_CHARS = 300
 TRANSIENT_RETRIES = 1        # 实测上游约 15% 的 graph 请求瞬时断连；重试一次即可消除
 TRANSIENT_RETRY_DELAY_S = 0.5
-MAX_SEARCH_LIMIT = 100       # 上游 top_k 实测 100 仍正常返回（曾误砍到 30，等于自断覆盖面）
+MAX_SEARCH_LIMIT = 20        # 控制单次输出，扩大覆盖靠换角度/换措辞检索
 
 T = TypeVar('T')
 
@@ -59,7 +59,7 @@ async def _call_with_transient_retry(operation: Callable[[], Awaitable[T]]) -> T
         await asyncio.sleep(TRANSIENT_RETRY_DELAY_S * attempt)
 
 
-def _brief(result: Any, *, source: str) -> dict:
+def _brief(result: Any) -> dict:
     abstract = result.abstract or ''
     authors = list(result.authors or [])
     brief = {
@@ -69,11 +69,8 @@ def _brief(result: Any, *, source: str) -> dict:
         'authors': authors[:8],
         'year': result.year,
         'venue': result.venue,
-        'keywords': list(result.keywords or [])[:8],
+        'keywords': list(result.keywords or [])[:5],
     }
-    # 检索接口不返回作者（实测恒为 []），详情接口才返回：需要作者时必须知道"去调 detail"
-    if not authors and source == 'search':
-        brief['authors_note'] = '检索接口不返回作者；需要作者请对该 paper_id 调用 paper_detail。'
     return brief
 
 
@@ -101,7 +98,8 @@ def knowledge_tools(service: KnowledgeService | None = None) -> list[Tool]:
     @tool(name='paper_search',
           description='检索 CS/AI 论文知识库（混合检索：精确 + 模糊 + 语义）。可按年份区间、'
                       'venue、关键词过滤。返回 paper_id、标题、摘要、年份、venue。'
-                      '换措辞重查往往能拿到完全不同的论文——这是扩大覆盖的主要手段。',
+                      '换措辞重查往往能拿到完全不同的论文——这是扩大覆盖的主要手段。'
+                      '单次最多返回 20 条；需要更多覆盖时换角度或换措辞检索。',
           params=SearchArgs, timeout_s=90.0)
     async def paper_search(args: SearchArgs) -> str:
         query = normalize_knowledge_query(args.query)
@@ -116,9 +114,20 @@ def knowledge_tools(service: KnowledgeService | None = None) -> list[Tool]:
             payload['keyword'] = args.keyword
         response = await _call_with_transient_retry(
             lambda: knowledge.search(KnowledgeSearchRequest.model_validate(payload)))
-        results = [_brief(item, source='search') for item in response.results]
-        return json.dumps({'results': results, 'sparse': len(results) < args.limit},
-                          ensure_ascii=False)
+        results = [_brief(item) for item in response.results]
+        output: dict = {'results': results,
+                        'sparse': len(results) < max(1, min(args.limit, MAX_SEARCH_LIMIT))}
+        if any(not item['authors'] for item in results):
+            output['note'] = '检索接口不返回作者；需要作者请对该 paper_id 调用 paper_detail。'
+        serialized = json.dumps(output, ensure_ascii=False)
+        omitted = 0
+        while len(serialized) > 7500 and results:
+            results.pop()
+            omitted += 1
+            output['omitted'] = omitted
+            output['note_omitted'] = '为控制长度省略了排名靠后的结果，可用更具体的查询获取'
+            serialized = json.dumps(output, ensure_ascii=False)
+        return serialized
 
     @tool(name='paper_detail',
           description='按 paper_id 获取论文详情（完整摘要、作者、DOI、pdf_url）。',
@@ -134,7 +143,7 @@ def knowledge_tools(service: KnowledgeService | None = None) -> list[Tool]:
                 f'① paper_search 用标题关键词换措辞重查；'
                 f'② web_search 搜"该论文标题 + arXiv"获取公开页面信息。'
             ) from exc
-        payload = _brief(detail, source='detail')
+        payload = _brief(detail)
         payload.update({'doi': detail.doi, 'pdf_url': detail.pdf_url,
                         'citation_count': detail.citation_count,
                         'reference_count': detail.reference_count})

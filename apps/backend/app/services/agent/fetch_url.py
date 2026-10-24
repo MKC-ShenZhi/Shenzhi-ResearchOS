@@ -19,7 +19,7 @@ from app.services.agent.read_paper import _html_text
 from app.services.agent.tools import Tool, ToolOutput, tool
 
 MAX_BYTES = 6_000_000
-MAX_TEXT_CHARS = 120_000
+MAX_TEXT_CHARS = 7000
 TIMEOUT_S = 60.0
 _UA = {'user-agent': 'ShenZhiResearchOS/1.0 (+research assistant)'}
 
