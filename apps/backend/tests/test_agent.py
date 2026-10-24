@@ -1064,7 +1064,7 @@ class ServiceComposeTests(unittest.TestCase):
     def test_tool_listing_dynamic(self):
         from app.services.agent import service
         from app.services.agent import workspace
-        runtime = service.build_run_runtime(owner='u1')
+        runtime = service.build_run_runtime(owner='u1', mode='deep')
         section = self._tool_section(runtime.system)
         listed = sorted(line[2:].split(':', 1)[0] for line in section.splitlines()
                         if line.startswith('- '))
@@ -1128,7 +1128,7 @@ class WorkPromptTests(unittest.TestCase):
         prompt_guidelines 与业务侧显式注入提供（此前照抄 pi 的一套准则已移除）。
         """
         from app.services.agent import service
-        runtime = service.build_run_runtime(owner='u1')
+        runtime = service.build_run_runtime(owner='u1', mode='deep')
         self.assertIn('ShenzhiAi', runtime.system)
         self.assertIn('可用工具：', runtime.system)
         self.assertIn('当前日期：', runtime.system)
