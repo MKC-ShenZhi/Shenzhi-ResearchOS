@@ -56,14 +56,11 @@ class TimelineCapture:
                     break
         elif name == 'message':
             kind = str(data.get('kind') or 'steer')
-            if kind not in {'steer', 'follow_up', 'system'}:
+            if kind == 'system':
+                return
+            if kind not in {'steer', 'follow_up'}:
                 kind = 'steer'
             self.steers.append({'text': str(data.get('text') or ''), 'kind': kind})
-        elif name == 'compaction':
-            self.steers.append({
-                'kind': 'system',
-                'text': f"上下文已压缩（{data.get('before_chars', 0)} → {data.get('after_chars', 0)} 字符）",
-            })
         elif name == 'meta' and isinstance(data.get('warnings'), list):
             self.warnings = [str(item) for item in data['warnings']]
 

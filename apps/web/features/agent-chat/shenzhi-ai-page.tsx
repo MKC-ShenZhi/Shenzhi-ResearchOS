@@ -23,7 +23,7 @@ import {
 import { ReportDialog } from "./report-dialog";
 import { Timeline } from "./timeline-view";
 import {
-  applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, restoreEntries,
+  applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, restoreEntries, visibleNotes,
   type Entry, type StreamState,
 } from "./timeline";
 import { ComposerShell, type ComposerSkill } from "@/components/common/composer/composer";
@@ -444,11 +444,6 @@ export function ShenzhiAiPage() {
         onMessage: (text, kind) => patchAssistant(context, (turn) => ({
           ...turn, steers: [...turn.steers, { text, kind }],
         })),
-        onCompaction: ({ before_chars, after_chars }) => patchAssistant(context, (turn) => ({
-          ...turn, steers: [...turn.steers, {
-            kind: "system", text: `上下文已压缩（${before_chars} → ${after_chars} 字符）`,
-          }],
-        })),
         onToolCall: (activity) => patchAssistant(context, (turn) => ({
           ...turn,
           stream: applyToolCall(turn.stream, activity),
@@ -683,11 +678,11 @@ export function ShenzhiAiPage() {
               : <div key={turn.id} className="mb-8">
                   {/* 过程流：思考 / 正文 / 工具按到达顺序交错（pi 的结构）。空时不渲染任何盒子。 */}
                   <Timeline state={turn.stream} live={running && index === turns.length - 1} />
-                  {turn.steers.map((note, noteIndex) => (
+                  {visibleNotes(turn.steers).map((note, noteIndex) => (
                     <div key={noteIndex} className="mb-3 flex items-center justify-end gap-1.5">
                       <span className="rounded-full bg-agent-soft px-2 py-0.5 text-[10px] font-medium text-agent">
                         {note.kind === "steer" ? "⚡ 插话"
-                        : note.kind === "system" ? "⚙ 系统提示" : "→ 追问"}
+                        : "→ 追问"}
                       </span>
                       <div className="max-w-[70%] rounded-2xl rounded-br-md border border-agent/30 bg-agent-soft px-3.5 py-2 text-[14px] leading-6 text-ink">
                         {note.text}
