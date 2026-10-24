@@ -15,15 +15,16 @@ import "katex/dist/katex.min.css";
 import { Download, FileText, MessageCircleQuestion, Quote, Sparkles, Zap } from "lucide-react";
 
 import {
-  createWorkspace, exportAgentSession, fetchAgentConfig, getAgentSession, steerAgentRun,
+  attachAgentSessionRun, createWorkspace, exportAgentSession, fetchAgentConfig, getAgentSession, steerAgentRun,
   stopAgentRun, streamAgentSessionRun, uploadWorkspaceFile,
   type AgentConfig, type AgentQuestion, type AgentQuestionOption, type AgentRunInput,
   type AgentRunResult, type AgentStoredTurn,
 } from "@/clients/backend/agent";
+import { ApiError } from "@/clients/backend/http";
 import { ReportDialog } from "./report-dialog";
 import { Timeline } from "./timeline-view";
 import {
-  applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, restoreEntries,
+  applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, restoreEntries, visibleNotes,
   type Entry, type StreamState,
 } from "./timeline";
 import { ComposerShell, type ComposerSkill } from "@/components/common/composer/composer";
@@ -118,6 +119,12 @@ interface Turn {
   stopReason?: string;
 }
 
+interface RunContext {
+  sessionId: string;
+  generation: number;
+  assistantId: string;
+}
+
 function newTurnId(prefix: string) {
   const random = typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -146,6 +153,20 @@ function fromStoredTurn(turn: AgentStoredTurn): StreamState {
         : { kind: segment.kind === "text" ? "text" as const : "thinking" as const, text: segment.text })
     : restoreEntries(undefined, undefined);
   return { turn: 0, entries, thinkingIndex: -1, textIndex: -1 };
+}
+
+function storedTurns(turns: AgentStoredTurn[]): Turn[] {
+  return turns.flatMap((turn) => [
+    { id: `${turn.id}:user`, role: "user" as const, content: turn.user_content, reasoning: "",
+      attachments: (turn.settings.attachments ?? []) as ChatAttachment[],
+      stream: initialStreamState(), steers: [] },
+    { id: `${turn.id}:assistant`, role: "assistant" as const, content: turn.assistant_content,
+      reasoning: turn.reasoning ?? "", stream: fromStoredTurn(turn),
+      steers: turn.steers ?? [], report: turn.report ?? undefined,
+      sources: turn.sources, question: turn.question ?? undefined,
+      warnings: turn.warnings, error: turn.error ?? undefined,
+      stopped: turn.stopped, stopReason: turn.stop_reason ?? undefined },
+  ]);
 }
 
 const FALLBACK_CONFIG: AgentConfig = {
@@ -278,6 +299,96 @@ export function ShenzhiAiPage() {
     }).catch(() => { /* 后端不可用时保持 fallback，发送时给出可读错误 */ });
   }, []);
 
+  const patchAssistant = useCallback((context: {
+    sessionId: string;
+    generation: number;
+    assistantId: string;
+  }, patch: (turn: Turn) => Turn) => {
+    const current = runContextRef.current;
+    if (!current || current.sessionId !== context.sessionId
+      || current.generation !== context.generation
+      || context.generation !== sessionGenerationRef.current
+      || current.assistantId !== context.assistantId) return;
+    setTurns((previous) => {
+      if (context.generation !== sessionGenerationRef.current) return previous;
+      const index = previous.findIndex((turn) => turn.id === context.assistantId);
+      if (index === -1) return previous;
+      const next = [...previous];
+      next[index] = patch(previous[index]);
+      return next;
+    });
+  }, []);
+
+  const isCurrentRun = useCallback((context: RunContext, controller: AbortController) => {
+    const current = runContextRef.current;
+    return current?.controller === controller
+      && current.sessionId === context.sessionId
+      && current.generation === context.generation
+      && current.assistantId === context.assistantId
+      && context.generation === sessionGenerationRef.current;
+  }, []);
+
+  const finishRun = useCallback((context: RunContext, controller: AbortController) => {
+    if (!isCurrentRun(context, controller)) return;
+    setRunning(false);
+    abortRef.current = null;
+    runIdRef.current = null;
+    runContextRef.current = null;
+    notifyAgentSessionsChanged();
+  }, [isCurrentRun]);
+
+  const buildRunHandlers = useCallback((
+    context: RunContext, controller: AbortController, onAccepted?: () => void,
+  ): Parameters<typeof streamAgentSessionRun>[2] => {
+    const isCurrent = () => isCurrentRun(context, controller);
+    return {
+      onRunStart: (runId) => { onAccepted?.(); if (isCurrent()) runIdRef.current = runId; },
+      onDelta: (text, reasoning, turn) => patchAssistant(context, (current) => {
+        // 状态机全在 timeline.ts（可测）。这里只负责把它与页面的 Turn 接起来。
+        return {
+          ...current,
+          stream: applyDelta(current.stream, text, reasoning, turn),
+          content: turn !== current.stream.turn ? text : current.content + text,
+          reasoning: turn !== current.stream.turn ? reasoning : current.reasoning + reasoning,
+        };
+      }),
+      onMeta: (data) => {
+        if (data.warnings?.length) patchAssistant(context, (turn) => ({ ...turn, warnings: data.warnings }));
+      },
+      onMessage: (text, kind) => patchAssistant(context, (turn) => ({
+        ...turn, steers: [...turn.steers, { text, kind }],
+      })),
+      onToolCall: (activity) => patchAssistant(context, (turn) => ({
+        ...turn,
+        stream: applyToolCall(turn.stream, activity),
+      })),
+      onToolEnd: (toolCallId, isError, durationMs, summary) => patchAssistant(context, (turn) => ({
+        ...turn,
+        // 回填到同一个工具对象：工具行据此从"转圈"变"完成"
+        stream: applyToolEnd(turn.stream, toolCallId, { done: true, isError, durationMs, summary }),
+      })),
+      onResult: (result: AgentRunResult) => {
+        if (!isCurrent()) return;
+        patchAssistant(context, (turn) => {
+          const sources = result.output?.sources;
+          return {
+            ...turn,
+            // 问题由 QuestionCard 渲染（避免正文与卡片重复同一段文字），content 只放报告/正文
+            report: result.output?.report,
+            sources: sources?.length ? sources : undefined,
+            question: result.question ?? undefined,
+            error: result.status === "failed" ? result.error?.message ?? "运行失败" : undefined,
+            stopped: result.status === "stopped" || result.status === "timeout",
+            stopReason: result.stop_reason,
+            // 超时/停止时，模型在被打断前写出的正文此前被整段丢掉（界面只剩"已停止"）：
+            // content 为空就补上 final_text（有流式正文时不重复）。
+            content: result.question ? "" : turn.content || result.final_text || "",
+          };
+        });
+      },
+    };
+  }, [isCurrentRun, patchAssistant]);
+
   useEffect(() => {
     if (isPending) return;
     if (!sessionId) {
@@ -287,8 +398,6 @@ export function ShenzhiAiPage() {
     const generation = sessionGenerationRef.current + 1;
     sessionGenerationRef.current = generation;
     const previousRun = runContextRef.current;
-    const previousRunId = runIdRef.current;
-    if (previousRunId) void stopAgentRun(previousRunId).catch(() => {});
     if (previousRun) {
       previousRun.controller.abort();
       runContextRef.current = null;
@@ -313,17 +422,15 @@ export function ShenzhiAiPage() {
       void getAgentSession(sessionId).then((session) => {
         if (!active || generation !== sessionGenerationRef.current) return;
         setSessionTitle(session.title);
-        setTurns(session.turns.flatMap((turn) => [
-          { id: `${turn.id}:user`, role: "user" as const, content: turn.user_content, reasoning: "",
-            attachments: (turn.settings.attachments ?? []) as ChatAttachment[],
-            stream: initialStreamState(), steers: [] },
-          { id: `${turn.id}:assistant`, role: "assistant" as const, content: turn.assistant_content,
-            reasoning: turn.reasoning ?? "", stream: fromStoredTurn(turn),
-            steers: turn.steers ?? [], report: turn.report ?? undefined,
-            sources: turn.sources, question: turn.question ?? undefined,
-            warnings: turn.warnings, error: turn.error ?? undefined,
-            stopped: turn.stopped, stopReason: turn.stop_reason ?? undefined },
-        ]));
+        const restored = storedTurns(session.turns);
+        const lastTurn = session.turns.at(-1);
+        if (lastTurn?.status === "running") {
+          const assistant = restored.at(-1)!;
+          Object.assign(assistant, {
+            stream: initialStreamState(), content: "", reasoning: "", steers: [],
+          });
+        }
+        setTurns(restored);
         const settings = session.settings ?? {};
         setModel(settings.model || "default");
         if (settings.mode) setMode(settings.mode);
@@ -333,6 +440,33 @@ export function ShenzhiAiPage() {
         setWorkspace(settings.workspace_id
           ? { id: settings.workspace_id, name: "会话工作区", files: 0 } : null);
         setHydratedSessionId(session.id);
+        if (lastTurn?.status === "running") {
+          const controller = new AbortController();
+          const context = { sessionId, generation, assistantId: `${lastTurn.id}:assistant` };
+          setRunning(true);
+          abortRef.current = controller;
+          runIdRef.current = null;
+          runContextRef.current = { ...context, controller };
+          void attachAgentSessionRun(sessionId, buildRunHandlers(context, controller), controller.signal)
+            .catch(async (cause: unknown) => {
+              if (!active || !isCurrentRun(context, controller) || controller.signal.aborted) return;
+              if (cause instanceof ApiError && cause.status === 404) {
+                // One refresh only; the service reconciles orphan turns before returning.
+                const refreshed = await getAgentSession(sessionId);
+                if (active && isCurrentRun(context, controller) && !controller.signal.aborted) {
+                  setTurns(storedTurns(refreshed.turns));
+                }
+              } else if (!(cause instanceof Error && cause.name === "AbortError")) {
+                setRunError(cause instanceof Error ? cause.message : "续接失败，请稍后重试");
+              }
+            })
+            .catch((cause: unknown) => {
+              if (active && isCurrentRun(context, controller) && !controller.signal.aborted) {
+                setRunError(cause instanceof Error ? cause.message : "会话刷新失败，请稍后重试");
+              }
+            })
+            .finally(() => finishRun(context, controller));
+        }
       }).catch((cause) => {
         if (!active || generation !== sessionGenerationRef.current) return;
         setRunError(cause instanceof Error ? cause.message : "会话不存在或无权访问");
@@ -340,33 +474,20 @@ export function ShenzhiAiPage() {
         if (active && generation === sessionGenerationRef.current) setLoadingSession(false);
       });
     });
-    return () => { active = false; };
-  }, [identityKey, isPending, sessionId, router]);
+    return () => {
+      active = false;
+      abortRef.current?.abort();
+      runContextRef.current = null;
+      abortRef.current = null;
+      runIdRef.current = null;
+    };
+  }, [identityKey, isPending, sessionId, router, buildRunHandlers, finishRun, isCurrentRun]);
 
   useEffect(() => {
     if (stickRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }
   }, [turns]);
-
-  const patchAssistant = useCallback((context: {
-    sessionId: string;
-    generation: number;
-    assistantId: string;
-  }, patch: (turn: Turn) => Turn) => {
-    const current = runContextRef.current;
-    if (!current || current.sessionId !== context.sessionId
-      || current.generation !== context.generation
-      || context.generation !== sessionGenerationRef.current
-      || current.assistantId !== context.assistantId) return;
-    setTurns((previous) => {
-      const index = previous.findIndex((turn) => turn.id === context.assistantId);
-      if (index === -1) return previous;
-      const next = [...previous];
-      next[index] = patch(previous[index]);
-      return next;
-    });
-  }, []);
 
   const handleWorkspaceFolder = useCallback(async (files: WorkspaceFile[]) => {
     setRunError(null);
@@ -419,86 +540,23 @@ export function ShenzhiAiPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     runContextRef.current = { ...context, controller };
-    const isCurrent = () => {
-      const current = runContextRef.current;
-      return current?.controller === controller
-        && current.sessionId === sessionId
-        && current.generation === sessionGenerationRef.current;
-    };
+    const isCurrent = () => isCurrentRun(context, controller);
     let accepted = false;
     try {
-      await streamAgentSessionRun(sessionId, runInput, {
-        onRunStart: (runId) => { accepted = true; if (isCurrent()) runIdRef.current = runId; },
-        onDelta: (text, reasoning, turn) => patchAssistant(context, (current) => {
-          // 状态机全在 timeline.ts（可测）。这里只负责把它与页面的 Turn 接起来。
-          return {
-            ...current,
-            stream: applyDelta(current.stream, text, reasoning, turn),
-            content: turn !== current.stream.turn ? text : current.content + text,
-            reasoning: turn !== current.stream.turn ? reasoning : current.reasoning + reasoning,
-          };
-        }),
-        onMeta: (data) => {
-          if (data.warnings?.length) patchAssistant(context, (turn) => ({ ...turn, warnings: data.warnings }));
-        },
-        onMessage: (text, kind) => patchAssistant(context, (turn) => ({
-          ...turn, steers: [...turn.steers, { text, kind }],
-        })),
-        onCompaction: ({ before_chars, after_chars }) => patchAssistant(context, (turn) => ({
-          ...turn, steers: [...turn.steers, {
-            kind: "system", text: `上下文已压缩（${before_chars} → ${after_chars} 字符）`,
-          }],
-        })),
-        onToolCall: (activity) => patchAssistant(context, (turn) => ({
-          ...turn,
-          stream: applyToolCall(turn.stream, activity),
-        })),
-        onToolEnd: (toolCallId, isError, durationMs, summary) => patchAssistant(context, (turn) => ({
-          ...turn,
-          // 回填到同一个工具对象：工具行据此从"转圈"变"完成"
-          stream: applyToolEnd(turn.stream, toolCallId, { done: true, isError, durationMs, summary }),
-        })),
-        onResult: (result: AgentRunResult) => {
-          if (!isCurrent()) return;
-          patchAssistant(context, (turn) => {
-          const sources = result.output?.sources;
-          return {
-            ...turn,
-            // 问题由 QuestionCard 渲染（避免正文与卡片重复同一段文字），content 只放报告/正文
-            report: result.output?.report,
-            sources: sources?.length ? sources : undefined,
-            question: result.question ?? undefined,
-            error: result.status === "failed" ? result.error?.message ?? "运行失败" : undefined,
-            stopped: result.status === "stopped" || result.status === "timeout",
-            stopReason: result.stop_reason,
-            // 超时/停止时，模型在被打断前写出的正文此前被整段丢掉（界面只剩"已停止"）：
-            // content 为空就补上 final_text（有流式正文时不重复）。
-            content: result.question ? "" : turn.content || result.final_text || "",
-          };
-          });
-          if (isCurrent()) notifyAgentSessionsChanged();
-        },
-      }, controller.signal);
+      await streamAgentSessionRun(sessionId, runInput, buildRunHandlers(context, controller, () => { accepted = true; }), controller.signal);
     } catch (error) {
       if (!accepted && isCurrent()) {
         setTurns((previous) => previous.filter((turn) => turn.id !== userId && turn.id !== assistantId));
         setInput(prompt);
         setAttachments(runInput.attachments as ChatAttachment[]);
       }
-      if ((error as Error).name === "AbortError") {
-        patchAssistant(context, (turn) => ({ ...turn, stopped: true }));
-      } else if (isCurrent()) {
+      if (!controller.signal.aborted && (error as Error).name !== "AbortError" && isCurrent()) {
         setRunError((error as Error).message || "连接失败，请稍后重试");
       }
     } finally {
-      if (isCurrent()) {
-        setRunning(false);
-        abortRef.current = null;
-        runIdRef.current = null;
-        runContextRef.current = null;
-      }
+      finishRun(context, controller);
     }
-  }, [running, sessionId, patchAssistant]);
+  }, [running, sessionId, buildRunHandlers, finishRun, isCurrentRun]);
 
   const send = useCallback(async (answer?: string) => {
     let prompt = (answer ?? input).trim();
@@ -683,11 +741,11 @@ export function ShenzhiAiPage() {
               : <div key={turn.id} className="mb-8">
                   {/* 过程流：思考 / 正文 / 工具按到达顺序交错（pi 的结构）。空时不渲染任何盒子。 */}
                   <Timeline state={turn.stream} live={running && index === turns.length - 1} />
-                  {turn.steers.map((note, noteIndex) => (
+                  {visibleNotes(turn.steers).map((note, noteIndex) => (
                     <div key={noteIndex} className="mb-3 flex items-center justify-end gap-1.5">
                       <span className="rounded-full bg-agent-soft px-2 py-0.5 text-[10px] font-medium text-agent">
                         {note.kind === "steer" ? "⚡ 插话"
-                        : note.kind === "system" ? "⚙ 系统提示" : "→ 追问"}
+                        : "→ 追问"}
                       </span>
                       <div className="max-w-[70%] rounded-2xl rounded-br-md border border-agent/30 bg-agent-soft px-3.5 py-2 text-[14px] leading-6 text-ink">
                         {note.text}

@@ -80,6 +80,14 @@ def tool_messages(result):
 
 
 class RuntimeTests(unittest.IsolatedAsyncioTestCase):
+    def test_wrap_up_messages_follow_the_agreed_delivery_method(self):
+        from app.services.agent.runtime import BUDGET_FOLLOW_UP, DEADLINE_FOLLOW_UP
+        for note in (BUDGET_FOLLOW_UP, DEADLINE_FOLLOW_UP):
+            self.assertIn('按本轮约定的交付方式完成交付', note)
+            self.assertIn('否则直接在回复中作答', note)
+            self.assertNotIn('写成工作区文件', note)
+            self.assertNotIn('（写成文件）', note)
+
     async def test_truncated_arguments_do_not_break_next_request(self):
         """线上事故回归：write_file 参数被输出上限截断 → 残缺 JSON 回传 → 上游 400 杀死整轮。
 
@@ -391,6 +399,8 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
                  if isinstance(m, UserMessage) and m.text.startswith('预算提示')]
         self.assertEqual(len(notes), 1)                   # 只注入一次
         self.assertIn('已用 7/8 次', notes[0])            # 8 × 0.83 = 6.64 → 首个达标读数是 7
+        self.assertIn('按本轮约定的交付方式', notes[0])
+        self.assertNotIn('写成工作区文件', notes[0])
         self.assertIn('现在就开始交付', notes[0])         # 是行动指令，不是单纯读数
         self.assertEqual(result.status, 'done')
         self.assertEqual(provider.requests[9].tools, [])  # 随后的撞墙收尾轮照常无检索工具
@@ -405,6 +415,8 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         notes = [m.text for m in result.messages
                  if isinstance(m, UserMessage) and m.text.startswith('时间提示')]
         self.assertEqual(len(notes), 1)
+        self.assertIn('按本轮约定的交付方式', notes[0])
+        self.assertNotIn('写成工作区文件', notes[0])
         self.assertIn('现在就开始交付', notes[0])
         self.assertEqual(result.status, 'done')
 
@@ -1064,7 +1076,7 @@ class ServiceComposeTests(unittest.TestCase):
     def test_tool_listing_dynamic(self):
         from app.services.agent import service
         from app.services.agent import workspace
-        runtime = service.build_run_runtime(owner='u1')
+        runtime = service.build_run_runtime(owner='u1', mode='deep')
         section = self._tool_section(runtime.system)
         listed = sorted(line[2:].split(':', 1)[0] for line in section.splitlines()
                         if line.startswith('- '))
@@ -1128,7 +1140,7 @@ class WorkPromptTests(unittest.TestCase):
         prompt_guidelines 与业务侧显式注入提供（此前照抄 pi 的一套准则已移除）。
         """
         from app.services.agent import service
-        runtime = service.build_run_runtime(owner='u1')
+        runtime = service.build_run_runtime(owner='u1', mode='deep')
         self.assertIn('ShenzhiAi', runtime.system)
         self.assertIn('可用工具：', runtime.system)
         self.assertIn('当前日期：', runtime.system)
