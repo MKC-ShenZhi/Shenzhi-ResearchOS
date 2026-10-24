@@ -310,6 +310,7 @@ export function ShenzhiAiPage() {
       || context.generation !== sessionGenerationRef.current
       || current.assistantId !== context.assistantId) return;
     setTurns((previous) => {
+      if (context.generation !== sessionGenerationRef.current) return previous;
       const index = previous.findIndex((turn) => turn.id === context.assistantId);
       if (index === -1) return previous;
       const next = [...previous];
@@ -369,20 +370,20 @@ export function ShenzhiAiPage() {
       onResult: (result: AgentRunResult) => {
         if (!isCurrent()) return;
         patchAssistant(context, (turn) => {
-        const sources = result.output?.sources;
-        return {
-          ...turn,
-          // 问题由 QuestionCard 渲染（避免正文与卡片重复同一段文字），content 只放报告/正文
-          report: result.output?.report,
-          sources: sources?.length ? sources : undefined,
-          question: result.question ?? undefined,
-          error: result.status === "failed" ? result.error?.message ?? "运行失败" : undefined,
-          stopped: result.status === "stopped" || result.status === "timeout",
-          stopReason: result.stop_reason,
-          // 超时/停止时，模型在被打断前写出的正文此前被整段丢掉（界面只剩"已停止"）：
-          // content 为空就补上 final_text（有流式正文时不重复）。
-          content: result.question ? "" : turn.content || result.final_text || "",
-        };
+          const sources = result.output?.sources;
+          return {
+            ...turn,
+            // 问题由 QuestionCard 渲染（避免正文与卡片重复同一段文字），content 只放报告/正文
+            report: result.output?.report,
+            sources: sources?.length ? sources : undefined,
+            question: result.question ?? undefined,
+            error: result.status === "failed" ? result.error?.message ?? "运行失败" : undefined,
+            stopped: result.status === "stopped" || result.status === "timeout",
+            stopReason: result.stop_reason,
+            // 超时/停止时，模型在被打断前写出的正文此前被整段丢掉（界面只剩"已停止"）：
+            // content 为空就补上 final_text（有流式正文时不重复）。
+            content: result.question ? "" : turn.content || result.final_text || "",
+          };
         });
       },
     };
