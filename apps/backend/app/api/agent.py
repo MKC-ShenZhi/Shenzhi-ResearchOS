@@ -22,7 +22,8 @@ from app.schemas.agent import (
     AgentSessionCreate, AgentSessionRun, AgentSessionUpdate, LegacyAgentSessionImport,
 )
 from app.services.agent_sessions.repository import agent_session_repository
-from app.services.agent_sessions.service import start_session_run
+from app.services.agent_sessions.live import LiveRun, get_live, subscribe
+from app.services.agent_sessions.service import get_session_detail, start_session_run
 from app.services.agent_uploads import agent_upload_store
 from app.services.uploads.parser import parse_document
 
@@ -155,7 +156,7 @@ async def import_agent_session(
 
 @router.get('/sessions/{session_id}')
 async def get_agent_session(session_id: str, owner: str = Depends(request_owner)):
-    return ok((await agent_session_repository.get(session_id, owner)).public())
+    return ok((await get_session_detail(session_id, owner)).public())
 
 
 @router.patch('/sessions/{session_id}')
@@ -178,19 +179,38 @@ async def delete_agent_session(session_id: str, owner: str = Depends(request_own
 async def run_agent_session(
     session_id: str, body: AgentSessionRun, owner: str = Depends(request_owner),
 ):
-    events = await start_session_run(
+    live = await start_session_run(
         owner=owner, session_id=session_id, prompt=body.prompt, model=body.model,
         mode=body.mode, attachments=body.attachments, workspace_id=body.workspace_id,
         skills=body.skills, allow_shell=False,
     )
 
+    return session_run_stream(live)
+
+
+def session_run_stream(live: LiveRun, after: int = 0) -> StreamingResponse:
     async def generate():
-        async for name, data in events:
-            yield f'event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'
+        async for event in subscribe(live, after):
+            if event is None:
+                yield ': ping\n\n'
+            else:
+                index, name, data = event
+                yield f'id: {index}\nevent: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'
 
     return StreamingResponse(generate(), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache, no-transform',
                                       'X-Accel-Buffering': 'no'})
+
+
+@router.get('/sessions/{session_id}/run/stream')
+async def attach_agent_session_run(
+    session_id: str, after: int = Query(default=0, ge=0),
+    owner: str = Depends(request_owner),
+):
+    live = get_live(session_id, owner)
+    if live is None:
+        raise BusinessError(20004, '当前没有运行中的任务', 404)
+    return session_run_stream(live, after)
 
 
 @router.get('/session/{session_id}/file')

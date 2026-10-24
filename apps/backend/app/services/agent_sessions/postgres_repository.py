@@ -69,7 +69,7 @@ class PostgresAgentSessionRepository:
             await db.execute(
                 update(AgentTurnRow).where(AgentTurnRow.status == 'running').values(
                     status='failed', stopped=True, stop_reason='backend_restart',
-                    error='backend restarted while generating', completed_at=func.now(),
+                    error='服务重启，运行已中断，请重新发送', completed_at=func.now(),
                 )
             )
             if running_sessions:
