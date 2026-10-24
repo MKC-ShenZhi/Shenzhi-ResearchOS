@@ -106,7 +106,8 @@ export function ComparisonTable({ idx, tables, references }: {
   // the table render blank.
   const pageIdx = Math.min(page, pages - 1);
   const start = pageIdx * colCount;
-  const visible = dataCols.slice(start, start + colCount);
+  const allColumns = dataCols.map((_, index) => index);
+  const visibleColumns = allColumns.slice(start, start + colCount);
 
   // First column is `[n] Title` — split off the number for the chip.
   const splitFirst = (cell: string) => {
@@ -115,53 +116,60 @@ export function ComparisonTable({ idx, tables, references }: {
     return { n: null, rest: cell };
   };
 
+  const renderTable = (columns: number[]) => (
+    <table className="w-full border-collapse text-sm">
+      <thead>
+        <tr>
+          <th className="min-w-[180px] border-b border-line bg-primary-soft px-3 py-2.5 text-left font-semibold text-primary">
+            {renderInlineMarkdown(header[0] ?? "")}
+          </th>
+          {columns.map((column) => (
+            <th key={column} className="min-w-[120px] border-b border-line bg-primary-soft px-3 py-2.5 text-left font-semibold text-primary">
+              {renderInlineMarkdown(dataCols[column])}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, ri) => {
+          const { n, rest } = splitFirst(row[0] ?? "");
+          const ref = n !== null ? references[n - 1] : undefined;
+          return (
+            <tr key={ri} className="transition-colors hover:bg-primary-soft">
+              <td className="min-w-[180px] border-b border-line px-3 py-2.5 text-sm text-ink last:border-b-0 [&:last-child]:border-b-0">
+                <span className="leading-[1.55]">
+                  {n !== null && ref && (
+                    <sup className="inline select-none align-super text-[0.7rem] font-semibold leading-none text-primary">[{n}]</sup>
+                  )}
+                  <Lines text={rest} />
+                </span>
+              </td>
+              {columns.map((column) => {
+                const cell = row[1 + column];
+                return (
+                  <td key={column} className="min-w-[120px] border-b border-line px-3 py-2.5 text-sm text-ink [&:last-child]:border-b-0">
+                    <span className="leading-[1.55]"><Lines text={cell ?? ""} /></span>
+                  </td>
+                );
+              })}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+
   return (
     <div className="my-4">
       {/* 参考站纸面表格：卡片底 + 主色表头行 + 细格线 */}
-      <div className="max-w-full overflow-x-auto rounded-xl border border-line bg-card shadow-card [touch-action:pan-x pan-y] [webkit-overflow-scrolling:touch]">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr>
-              <th className="min-w-[180px] border-b border-line bg-primary-soft px-3 py-2.5 text-left font-semibold text-primary">
-                {renderInlineMarkdown(header[0] ?? "")}
-              </th>
-              {visible.map((h, i) => (
-                <th key={`${h}-${start + i}`} className="min-w-[120px] border-b border-line bg-primary-soft px-3 py-2.5 text-left font-semibold text-primary">
-                  {renderInlineMarkdown(h)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, ri) => {
-              const { n, rest } = splitFirst(row[0] ?? "");
-              const ref = n !== null ? references[n - 1] : undefined;
-              return (
-                <tr key={ri} className="transition-colors hover:bg-primary-soft">
-                  <td className="min-w-[180px] border-b border-line px-3 py-2.5 text-sm text-ink last:border-b-0 [&:last-child]:border-b-0">
-                    <span className="leading-[1.55]">
-                      {n !== null && ref && (
-                        <sup className="inline select-none align-super text-[0.7rem] font-semibold leading-none text-primary">[{n}]</sup>
-                      )}
-                      <Lines text={rest} />
-                    </span>
-                  </td>
-                  {visible.map((_, ci) => {
-                    const cell = row[1 + start + ci];
-                    return (
-                      <td key={ci} className="min-w-[120px] border-b border-line px-3 py-2.5 text-sm text-ink [&:last-child]:border-b-0">
-                        <span className="leading-[1.55]"><Lines text={cell ?? ""} /></span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div data-print-hide className="max-w-full overflow-x-auto rounded-xl border border-line bg-card shadow-card [touch-action:pan-x pan-y] [webkit-overflow-scrolling:touch]">
+        {renderTable(visibleColumns)}
+      </div>
+      <div className="hidden max-w-full overflow-x-auto rounded-xl border border-line bg-card shadow-card" data-print-only>
+        {renderTable(allColumns)}
       </div>
       {pages > 1 && (
-        <div className="mt-2 flex items-center justify-end gap-2">
+        <div data-print-hide className="mt-2 flex items-center justify-end gap-2">
           <span className="text-xs text-muted">{pageIdx + 1}/{pages}</span>
           <div className="flex overflow-hidden rounded-lg border border-line">
             <button

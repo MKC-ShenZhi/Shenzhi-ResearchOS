@@ -82,6 +82,42 @@ export function ReportView({ text, sources, showToc = true }: { text: string; so
           const COLLAPSED_FROM = 60;
           const showAll = collapsedFrom === null;
           const visibleCount = showAll ? ordered.length : Math.min(citedCount + 8, Math.max(COLLAPSED_FROM, citedCount + 8));
+          const renderReference = ({ source, index }: { source: AgentSource; index: number }) => {
+            const url = textOf(source.url);
+            const title = textOf(source.title) || url || "(未命名)";
+            const readDepth = textOf(source.readDepth);
+            return (
+              <div
+                key={`${textOf(source.id) || url || index}-${index}`}
+                title={url ? "打开来源" : undefined}
+                className={cn("flex items-baseline gap-3", url && "-mx-2 cursor-pointer rounded-lg px-2 transition-colors duration-200 hover:bg-primary-soft")}
+              >
+                <span className="min-w-6 text-right text-xs font-bold text-primary">{index + 1}</span>
+                <div className="min-w-0">
+                  {url ? (
+                    <a href={url} target="_blank" rel="noreferrer" title={title}
+                      className="block truncate text-sm no-underline hover:text-primary hover:underline">
+                      {title}
+                    </a>
+                  ) : (
+                    <p className="truncate text-sm" title={title}>{title}</p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    {refMeta(source).map((meta, position) => (
+                      <span key={position} className="truncate text-xs text-muted">{meta}</span>
+                    ))}
+                    {source.kind === "web" && <span className="rounded bg-chip px-1.5 py-0.5 text-[10px] text-muted">网页</span>}
+                    {Boolean(source.preprint) && (
+                      <span title="arXiv 托管且无正式 DOI/venue，未经同行评审" className="rounded bg-brand-gold/20 px-1.5 py-0.5 text-[10px] text-ink-2">预印本</span>
+                    )}
+                    {readDepth === "full" && <span title="已读这篇的全文" className="rounded bg-success-soft px-1.5 py-0.5 text-[10px] text-success">已读全文</span>}
+                    {readDepth === "abstract" && <span title="只基于摘要引用" className="rounded bg-chip px-1.5 py-0.5 text-[10px] text-muted">仅摘要</span>}
+                    {readDepth === "head" && <span title="批读的全文头部摘录" className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] text-primary">头部摘录</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          };
           return (
             <div className="mt-8">
               <div className="mb-4 border-t border-line" />
@@ -90,45 +126,16 @@ export function ReportView({ text, sources, showToc = true }: { text: string; so
                 <span className="text-sm font-semibold text-muted">参考文献（{sources!.length}，其中被引用 {citedCount}）</span>
               </div>
               <div className="space-y-1.5 pl-1">
-                {ordered.slice(0, visibleCount).map(({ source, index }) => {
-                  const url = textOf(source.url);
-                  const title = textOf(source.title) || url || "(未命名)";
-                  const readDepth = textOf(source.readDepth);
-                  return (
-                    <div
-                      key={`${textOf(source.id) || url || index}-${index}`}
-                      title={url ? "打开来源" : undefined}
-                      className={cn("flex items-baseline gap-3", url && "-mx-2 cursor-pointer rounded-lg px-2 transition-colors duration-200 hover:bg-primary-soft")}
-                    >
-                      <span className="min-w-6 text-right text-xs font-bold text-primary">{index + 1}</span>
-                      <div className="min-w-0">
-                        {url ? (
-                          <a href={url} target="_blank" rel="noreferrer" title={title}
-                            className="block truncate text-sm no-underline hover:text-primary hover:underline">
-                            {title}
-                          </a>
-                        ) : (
-                          <p className="truncate text-sm" title={title}>{title}</p>
-                        )}
-                        <div className="flex items-center gap-2">
-                          {refMeta(source).map((meta, position) => (
-                            <span key={position} className="truncate text-xs text-muted">{meta}</span>
-                          ))}
-                          {source.kind === "web" && <span className="rounded bg-chip px-1.5 py-0.5 text-[10px] text-muted">网页</span>}
-                          {Boolean(source.preprint) && (
-                            <span title="arXiv 托管且无正式 DOI/venue，未经同行评审" className="rounded bg-brand-gold/20 px-1.5 py-0.5 text-[10px] text-ink-2">预印本</span>
-                          )}
-                          {readDepth === "full" && <span title="已读这篇的全文" className="rounded bg-success-soft px-1.5 py-0.5 text-[10px] text-success">已读全文</span>}
-                          {readDepth === "abstract" && <span title="只基于摘要引用" className="rounded bg-chip px-1.5 py-0.5 text-[10px] text-muted">仅摘要</span>}
-                          {readDepth === "head" && <span title="批读的全文头部摘录" className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] text-primary">头部摘录</span>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {ordered.slice(0, visibleCount).map(renderReference)}
+                {ordered.length > visibleCount && (
+                  <div className="hidden space-y-1.5" data-print-only>
+                    {ordered.slice(visibleCount).map(renderReference)}
+                  </div>
+                )}
                 {ordered.length > visibleCount && (
                   <button
                     type="button"
+                    data-print-hide
                     onClick={() => setCollapsedFrom(null)}
                     className="mt-1 cursor-pointer self-start text-[13px] text-primary hover:underline"
                   >
@@ -142,6 +149,7 @@ export function ReportView({ text, sources, showToc = true }: { text: string; so
       </div>
       {hasToc && (
         <div
+          data-print-hide
           className={cn(
             // min-[900px] 精确复刻报告布局的 md 断点（Tailwind md=768 会在 768–900px
             // 窗口误显示 TOC，把报告卡挤到不可读的宽度）。
