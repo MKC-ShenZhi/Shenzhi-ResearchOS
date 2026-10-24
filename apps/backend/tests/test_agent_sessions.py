@@ -377,6 +377,11 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unexpected_bridge_failure_persists_failed_and_sends_result(self):
         session_id = await self.create('异常兜底')
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        upload = await agent_upload_store.save(owner, 'notes.md', {
+            'text': '异常前的附件正文', 'original_length': 9, 'final_length': 9,
+            'truncated': False, 'warning': None,
+        })
 
         async def broken_events(*args, **kwargs):
             yield 'run_start', {'run_id': 'broken'}
@@ -385,7 +390,9 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
 
         with patch('app.services.agent_sessions.service.agent_runtime.run_events', broken_events):
             response = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
-                                          json_body={'prompt': '异常兜底'})
+                                          json_body={'prompt': '异常兜底', 'attachments': [
+                                              {'kind': 'file', 'file_id': upload['file_id']}
+                                          ]})
         result = parse_sse(response.text)[-1][1]
         self.assertEqual(result['status'], 'failed')
         self.assertEqual(result['stop_reason'], 'error')
@@ -394,7 +401,10 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(turn.status, 'failed')
         self.assertEqual(turn.stop_reason, 'error')
         self.assertEqual(turn.assistant_content, '部分答案')
-        self.assertEqual(turn.transcript[-2]['text'], '异常兜底')
+        self.assertTrue(turn.transcript[-2]['text'].startswith('异常兜底'))
+        self.assertIn('异常前的附件正文', turn.transcript[-2]['text'])
+        with self.assertRaises(BusinessError):
+            await agent_upload_store.get(owner, upload['file_id'])
         self.assertEqual(turn.transcript[-1]['tool_calls'], [])
 
     async def test_replayed_run_can_still_be_steered_and_stopped(self):

@@ -169,7 +169,7 @@ async def start_session_run(
                     'usage': {},
                     # Tool calls may be incomplete after a bridge failure. Keep the
                     # observed timeline but close the model-facing transcript.
-                    'transcript': _closed_transcript(runtime_history, turn.user_content, partial),
+                    'transcript': _closed_transcript(runtime_history, prompt + attachment_text, partial),
                 })
                 await agent_upload_store.consume(owner, list(files))
             except Exception:
