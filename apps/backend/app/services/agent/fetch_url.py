@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
@@ -36,33 +37,39 @@ def fetch_url_tool(*, transport: httpx.BaseTransport | None = None) -> Tool:
           snippet='抓取单个网页并返回正文文本')
     async def fetch_url(args: FetchUrlArgs) -> str | ToolOutput:
         max_chars = max(500, min(args.max_chars or MAX_TEXT_CHARS, MAX_TEXT_CHARS))
-        with httpx.Client(timeout=TIMEOUT_S, headers=_UA, follow_redirects=False,
-                          transport=transport) as client:
-            try:
-                response = safe_get(client, args.url)
-            except BlockedUrlError as exc:
-                raise BusinessError(20004, str(exc)) from exc
-            except httpx.HTTPError as exc:
-                raise BusinessError(20004, f'抓取失败：{exc}') from exc
-            if response.status_code >= 400:
-                raise BusinessError(20004, f'目标返回 HTTP {response.status_code}')
-            content_type = response.headers.get('content-type', '')
-            try:
-                raw = read_bytes_capped(response, MAX_BYTES)
-            except ValueError as exc:
-                raise BusinessError(20004, str(exc)) from exc
-        text = _html_text(raw) if ('html' in content_type or not content_type) else \
-            raw.decode('utf-8', 'replace')
-        if not text.strip():
-            raise BusinessError(20004, '页面没有可提取的正文（可能是纯前端渲染或空页）')
-        clipped = text[:max_chars]
-        payload = {
-            'url': str(response.url),
-            'content_type': content_type or 'unknown',
-            'text_chars': len(clipped),
-            'truncated': bool(len(text) > max_chars),
-            'text': clipped,
-        }
-        return json.dumps(payload, ensure_ascii=False)
+        return await asyncio.to_thread(_fetch_url_sync, args, max_chars, transport)
 
     return fetch_url
+
+
+def _fetch_url_sync(args: FetchUrlArgs, max_chars: int,
+                    transport: httpx.BaseTransport | None) -> str:
+    """同步网络请求、正文读取和解析统一在线程中完成。"""
+    with httpx.Client(timeout=TIMEOUT_S, headers=_UA, follow_redirects=False,
+                      transport=transport) as client:
+        try:
+            response = safe_get(client, args.url)
+        except BlockedUrlError as exc:
+            raise BusinessError(20004, str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise BusinessError(20004, f'抓取失败：{exc}') from exc
+        if response.status_code >= 400:
+            raise BusinessError(20004, f'目标返回 HTTP {response.status_code}')
+        content_type = response.headers.get('content-type', '')
+        try:
+            raw = read_bytes_capped(response, MAX_BYTES)
+        except ValueError as exc:
+            raise BusinessError(20004, str(exc)) from exc
+    text = _html_text(raw) if ('html' in content_type or not content_type) else \
+        raw.decode('utf-8', 'replace')
+    if not text.strip():
+        raise BusinessError(20004, '页面没有可提取的正文（可能是纯前端渲染或空页）')
+    clipped = text[:max_chars]
+    payload = {
+        'url': str(response.url),
+        'content_type': content_type or 'unknown',
+        'text_chars': len(clipped),
+        'truncated': bool(len(text) > max_chars),
+        'text': clipped,
+    }
+    return json.dumps(payload, ensure_ascii=False)

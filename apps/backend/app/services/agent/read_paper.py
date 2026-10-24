@@ -14,7 +14,9 @@
 """
 from __future__ import annotations
 
+import asyncio
 import io
+import json
 import re
 from typing import Any
 from urllib.parse import quote
@@ -146,75 +148,81 @@ def read_paper_tool(*, knowledge: Any = None, transport: httpx.BaseTransport | N
           params=ReadPaperArgs, timeout_s=120.0,
           snippet='读 PDF 全文（带页号）或退回网页正文')
     async def read_paper(args: ReadPaperArgs) -> str | ToolOutput:
-        import json
-
         target = (args.url or '').strip()
         paper_id = (args.paper_id or '').strip()
         if not target and not paper_id:
             raise BusinessError(20001, 'read_paper 需要 url 或 paper_id 之一')
         max_chars = max(200, min(args.max_chars or MAX_TEXT_CHARS, MAX_TEXT_CHARS))
-        with httpx.Client(timeout=REQUEST_TIMEOUT_S, headers=_UA, follow_redirects=False,
-                          transport=transport) as client:
-            # paper_id 优先走知识库的 pdf_url（最可靠）；拿不到再退回 URL/猜测路径
-            resolved = await _resolve_pdf_url(knowledge, paper_id or target)
-            if not target and resolved is None:
-                raise BusinessError(20004, f'知识库没有 {paper_id} 的可达 PDF 地址'
-                                           f'（可改用 paper_detail 看摘要，或用 URL 重试）')
-            candidates = pdf_candidates(target or resolved or '')
-            if resolved:
-                candidates.insert(0, resolved)
-            failures: list[str] = []
-            for candidate in candidates:
-                try:
-                    response = safe_get(client, candidate)
-                    if response.status_code >= 400:
-                        failures.append(f'{candidate}: HTTP {response.status_code}')
-                        continue
-                    content_type = response.headers.get('content-type', '')
-                    if not looks_like_pdf(candidate, content_type):
-                        # Unpaywall 之类的 JSON 跳板：从里面再取一个 PDF 地址
-                        if 'json' in content_type:
-                            best = _unpaywall_pdf(response.json())
-                            if best:
-                                candidates.append(best)
-                                continue
-                        # 已经是网页正文：不必等候选耗尽，也不该把它记成"PDF 候选失败"重打一次
-                        page_text = _html_text(read_bytes_capped(response, MAX_HTML_BYTES))
-                        if page_text:
-                            return json.dumps(_html_payload(candidate, page_text, max_chars,
-                                                            failures), ensure_ascii=False)
-                        failures.append(f'{candidate}: 页面无可提取正文')
-                        continue
-                    data = read_bytes_capped(response, MAX_PDF_BYTES)
-                    title, pages, total = _pdf_pages(data)
-                    text, meta = _paginate(pages, args.page_from, args.page_to, max_chars)
-                    if not text.strip():
-                        failures.append(f'{candidate}: PDF 无可用文本层（可能是扫描件）')
-                        continue
-                    payload = {'title': title or candidate, 'url': candidate, 'pdf': True,
-                               **meta, 'text': text}
-                    return json.dumps(payload, ensure_ascii=False)
-                except (BlockedUrlError, ValueError, httpx.HTTPError) as exc:
-                    failures.append(f'{candidate}: {exc}')
-            # 所有 PDF 候选都失败 → 退回读网页正文，并如实标记 pdf=false
-            try:
-                response = safe_get(client, target or resolved or '')
-                if response.status_code >= 400:
-                    raise BusinessError(20004, f'网页返回 HTTP {response.status_code}')
-                text = _html_text(read_bytes_capped(response, MAX_HTML_BYTES))
-                if not text:
-                    raise BusinessError(20004, '网页没有可提取的正文')
-                return json.dumps(_html_payload(target, text, max_chars, failures),
-                                  ensure_ascii=False)
-            except BusinessError as exc:
-                detail = '; '.join(failures[:3]) or '无 PDF 候选'
-                raise BusinessError(20004,
-                                    f'无法读取 {target}: {exc.message}（PDF 尝试：{detail}）') from exc
-            except (BlockedUrlError, ValueError, httpx.HTTPError) as exc:
-                detail = '; '.join(failures[:3]) or '无 PDF 候选'
-                raise BusinessError(20004, f'无法读取 {target}: {exc}（PDF 尝试：{detail}）') from exc
+        # paper_id 优先走知识库的 pdf_url；异步知识库调用保留在事件循环中。
+        resolved = await _resolve_pdf_url(knowledge, paper_id or target)
+        return await asyncio.to_thread(_read_paper_sync, args, target, resolved,
+                                       max_chars, transport)
 
     return read_paper
+
+
+def _read_paper_sync(args: ReadPaperArgs, target: str, resolved: str | None,
+                    max_chars: int, transport: httpx.BaseTransport | None) -> str:
+    """同步下载与解析在线程中执行，避免阻塞 Agent 事件循环。"""
+    paper_id = (args.paper_id or '').strip()
+    with httpx.Client(timeout=REQUEST_TIMEOUT_S, headers=_UA, follow_redirects=False,
+                      transport=transport) as client:
+        if not target and resolved is None:
+            raise BusinessError(20004, f'知识库没有 {paper_id} 的可达 PDF 地址'
+                                       f'（可改用 paper_detail 看摘要，或用 URL 重试）')
+        candidates = pdf_candidates(target or resolved or '')
+        if resolved:
+            candidates.insert(0, resolved)
+        failures: list[str] = []
+        for candidate in candidates:
+            try:
+                response = safe_get(client, candidate)
+                if response.status_code >= 400:
+                    failures.append(f'{candidate}: HTTP {response.status_code}')
+                    continue
+                content_type = response.headers.get('content-type', '')
+                if not looks_like_pdf(candidate, content_type):
+                    # Unpaywall 之类的 JSON 跳板：从里面再取一个 PDF 地址
+                    if 'json' in content_type:
+                        best = _unpaywall_pdf(response.json())
+                        if best:
+                            candidates.append(best)
+                            continue
+                    # 已经是网页正文：不必等候选耗尽，也不该把它记成"PDF 候选失败"重打一次
+                    page_text = _html_text(read_bytes_capped(response, MAX_HTML_BYTES))
+                    if page_text:
+                        return json.dumps(_html_payload(candidate, page_text, max_chars,
+                                                        failures), ensure_ascii=False)
+                    failures.append(f'{candidate}: 页面无可提取正文')
+                    continue
+                data = read_bytes_capped(response, MAX_PDF_BYTES)
+                title, pages, total = _pdf_pages(data)
+                text, meta = _paginate(pages, args.page_from, args.page_to, max_chars)
+                if not text.strip():
+                    failures.append(f'{candidate}: PDF 无可用文本层（可能是扫描件）')
+                    continue
+                payload = {'title': title or candidate, 'url': candidate, 'pdf': True,
+                           **meta, 'text': text}
+                return json.dumps(payload, ensure_ascii=False)
+            except (BlockedUrlError, ValueError, httpx.HTTPError) as exc:
+                failures.append(f'{candidate}: {exc}')
+        # 所有 PDF 候选都失败 → 退回读网页正文，并如实标记 pdf=false
+        try:
+            response = safe_get(client, target or resolved or '')
+            if response.status_code >= 400:
+                raise BusinessError(20004, f'网页返回 HTTP {response.status_code}')
+            text = _html_text(read_bytes_capped(response, MAX_HTML_BYTES))
+            if not text:
+                raise BusinessError(20004, '网页没有可提取的正文')
+            return json.dumps(_html_payload(target, text, max_chars, failures),
+                              ensure_ascii=False)
+        except BusinessError as exc:
+            detail = '; '.join(failures[:3]) or '无 PDF 候选'
+            raise BusinessError(20004,
+                                f'无法读取 {target}: {exc.message}（PDF 尝试：{detail}）') from exc
+        except (BlockedUrlError, ValueError, httpx.HTTPError) as exc:
+            detail = '; '.join(failures[:3]) or '无 PDF 候选'
+            raise BusinessError(20004, f'无法读取 {target}: {exc}（PDF 尝试：{detail}）') from exc
 
 
 def _html_payload(url: str, text: str, max_chars: int, failures: list[str]) -> dict[str, Any]:
