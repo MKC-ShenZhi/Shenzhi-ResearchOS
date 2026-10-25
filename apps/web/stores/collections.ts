@@ -15,11 +15,9 @@ interface CollectionState {
   identityKey: string | null;
   generation: number;
   folders: CollectionFolder[];
-  paperFolders: Record<string, number[]>;
   loading: boolean;
   syncIdentity: (userId: string | null) => void;
   loadFolders: () => Promise<void>;
-  loadPaperFolders: (paperId: string) => Promise<number[]>;
   createFolder: (name: string) => Promise<CollectionFolder>;
   renameFolder: (folderId: number, name: string) => Promise<CollectionFolder>;
   deleteFolder: (folderId: number) => Promise<void>;
@@ -40,7 +38,6 @@ export const useCollections = create<CollectionState>((set, get) => ({
   identityKey: null,
   generation: 0,
   folders: [],
-  paperFolders: {},
   loading: false,
   syncIdentity: (userId) => set((state) => {
     if (state.identityKey === userId) return state;
@@ -49,7 +46,6 @@ export const useCollections = create<CollectionState>((set, get) => ({
       identityKey: userId,
       generation: state.generation + 1,
       folders: [],
-      paperFolders: {},
       loading: false,
     };
   }),
@@ -63,23 +59,13 @@ export const useCollections = create<CollectionState>((set, get) => ({
       // 未登录：固定展示三个默认文件夹占位，使展示与上次登录状态无关；
       // 点击文件夹后由内容区给出“请先登录”提示。
       if (error instanceof ApiError && error.status === 401) {
-        if (get().generation === generation) set({ folders: UNAUTHENTICATED_FOLDERS, paperFolders: {} });
+        if (get().generation === generation) set({ folders: UNAUTHENTICATED_FOLDERS });
         return;
       }
       throw error;
     } finally {
       if (get().generation === generation) set({ loading: false });
     }
-  },
-  loadPaperFolders: async (paperId) => {
-    const generation = get().generation;
-    const response = await apiJson<{ folder_ids: number[] }>(
-      `/papers/${encodeURIComponent(paperId)}/collections`,
-    );
-    if (get().generation === generation) set((state) => ({
-      paperFolders: { ...state.paperFolders, [paperId]: response.folder_ids },
-    }));
-    return response.folder_ids;
   },
   createFolder: async (name) => {
     const generation = get().generation;
@@ -109,9 +95,6 @@ export const useCollections = create<CollectionState>((set, get) => ({
     if (get().generation !== generation) return;
     set((state) => ({
       folders: state.folders.filter((item) => item.id !== folderId),
-      paperFolders: Object.fromEntries(
-        Object.entries(state.paperFolders).map(([paperId, ids]) => [paperId, ids.filter((id) => id !== folderId)]),
-      ),
     }));
     invalidateKnowledgeOverviewCache();
   },
@@ -122,13 +105,6 @@ export const useCollections = create<CollectionState>((set, get) => ({
       body: JSON.stringify({ folder_ids: folderIds }),
     });
     if (get().generation !== generation) return;
-    set((state) => ({
-      paperFolders: { ...state.paperFolders, [paperId]: folderIds },
-      folders: state.folders.map((folder) => ({
-        ...folder,
-        paper_count: folder.paper_count + (folderIds.includes(folder.id) ? 1 : 0),
-      })),
-    }));
     invalidateKnowledgeOverviewCache();
     await get().loadFolders();
   },

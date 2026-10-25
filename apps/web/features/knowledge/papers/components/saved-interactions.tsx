@@ -154,9 +154,9 @@ function PaperRow({ paper, liked, userId, onRemoved }: {
   return <div className="rounded-xl border border-line px-3 py-3 sm:px-4">
     <div className="flex items-center gap-3">
       <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><FileText className="size-5" /></span>
-      <div className="min-w-0 flex-1"><Link href={paperHref(paper.paper_id, { mode: "create", source: "/knowledge/papers" })} className="block truncate text-sm font-semibold text-ink hover:text-primary hover:underline">{paper.title}</Link><p className="mt-1 truncate text-xs text-faint">{paper.venue ?? "暂无会议"} · {paper.year ?? "年份未知"} · {paper.authors.join("、") || "作者未知"}</p></div>
+      <div className="min-w-0 flex-1">{paper.is_available ? <Link href={paperHref(paper.paper_id, { mode: "create", source: "/knowledge/papers" })} className="block truncate text-sm font-semibold text-ink hover:text-primary hover:underline">{paper.title}</Link> : <p className="truncate text-sm font-semibold text-ink">论文暂不可用</p>}<p className="mt-1 truncate text-xs text-faint">{paper.is_available ? `${paper.venue ?? "暂无会议"} · ${paper.year ?? "年份未知"} · ${paper.authors.join("、") || "作者未知"}` : `知识库暂未提供详情 · ID ${paper.paper_id}`}</p></div>
       <CancelButton action={liked ? "点赞" : "收藏"} saving={saving} onClick={() => void cancel()} />
-      <Link href={paperHref(paper.paper_id, { mode: "create", source: "/knowledge/papers" })} className="shrink-0 text-xs font-medium text-primary hover:underline">查看论文 ›</Link>
+      {paper.is_available && <Link href={paperHref(paper.paper_id, { mode: "create", source: "/knowledge/papers" })} className="shrink-0 text-xs font-medium text-primary hover:underline">查看论文 ›</Link>}
     </div>
     {error && <p role="alert" className="mt-2 text-right text-xs text-danger">{error}</p>}
   </div>;

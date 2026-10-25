@@ -59,6 +59,10 @@ export function InteractionSync() {
           collectorCount: typeof message.collectorCount === "number"
             ? message.collectorCount
             : current.collectorCount,
+          folderIds: Array.isArray(message.folderIds)
+            && message.folderIds.every((id) => Number.isInteger(id))
+            ? message.folderIds as number[]
+            : current.folderIds,
         } : current,
       );
     };

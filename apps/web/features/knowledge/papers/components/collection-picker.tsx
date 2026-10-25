@@ -5,6 +5,7 @@ import { Bookmark, Check, LoaderCircle, MoreHorizontal, Plus, X } from "lucide-r
 import { ApiError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
+import { usePaperInteraction } from "@/features/knowledge/interactions/use-paper-interaction";
 import { useRefreshPaperInteraction } from "@/features/knowledge/interactions/use-refresh-paper-interaction";
 import { useCollections } from "@/stores/collections";
 
@@ -26,10 +27,10 @@ export function CollectionPicker({
   const [saving, setSaving] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const { session, isPending: isAuthPending, openLogin } = useAuth();
+  const { interaction, refetch: refetchInteraction } = usePaperInteraction(paperId);
   const refreshInteraction = useRefreshPaperInteraction(paperId);
-  const identityKey = useCollections((state) => state.identityKey);
-  const { folders, paperFolders, loadFolders, loadPaperFolders, createFolder, updatePaperFolders } = useCollections();
-  const checked = paperFolders[paperId] ?? [];
+  const { folders, loadFolders, createFolder, updatePaperFolders } = useCollections();
+  const checked = interaction?.folderIds ?? [];
 
   const promptLogin = useCallback(() => {
     changeOpen(false);
@@ -46,14 +47,9 @@ export function CollectionPicker({
   }
 
   useEffect(() => {
-    if (isAuthPending || !session?.user?.id || identityKey !== session.user.id) return;
-    void loadPaperFolders(paperId).catch(() => {});
-  }, [identityKey, isAuthPending, loadPaperFolders, paperId, session?.user?.id]);
-
-  useEffect(() => {
     if (!open) return;
-    void Promise.all([loadFolders(), loadPaperFolders(paperId)])
-      .then(([, folderIds]) => setSelected(folderIds))
+    void Promise.all([loadFolders(), refetchInteraction()])
+      .then(([, result]) => setSelected(result.data?.folderIds ?? []))
       .catch((error) => {
         if (error instanceof ApiError && error.status === 401) {
           promptLogin();
@@ -61,7 +57,7 @@ export function CollectionPicker({
         }
         setMessage("收藏信息加载失败");
       });
-  }, [loadFolders, loadPaperFolders, open, paperId, promptLogin]);
+  }, [loadFolders, open, promptLogin, refetchInteraction]);
 
   useEffect(() => {
     if (!open) return;

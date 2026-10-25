@@ -95,6 +95,7 @@ class TopicFollowListResponse(BaseModel):
 class LikedPaperItem(PaperDetail):
     paper_id: str
     liked_at: datetime
+    is_available: bool = True
 
 
 class LikedPaperListResponse(BaseModel):

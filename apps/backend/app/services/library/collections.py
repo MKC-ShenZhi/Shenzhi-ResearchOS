@@ -122,10 +122,10 @@ class CollectionService:
         summaries = await self.knowledge.batch_get_papers([row.paper_id for row in rows])
         summaries_by_id = {paper.id: paper for paper in summaries}
         items = [CollectionPaperItem.model_validate({
-            **summaries_by_id[row.paper_id].model_dump(),
+            **self._paper_data(summaries_by_id.get(row.paper_id), row.paper_id),
             'paper_id': row.paper_id,
             'added_at': row.created_at,
-        }) for row in rows if row.paper_id in summaries_by_id]
+        }) for row in rows]
         return CollectionPaperListResponse(items=items, total=total or 0, page=page, page_size=page_size)
 
     async def collected_papers(self, user_id: str, page: int, page_size: int) -> CollectionPaperListResponse:
@@ -150,10 +150,10 @@ class CollectionService:
         summaries = await self.knowledge.batch_get_papers([paper_id for paper_id, _ in rows])
         summaries_by_id = {paper.id: paper for paper in summaries}
         items = [CollectionPaperItem.model_validate({
-            **summaries_by_id[paper_id].model_dump(),
+            **self._paper_data(summaries_by_id.get(paper_id), paper_id),
             'paper_id': paper_id,
             'added_at': added_at,
-        }) for paper_id, added_at in rows if paper_id in summaries_by_id]
+        }) for paper_id, added_at in rows]
         return CollectionPaperListResponse(items=items, total=total or 0, page=page, page_size=page_size)
 
     async def paper_folders(self, user_id: str, paper_id: str) -> list[int]:
@@ -168,7 +168,7 @@ class CollectionService:
         async with session_scope() as session:
             folders = list(await session.scalars(select(CollectionFolderRow).where(
                 CollectionFolderRow.user_id == user_id, CollectionFolderRow.id.in_(set(folder_ids)),
-            ))) if folder_ids else []
+            ).order_by(CollectionFolderRow.id).with_for_update())) if folder_ids else []
             if len(folders) != len(set(folder_ids)):
                 raise BusinessError(40003, '包含不存在的文件夹', 400)
             existing = set(await session.scalars(select(CollectionItemRow.folder_id).where(
@@ -232,6 +232,17 @@ class CollectionService:
                 .group_by(CollectionItemRow.paper_id)
             )
             return {paper_id: int(total) for paper_id, total in rows}
+
+    @staticmethod
+    def _paper_data(summary, paper_id: str) -> dict:
+        if summary is not None:
+            return {**summary.model_dump(), 'is_available': True}
+        return {
+            'id': paper_id,
+            'title': '论文暂不可用',
+            'provenance': {'external_id': paper_id},
+            'is_available': False,
+        }
 
     async def paper_folder_map(self, user_id: str, paper_ids: list[str]) -> dict[str, list[int]]:
         """Personal folder membership for a visible list, without one query per card."""

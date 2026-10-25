@@ -25,6 +25,7 @@ export function useRefreshPaperInteraction(paperId: string) {
       publishPaperInteraction(identityKey, {
         paperId,
         collectorCount: current.collectorCount,
+        folderIds: current.folderIds ?? [],
       });
     }
   }, [identityKey, isAuthenticated, paperId, queryClient]);

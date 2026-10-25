@@ -220,6 +220,7 @@ export interface ReadingHistoryResponse {
 export interface CollectionPaperItem extends KnowledgePaperDetail {
   paper_id: string;
   added_at: string;
+  is_available: boolean;
 }
 
 export interface CollectionPaperListResponse {

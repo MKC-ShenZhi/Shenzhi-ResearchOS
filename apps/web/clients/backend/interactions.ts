@@ -45,6 +45,7 @@ export interface TopicFollowState {
 export interface LikedPaperItem extends KnowledgePaperDetail {
   paper_id: string;
   liked_at: string;
+  is_available: boolean;
 }
 
 export interface LikedPaperListResponse {
@@ -277,7 +278,7 @@ export function fetchMyTopicFollows(): Promise<TopicFollowListResponse> {
 /** 通知其他标签页/其他卡片同一篇论文的最新状态。 */
 export function publishPaperInteraction(
   userId: string,
-  update: { paperId: string; liked?: boolean; likeCount?: number; collectorCount?: number },
+  update: { paperId: string; liked?: boolean; likeCount?: number; collectorCount?: number; folderIds?: number[] },
 ) {
   if (typeof BroadcastChannel === "undefined") return;
   paperChannel ??= new BroadcastChannel(PAPER_INTERACTION_CHANNEL);

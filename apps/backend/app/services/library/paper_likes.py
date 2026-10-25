@@ -76,12 +76,11 @@ class PaperLikeService:
         return LikedPaperListResponse(
             items=[
                 LikedPaperItem.model_validate({
-                    **summaries_by_id[row.paper_id].model_dump(),
+                    **self._paper_data(summaries_by_id.get(row.paper_id), row.paper_id),
                     'paper_id': row.paper_id,
                     'liked_at': row.created_at,
                 })
                 for row in rows
-                if row.paper_id in summaries_by_id
             ],
             total=total or 0,
             page=page,
@@ -93,3 +92,14 @@ class PaperLikeService:
         return int(await session.scalar(
             select(func.count(func.distinct(PaperLikeRow.user_id))).where(PaperLikeRow.paper_id == paper_id)
         ) or 0)
+
+    @staticmethod
+    def _paper_data(summary, paper_id: str) -> dict:
+        if summary is not None:
+            return {**summary.model_dump(), 'is_available': True}
+        return {
+            'id': paper_id,
+            'title': '论文暂不可用',
+            'provenance': {'external_id': paper_id},
+            'is_available': False,
+        }
