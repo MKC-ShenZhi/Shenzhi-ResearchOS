@@ -80,6 +80,14 @@ def tool_messages(result):
 
 
 class RuntimeTests(unittest.IsolatedAsyncioTestCase):
+    def test_wrap_up_messages_follow_the_agreed_delivery_method(self):
+        from app.services.agent.runtime import BUDGET_FOLLOW_UP, DEADLINE_FOLLOW_UP
+        for note in (BUDGET_FOLLOW_UP, DEADLINE_FOLLOW_UP):
+            self.assertIn('按本轮约定的交付方式完成交付', note)
+            self.assertIn('否则直接在回复中作答', note)
+            self.assertNotIn('写成工作区文件', note)
+            self.assertNotIn('（写成文件）', note)
+
     async def test_truncated_arguments_do_not_break_next_request(self):
         """线上事故回归：write_file 参数被输出上限截断 → 残缺 JSON 回传 → 上游 400 杀死整轮。
 
@@ -112,7 +120,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.turns, 1)
         self.assertEqual([e.name for e in events],
                          ['run_start', 'turn_start', 'delta', 'turn_end', 'run_end'])
-        self.assertEqual(events[0].data['model'], 'deepseek-chat')
+        self.assertEqual(events[0].data['model'], 'deepseek/deepseek-chat')
         self.assertEqual(events[-1].data['status'], 'done')
 
     async def test_tool_round_trip_wire_format(self):
@@ -391,6 +399,8 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
                  if isinstance(m, UserMessage) and m.text.startswith('预算提示')]
         self.assertEqual(len(notes), 1)                   # 只注入一次
         self.assertIn('已用 7/8 次', notes[0])            # 8 × 0.83 = 6.64 → 首个达标读数是 7
+        self.assertIn('按本轮约定的交付方式', notes[0])
+        self.assertNotIn('写成工作区文件', notes[0])
         self.assertIn('现在就开始交付', notes[0])         # 是行动指令，不是单纯读数
         self.assertEqual(result.status, 'done')
         self.assertEqual(provider.requests[9].tools, [])  # 随后的撞墙收尾轮照常无检索工具
@@ -405,6 +415,8 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         notes = [m.text for m in result.messages
                  if isinstance(m, UserMessage) and m.text.startswith('时间提示')]
         self.assertEqual(len(notes), 1)
+        self.assertIn('按本轮约定的交付方式', notes[0])
+        self.assertNotIn('写成工作区文件', notes[0])
         self.assertIn('现在就开始交付', notes[0])
         self.assertEqual(result.status, 'done')
 
@@ -627,8 +639,8 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('凭据无效', ctx.exception.message)
         self.assertEqual(len(calls), 1)  # 401 是配置类错误，不重试
 
-    async def test_upstream_400_detail_surfaces(self):
-        """400 的上游原文必须带出来：原因（参数/长度/消息序列）只有上游说得清。"""
+    async def test_upstream_400_detail_is_private(self):
+        """上游原始响应可能回显凭据，不进入公开异常。"""
         def handler(request):
             return httpx.Response(400, json={'error': {'message': 'Range of input length should be [1, 129024]'}})
 
@@ -636,10 +648,10 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(BusinessError) as ctx:
             await self.collect(provider, ModelRequest('deepseek-chat', [{'role': 'user', 'content': 'q'}]))
         self.assertIn('模型不支持当前请求参数', ctx.exception.message)
-        self.assertIn('Range of input length', ctx.exception.message)
+        self.assertNotIn('Range of input length', ctx.exception.message)
 
-    async def test_transient_400_retried(self):
-        """瞬时 400 重试后可恢复（实测同一 payload 可反复成功，400 多为上游瞬时状态）。"""
+    async def test_arbitrary_400_is_not_parameter_degradation(self):
+        """任意 400 不能当作参数不兼容而重试。"""
         calls = []
 
         def handler(request):
@@ -652,9 +664,9 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             ]), headers={'content-type': 'text/event-stream'})
 
         provider = OpenAICompatProvider(CONFIG, transport=httpx.MockTransport(handler), retry_delay=0)
-        events = await self.collect(provider, ModelRequest('deepseek-chat', [{'role': 'user', 'content': 'q'}]))
-        self.assertEqual([e.text for e in events if isinstance(e, TextDelta)], ['A'])
-        self.assertEqual(len(calls), 2)
+        with self.assertRaises(BusinessError):
+            await self.collect(provider, ModelRequest('deepseek-chat', [{'role': 'user', 'content': 'q'}]))
+        self.assertEqual(len(calls), 1)
 
     async def test_thinking_dropped_on_400_before_outer_retry(self):
         """enable_thinking 被拒 → 先去思考重试（同一次调用内），不占用外层重试次数。"""
@@ -1064,7 +1076,7 @@ class ServiceComposeTests(unittest.TestCase):
     def test_tool_listing_dynamic(self):
         from app.services.agent import service
         from app.services.agent import workspace
-        runtime = service.build_run_runtime(owner='u1')
+        runtime = service.build_run_runtime(owner='u1', mode='deep')
         section = self._tool_section(runtime.system)
         listed = sorted(line[2:].split(':', 1)[0] for line in section.splitlines()
                         if line.startswith('- '))
@@ -1128,7 +1140,7 @@ class WorkPromptTests(unittest.TestCase):
         prompt_guidelines 与业务侧显式注入提供（此前照抄 pi 的一套准则已移除）。
         """
         from app.services.agent import service
-        runtime = service.build_run_runtime(owner='u1')
+        runtime = service.build_run_runtime(owner='u1', mode='deep')
         self.assertIn('ShenzhiAi', runtime.system)
         self.assertIn('可用工具：', runtime.system)
         self.assertIn('当前日期：', runtime.system)

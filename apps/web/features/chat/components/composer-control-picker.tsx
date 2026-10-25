@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { popoverPosition, usePopoverPlacement } from "@/lib/use-popover-placement";
 import { ModelProviderLogo } from "./model-provider-logo";
+import { modelUnavailableReason } from "../services/model-catalog";
 import { QuotaRing } from "./quota-ring";
 import type {
   ChatModelId,
@@ -226,9 +227,7 @@ export function ComposerControlPicker({
                       title={
                         m.enabled
                           ? undefined
-                          : m.reason === "not_subscribed"
-                            ? "需要订阅"
-                            : "暂不可用"
+                          : modelUnavailableReason(m.reason)
                       }
                       onClick={() => {
                         if (!m.enabled) return;

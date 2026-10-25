@@ -20,7 +20,7 @@ from contextlib import aclosing
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from app.core.config import model_config
+from app.integrations.llm.resolver import load_registry
 from app.core.errors import BusinessError
 from app.services.agent.compaction import (
     estimate_context_chars, format_file_operations, plan_compaction,
@@ -51,14 +51,14 @@ BUDGET_MESSAGE = '工具预算已耗尽，请基于已收集的证据直接作�
 # 收尾模式收起检索/执行类工具、保留交付类工具（write_file / edit_file），把"没收工具"
 # 与收尾指令成对给出，让证据能落成交付物。
 BUDGET_FOLLOW_UP = (f'{BUDGET_MESSAGE}本轮已收起检索与执行类工具，仅保留交付类工具'
-                    '（如 write_file / edit_file）：立即把已有证据整理成交付物（写成文件），'
+                    '（如 write_file / edit_file）：立即按本轮约定的交付方式完成交付（约定写成文件的就写入文件，否则直接在回复中作答），'
                     '尚未覆盖的部分在交付物里如实说明。')
 BUDGET_REJECT_MESSAGE = '本轮工具调用预算已耗尽，不再执行新的工具调用；请直接基于已收集的证据作答。'
 # 收尾模式里模型仍发非交付调用（上游回放/自行编造）时的拒绝文案
 WRAP_UP_REJECT_MESSAGE = ('运行进入收尾阶段（工具预算已耗尽或到达时间上限）：除交付类工具'
                           '（如 write_file / edit_file）外不再执行调用；请立即基于已收集的证据完成交付。')
 DEADLINE_FOLLOW_UP = ('运行已到达时间上限：本轮只保留交付类工具（如 write_file / edit_file）。'
-                      '请立即基于已收集的证据完成交付（写成文件），不要发起新的检索或执行。')
+                      '请立即基于已收集的证据按本轮约定的交付方式完成交付（约定写成文件的就写入文件，否则直接在回复中作答），不要发起新的检索或执行。')
 WRAP_UP_MAX_TURNS = 4  # deadline 交付窗口内最多收尾轮数，防模型在窗口里无限续写
 TRUNCATED_CALL_MESSAGE = ('该响应因输出上限被截断，工具参数可能不完整，本次未执行；请重新发起完整的工具调用。'
                           '要写入的内容较长时不要一次写完：先写第一部分，再用 edit_file 分段续写。')
@@ -198,8 +198,8 @@ class AgentRuntime:
                  ask_user: bool = False,
                  before_tool_call: BeforeToolCall | None = None,
                  after_tool_call: AfterToolCall | None = None):
-        self.config = model_config()
-        self.provider = provider or OpenAICompatProvider(self.config)
+        model_registry = load_registry()
+        self.provider = provider or OpenAICompatProvider(registry=model_registry)
         self.checkpoint_store = checkpoint_store
         self.compaction = compaction
         self.compaction_at = compaction_at
@@ -258,10 +258,9 @@ class AgentRuntime:
                             '只能基于已收集的证据交付，未覆盖的部分照实说明。')
         self.max_context_chars = max_context_chars
         self.max_tool_result_chars = max_tool_result_chars
-        chosen = self.config.model if not model or model == 'default' else model
-        if chosen not in self.config.models:
-            raise BusinessError(20001, '所选模型未配置，请刷新后选择可用模型')
-        self.model = chosen
+        self.model = model_registry.resolve_model(
+            model, 'agent', require_configured=False).spec.id
+
 
     async def run(self, prompt: str, *, history: Sequence[AgentMessage] = (),
                   on_event: Callable[[AgentEvent], None] | None = None,
@@ -368,11 +367,11 @@ class AgentRuntime:
                             if budget_near:
                                 note = (f'预算提示：工具调用已用 {state.executed_tools}/'
                                         f'{self.max_tool_calls} 次，剩 {budget_left} 次——'
-                                        '现在就开始交付：把已有证据整理成报告（写成工作区文件），'
+                                        '现在就开始交付：按本轮约定的交付方式完成交付（约定写成文件的就写入文件，否则直接在回复中作答），'
                                         '剩余次数只用于补最关键的证据缺口，不要再开新的检索方向。')
                             else:
                                 note = (f'时间提示：本轮剩余时间约 {int(time_left)} 秒——'
-                                        '现在就开始交付：把已有证据整理成报告（写成工作区文件），'
+                                        '现在就开始交付：按本轮约定的交付方式完成交付（约定写成文件的就写入文件，否则直接在回复中作答），'
                                         '不要再开新的检索方向。')
                             state.messages.append(UserMessage(note))
                             emit(state.turn, MESSAGE, {'text': note, 'kind': 'system'})

@@ -3,13 +3,15 @@
 import { useEffect, type MouseEvent } from "react";
 import { clearSearchScroll, readSearchScroll, saveSearchScroll } from "./search-scroll-state";
 
-/** Only record navigation into Paper scope; ordinary searching must not replay old scroll. */
+/** Record result activation only; changing search conditions must not replay old scroll. */
 export function rememberSearchScroll(event: MouseEvent<HTMLElement>, returnTo: string, scope: string | null = "anonymous"): void {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.defaultPrevented) return;
   const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
   if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
   const destination = new URL(link.href);
-  if (destination.origin !== window.location.origin || !/^\/papers\/[^/]+(?:\/graph)?\/?$/.test(destination.pathname)) return;
+  const fromDirectory = new URL(returnTo, window.location.origin).pathname === "/knowledge/search/conferences";
+  const opensConference = fromDirectory && destination.pathname === "/knowledge/search" && destination.searchParams.get("mode") === "conference";
+  if (destination.origin !== window.location.origin || (!opensConference && !/^\/papers\/[^/]+(?:\/graph)?\/?$/.test(destination.pathname))) return;
   saveCurrentSearchScroll(returnTo, scope);
 }
 

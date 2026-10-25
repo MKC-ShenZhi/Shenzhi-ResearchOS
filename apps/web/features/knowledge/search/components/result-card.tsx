@@ -95,7 +95,7 @@ export function KnowledgeResultCard({
 
         <div className="hidden w-full max-w-[320px] justify-self-center self-start @min-[400px]:block @min-[600px]:max-w-none">
           <PaperThumbnail
-            src={getPaperThumbnailUrl(hit.id)}
+            src={getPaperThumbnailUrl(hit.imageId)}
             title={hit.title}
           />
         </div>

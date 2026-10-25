@@ -1,12 +1,14 @@
 """Application service joining persistent Agent sessions to the existing runtime."""
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import AsyncIterator
 from typing import Any
 
 from app.services.agent import service as agent_runtime
 from app.services.agent.types import RunResult, message_to_dict
+from app.services.agent_sessions.entities import AgentSession
+from app.services.agent_sessions.live import LiveRun, _tasks, append, finish, get_live, register
 from app.services.agent_sessions.repository import agent_session_repository
 from app.services.agent_uploads import agent_upload_store
 
@@ -56,14 +58,11 @@ class TimelineCapture:
                     break
         elif name == 'message':
             kind = str(data.get('kind') or 'steer')
-            if kind not in {'steer', 'follow_up', 'system'}:
+            if kind == 'system':
+                return
+            if kind not in {'steer', 'follow_up'}:
                 kind = 'steer'
             self.steers.append({'text': str(data.get('text') or ''), 'kind': kind})
-        elif name == 'compaction':
-            self.steers.append({
-                'kind': 'system',
-                'text': f"上下文已压缩（{data.get('before_chars', 0)} → {data.get('after_chars', 0)} 字符）",
-            })
         elif name == 'meta' and isinstance(data.get('warnings'), list):
             self.warnings = [str(item) for item in data['warnings']]
 
@@ -79,10 +78,11 @@ async def start_session_run(
     *, owner: str, session_id: str, prompt: str, model: str | None, mode: str,
     attachments: list[dict], workspace_id: str | None, skills: list[str],
     allow_shell: bool = True,
-) -> AsyncIterator[tuple[str, dict]]:
-    """Validate ownership and concurrency before returning the live SSE iterator."""
+) -> LiveRun:
+    """Validate ownership and concurrency before starting an independent run task."""
     session = await agent_session_repository.get(session_id, owner)
-    history = agent_runtime.decode_history(session.runtime_history)
+    runtime_history = list(session.runtime_history)
+    history = agent_runtime.decode_history(runtime_history)
     attachment_text, warnings, files = await agent_runtime.resolve_attachments(attachments, owner)
     # File IDs point to short-lived parsed upload slots. Persist only safe display
     # metadata on this turn; the extracted text is already part of the run transcript.
@@ -107,6 +107,8 @@ async def start_session_run(
     turn = await agent_session_repository.start_turn(
         session_id, owner, prompt, settings, warnings,
     )
+    live = LiveRun(session_id=session_id, owner=owner, turn_id=turn.id)
+    register(live)
     capture = TimelineCapture(warnings)
 
     async def complete(result: RunResult) -> None:
@@ -139,8 +141,7 @@ async def start_session_run(
         except Exception:
             logger.exception('Failed to delete consumed Agent attachment text')
 
-    async def events() -> AsyncIterator[tuple[str, dict]]:
-        completed = False
+    async def _drive() -> None:
         try:
             async for name, data in agent_runtime.run_events(
                 runtime, prompt + attachment_text, history,
@@ -148,38 +149,76 @@ async def start_session_run(
                 owner=owner, session_id=session_id, on_complete=complete,
             ):
                 capture.event(name, data)
-                if name == 'result':
-                    completed = True
-                yield name, data
+                append(live, name, data)
+        except Exception as cause:
+            logger.exception('Agent session run failed: %s', session_id)
+            error = f'Agent 运行失败：{cause}'
+            partial = ''.join(
+                str(item.get('text') or '') for item in capture.process
+                if item.get('kind') == 'text')
+            try:
+                await agent_session_repository.finish_turn(session_id, owner, turn.id, {
+                    'assistant_content': partial,
+                    'process': capture.process,
+                    'steers': capture.steers,
+                    'warnings': capture.warnings,
+                    'error': error,
+                    'stopped': False,
+                    'stop_reason': 'error',
+                    'status': 'failed',
+                    'usage': {},
+                    # Tool calls may be incomplete after a bridge failure. Keep the
+                    # observed timeline but close the model-facing transcript.
+                    'transcript': _closed_transcript(runtime_history, prompt + attachment_text, partial),
+                })
+                await agent_upload_store.consume(owner, list(files))
+            except Exception:
+                logger.exception('Failed to persist interrupted Agent session run')
+            append(live, 'result', {
+                'status': 'failed', 'stop_reason': 'error', 'final_text': partial,
+                'output': None, 'question': None, 'turns': 0, 'duration_ms': 0,
+                'prompt_tokens': 0, 'completion_tokens': 0, 'truncated': False,
+                'error': {'code': 20004, 'message': error},
+            })
         finally:
-            # run_events persists on disconnect through its worker callback. This fallback only
-            # covers setup/bridge failures that occurred before a RunResult could be produced.
-            if not completed and turn.status == 'running':
-                # The repository entity is a snapshot; a duplicate completion is rejected and ignored.
-                try:
-                    partial = ''.join(
-                        str(item.get('text') or '') for item in capture.process
-                        if item.get('kind') == 'text')
-                    await agent_session_repository.finish_turn(session_id, owner, turn.id, {
-                        'assistant_content': partial,
-                        'process': capture.process,
-                        'steers': capture.steers,
-                        'warnings': capture.warnings,
-                        'error': 'SSE connection ended before the run completed',
-                        'stopped': True,
-                        'stop_reason': 'connection_closed',
-                        'status': 'stopped',
-                        'usage': {},
-                        # Do not persist incomplete tool calls: the next provider request requires a
-                        # closed transcript. The UI timeline still retains every observed tool event.
-                        'transcript': [*session.runtime_history,
-                                       {'kind': 'user', 'text': prompt + attachment_text},
-                                       {'kind': 'assistant', 'content': partial, 'reasoning': '',
-                                        'tool_calls': [], 'stop_reason': 'cancelled',
-                                        'usage_tokens': 0}],
-                    })
-                    await agent_upload_store.consume(owner, list(files))
-                except Exception:
-                    pass
+            finish(live)
+            _tasks.discard(asyncio.current_task())
 
-    return events()
+    live.task = asyncio.create_task(_drive())
+    _tasks.add(live.task)
+    return live
+
+
+def _closed_transcript(history: list[dict], user_content: str, partial: str) -> list[dict]:
+    return [*history,
+            {'kind': 'user', 'text': user_content},
+            {'kind': 'assistant', 'content': partial, 'reasoning': '',
+             'tool_calls': [], 'stop_reason': 'cancelled', 'usage_tokens': 0}]
+
+
+async def get_session_detail(session_id: str, owner: str) -> AgentSession:
+    """Close orphan turns left by a previous process before returning a session."""
+    session = await agent_session_repository.get(session_id, owner)
+    if get_live(session_id, owner) is not None:
+        return session
+    history: list[dict] = []
+    reconciled = False
+    for turn in session.turns:
+        if turn.status == 'running':
+            payload = {
+                'status': 'stopped', 'stop_reason': 'interrupted', 'stopped': True,
+                'error': '运行已中断（服务重启或异常退出），请重新发送',
+                'transcript': _closed_transcript(history, turn.user_content, turn.assistant_content),
+            }
+            try:
+                await agent_session_repository.finish_turn(session_id, owner, turn.id, payload)
+            except Exception:
+                # A concurrent detail request may have already reconciled this snapshot.
+                current = await agent_session_repository.get(session_id, owner)
+                if any(item.id == turn.id and item.status == 'running' for item in current.turns):
+                    raise
+            history = payload['transcript']
+            reconciled = True
+        else:
+            history = turn.transcript
+    return await agent_session_repository.get(session_id, owner) if reconciled else session

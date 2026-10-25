@@ -14,6 +14,7 @@ from app.core.logging import log_exception
 from app.core.request_context import get_request_id
 from app.core.responses import ok
 from app.schemas.knowledge import (
+    PaperBrowseRequest,
     FundingSearchRequest,
     KnowledgeError,
     KnowledgeMixedSearchRequest,
@@ -144,6 +145,42 @@ async def overview(
 ):
     try:
         response = await service.overview()
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/conferences')
+async def conferences(request: Request, _credential: None = Depends(require_bff)):
+    try:
+        response = await service.conferences()
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/papers')
+async def browse_papers(
+    request: Request,
+    conference: str | None = Query(default=None),
+    year: str | None = Query(default=None),
+    limit: str = Query(default='20'),
+    offset: str = Query(default='0'),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        browse_request = PaperBrowseRequest.model_validate({
+            'conference': conference, 'year': int(year),
+            'limit': int(limit), 'offset': int(offset),
+        })
+    except (ValidationError, TypeError, ValueError):
+        return invalid_argument(request, '会议论文浏览参数不合法')
+    try:
+        response = await service.browse_papers(browse_request)
     except KnowledgeServiceError as error:
         return _error_payload(error, request)
     except Exception as error:

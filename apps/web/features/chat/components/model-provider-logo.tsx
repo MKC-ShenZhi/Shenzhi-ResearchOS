@@ -2,6 +2,13 @@ import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";
 import type { ModelProvider } from "@/types/ai-search";
 
+function PlatformLogo({ className }: { className?: string }) {
+  return <svg viewBox="0 0 24 24" className={className} aria-hidden>
+    <rect width="24" height="24" rx="6" fill="#6D5AE6" />
+    <path d="m12 4 2.3 5.7L20 12l-5.7 2.3L12 20l-2.3-5.7L4 12l5.7-2.3Z" fill="white" />
+  </svg>;
+}
+
 function OpenAILogo({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden>
@@ -87,7 +94,7 @@ const LOGOS: Record<
   google: GoogleLogo,
   deepseek: DeepSeekLogo,
   zhipu: ZhipuLogo,
-  platform: DeepSeekLogo,
+  platform: PlatformLogo,
 };
 
 export function ModelProviderLogo({
@@ -99,7 +106,7 @@ export function ModelProviderLogo({
   size?: "sm" | "md";
   className?: string;
 }) {
-  const Logo = LOGOS[provider];
+  const Logo = LOGOS[provider] ?? PlatformLogo;
   return (
     <span
       className={cn(

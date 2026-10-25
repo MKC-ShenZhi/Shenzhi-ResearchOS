@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, Header
 from fastapi.responses import StreamingResponse
-from app.core.config import MAX_FILES, UPLOAD_ACCEPT, model_config
+from app.core.config import MAX_FILES, UPLOAD_ACCEPT
 from app.core.errors import BusinessError
+from app.integrations.llm.resolver import load_registry
 from app.core.identity import MigrationIdentity, migration_identity, request_owner, require_bff
 from app.core.request_context import get_request_id
 from app.core.responses import ok
@@ -17,12 +18,9 @@ router = APIRouter(prefix='/api/v1/chat', tags=['chat'])
 
 @router.get('/config')
 def chat_config(_credential: None = Depends(require_bff)):
-    config = model_config()
-    return ok({'models': [{'value': model, 'label': model, 'provider': config.provider,
-                          'enabled': bool(config.key),
-                          **({} if config.key else {'reason': 'provider_not_configured'})}
-                         for model in config.models],
-               'default_model': config.model,
+    registry = load_registry()
+    return ok({'models': registry.public_models('chat'),
+               'default_model': registry.public_default('chat'),
                'modes': ['fast', 'deep', 'idea', 'doubt'],
                'quota': {'used': 0, 'limit': 0, 'deep_used': 0, 'deep_limit': 0},
                'quota_enforced': False,

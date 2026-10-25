@@ -2,23 +2,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore } from "react";
+import { useId, useSyncExternalStore } from "react";
 import {
   BarChart3,
+  ArrowUpRight,
   Bell,
   Bot,
   KeyRound,
   Monitor,
   Moon,
+  Palette,
   Settings,
   Sparkles,
   Sun,
   UserRound,
 } from "lucide-react";
 import { useThemeStore, type ThemeMode } from "@/stores/theme";
+import { supportsThemeMode, QUICK_THEME_PRESETS } from "@/lib/theme-presets";
 import { cn } from "@/lib/utils";
 import { McpIcon } from "@/features/settings/components/settings-tabs";
 import { useSidebarStore } from "@/stores/sidebar";
+import { useSettingsMenuHover } from "./use-settings-menu-hover";
 
 /** 设置选项,自上而下与设置页 Tab 顺序一致,点击跳转对应 Tab */
 const MENU_ITEMS = [
@@ -31,7 +35,7 @@ const MENU_ITEMS = [
   { label: "通知", icon: Bell, href: "/settings?tab=notifications" },
 ];
 
-const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
+const MODE_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "日间", icon: Sun },
   { mode: "dark", label: "夜间", icon: Moon },
   { mode: "system", label: "跟随系统", icon: Monitor },
@@ -39,8 +43,12 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
 
 /** 设置条目 + 悬停展开的选项栏,栏底为日/夜/跟随系统切换 */
 export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean; mobile?: boolean }) {
+  const { open, rootRef, triggerRef, menuRef, close, onPointerEnter, onPointerLeave, onFocus, onBlur } = useSettingsMenuHover(mobile);
+  const menuId = useId();
   const mode = useThemeStore((s) => s.mode);
   const setMode = useThemeStore((s) => s.setMode);
+  const preset = useThemeStore((s) => s.preset);
+  const setPreset = useThemeStore((s) => s.setPreset);
   // persist 的主题在客户端水合后才可读,避免水合不一致
   const mounted = useSyncExternalStore(
     () => () => undefined,
@@ -50,14 +58,18 @@ export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean
   const setCollapsed = useSidebarStore((s) => s.setCollapsed);
   const pathname = usePathname();
   return (
-    <div className="group relative mt-4 shrink-0">
+    <div ref={rootRef} onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave} onFocusCapture={onFocus} onBlurCapture={onBlur} className="relative mt-4 shrink-0">
       {collapsed ? (
         <Link
           href="/settings"
+          ref={triggerRef}
+          aria-expanded={mobile ? undefined : open}
+          aria-controls={mobile ? undefined : menuId}
           scroll={false}
           title="设置"
           aria-label="设置"
           onClick={() => {
+            close();
             // 图标栏:再次点击当前栏目图标则展开侧边栏
             if (pathname.startsWith("/settings")) setCollapsed(false);
           }}
@@ -68,6 +80,10 @@ export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean
       ) : (
         <Link
           href="/settings"
+          ref={triggerRef}
+          aria-expanded={mobile ? undefined : open}
+          aria-controls={mobile ? undefined : menuId}
+          onClick={close}
           scroll={false}
           title="设置"
           className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-ink-2 transition-colors hover:bg-card"
@@ -78,13 +94,14 @@ export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean
       )}
 
       {/* 悬停选项栏:出现在条目右侧,底部对齐向上展开 */}
-      <div className={cn(mobile && "hidden", "pointer-events-none absolute bottom-0 left-full z-50 pl-2 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100")}>
-        <div className="w-52 rounded-2xl border border-line bg-card p-2 shadow-pop">
+      <div id={menuId} hidden={!open} className="absolute bottom-0 left-full z-50 pl-2">
+        <div ref={menuRef} aria-label="设置快捷入口" className="w-52 rounded-2xl border border-line bg-card p-2 shadow-pop">
           {MENU_ITEMS.map((item) => (
             <Link
               key={item.label}
               href={item.href}
               scroll={false}
+              onClick={close}
               className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-2 transition-colors hover:bg-chip"
             >
               {item.icon ? (
@@ -96,9 +113,45 @@ export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean
             </Link>
           ))}
 
-          {/* 主题:日间 / 夜间 / 跟随系统 */}
-          <div className="mt-1.5 flex items-center gap-1 border-t border-line px-1 pb-1 pt-2.5">
-            {THEME_OPTIONS.map((opt) => (
+          <div className="mt-1.5 border-t border-line px-1 pb-1 pt-2.5">
+            <div className="mb-2 flex items-center gap-2 px-1 text-xs font-medium text-muted">
+              <Palette className="size-3.5" strokeWidth={1.8} />
+              视觉风格
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              {QUICK_THEME_PRESETS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-label={`切换到${option.label}风格`}
+                  aria-pressed={mounted && preset === option.id}
+                  onClick={() => setPreset(option.id)}
+                  className={cn(
+                    "min-w-0 cursor-pointer rounded-lg px-2 py-1.5 text-left transition-colors",
+                    mounted && preset === option.id
+                      ? "bg-primary-soft text-primary"
+                      : "text-ink-2 hover:bg-chip",
+                  )}
+                >
+                  <span className="block truncate text-xs font-medium">{option.label}</span>
+                  <span className="block truncate text-[10px] text-muted">{option.description}</span>
+                </button>
+              ))}
+              <Link
+                href="/settings?tab=profile#appearance"
+                onClick={close}
+                onNavigate={() => document.getElementById("appearance")?.scrollIntoView({ block: "start" })}
+                className="min-w-0 rounded-lg px-2 py-1.5 text-left text-ink-2 transition-colors hover:bg-chip"
+              >
+                <span className="flex items-center gap-1 text-xs font-medium">更多配色<ArrowUpRight className="size-3" aria-hidden="true" /></span>
+                <span className="block text-[10px] text-muted">查看全部预设</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* 自适应预设支持日间 / 夜间 / 跟随系统 */}
+          {supportsThemeMode(preset) && <div className="flex items-center gap-1 border-t border-line px-1 pb-1 pt-2.5">
+            {MODE_OPTIONS.map((opt) => (
               <button
                 key={opt.mode}
                 type="button"
@@ -116,7 +169,7 @@ export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean
                 <opt.icon className="size-4" strokeWidth={1.8} />
               </button>
             ))}
-          </div>
+          </div>}
         </div>
       </div>
     </div>

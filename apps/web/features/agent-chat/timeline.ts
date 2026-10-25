@@ -149,3 +149,8 @@ export function restoreEntries(
   }
   return (activity ?? []).map((tool) => ({ kind: "tool" as const, tool }));
 }
+
+/** Hide model-facing notes, including notes saved by older sessions. */
+export function visibleNotes<T extends { kind: string }>(notes: readonly T[]): T[] {
+  return notes.filter((note) => note.kind !== "system");
+}

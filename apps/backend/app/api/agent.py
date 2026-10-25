@@ -11,8 +11,9 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.api._support.upload_reader import read_upload
-from app.core.config import MAX_FILES, UPLOAD_ACCEPT, model_config
+from app.core.config import MAX_FILES, UPLOAD_ACCEPT
 from app.core.errors import BusinessError
+from app.integrations.llm.resolver import load_registry
 from app.core.identity import request_owner, require_bff
 from app.core.responses import ok
 from app.services.agent import service as agent_service
@@ -21,7 +22,8 @@ from app.schemas.agent import (
     AgentSessionCreate, AgentSessionRun, AgentSessionUpdate, LegacyAgentSessionImport,
 )
 from app.services.agent_sessions.repository import agent_session_repository
-from app.services.agent_sessions.service import start_session_run
+from app.services.agent_sessions.live import LiveRun, get_live, subscribe
+from app.services.agent_sessions.service import get_session_detail, start_session_run
 from app.services.agent_uploads import agent_upload_store
 from app.services.uploads.parser import parse_document
 
@@ -33,8 +35,8 @@ class AgentRunBody(BaseModel):
     prompt: str = Field(min_length=1, max_length=10_000)
     history: list[dict] = Field(default_factory=list, max_length=200)
     model: str | None = None
-    # 默认 fast。预算对齐 SZDR 的实测形态（900 秒 / 120 次工具调用，见 policies.py）：
-    # deadline 是上限不是目标，快问题照样快回；mode 只影响温度等资源倾向。
+    # 默认 fast：180 秒 / 12 次工具调用，其余模式保持 900 秒 / 120 次（见 policies.py）。
+    # mode 决定温度、运行预算，以及未显式选择技能时的快速回答技能与工具集。
     mode: Literal['fast', 'deep', 'idea', 'doubt'] = 'fast'
     attachments: list[dict] = Field(default_factory=list, max_length=MAX_FILES)
     workspace_id: str | None = None
@@ -49,17 +51,15 @@ class SteerBody(BaseModel):
 @router.get('/config')
 def config(_credential: None = Depends(require_bff)):
     """运行配置：可选模型、技能清单、附件限制（结构与 chat/config 对齐）。"""
-    settings = model_config()
+    registry = load_registry()
     store = agent_service.default_store()
     skills = [{'name': skill.name, 'description': skill.description}
               for name in store.names()
               for skill in [store.get(name)]
               if skill and not skill.disable_model_invocation]
     return ok({
-        'models': [{'value': item, 'label': item, 'provider': settings.provider,
-                    'enabled': bool(settings.key)}
-                   for item in settings.models],
-        'default_model': settings.model,
+        'models': registry.public_models('agent'),
+        'default_model': registry.public_default('agent'),
         'skills': skills,
         'upload': {'max_size_mb': 20, 'max_files': MAX_FILES, 'accept': UPLOAD_ACCEPT},
     })
@@ -156,7 +156,7 @@ async def import_agent_session(
 
 @router.get('/sessions/{session_id}')
 async def get_agent_session(session_id: str, owner: str = Depends(request_owner)):
-    return ok((await agent_session_repository.get(session_id, owner)).public())
+    return ok((await get_session_detail(session_id, owner)).public())
 
 
 @router.patch('/sessions/{session_id}')
@@ -179,19 +179,38 @@ async def delete_agent_session(session_id: str, owner: str = Depends(request_own
 async def run_agent_session(
     session_id: str, body: AgentSessionRun, owner: str = Depends(request_owner),
 ):
-    events = await start_session_run(
+    live = await start_session_run(
         owner=owner, session_id=session_id, prompt=body.prompt, model=body.model,
         mode=body.mode, attachments=body.attachments, workspace_id=body.workspace_id,
         skills=body.skills, allow_shell=False,
     )
 
+    return session_run_stream(live)
+
+
+def session_run_stream(live: LiveRun, after: int = 0) -> StreamingResponse:
     async def generate():
-        async for name, data in events:
-            yield f'event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'
+        async for event in subscribe(live, after):
+            if event is None:
+                yield ': ping\n\n'
+            else:
+                index, name, data = event
+                yield f'id: {index}\nevent: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'
 
     return StreamingResponse(generate(), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache, no-transform',
                                       'X-Accel-Buffering': 'no'})
+
+
+@router.get('/sessions/{session_id}/run/stream')
+async def attach_agent_session_run(
+    session_id: str, after: int = Query(default=0, ge=0),
+    owner: str = Depends(request_owner),
+):
+    live = get_live(session_id, owner)
+    if live is None:
+        raise BusinessError(20004, '当前没有运行中的任务', 404)
+    return session_run_stream(live, after)
 
 
 @router.get('/session/{session_id}/file')

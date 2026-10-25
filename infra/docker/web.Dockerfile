@@ -10,6 +10,8 @@ RUN corepack enable && corepack prepare pnpm@11.18.0 --activate \
 COPY apps/web/package.json apps/web/pnpm-lock.yaml apps/web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY apps/web/ ./
+ARG NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED=false
+ENV NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED=$NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED
 RUN pnpm build
 
 # ---- 运行时 ----

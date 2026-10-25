@@ -20,7 +20,7 @@ description: 论文深度研究总控（含检索、分层批读、全文精读�
 
 ## 你可用的工具（基座提供，与本技能无关地存在）
 
-- `paper_search`：论文知识库检索（混合检索：精确 + 模糊 + 语义）。`limit` 最高 **100**——深度综述可请求大池子，不要靠小池子猜全貌。返回 `sparse`（本次返回少于所请求数量，需结合查询判断覆盖）。可按年份区间 / venue / keyword 过滤。
+- `paper_search`：论文知识库检索（混合检索：精确 + 模糊 + 语义）。`limit` 单次最高 **20**，扩大覆盖靠换角度/换措辞多次检索。返回 `sparse`（本次返回少于所请求数量，需结合查询判断覆盖）。可按年份区间 / venue / keyword 过滤。
 - `paper_detail`：按 paper_id 核对元数据、补摘要、取 doi / pdf_url。检索行作者通常为空；要核实作者就调详情。
 - `citation_graph`：引用邻域，按 `backward`（它引的）/ `forward`（引它的）/ `topics` 分组。`citations_available:false` 表示该次结果没有 CITES 边——**对同一种子反复重试无意义**，改用 `paper_search` 追后续与批评工作。
 - `web_search`：开放网络检索。非学术事实起手就找它；搜索渠道由工具处理，不依赖特定服务商。

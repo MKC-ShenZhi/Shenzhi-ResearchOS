@@ -328,7 +328,7 @@ export function AccountSection({ locale }: { locale: SettingsLocale }) {
       </form>
 
       <AccountSessions
-        key={session.session.token}
+        key={userId}
         currentToken={session.session.token}
         currentUserId={userId}
         locale={locale}

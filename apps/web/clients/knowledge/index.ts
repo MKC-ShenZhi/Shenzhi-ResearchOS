@@ -11,6 +11,10 @@ export type { MockKnowledgeClientOptions, MockScenario } from "./mock";
 export { BffKnowledgeClient } from "./bff";
 
 export type {
+  KnowledgeConference,
+  KnowledgeConferenceListResponse,
+  KnowledgePaperBrowseParams,
+  KnowledgePaperBrowseResponse,
   KnowledgeFundingSearchParams,
   KnowledgeFundingSearchResponse,
   KnowledgeFundingSummary,

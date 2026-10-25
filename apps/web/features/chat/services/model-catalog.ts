@@ -1,82 +1,38 @@
-import type { ChatModelId, ChatModelOption } from "../../../clients/backend/chat/types";
+import type { ChatConfig, ChatModelId, ChatModelOption } from "../../../clients/backend/chat/types";
 
-/** 前端可选的大模型目录（与 GET /chat/config 对齐） */
+/** Display-only placeholders for a failed config request. Never imply availability. */
 export const CHAT_MODEL_CATALOG: ChatModelOption[] = [
-  {
-    value: "qwen-plus",
-    label: "通义 Plus",
-    provider: "platform",
-    enabled: true,
-    description: "阿里百炼默认对话模型",
-  },
-  {
-    value: "deepseek-reasoner",
-    label: "DeepSeek R1",
-    provider: "deepseek",
-    enabled: true,
-    description: "推理模型，适合复杂分析与证明",
-  },
-  {
-    value: "gpt-4o",
-    label: "GPT-4o",
-    provider: "openai",
-    enabled: false,
-    reason: "not_subscribed",
-    description: "OpenAI 旗舰多模态模型",
-  },
-  {
-    value: "gpt-4o-mini",
-    label: "GPT-4o mini",
-    provider: "openai",
-    enabled: false,
-    reason: "not_subscribed",
-    description: "OpenAI 轻量快速模型",
-  },
-  {
-    value: "claude-3-5-sonnet",
-    label: "Claude 3.5 Sonnet",
-    provider: "anthropic",
-    enabled: false,
-    reason: "not_subscribed",
-    description: "Anthropic 长上下文推理",
-  },
-  {
-    value: "gemini-2-flash",
-    label: "Gemini 2.0 Flash",
-    provider: "google",
-    enabled: false,
-    reason: "not_subscribed",
-    description: "Google 低延迟模型",
-  },
-  {
-    value: "glm-4-plus",
-    label: "GLM-4 Plus",
-    provider: "zhipu",
-    enabled: false,
-    reason: "not_subscribed",
-    description: "智谱 GLM，中文与代码表现好",
-  },
+  { value: "qwen-plus", label: "通义 Plus", provider: "platform", enabled: false, reason: "config_unavailable" },
+  { value: "deepseek-chat", label: "DeepSeek Chat", provider: "deepseek", enabled: false, reason: "config_unavailable" },
+  { value: "glm-4-plus", label: "GLM-4 Plus", provider: "zhipu", enabled: false, reason: "config_unavailable" },
 ];
 
-export const DEFAULT_CHAT_MODEL: ChatModelId = "qwen-plus";
-
-export const CHAT_MODEL_IDS = CHAT_MODEL_CATALOG.map((m) => m.value);
-
-const LEGACY_MODEL_MAP: Record<string, ChatModelId> = {
-  default: "deepseek-chat",
-  subscription: "gpt-4o",
-  byok: "gpt-4o-mini",
-};
+// The backend resolves this sentinel according to server configuration.
+export const DEFAULT_CHAT_MODEL: ChatModelId = "default";
+export const CHAT_MODEL_IDS = CHAT_MODEL_CATALOG.map((model) => model.value);
 
 export function normalizeChatModelId(value?: string | null): ChatModelId {
-  if (!value) return DEFAULT_CHAT_MODEL;
-  if (CHAT_MODEL_IDS.includes(value)) return value;
-  if (value in LEGACY_MODEL_MAP) return LEGACY_MODEL_MAP[value]!;
-  return DEFAULT_CHAT_MODEL;
+  // Preserve registry IDs and historical IDs; only the server knows their aliases.
+  return value?.trim() || DEFAULT_CHAT_MODEL;
 }
 
 export function chatModelLabel(value: ChatModelId): string {
-  return (
-    CHAT_MODEL_CATALOG.find((m) => m.value === value)?.label ?? value
-  );
+  return CHAT_MODEL_CATALOG.find((model) => model.value === value)?.label ?? value;
+}
+
+export function modelUnavailableReason(reason?: string): string {
+  switch (reason) {
+    case "provider_not_configured": return "模型服务尚未配置";
+    case "model_disabled": return "模型已禁用";
+    case "unsupported_capability": return "模型不支持当前业务";
+    case "config_unavailable": return "模型配置加载失败，请稍后重试";
+    default: return "模型暂不可用";
+  }
+}
+
+/** Resolve historical IDs using aliases published by the same backend Registry. */
+export function selectAvailableModel(config: Pick<ChatConfig, "models" | "default_model">, preferred?: string): string {
+  const selected = config.models.find((model) => model.enabled
+    && (model.value === preferred || model.aliases?.includes(preferred ?? "")));
+  return selected?.value ?? config.default_model ?? config.models.find((model) => model.enabled)?.value ?? preferred ?? "default";
 }

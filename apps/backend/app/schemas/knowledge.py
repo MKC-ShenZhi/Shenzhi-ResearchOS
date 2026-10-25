@@ -115,6 +115,11 @@ class KnowledgeSearchRequest(KnowledgeModel):
 
 class PaperSearchResult(KnowledgeModel):
     id: str
+    image_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices('imageId', 'image_id'),
+        serialization_alias='imageId',
+    )
     title: str
     abstract: str | None = None
     authors: list[str] = Field(default_factory=list)
@@ -136,6 +141,38 @@ class KnowledgeSearchResponse(KnowledgeModel):
 class KnowledgeSubjectSearchResponse(KnowledgeModel):
     results: list[PaperSearchResult] = Field(default_factory=list)
     total: int = Field(ge=0)
+
+
+class ConferenceSummary(KnowledgeModel):
+    name: str = Field(min_length=1)
+    paper_count: int = Field(ge=0, serialization_alias='paperCount')
+    years: list[int]
+    year_count: int = Field(ge=0, serialization_alias='yearCount')
+
+
+class ConferenceListResponse(KnowledgeModel):
+    items: list[ConferenceSummary]
+
+
+class PaperBrowseRequest(KnowledgeModel):
+    conference: str = Field(min_length=1, max_length=500)
+    year: int = Field(ge=1000, le=9999)
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0, le=2_147_483_647)
+
+    @field_validator('conference')
+    @classmethod
+    def normalize_conference(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('conference must not be blank')
+        return value.strip()
+
+
+class PaperBrowseResponse(KnowledgeModel):
+    results: list[PaperSearchResult]
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
+    offset: int = Field(ge=0)
 
 
 class ScholarSearchRequest(KnowledgeModel):

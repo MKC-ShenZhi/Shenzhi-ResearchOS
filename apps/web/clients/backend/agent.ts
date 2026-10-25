@@ -1,5 +1,6 @@
+import type { ModelOption } from "./model-types";
 import { apiJson, apiPath } from "./http";
-import { readSseStream } from "./sse";
+import { readSseStream, type SseEvent } from "./sse";
 
 /**
  * Agent 基座（ShenzhiAi）客户端：产品路径使用 Backend Session；无状态 run 仅保留兼容。
@@ -54,8 +55,8 @@ export interface AgentActivity {
 export interface AgentSkillInfo { name: string; description: string }
 
 export interface AgentConfig {
-  models: Array<{ value: string; label: string; enabled: boolean }>;
-  default_model: string;
+  models: ModelOption[];
+  default_model: string | null;
   skills: AgentSkillInfo[];
   upload: { max_size_mb: number; max_files: number; accept: string[] };
 }
@@ -237,6 +238,17 @@ export async function streamAgentSessionRun(
   );
 }
 
+export async function attachAgentSessionRun(
+  sessionId: string,
+  handlers: Parameters<typeof streamAgentRun>[1],
+  signal?: AbortSignal,
+): Promise<void> {
+  await streamAgentEndpoint(
+    apiPath(`/agent/sessions/${encodeURIComponent(sessionId)}/run/stream?after=0`),
+    undefined, handlers, signal,
+  );
+}
+
 async function streamAgentEndpoint(
   url: string,
   body: unknown,
@@ -246,40 +258,42 @@ async function streamAgentEndpoint(
   await readSseStream(url, {
     body,
     signal,
-    onEvent: (event) => {
-      const data = JSON.parse(event.data);
-      switch (event.event) {
-        case "run_start":
-          handlers.onRunStart?.(data.run_id);
-          break;
-        case "delta":
-          handlers.onDelta(data.text ?? "", data.reasoning ?? "", data.turn ?? 0);
-          break;
-        case "meta":
-          handlers.onMeta(data);
-          break;
-        case "message":
-          handlers.onMessage?.(data.text ?? "",
-            data.kind === "follow_up" || data.kind === "system" ? data.kind : "steer");
-          break;
-        case "compaction":
-          handlers.onCompaction?.(data);
-          break;
-        case "tool_call":
-          handlers.onToolCall({
-            toolCallId: data.tool_call_id, name: data.name, arguments: data.arguments,
-            done: false, isError: false, durationMs: 0,
-          }, data.turn ?? 0);
-          break;
-        case "tool_end":
-          handlers.onToolEnd(data.tool_call_id, Boolean(data.is_error), data.duration_ms ?? 0, data.summary ?? "");
-          break;
-        case "result":
-          handlers.onResult(data as AgentRunResult);
-          break;
-        default:
-          break; // turn_start / turn_end / tools_enabled 前端无需处理
-      }
-    },
+    onEvent: (event) => dispatchAgentEvent(event, handlers),
   });
+}
+
+function dispatchAgentEvent(event: SseEvent, handlers: Parameters<typeof streamAgentRun>[1]): void {
+  const data = JSON.parse(event.data);
+  switch (event.event) {
+    case "run_start":
+      handlers.onRunStart?.(data.run_id);
+      break;
+    case "delta":
+      handlers.onDelta(data.text ?? "", data.reasoning ?? "", data.turn ?? 0);
+      break;
+    case "meta":
+      handlers.onMeta(data);
+      break;
+    case "message":
+      handlers.onMessage?.(data.text ?? "",
+        data.kind === "follow_up" || data.kind === "system" ? data.kind : "steer");
+      break;
+    case "compaction":
+      handlers.onCompaction?.(data);
+      break;
+    case "tool_call":
+      handlers.onToolCall({
+        toolCallId: data.tool_call_id, name: data.name, arguments: data.arguments,
+        done: false, isError: false, durationMs: 0,
+      }, data.turn ?? 0);
+      break;
+    case "tool_end":
+      handlers.onToolEnd(data.tool_call_id, Boolean(data.is_error), data.duration_ms ?? 0, data.summary ?? "");
+      break;
+    case "result":
+      handlers.onResult(data as AgentRunResult);
+      break;
+    default:
+      break; // turn_start / turn_end / tools_enabled 前端无需处理
+  }
 }

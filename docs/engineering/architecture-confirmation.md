@@ -75,7 +75,7 @@ shenzhi/
 │       │   ├── services/        # 按 chat、knowledge、uploads、user、library 等领域组织业务逻辑
 │       │   ├── integrations/    # 外部服务与科研能力接入边界
 │       │   │   ├── knowledge/   # Knowledge Base Research Capability
-│       │   │   ├── llm/         # 外部模型 Provider
+│       │   │   ├── llm/         # 统一 Model Registry / Resolver 与 Chat Provider
 │       │   │   ├── web_search/  # 外部搜索 Provider
 │       │   │   └── paper_resource/ # 外部 PDF 资源 Provider
 │       │   ├── core/            # 配置、身份、错误等基础能力
@@ -533,6 +533,10 @@ components/common/   # 跨 Feature 通用组件
 直接访问空路径不自动跳转，也不清除记录。Feature 继续负责 URL 的业务解析、请求和缓存，
 主动清空时调用 `useClearSearchRestoration`；部分条件清除后仍有参数则记录新的地址。
 新增搜索入口只需注册路径与允许参数，并在需要恢复的导航入口使用该 Link。
+论文库的 `?mode=keyword` 与 `?mode=conference` 是显式登记的模式导航入口，使用同一
+恢复机制分开保存各模式最近的查询地址；仅这些模式入口允许恢复，携带具体查询条件的
+完整链接仍直接使用。`/knowledge/search/conferences` 作为独立目录保存自身筛选条件。
+清空某一模式只清理该模式及指向它的最后导航地址，清空论文库主入口则同时清理两种模式。
 存储访问集中封装，可替换存储策略；不可用时退回原始导航地址。认证切换时不将当前旧 URL
 记到新身份下，直到 URL 再次变化。未提交的输入草稿、API 响应和其他页面状态不在此导航地址恢复机制内。
 首页简单搜索与论文库的短期文本草稿由 `lib/navigation/search-draft.ts` 和
@@ -680,3 +684,11 @@ main
 - 良好的可扩展性
 - 对科研能力变化的适应能力
 - 较低的跨组协作和后续维护成本
+
+## LLM 接入基础设施
+
+Chat、Agent 与后续 AI Feature 统一通过 `integrations/llm` 的 Model Registry / Resolver
+解析 Model ID、Provider、上游型号和能力。Chat 的 `integrations/llm/provider.py` 与 Agent 的
+`services/agent/provider.py` 继续各自负责流式协议处理。模型品牌只用于展示，实际路由由
+`provider_id` 决定；Provider 凭据仅在服务端加载。接入规则、兼容策略及声明示例见
+[LLM API Foundation](llm-api-foundation.md)。
