@@ -17,6 +17,7 @@ from app.schemas.collections import (
     FolderListResponse,
 )
 from app.services.knowledge.service import KnowledgeService
+from app.services.recommendation.behavior import BehaviorEventService
 
 DEFAULT_FOLDERS = ('想读', '在读', '已读')
 
@@ -107,9 +108,18 @@ class CollectionService:
         async with session_scope() as session:
             await self._lock_membership(session, user_id)
             await self._folder(session, user_id, folder_id)
+            paper_ids = sorted(set(await session.scalars(select(CollectionItemRow.paper_id).where(
+                CollectionItemRow.folder_id == folder_id,
+            ))))
             await session.execute(delete(CollectionFolderRow).where(
                 CollectionFolderRow.id == folder_id, CollectionFolderRow.user_id == user_id,
             ))
+            for paper_id in paper_ids:
+                if not await self._has_paper(session, user_id, paper_id):
+                    await BehaviorEventService().record_explicit(
+                        session, user_id=user_id, event_type='paper_uncollect',
+                        entity_type='paper', entity_id=paper_id,
+                    )
 
     async def papers(self, user_id: str, folder_id: int, page: int, page_size: int) -> CollectionPaperListResponse:
         async with session_scope() as session:
@@ -188,6 +198,16 @@ class CollectionService:
                 if (count or 0) >= 100:
                     raise BusinessError(40005, '每个文件夹最多收藏 100 篇论文', 400)
                 session.add(CollectionItemRow(folder_id=folder_id, paper_id=paper_id))
+            if not existing and desired:
+                await BehaviorEventService().record_explicit(
+                    session, user_id=user_id, event_type='paper_collect',
+                    entity_type='paper', entity_id=paper_id,
+                )
+            elif existing and not desired:
+                await BehaviorEventService().record_explicit(
+                    session, user_id=user_id, event_type='paper_uncollect',
+                    entity_type='paper', entity_id=paper_id,
+                )
 
     async def remove_paper(self, user_id: str, folder_id: int, paper_id: str) -> None:
         await self.ensure_default_folders(user_id)
@@ -199,6 +219,11 @@ class CollectionService:
             ))
             if result.rowcount == 0:
                 raise BusinessError(40401, '论文不在该文件夹中', 404)
+            if not await self._has_paper(session, user_id, paper_id):
+                await BehaviorEventService().record_explicit(
+                    session, user_id=user_id, event_type='paper_uncollect',
+                    entity_type='paper', entity_id=paper_id,
+                )
 
     async def move_paper(self, user_id: str, folder_id: int, paper_id: str, target_folder_id: int) -> None:
         if folder_id == target_folder_id:
@@ -290,3 +315,12 @@ class CollectionService:
         if row is None:
             raise BusinessError(40402, '文件夹不存在', 404)
         return row
+
+    @staticmethod
+    async def _has_paper(session, user_id: str, paper_id: str) -> bool:
+        return await session.scalar(select(CollectionItemRow.id).join(
+            CollectionFolderRow, CollectionFolderRow.id == CollectionItemRow.folder_id,
+        ).where(
+            CollectionFolderRow.user_id == user_id,
+            CollectionItemRow.paper_id == paper_id,
+        ).limit(1)) is not None

@@ -29,6 +29,8 @@ BUSINESS_BACKEND_URL=http://127.0.0.1:8000
 
 两端配置相同 `BACKEND_BFF_SECRET`；后端只允许私网/BFF 访问，不能直接暴露公网。
 
+Vercel Backend 的每日 Cron 会清理过期推荐行为和分页快照。部署环境需设置独立的 `CRON_SECRET`（生成方式见 `.env.example`）；Cron 路由只接受对应 Bearer Secret。配置位于 `vercel.json`，计划每天 UTC 17:18（上海时间次日 01:18）执行。Vercel Cron 为尽力投递，清理操作可安全重复执行；部署后需在 Cron Jobs 与函数日志中确认任务运行。
+
 未配置 Secret 时默认拒绝；仅 loopback 本地开发可在两端显式设置：
 
 ```text

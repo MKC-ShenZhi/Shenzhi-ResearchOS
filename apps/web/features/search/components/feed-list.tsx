@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/components/auth/auth-provider";
 import { discoveryQueryRetry } from "@/clients/backend/discovery";
 import {
-  fetchDiscoveryFeedPage,
+  fetchHomeFeedPage,
 } from "../services/discovery-feed";
 import { PaperCard } from "./paper-card";
 
@@ -24,6 +25,8 @@ function FeedLoading() {
 
 /** Single snapshot-backed discovery feed with cursor-based infinite loading. */
 export function FeedList() {
+  const { session, isPending: authPending } = useAuth();
+  const userId = session?.user.id ?? null;
   const sentinelRef = useRef<HTMLDivElement>(null);
   const {
     data,
@@ -35,11 +38,12 @@ export function FeedList() {
     fetchNextPage,
     refetch,
   } = useInfiniteQuery({
-    queryKey: ["discovery-papers"],
-    queryFn: ({ pageParam }) => fetchDiscoveryFeedPage(pageParam),
+    queryKey: ["home-feed", userId],
+    queryFn: ({ pageParam }) => fetchHomeFeedPage(pageParam, Boolean(userId)),
+    enabled: !authPending,
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.hasMore ? page.nextCursor ?? undefined : undefined,
-    staleTime: 10 * 60 * 1000,
+    staleTime: 60 * 1000,
     retry: discoveryQueryRetry,
   });
 
@@ -89,7 +93,7 @@ export function FeedList() {
   return (
     <div className="space-y-5">
       {papers.map((paper, i) => (
-        <PaperCard key={paper.id} paper={paper} index={i} />
+        <PaperCard key={`${paper.id}:${paper.recommendationRequestId ?? "global"}`} paper={paper} index={i} />
       ))}
       <div ref={sentinelRef} className="flex min-h-12 items-center justify-center py-2" aria-live="polite">
         {isFetchingNextPage && (

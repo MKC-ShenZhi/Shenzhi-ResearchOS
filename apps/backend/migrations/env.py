@@ -23,6 +23,7 @@ from app.models import private_paper as _private_paper_models  # noqa: E402,F401
 from app.models import agent_upload as _agent_upload_models  # noqa: E402,F401
 from app.models import interactions as _interaction_models  # noqa: E402,F401
 from app.models import stats as _stats_models  # noqa: E402,F401
+from app.models import recommendation as _recommendation_models  # noqa: E402,F401
 
 config = context.config
 if config.config_file_name is not None:

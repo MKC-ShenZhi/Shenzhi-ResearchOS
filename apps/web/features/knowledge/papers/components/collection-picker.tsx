@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Bookmark, Check, LoaderCircle, MoreHorizontal, Plus, X } from "lucide-react";
 import { ApiError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -42,6 +43,7 @@ function CollectionPickerContent({
   const [saving, setSaving] = useState(false);
   const [ready, setReady] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
   const { session, isPending: isAuthPending, openLogin } = useAuth();
   const { interaction, refetch: refetchInteraction } = usePaperInteraction(paperId);
   const refreshInteraction = useRefreshPaperInteraction(paperId);
@@ -121,6 +123,7 @@ function CollectionPickerContent({
       changeOpen(false);
       // 人数以服务端重新统计的结果为准。
       void refreshInteraction();
+      if (session?.user.id) void queryClient.invalidateQueries({ queryKey: ["home-feed", session.user.id] });
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) promptLogin();
       else setMessage("操作失败，请重试");

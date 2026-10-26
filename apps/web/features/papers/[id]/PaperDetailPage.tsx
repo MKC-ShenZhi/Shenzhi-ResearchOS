@@ -10,6 +10,7 @@ import {
 import { PanelRightOpen } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "@/clients/backend/http";
+import { recordPaperBehavior } from "@/clients/backend/behavior";
 import { paperReadStatusQueryKey, publishPaperRead } from "@/clients/backend/read-status";
 import { KnowledgeClientError } from "@/clients/knowledge";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -113,8 +114,26 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
       // A visit is still in progress until the PDF's final page is reached.
       queryClient.invalidateQueries({ queryKey: paperReadStatusQueryKey(userId, loadedPaperId) });
       publishPaperRead(userId, loadedPaperId, "reading");
+      void queryClient.invalidateQueries({ queryKey: ["home-feed", userId] });
     }).catch(() => {});
   }, [isIdentityPending, loadedPaperId, queryClient, userId]);
+
+  useEffect(() => {
+    if (!loadedPaperId || !userId || viewMode !== "paper" || viewerState !== "ready" || mobilePanel !== "reader") return;
+    let visibleSeconds = 0;
+    let sent = false;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || sent) return;
+      visibleSeconds += 5;
+      if (visibleSeconds < 30) return;
+      sent = true;
+      recordPaperBehavior({
+        eventType: "active_read", paperId: loadedPaperId,
+        source: "paper_detail", durationSeconds: visibleSeconds,
+      });
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [loadedPaperId, mobilePanel, userId, viewMode, viewerState]);
 
   const handleReachedEnd = () => {
     if (!loadedPaperId || !userId || isIdentityPending) return;
@@ -125,6 +144,7 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
       if (!result.success || result.user_id !== userId) return;
       queryClient.setQueryData(paperReadStatusQueryKey(userId, loadedPaperId), "read");
       publishPaperRead(userId, loadedPaperId, "read");
+      void queryClient.invalidateQueries({ queryKey: ["home-feed", userId] });
     }).catch(() => {});
   };
 

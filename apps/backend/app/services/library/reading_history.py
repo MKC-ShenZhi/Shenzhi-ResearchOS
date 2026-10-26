@@ -10,6 +10,7 @@ from app.core.database import session_scope
 from app.models.reading_history import ReadingHistoryRow
 from app.schemas.history import ReadingHistoryItem, ReadingHistoryResponse
 from app.services.knowledge.service import KnowledgeService
+from app.services.recommendation.behavior import BehaviorEventService
 
 MAX_HISTORY_SCAN = 100
 
@@ -20,6 +21,10 @@ class ReadingHistoryService:
     async def record(self, user_id: str, paper_id: str) -> None:
         now = datetime.now(timezone.utc)
         async with session_scope() as session:
+            previous_view = await session.scalar(select(ReadingHistoryRow.last_viewed_at).where(
+                ReadingHistoryRow.user_id == user_id,
+                ReadingHistoryRow.paper_id == paper_id,
+            ))
             statement = insert(ReadingHistoryRow).values(
                 user_id=user_id, paper_id=paper_id, last_viewed_at=now,
             )
@@ -27,6 +32,11 @@ class ReadingHistoryService:
                 index_elements=['user_id', 'paper_id'],
                 set_={'last_viewed_at': now},
             ))
+            if previous_view is None or (now - previous_view).total_seconds() >= 600:
+                await BehaviorEventService().record_explicit(
+                    session, user_id=user_id, event_type='paper_detail_view',
+                    entity_type='paper', entity_id=paper_id, source='paper_detail',
+                )
 
     async def mark_read(self, user_id: str, paper_id: str) -> None:
         now = datetime.now(timezone.utc)
@@ -34,10 +44,16 @@ class ReadingHistoryService:
             statement = insert(ReadingHistoryRow).values(
                 user_id=user_id, paper_id=paper_id, last_viewed_at=now, read_at=now,
             )
-            await session.execute(statement.on_conflict_do_update(
+            first_read = await session.scalar(statement.on_conflict_do_update(
                 index_elements=['user_id', 'paper_id'],
                 set_={'read_at': now},
-            ))
+                where=ReadingHistoryRow.read_at.is_(None),
+            ).returning(ReadingHistoryRow.id))
+            if first_read is not None:
+                await BehaviorEventService().record_explicit(
+                    session, user_id=user_id, event_type='paper_read',
+                    entity_type='paper', entity_id=paper_id,
+                )
 
     async def paper_status_ids(self, user_id: str, paper_ids: list[str]) -> tuple[list[str], list[str]]:
         async with session_scope() as session:

@@ -4,6 +4,8 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { useAuth } from "@/components/auth/auth-provider";
+import { recordSearchSubmit } from "@/clients/backend/behavior";
 import { useSearchDraft } from "@/hooks/use-search-draft";
 import { SlidersHorizontal } from "lucide-react";
 import { useClearSearchRestoration, useSearchRestorationScope } from "@/hooks/use-search-restoration";
@@ -59,6 +61,7 @@ function createSearchParams(
  */
 function KeywordSearchContent() {
   const router = useRouter();
+  const { session } = useAuth();
   const scope = useSearchRestorationScope();
   const clearRestoration = useClearSearchRestoration("/knowledge/search?mode=keyword");
   const queryClient = useQueryClient();
@@ -68,6 +71,7 @@ function KeywordSearchContent() {
   const draft = useSearchDraft("/knowledge/search", returnTo, committedQuery);
   const query = draft.value;
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searchIntent, setSearchIntent] = useState<{ query: string; id: string } | null>(null);
   const setQuery = (value: string) => {
     draft.set(value);
     // 输入变化立即废弃旧预取；新请求只会在 debounce 到期后开始。
@@ -95,6 +99,8 @@ function KeywordSearchContent() {
     draft.clear();
     discardSearchScroll(returnTo, scope);
     const text = q.trim();
+    const queryId = text && session?.user.id ? recordSearchSubmit(text) : null;
+    setSearchIntent(queryId ? { query: text, id: queryId } : null);
     if (!text) clearRestoration();
     discardSearchScroll(buildKnowledgeSearchUrl({ query: text, filters, page: 1 }), scope);
     const nextParams = createSearchParams(text, filters, 1);
@@ -172,6 +178,7 @@ function KeywordSearchContent() {
                 params={searchParamsForQuery}
                 returnTo={returnTo}
                 page={page}
+                queryId={searchIntent?.query === committedQuery ? searchIntent.id : undefined}
                 onPageChange={updatePage}
               />
             ) : (

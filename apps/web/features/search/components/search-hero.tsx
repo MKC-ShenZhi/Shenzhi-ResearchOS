@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchDraft } from "@/hooks/use-search-draft";
+import { useAuth } from "@/components/auth/auth-provider";
+import { recordSearchSubmit } from "@/clients/backend/behavior";
 import { ComposerShell, type ComposerSkill } from "@/components/common/composer/composer";
 import { createAgentSession, fetchAgentConfig, type AgentConfig, type AgentMode } from "@/clients/backend/agent";
 import { saveAgentLaunch } from "@/features/agent-chat/launch-store";
@@ -20,6 +22,7 @@ export function SearchHero({
   initialQuery?: string;
 }) {
   const router = useRouter();
+  const { session } = useAuth();
   const draft = useSearchDraft("home-search", initialQuery, initialQuery);
   const [aiValue, setAiValue] = useState(initialQuery);
   const [chosenMode, setEntryMode] = useState<ComposerEntryMode | null>(null);
@@ -57,6 +60,7 @@ export function SearchHero({
   const send = async (payload: ComposerSubmitPayload) => {
     if (!payload.question.trim()) return;
     if (payload.entryMode === "search") {
+      if (session?.user.id) recordSearchSubmit(payload.question);
       draft.clear();
       router.push(`/knowledge/search?q=${encodeURIComponent(payload.question)}`);
       return;
