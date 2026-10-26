@@ -10,12 +10,14 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.api import maintenance
 from app.core.database import session_scope
 from app.core.errors import BusinessError
 from app.main import app
+from app.models.interactions import PaperLikeRow
+from app.models.reading_history import ReadingHistoryRow
 from app.models.recommendation import BehaviorEventRow, RecommendationSnapshotRow
 from app.schemas.behavior import BehaviorBatchRequest, BehaviorEventInput
 from app.schemas.knowledge import PaperDetail, Provenance
@@ -23,10 +25,12 @@ from app.services.knowledge.service import KnowledgeServiceError
 from app.services.library.collections import CollectionService
 from app.services.library.paper_likes import PaperLikeService
 from app.services.recommendation.behavior import BehaviorEventService
+from app.services.recommendation.config import PROFILE_IMMEDIATE_EVENT_TYPES
 from app.services.recommendation.evaluation import (
     compare_judged_baselines,
     engagement_summary,
     judged_quality,
+    search_linkage_summary,
 )
 from app.services.recommendation.features import PaperFeatureService
 from app.services.recommendation.maintenance import purge_expired
@@ -100,6 +104,17 @@ class BehaviorContractTests(unittest.TestCase):
 
 
 class ProfileMathTests(unittest.TestCase):
+    def test_weak_navigation_and_impression_events_wait_for_ttl_refresh(self):
+        self.assertTrue({'paper_like', 'paper_unlike', 'paper_collect', 'topic_follow',
+                         'paper_read', 'active_read', 'search_submit'}.issubset(
+                             PROFILE_IMMEDIATE_EVENT_TYPES,
+                         ))
+        self.assertTrue({'paper_click', 'paper_detail_view', 'abstract_expand',
+                         'recommendation_click', 'recommendation_impression',
+                         'paper_impression', 'search_result_click'}.isdisjoint(
+                             PROFILE_IMMEDIATE_EVENT_TYPES,
+                         ))
+
     def test_engagement_and_judged_quality_are_aggregate_only(self):
         common = {'user_id': 'user-a', 'request_id': 'request-a', 'entity_id': 'paper:1', 'rank': 1}
         events = [SimpleNamespace(**common, event_type=kind) for kind in (
@@ -137,6 +152,21 @@ class ProfileMathTests(unittest.TestCase):
         })
         self.assertEqual(result['metrics']['content_v1']['@1'], {
             'recall': 1.0, 'ndcg': 1.0,
+        })
+
+    def test_search_linkage_summary_is_aggregate_and_user_scoped(self):
+        events = [
+            SimpleNamespace(user_id='user-a', query_id='query-a', event_type='search_submit'),
+            SimpleNamespace(user_id='user-a', query_id='query-a', event_type='search_result_click'),
+            SimpleNamespace(user_id='user-a', query_id='query-missing', event_type='search_result_click'),
+            SimpleNamespace(user_id='user-b', query_id='query-a', event_type='search_result_click'),
+            SimpleNamespace(user_id='user-a', query_id=None, event_type='search_result_click'),
+        ]
+        self.assertEqual(search_linkage_summary(events), {
+            'search_result_clicks': 4,
+            'clicks_with_matching_search_submit': 1,
+            'clicks_without_query_id': 1,
+            'clicks_with_unmatched_query_id': 2,
         })
 
     def test_rejects_unmatched_candidate_sets_and_relevance_labels(self):
@@ -395,6 +425,30 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(BusinessError):
             await BehaviorEventService().record_batch(self.other_id, feedback)
 
+    async def test_profile_debounces_weak_events_and_refreshes_strong_state(self):
+        paper = PaperDetail(
+            id=self.paper_id, title='RAG study', subjects=['RAG'],
+            keywords=['retrieval'], provenance=Provenance(external_id=self.paper_id),
+        )
+        features = SimpleNamespace(get_many=AsyncMock(return_value={self.paper_id: paper}))
+        profiles = UserProfileService(features=features)
+        initial = await profiles.get(self.user_id)
+        features.get_many.reset_mock()
+
+        weak_click = BehaviorBatchRequest.model_validate({'events': [{
+            'event_id': str(uuid4()), 'event_type': 'paper_click',
+            'paper_id': self.paper_id, 'source': 'discovery',
+        }]})
+        await BehaviorEventService().record_batch(self.user_id, weak_click)
+        cached = await profiles.get(self.user_id)
+        self.assertEqual(cached['computed_at'], initial['computed_at'])
+        features.get_many.assert_not_awaited()
+
+        await PaperLikeService().like(self.user_id, self.paper_id)
+        refreshed = await profiles.get(self.user_id)
+        self.assertIn('rag', refreshed['long_topics'])
+        features.get_many.assert_awaited_once_with([self.paper_id])
+
     async def test_search_only_interest_changes_recommendation_order(self):
         query_id = uuid4()
         batch = BehaviorBatchRequest.model_validate({'events': [{
@@ -432,6 +486,73 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
         page = await service.page(self.user_id, limit=2)
         self.assertEqual([item['id'] for item in page['items']], ['paper:z-matching', 'paper:a-unrelated'])
         self.assertEqual(page['items'][0]['reason'], '与你关注的论文关键词相关')
+
+    async def test_concurrent_detail_views_emit_one_debounced_event(self):
+        from app.services.library.reading_history import ReadingHistoryService
+
+        service = ReadingHistoryService()
+        await asyncio.gather(*(service.record(self.user_id, self.paper_id) for _ in range(12)))
+        async with session_scope() as session:
+            count = await session.scalar(select(func.count()).select_from(BehaviorEventRow).where(
+                BehaviorEventRow.user_id == self.user_id,
+                BehaviorEventRow.entity_id == self.paper_id,
+                BehaviorEventRow.event_type == 'paper_detail_view',
+            ))
+        self.assertEqual(count, 1)
+
+    async def test_detail_view_debounce_uses_persisted_ten_minute_window(self):
+        from app.services.library.reading_history import ReadingHistoryService
+
+        service = ReadingHistoryService()
+        await service.record(self.user_id, self.paper_id)
+        await service.record(self.user_id, self.paper_id)
+        async with session_scope() as session:
+            count = await session.scalar(select(func.count()).select_from(BehaviorEventRow).where(
+                BehaviorEventRow.user_id == self.user_id,
+                BehaviorEventRow.entity_id == self.paper_id,
+                BehaviorEventRow.event_type == 'paper_detail_view',
+            ))
+        self.assertEqual(count, 1)
+
+        async with session_scope() as session:
+            await session.execute(update(ReadingHistoryRow).where(
+                ReadingHistoryRow.user_id == self.user_id,
+                ReadingHistoryRow.paper_id == self.paper_id,
+            ).values(last_viewed_at=datetime.now(UTC) - timedelta(minutes=11)))
+        await service.record(self.user_id, self.paper_id)
+        async with session_scope() as session:
+            count = await session.scalar(select(func.count()).select_from(BehaviorEventRow).where(
+                BehaviorEventRow.user_id == self.user_id,
+                BehaviorEventRow.entity_id == self.paper_id,
+                BehaviorEventRow.event_type == 'paper_detail_view',
+            ))
+        self.assertEqual(count, 2)
+
+    async def test_event_retention_keeps_active_explicit_interest_rebuildable(self):
+        now = datetime(2026, 10, 25, tzinfo=UTC)
+        old = now - timedelta(days=91)
+        await PaperLikeService().like(self.user_id, self.paper_id)
+        async with session_scope() as session:
+            await session.execute(update(PaperLikeRow).where(
+                PaperLikeRow.user_id == self.user_id,
+                PaperLikeRow.paper_id == self.paper_id,
+            ).values(created_at=old))
+            await session.execute(update(BehaviorEventRow).where(
+                BehaviorEventRow.user_id == self.user_id,
+                BehaviorEventRow.entity_id == self.paper_id,
+                BehaviorEventRow.event_type == 'paper_like',
+            ).values(occurred_at=old, received_at=old))
+
+        self.assertEqual(await purge_expired(now), (1, 0))
+        paper = PaperDetail(
+            id=self.paper_id, title='Older liked paper', subjects=['RAG'],
+            keywords=['retrieval'], provenance=Provenance(external_id=self.paper_id),
+        )
+        rebuilt = await UserProfileService(
+            features=SimpleNamespace(get_many=AsyncMock(return_value={self.paper_id: paper})),
+        ).rebuild(self.user_id)
+        self.assertGreater(rebuilt['long_topics']['rag'], 0)
+        self.assertGreater(rebuilt['long_keywords']['retrieval'], 0)
 
     async def test_distinct_interests_weights_rebuild_and_user_isolation(self):
         collected_id = f'paper:collected:{uuid4()}'

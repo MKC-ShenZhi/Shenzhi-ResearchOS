@@ -24,7 +24,9 @@ export function recordPaperBehavior(input: {
       request_id: input.requestId,
       query_id: input.queryId,
       rank: input.rank,
-      duration_seconds: input.durationSeconds,
+      duration_seconds: input.eventType === "active_read" && input.durationSeconds !== undefined
+        ? Math.floor(input.durationSeconds)
+        : input.durationSeconds,
     }] }),
   }).catch(() => undefined);
 }

@@ -1,9 +1,9 @@
 """Persistence and Knowledge enrichment for paper reading history."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.database import session_scope
@@ -19,8 +19,13 @@ class ReadingHistoryService:
         self.knowledge = knowledge or KnowledgeService()
 
     async def record(self, user_id: str, paper_id: str) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         async with session_scope() as session:
+            # Serialize the debounce check for concurrent detail requests so
+            # one navigation cannot append several identical view events.
+            await session.execute(select(func.pg_advisory_xact_lock(
+                func.hashtext(f'reading-history:{user_id}'), func.hashtext(paper_id),
+            )))
             previous_view = await session.scalar(select(ReadingHistoryRow.last_viewed_at).where(
                 ReadingHistoryRow.user_id == user_id,
                 ReadingHistoryRow.paper_id == paper_id,
@@ -39,7 +44,7 @@ class ReadingHistoryService:
                 )
 
     async def mark_read(self, user_id: str, paper_id: str) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         async with session_scope() as session:
             statement = insert(ReadingHistoryRow).values(
                 user_id=user_id, paper_id=paper_id, last_viewed_at=now, read_at=now,

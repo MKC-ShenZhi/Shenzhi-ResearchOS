@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { fetchHomeFeedPage } from "../../features/search/services/discovery-feed.js";
 import { recordPaperBehavior, recordSearchSubmit } from "../../clients/backend/behavior.js";
+import { ActiveReadTracker } from "../../features/papers/active-read-tracker.js";
 
 const paper = {
   id: "paper:1", title: "Paper one", abstract: "Abstract",
@@ -128,4 +129,46 @@ test("abstract expansion sends a single positive-intent event", async () => {
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test("active-read duration is serialized as whole seconds for the backend schema", async () => {
+  const original = globalThis.fetch;
+  let event: Record<string, unknown> | undefined;
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body));
+    event = body.events[0];
+    return json({ inserted: 1 });
+  };
+  try {
+    recordPaperBehavior({
+      eventType: "active_read", paperId: "paper:1", source: "paper_detail",
+      durationSeconds: 30.125,
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(event?.duration_seconds, 30);
+    assert.equal(Number.isInteger(event?.duration_seconds), true);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("active reading accumulates foreground time across interruptions and reports once", () => {
+  const tracker = new ActiveReadTracker();
+  assert.equal(tracker.tick("user-1", "paper:1", true, 0), null);
+  assert.equal(tracker.tick("user-1", "paper:1", true, 10_000), null);
+  assert.equal(tracker.tick("user-1", "paper:1", false, 15_000), null);
+  assert.equal(tracker.tick("user-1", "paper:1", false, 35_000), null);
+  assert.equal(tracker.tick("user-1", "paper:1", true, 40_000), null);
+  assert.equal(tracker.tick("user-1", "paper:1", true, 55_000), 30);
+  assert.equal(tracker.tick("user-1", "paper:1", true, 60_000), null);
+});
+
+test("active reading tracker resets for a different paper or user", () => {
+  const tracker = new ActiveReadTracker();
+  assert.equal(tracker.tick("user-1", "paper:1", true, 0), null);
+  assert.equal(tracker.tick("user-1", "paper:1", true, 25_000), null);
+  assert.equal(tracker.tick("user-1", "paper:2", true, 30_000), null);
+  assert.equal(tracker.tick("user-2", "paper:2", true, 35_000), null);
+  assert.equal(tracker.tick("user-2", "paper:2", true, 55_000), null);
+  assert.equal(tracker.tick("user-2", "paper:2", true, 65_000), 30);
 });

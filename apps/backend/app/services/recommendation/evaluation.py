@@ -20,6 +20,7 @@ MAX_EVENTS = 100_000
 
 def engagement_summary(events: Iterable[BehaviorEventRow]) -> dict:
     """Count distinct recommendation exposures and clicks by snapshot position."""
+    events = list(events)
     impressions: set[tuple[str, str | None, str, int | None]] = set()
     clicks: set[tuple[str, str | None, str, int | None]] = set()
     impression_events = 0
@@ -41,6 +42,29 @@ def engagement_summary(events: Iterable[BehaviorEventRow]) -> dict:
         'repeated_impression_events': impression_events - len(impressions),
         'repeated_click_events': click_events - len(clicks),
         'click_through_rate': round(matched / len(impressions), 6) if impressions else None,
+        'search_linkage': search_linkage_summary(events),
+    }
+
+
+def search_linkage_summary(events: Iterable[BehaviorEventRow]) -> dict:
+    """Report search click attribution counts without returning query/user data."""
+    materialized = list(events)
+    submissions = {
+        (event.user_id, getattr(event, 'query_id', None))
+        for event in materialized
+        if event.event_type == 'search_submit' and getattr(event, 'query_id', None) is not None
+    }
+    clicks = [event for event in materialized if event.event_type == 'search_result_click']
+    with_query_id = [event for event in clicks if getattr(event, 'query_id', None) is not None]
+    linked = sum(
+        (event.user_id, event.query_id) in submissions
+        for event in with_query_id
+    )
+    return {
+        'search_result_clicks': len(clicks),
+        'clicks_with_matching_search_submit': linked,
+        'clicks_without_query_id': len(clicks) - len(with_query_id),
+        'clicks_with_unmatched_query_id': len(with_query_id) - linked,
     }
 
 
@@ -133,7 +157,10 @@ async def recent_engagement(days: int = 7) -> dict:
         raise ValueError('days must be between 1 and 90')
     async with session_scope() as session:
         events = list(await session.scalars(select(BehaviorEventRow).where(
-            BehaviorEventRow.event_type.in_(['recommendation_impression', 'recommendation_click']),
+            BehaviorEventRow.event_type.in_([
+                'recommendation_impression', 'recommendation_click',
+                'search_submit', 'search_result_click',
+            ]),
             BehaviorEventRow.received_at >= utc_now() - timedelta(days=days),
         ).order_by(BehaviorEventRow.received_at.desc()).limit(MAX_EVENTS + 1)))
     complete = len(events) <= MAX_EVENTS
@@ -151,7 +178,7 @@ async def main() -> int:
 
 
 def cli() -> int:
-    parser = argparse.ArgumentParser(description='Evaluate recommendation engagement or compare judged baselines.')
+    parser = argparse.ArgumentParser(description='Audit recommendation/search engagement or compare judged baselines.')
     parser.add_argument('--judgments', type=Path, help='JSON file with same-candidate-set rankings and human labels')
     parser.add_argument('--k', type=int, nargs='+', default=[5, 10], help='cutoffs for Recall@K and NDCG@K')
     args = parser.parse_args()

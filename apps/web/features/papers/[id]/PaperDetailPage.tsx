@@ -26,6 +26,7 @@ import { PaperAbstractView } from "./components/paper-abstract-view";
 import { PaperPdfViewer, type ViewerState } from "./components/paper-pdf-viewer";
 import { PaperRightPanel } from "./components/right-panel";
 import { useVisualViewport } from "@/hooks/use-visual-viewport";
+import { ActiveReadTracker } from "../active-read-tracker";
 
 type PaperViewMode = "abstract" | "paper";
 
@@ -56,6 +57,8 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
   const [assistantWidthPercent, setAssistantWidthPercent] = useState(DEFAULT_ASSISTANT_WIDTH_PERCENT);
   const [isResizing, setIsResizing] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
+  const activeReadTrackerRef = useRef<ActiveReadTracker | null>(null);
+  activeReadTrackerRef.current ??= new ActiveReadTracker();
   const [zoom, setZoom] = useState(1);
   const [viewerState, setViewerState] = useState<ViewerState>("loading");
   const [mobilePanel, setMobilePanel] = useState<"reader" | "assistant">("reader");
@@ -120,19 +123,26 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
 
   useEffect(() => {
     if (!loadedPaperId || !userId || viewMode !== "paper" || viewerState !== "ready" || mobilePanel !== "reader") return;
-    let visibleSeconds = 0;
-    let sent = false;
     const interval = window.setInterval(() => {
-      if (document.visibilityState !== "visible" || sent) return;
-      visibleSeconds += 5;
-      if (visibleSeconds < 30) return;
-      sent = true;
+      const visibleSeconds = activeReadTrackerRef.current?.tick(
+        userId,
+        loadedPaperId,
+        document.visibilityState === "visible",
+        performance.now(),
+      );
+      if (visibleSeconds === null || visibleSeconds === undefined) return;
       recordPaperBehavior({
         eventType: "active_read", paperId: loadedPaperId,
         source: "paper_detail", durationSeconds: visibleSeconds,
       });
     }, 5000);
-    return () => window.clearInterval(interval);
+    const resetInterval = () => activeReadTrackerRef.current?.resetInterval();
+    document.addEventListener("visibilitychange", resetInterval);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", resetInterval);
+      resetInterval();
+    };
   }, [loadedPaperId, mobilePanel, userId, viewMode, viewerState]);
 
   const handleReachedEnd = () => {

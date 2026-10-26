@@ -26,6 +26,11 @@ HALF_LIFE_DAYS = {
     'recommendation_click': 7,
     'search_submit': 3,
 }
+PROFILE_IMMEDIATE_EVENT_TYPES = frozenset({
+    'paper_collect', 'paper_uncollect', 'paper_like', 'paper_unlike',
+    'topic_follow', 'topic_unfollow', 'paper_read', 'active_read',
+    'search_submit',
+})
 RANK_WEIGHTS = {
     'topic_affinity': 0.40,
     'keyword_match': 0.25,

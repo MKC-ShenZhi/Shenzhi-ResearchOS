@@ -18,6 +18,7 @@ from app.services.recommendation.config import (
     EVENT_WEIGHTS,
     HALF_LIFE_DAYS,
     MAX_PROFILE_PAPERS,
+    PROFILE_IMMEDIATE_EVENT_TYPES,
 )
 from app.services.recommendation.features import PaperFeatureService
 from app.services.topics.registry import TopicRegistry, TopicRegistryError
@@ -69,7 +70,10 @@ class UserProfileService:
             row = await session.get(UserInterestProfileRow, user_id)
             latest = await session.scalar(select(func.max(BehaviorEventRow.received_at)).where(
                 BehaviorEventRow.user_id == user_id,
+                BehaviorEventRow.event_type.in_(PROFILE_IMMEDIATE_EVENT_TYPES),
             ))
+            # Strong state changes refresh immediately; weak clicks and views
+            # join the next TTL-based rebuild instead of rebuilding on every hit.
             if (row is not None and row.algorithm_version == ALGORITHM_VERSION
                 and row.computed_at >= utc_now() - timedelta(minutes=10)
                 and (latest is None or row.last_event_at == latest)):
@@ -105,6 +109,7 @@ class UserProfileService:
             ).order_by(BehaviorEventRow.received_at.desc()).limit(500))).scalars())
             latest = await session.scalar(select(func.max(BehaviorEventRow.received_at)).where(
                 BehaviorEventRow.user_id == user_id,
+                BehaviorEventRow.event_type.in_(PROFILE_IMMEDIATE_EVENT_TYPES),
             ))
 
         paper_ids = list(dict.fromkeys(
