@@ -3,11 +3,14 @@ import asyncio
 import time
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import delete, exists, func, select, update
+from sqlalchemy import delete, exists, func, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.core.database import dispose_engine, get_session_factory, session_scope
 from app.core.errors import BusinessError
+from app.core.idempotency import ensure_same_request
+from app.core.worker_lease import LEASE_SECONDS, current_worker_id
 from app.models.chat import ChatMessageRow, ChatSessionRow
 from app.services.chat.entities import Message, Session
 
@@ -19,11 +22,26 @@ def _ts(value: datetime) -> float:
     return value.timestamp()
 
 
+def _constraint_name(error: IntegrityError) -> str | None:
+    for cause in (error.orig, getattr(error.orig, '__cause__', None)):
+        name = getattr(cause, 'constraint_name', None)
+        if isinstance(name, str):
+            return name
+    return None
+
+
 def _message_from_row(row: ChatMessageRow) -> Message:
     return Message(
         str(row.id), str(row.session_id), row.question, dict(row.settings),
         row.attachment_context, list(row.warnings), row.content, row.reasoning,
         row.status, list(row.message_refs), list(row.followups), row.duration_ms, row.error,
+        idempotency_owner=row.idempotency_owner,
+        idempotency_scope=row.idempotency_scope,
+        idempotency_key=row.idempotency_key,
+        idempotency_fingerprint=row.idempotency_fingerprint,
+        generation_claimed=row.generation_claimed,
+        worker_id=row.worker_id,
+        lease_expires_at=row.lease_expires_at,
     )
 
 
@@ -54,35 +72,69 @@ class PostgresSessionRepository:
     def _overlay_messages(self, messages: list[Message]) -> list[Message]:
         return [self.messages.get(message.id, message) for message in messages]
 
-    async def recover(self) -> None:
-        async with session_scope() as db:
-            await db.execute(
-                update(ChatMessageRow)
-                .where(ChatMessageRow.status == 'streaming')
-                .values(status='failed', error=RECOVER_ERROR, completed_at=func.now())
-            )
-        for message in self.messages.values():
-            if message.status == 'streaming':
+    async def _recover_expired_messages(self, db, *, session_id=None, message_id=None) -> set[str]:
+        statement = update(ChatMessageRow).where(
+            ChatMessageRow.status == 'streaming',
+            ChatMessageRow.lease_expires_at <= func.clock_timestamp(),
+        )
+        if session_id is not None:
+            statement = statement.where(ChatMessageRow.session_id == session_id)
+        if message_id is not None:
+            statement = statement.where(ChatMessageRow.id == message_id)
+        recovered = await db.scalars(
+            statement.values(
+                status='failed', error=RECOVER_ERROR, completed_at=func.clock_timestamp(),
+                worker_id=None, lease_expires_at=None,
+            ).returning(ChatMessageRow.id)
+        )
+        return {str(item) for item in recovered.all()}
+
+    def _sync_recovered_messages(self, recovered_ids: set[str]) -> None:
+        for message_id in recovered_ids:
+            message = self.messages.get(message_id)
+            if message is not None:
                 message.status = 'failed'
                 message.error = RECOVER_ERROR
+                message.worker_id = None
+                message.lease_expires_at = None
 
-    async def persist_message(self, message: Message) -> None:
+    async def recover(self) -> None:
+        async with session_scope() as db:
+            recovered_ids = await self._recover_expired_messages(db)
+        self._sync_recovered_messages(recovered_ids)
+
+    async def persist_message(self, message: Message, worker_id: str | None = None) -> bool:
         message_id = uuid.UUID(message.id)
         session_id = uuid.UUID(message.session_id)
         async with session_scope() as db:
             if message.status == 'streaming':
-                await db.execute(
+                persisted = await db.scalar(
                     update(ChatMessageRow)
                     .where(ChatMessageRow.id == message_id)
                     .where(ChatMessageRow.status.in_(('stopped', 'failed')))
-                    .values(status='streaming', error=None, completed_at=None)
+                    .values(status='streaming', error=None, completed_at=None,
+                            generation_claimed=False, worker_id=None, lease_expires_at=None)
+                    .returning(ChatMessageRow.id)
                 )
             else:
-                await db.execute(
+                statement = (
                     update(ChatMessageRow)
                     .where(ChatMessageRow.id == message_id)
                     .where(ChatMessageRow.status == 'streaming')
-                    .values(
+                )
+                if worker_id is not None:
+                    statement = statement.where(
+                        ChatMessageRow.worker_id == worker_id,
+                        ChatMessageRow.lease_expires_at > func.clock_timestamp(),
+                    )
+                else:
+                    statement = statement.where(
+                        ChatMessageRow.generation_claimed.is_(False),
+                        ChatMessageRow.worker_id.is_(None),
+                        ChatMessageRow.lease_expires_at.is_(None),
+                    )
+                persisted = await db.scalar(
+                    statement.values(
                         content=message.content,
                         reasoning=message.reasoning,
                         status=message.status,
@@ -92,18 +144,22 @@ class PostgresSessionRepository:
                         error=message.error,
                         settings=dict(message.settings),
                         warnings=list(message.warnings),
-                        completed_at=func.now(),
-                    )
+                        completed_at=func.clock_timestamp(),
+                        worker_id=worker_id,
+                        lease_expires_at=None,
+                    ).returning(ChatMessageRow.id)
                 )
-            await db.execute(
-                update(ChatSessionRow)
-                .where(ChatSessionRow.id == session_id)
-                .values(updated_at=func.now())
-            )
+            if persisted is not None:
+                await db.execute(
+                    update(ChatSessionRow)
+                    .where(ChatSessionRow.id == session_id)
+                    .values(updated_at=func.clock_timestamp())
+                )
         if message.status in TERMINAL:
             self._untrack(message.id)
         elif message.status == 'streaming':
             self._track(message)
+        return persisted is not None
 
     async def create(self, owner: str, question: str, settings: dict) -> Session:
         session_id = uuid.uuid4()
@@ -115,14 +171,81 @@ class PostgresSessionRepository:
             ))
         return Session(str(session_id), owner, question[:50], dict(settings))
 
+    async def find_idempotent_message(self, owner: str, scope: str, key: str,
+                                      fingerprint: str) -> Message | None:
+        recovered_ids: set[str] = set()
+        async with session_scope() as db:
+            row = await db.scalar(
+                select(ChatMessageRow)
+                .join(ChatSessionRow, ChatMessageRow.session_id == ChatSessionRow.id)
+                .where(
+                    ChatSessionRow.owner == owner,
+                    ChatMessageRow.idempotency_owner == owner,
+                    ChatMessageRow.idempotency_scope == scope,
+                    ChatMessageRow.idempotency_key == key,
+                )
+            )
+            if row is not None:
+                ensure_same_request(row.idempotency_fingerprint, fingerprint)
+                recovered_ids = await self._recover_expired_messages(db, message_id=row.id)
+                if recovered_ids:
+                    await db.refresh(row)
+        self._sync_recovered_messages(recovered_ids)
+        if row is None:
+            return None
+        message = self.messages.get(str(row.id)) or _message_from_row(row)
+        self._track(message)
+        return message
+
+    async def create_with_message(self, owner: str, question: str, settings: dict,
+                                  context: str, warnings: list[str], *, scope: str,
+                                  key: str, fingerprint: str) -> Message:
+        session_id = uuid.uuid4()
+        message_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+        message = Message(
+            str(message_id), str(session_id), question, dict(settings), context, list(warnings),
+            idempotency_owner=owner, idempotency_scope=scope, idempotency_key=key,
+            idempotency_fingerprint=fingerprint,
+        )
+        try:
+            async with session_scope() as db:
+                db.add(ChatSessionRow(
+                    id=session_id, owner=owner, title=question[:50], settings=dict(settings),
+                    favorite=False, created_at=now, updated_at=now,
+                ))
+                db.add(ChatMessageRow(
+                    id=message_id, session_id=session_id, question=question,
+                    settings=dict(settings), attachment_context=context, warnings=list(warnings),
+                    status='streaming', idempotency_owner=owner, idempotency_scope=scope,
+                    idempotency_key=key, idempotency_fingerprint=fingerprint,
+                    created_at=now,
+                ))
+        except IntegrityError:
+            existing = await self.find_idempotent_message(owner, scope, key, fingerprint)
+            if existing is not None:
+                return existing
+            raise
+        self._track(message)
+        return message
+
     async def get(self, session_id: str, owner: str) -> Session:
         sid = uuid.UUID(session_id)
-        async with get_session_factory()() as db:
-            row = await db.scalar(
-                select(ChatSessionRow)
-                .where(ChatSessionRow.id == sid, ChatSessionRow.owner == owner)
-                .options(selectinload(ChatSessionRow.messages))
-            )
+        recovered_ids: set[str] = set()
+        async with session_scope() as db:
+            found = await db.scalar(select(ChatSessionRow.id).where(
+                ChatSessionRow.id == sid, ChatSessionRow.owner == owner,
+            ))
+            if found is None:
+                row = None
+            else:
+                recovered_ids = await self._recover_expired_messages(db, session_id=sid)
+                row = await db.scalar(
+                    select(ChatSessionRow)
+                    .where(ChatSessionRow.id == sid, ChatSessionRow.owner == owner)
+                    .options(selectinload(ChatSessionRow.messages))
+                )
+        self._sync_recovered_messages(recovered_ids)
         if row is None:
             raise BusinessError(20004, '会话不存在或已过期', 404)
         messages = self._overlay_messages([_message_from_row(item) for item in row.messages])
@@ -154,17 +277,21 @@ class PostgresSessionRepository:
             message = self.messages[message_id]
             await self.get(message.session_id, owner)
             return message
-        async with get_session_factory()() as db:
-            result = await db.execute(
-                select(ChatMessageRow, ChatSessionRow.owner)
-                .join(ChatSessionRow, ChatMessageRow.session_id == ChatSessionRow.id)
-                .where(ChatMessageRow.id == uuid.UUID(message_id))
+        mid = uuid.UUID(message_id)
+        recovered_ids: set[str] = set()
+        async with session_scope() as db:
+            msg_owner = await db.scalar(
+                select(ChatSessionRow.owner)
+                .join(ChatMessageRow, ChatMessageRow.session_id == ChatSessionRow.id)
+                .where(ChatMessageRow.id == mid)
             )
-            row = result.first()
-        if row is None:
-            raise BusinessError(20004, '消息不存在或已过期', 404)
-        msg_row, msg_owner = row
-        if msg_owner != owner:
+            if msg_owner == owner:
+                recovered_ids = await self._recover_expired_messages(db, message_id=mid)
+                msg_row = await db.get(ChatMessageRow, mid)
+            else:
+                msg_row = None
+        self._sync_recovered_messages(recovered_ids)
+        if msg_row is None:
             raise BusinessError(20004, '消息不存在或已过期', 404)
         message = _message_from_row(msg_row)
         # Track so resume/stop/stream share one object with session.messages overlay.
@@ -172,33 +299,158 @@ class PostgresSessionRepository:
         return message
 
     async def add_message(self, session: Session, question: str, settings: dict,
-                          context: str = '', warnings: list[str] | None = None) -> Message:
-        if any(item.status == 'streaming' for item in session.messages):
-            raise BusinessError(20009, '请先停止当前生成', 409)
-        if len(session.messages) >= 100:
-            raise BusinessError(20009, '单个临时会话最多 100 轮，请新建会话', 429)
-        message_id = uuid.uuid4()
+                          context: str = '', warnings: list[str] | None = None, *,
+                          idempotency_owner: str | None = None,
+                          idempotency_scope: str | None = None,
+                          idempotency_key: str | None = None,
+                          idempotency_fingerprint: str | None = None) -> Message:
         sid = uuid.UUID(session.id)
         now = datetime.now(timezone.utc)
+        message_id = uuid.uuid4()
         message = Message(
             str(message_id), session.id, question, dict(settings), context, warnings or [],
+            idempotency_owner=idempotency_owner, idempotency_scope=idempotency_scope,
+            idempotency_key=idempotency_key,
+            idempotency_fingerprint=idempotency_fingerprint,
         )
-        async with session_scope() as db:
-            await db.execute(
-                update(ChatSessionRow)
-                .where(ChatSessionRow.id == sid)
-                .values(settings=dict(settings), updated_at=now)
-            )
-            db.add(ChatMessageRow(
-                id=message_id, session_id=sid, question=question, settings=dict(settings),
-                attachment_context=context, warnings=warnings or [], status='streaming',
-                created_at=now,
-            ))
+        replay: Message | None = None
+        recovered_ids: set[str] = set()
+        try:
+            async with session_scope() as db:
+                session_row = await db.scalar(
+                    select(ChatSessionRow)
+                    .where(ChatSessionRow.id == sid, ChatSessionRow.owner == session.owner)
+                    .with_for_update()
+                )
+                if session_row is None:
+                    raise BusinessError(20004, '会话不存在或已过期', 404)
+                recovered_ids = await self._recover_expired_messages(db, session_id=sid)
+                if idempotency_key is not None:
+                    existing_row = await db.scalar(select(ChatMessageRow).where(
+                        ChatMessageRow.idempotency_owner == (idempotency_owner or session.owner),
+                        ChatMessageRow.idempotency_scope == (idempotency_scope or ''),
+                        ChatMessageRow.idempotency_key == idempotency_key,
+                    ))
+                    if existing_row is not None:
+                        ensure_same_request(existing_row.idempotency_fingerprint,
+                                            idempotency_fingerprint or '')
+                        replay = self.messages.get(str(existing_row.id)) or _message_from_row(existing_row)
+                    else:
+                        active = await db.scalar(select(exists().where(
+                            ChatMessageRow.session_id == sid, ChatMessageRow.status == 'streaming',
+                        )))
+                        if active:
+                            raise BusinessError(20009, '请先停止当前生成', 409)
+                else:
+                    active = await db.scalar(select(exists().where(
+                        ChatMessageRow.session_id == sid, ChatMessageRow.status == 'streaming',
+                    )))
+                    if active:
+                        raise BusinessError(20009, '请先停止当前生成', 409)
+
+                if replay is None:
+                    count = await db.scalar(select(func.count()).select_from(ChatMessageRow).where(
+                        ChatMessageRow.session_id == sid,
+                    ))
+                    if int(count or 0) >= 100:
+                        raise BusinessError(20009, '单个临时会话最多 100 轮，请新建会话', 429)
+                    await db.execute(
+                        update(ChatSessionRow).where(ChatSessionRow.id == sid)
+                        .values(settings=dict(settings), updated_at=now)
+                    )
+                    db.add(ChatMessageRow(
+                        id=message_id, session_id=sid, question=question, settings=dict(settings),
+                        attachment_context=context, warnings=warnings or [], status='streaming',
+                        idempotency_owner=idempotency_owner,
+                        idempotency_scope=idempotency_scope,
+                        idempotency_key=idempotency_key,
+                        idempotency_fingerprint=idempotency_fingerprint,
+                        created_at=now,
+                    ))
+        except IntegrityError as error:
+            if idempotency_key is not None:
+                existing = await self.find_idempotent_message(
+                    idempotency_owner or session.owner, idempotency_scope or '',
+                    idempotency_key, idempotency_fingerprint or '',
+                )
+                if existing is not None:
+                    return existing
+            if _constraint_name(error) == 'uq_chat_messages_active':
+                raise BusinessError(20009, '请先停止当前生成', 409) from None
+            raise
+        self._sync_recovered_messages(recovered_ids)
+        if replay is not None:
+            self._track(replay)
+            return replay
         session.messages.append(message)
         session.settings = dict(settings)
         session.updated_at = _ts(now)
         self._track(message)
         return message
+
+    async def claim_generation(self, message: Message, worker_id: str | None = None) -> bool:
+        worker_id = worker_id or current_worker_id()
+        async with session_scope() as db:
+            claimed = await db.scalar(
+                update(ChatMessageRow)
+                .where(
+                    ChatMessageRow.id == uuid.UUID(message.id),
+                    ChatMessageRow.status == 'streaming',
+                    ChatMessageRow.generation_claimed.is_(False),
+                    ChatMessageRow.lease_expires_at.is_(None),
+                )
+                .values(
+                    generation_claimed=True,
+                    worker_id=worker_id,
+                    lease_expires_at=func.clock_timestamp() + text(f"INTERVAL '{LEASE_SECONDS} seconds'"),
+                )
+                .returning(ChatMessageRow.lease_expires_at)
+            )
+        if claimed is None:
+            async with get_session_factory()() as db:
+                row = await db.get(ChatMessageRow, uuid.UUID(message.id))
+            if row is not None:
+                message.content = row.content
+                message.reasoning = row.reasoning
+                message.status = row.status
+                message.references = list(row.message_refs)
+                message.followups = list(row.followups)
+                message.duration_ms = row.duration_ms
+                message.error = row.error
+                message.warnings = list(row.warnings)
+                message.settings = dict(row.settings)
+                message.generation_claimed = row.generation_claimed
+                message.worker_id = row.worker_id
+                message.lease_expires_at = row.lease_expires_at
+                message.events.clear()
+            return False
+        message.generation_claimed = True
+        message.worker_id = worker_id
+        message.lease_expires_at = claimed
+        return True
+
+    async def renew_generation(self, message_id: str, worker_id: str) -> bool | None:
+        async with session_scope() as db:
+            renewed = await db.scalar(
+                update(ChatMessageRow)
+                .where(
+                    ChatMessageRow.id == uuid.UUID(message_id),
+                    ChatMessageRow.status == 'streaming',
+                    ChatMessageRow.worker_id == worker_id,
+                    ChatMessageRow.lease_expires_at > func.clock_timestamp(),
+                )
+                .values(lease_expires_at=func.clock_timestamp()
+                        + text(f"INTERVAL '{LEASE_SECONDS} seconds'"))
+                .returning(ChatMessageRow.id)
+            )
+            if renewed is not None:
+                return True
+            row = await db.scalar(select(ChatMessageRow).where(
+                ChatMessageRow.id == uuid.UUID(message_id),
+            ))
+        if row is not None and row.status != 'streaming' and row.worker_id == worker_id:
+            return None
+        return False
 
     async def list(self, owner: str) -> list[dict]:
         async with get_session_factory()() as db:

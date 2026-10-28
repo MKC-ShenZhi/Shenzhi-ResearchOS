@@ -283,6 +283,9 @@ export function ShenzhiAiPage() {
   const stickRef = useRef(true);
   const loadedSessionRef = useRef<string | null>(null);
   const sessionGenerationRef = useRef(0);
+  const pendingOperationRef = useRef<{
+    sessionId: string; body: AgentRunInput; key: string; userId: string; assistantId: string;
+  } | null>(null);
   const runContextRef = useRef<{
     sessionId: string;
     generation: number;
@@ -338,7 +341,8 @@ export function ShenzhiAiPage() {
   }, [isCurrentRun]);
 
   const buildRunHandlers = useCallback((
-    context: RunContext, controller: AbortController, onAccepted?: () => void,
+    context: RunContext, controller: AbortController,
+    onAccepted?: () => void, onCompleted?: () => void,
   ): Parameters<typeof streamAgentSessionRun>[2] => {
     const isCurrent = () => isCurrentRun(context, controller);
     return {
@@ -369,6 +373,7 @@ export function ShenzhiAiPage() {
       })),
       onResult: (result: AgentRunResult) => {
         if (!isCurrent()) return;
+        onCompleted?.();
         patchAssistant(context, (turn) => {
           const sources = result.output?.sources;
           return {
@@ -455,6 +460,9 @@ export function ShenzhiAiPage() {
                 const refreshed = await getAgentSession(sessionId);
                 if (active && isCurrentRun(context, controller) && !controller.signal.aborted) {
                   setTurns(storedTurns(refreshed.turns));
+                  if (refreshed.turns.at(-1)?.status === "running") {
+                    setRunError("任务仍在其他工作进程运行，当前连接无法接续；稍后重新打开会话查看结果。");
+                  }
                 }
               } else if (!(cause instanceof Error && cause.name === "AbortError")) {
                 setRunError(cause instanceof Error ? cause.message : "续接失败，请稍后重试");
@@ -520,17 +528,33 @@ export function ShenzhiAiPage() {
   }, [agentConfig]);
 
   /** All normal sends and the home-page launch use this exact persisted run path. */
-  const runPrompt = useCallback(async (runInput: AgentRunInput) => {
+  const runPrompt = useCallback(async (runInput: AgentRunInput, retryOperationKey?: string) => {
     const prompt = runInput.prompt.trim();
     if (!prompt || running || !sessionId) return;
+    const requestBody = { ...runInput, prompt };
+    const idempotencyKey = retryOperationKey ?? newTurnId("operation");
+    const retry = retryOperationKey && pendingOperationRef.current?.key === retryOperationKey
+      ? pendingOperationRef.current
+      : null;
     const generation = sessionGenerationRef.current;
-    const userId = newTurnId("user");
-    const assistantId = newTurnId("assistant");
+    const userId = retry?.userId ?? newTurnId("user");
+    const assistantId = retry?.assistantId ?? newTurnId("assistant");
+    pendingOperationRef.current = { sessionId, body: requestBody, key: idempotencyKey, userId, assistantId };
     const context = { sessionId, generation, assistantId };
-    setTurns((previous) => [...previous,
-      { id: userId, role: "user", content: prompt, attachments: runInput.attachments as ChatAttachment[],
-        reasoning: "", stream: initialStreamState(), steers: [] },
-      { id: assistantId, role: "assistant", content: "", reasoning: "", stream: initialStreamState(), steers: [] }]);
+    const userTurn: Turn = {
+      id: userId, role: "user", content: prompt, attachments: runInput.attachments as ChatAttachment[],
+      reasoning: "", stream: initialStreamState(), steers: [],
+    };
+    const assistantTurn: Turn = {
+      id: assistantId, role: "assistant", content: "", reasoning: "", stream: initialStreamState(), steers: [],
+    };
+    setTurns((previous) => {
+      if (retry && previous.some((turn) => turn.id === userId)
+          && previous.some((turn) => turn.id === assistantId)) {
+        return previous.map((turn) => turn.id === assistantId ? assistantTurn : turn);
+      }
+      return [...previous.filter((turn) => turn.id !== userId && turn.id !== assistantId), userTurn, assistantTurn];
+    });
     setInput("");
     setAttachments([]);
     setRunError(null);
@@ -543,7 +567,17 @@ export function ShenzhiAiPage() {
     const isCurrent = () => isCurrentRun(context, controller);
     let accepted = false;
     try {
-      await streamAgentSessionRun(sessionId, runInput, buildRunHandlers(context, controller, () => { accepted = true; }), controller.signal);
+      await streamAgentSessionRun(
+        sessionId, requestBody,
+        buildRunHandlers(context, controller, () => {
+          accepted = true;
+        }, () => {
+          if (pendingOperationRef.current?.key === idempotencyKey) {
+            pendingOperationRef.current = null;
+          }
+        }),
+        idempotencyKey, controller.signal,
+      );
     } catch (error) {
       if (!accepted && isCurrent()) {
         setTurns((previous) => previous.filter((turn) => turn.id !== userId && turn.id !== assistantId));
@@ -551,12 +585,21 @@ export function ShenzhiAiPage() {
         setAttachments(runInput.attachments as ChatAttachment[]);
       }
       if (!controller.signal.aborted && (error as Error).name !== "AbortError" && isCurrent()) {
-        setRunError((error as Error).message || "连接失败，请稍后重试");
+        setRunError(error instanceof ApiError && error.status === 409
+          ? "该会话已有正在运行的任务，当前连接无法实时续接。稍后重新打开会话查看结果；再次重试会沿用本次操作标识。"
+          : (error as Error).message || "连接失败，请稍后重试");
       }
     } finally {
       finishRun(context, controller);
     }
   }, [running, sessionId, buildRunHandlers, finishRun, isCurrentRun]);
+
+  const retryPendingOperation = useCallback(() => {
+    const operation = pendingOperationRef.current;
+    if (operation?.sessionId === sessionId) {
+      void runPrompt(operation.body, operation.key);
+    }
+  }, [runPrompt, sessionId]);
 
   const send = useCallback(async (answer?: string) => {
     let prompt = (answer ?? input).trim();
@@ -852,6 +895,12 @@ export function ShenzhiAiPage() {
             />
             {steerError && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{steerError}</div>}
             {runError && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{runError}</div>}
+            {!running && pendingOperationRef.current?.sessionId === sessionId && (
+              <button type="button" onClick={retryPendingOperation}
+                className="mt-2 cursor-pointer text-xs text-primary hover:underline">
+                重试上次提交
+              </button>
+            )}
           </div>
         </div>
       </div>

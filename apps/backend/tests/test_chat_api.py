@@ -104,6 +104,92 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
         await self.client.delete(f'/api/v1/chat/sessions/{sid}')
         self.assertEqual((await self.client.get(f'/api/v1/chat/messages/{mid}/stream')).status_code, 404)
 
+    async def test_idempotency_key_reuses_first_message_and_different_key_creates_new_operation(self):
+        body = {'question': '同一内容的新操作', 'capabilities': {'knowledge': {'enabled': False}}}
+        headers = {'Idempotency-Key': 'chat-create-operation-1'}
+        first = await self.client.post('/api/v1/chat/sessions', json=body, headers=headers)
+        repeated = await self.client.post('/api/v1/chat/sessions', json=body, headers=headers)
+
+        first_data = first.json()['data']
+        repeated_data = repeated.json()['data']
+        self.assertEqual(first_data, repeated_data)
+        self.assertEqual(len(await repository.list(OWNER_KEY)), 1)
+
+        first_stream = await self.client.get(f"/api/v1/chat/messages/{first_data['message_id']}/stream")
+        persisted_message = await repository.message(first_data['message_id'], OWNER_KEY)
+        persisted_message.events.clear()
+        replay_stream = await self.client.get(f"/api/v1/chat/messages/{first_data['message_id']}/stream")
+        self.assertEqual(events(first_stream.text)[-1][1]['status'], 'done')
+        self.assertEqual(events(replay_stream.text)[-1][1]['status'], 'done')
+        self.assertIn('这是一个带公式', ''.join(
+            data.get('text', '') for kind, data in events(replay_stream.text) if kind == 'delta'
+        ))
+        self.assertEqual(len(FakeProvider.calls), 1)
+
+        conflict = await self.client.post(
+            '/api/v1/chat/sessions', json={**body, 'question': '不同内容'}, headers=headers,
+        )
+        self.assertEqual(conflict.status_code, 409)
+
+        another_operation = await self.client.post(
+            '/api/v1/chat/sessions', json=body,
+            headers={'Idempotency-Key': 'chat-create-operation-2'},
+        )
+        self.assertEqual(another_operation.status_code, 200)
+        self.assertNotEqual(another_operation.json()['data']['message_id'], first_data['message_id'])
+        self.assertEqual(len(await repository.list(OWNER_KEY)), 2)
+
+    async def test_concurrent_idempotent_chat_creation_creates_one_message(self):
+        body = {'question': '并发重复提交', 'capabilities': {'knowledge': {'enabled': False}}}
+        headers = {'Idempotency-Key': 'chat-concurrent-operation'}
+        first, second = await asyncio.gather(
+            self.client.post('/api/v1/chat/sessions', json=body, headers=headers),
+            self.client.post('/api/v1/chat/sessions', json=body, headers=headers),
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()['data'], second.json()['data'])
+        sessions = await repository.list(OWNER_KEY)
+        self.assertEqual(len(sessions), 1)
+        detail = await self.client.get(f"/api/v1/chat/sessions/{first.json()['data']['session_id']}")
+        self.assertEqual(len(detail.json()['data']['messages']), 1)
+        await self.client.get(f"/api/v1/chat/messages/{first.json()['data']['message_id']}/stream")
+        self.assertEqual(len(FakeProvider.calls), 1)
+
+    async def test_claimed_chat_stream_on_another_worker_returns_conflict_without_sse(self):
+        response = await self.client.post(
+            '/api/v1/chat/sessions',
+            json={'question': '跨进程流', 'capabilities': {'knowledge': {'enabled': False}}},
+            headers={'Idempotency-Key': 'chat-other-worker-operation'},
+        )
+        message_id = response.json()['data']['message_id']
+        message = await repository.message(message_id, OWNER_KEY)
+        message.generation_claimed = True
+
+        conflict = await self.client.get(f'/api/v1/chat/messages/{message_id}/stream')
+
+        self.assertEqual(conflict.status_code, 409)
+        self.assertNotIn('text/event-stream', conflict.headers.get('content-type', ''))
+        self.assertEqual(FakeProvider.calls, [])
+
+    async def test_idempotency_key_reuses_followup_message(self):
+        created = await self.create(capabilities={'knowledge': {'enabled': False}})
+        await self.client.get(f"/api/v1/chat/messages/{created['message_id']}/stream")
+        body = {'question': '相同操作的续问'}
+        headers = {'Idempotency-Key': 'chat-followup-operation'}
+        path = f"/api/v1/chat/sessions/{created['session_id']}/messages"
+        first = await self.client.post(path, json=body, headers=headers)
+        repeated = await self.client.post(path, json=body, headers=headers)
+
+        self.assertEqual(first.json()['data'], repeated.json()['data'])
+        self.assertEqual(len((await self.client.get(
+            f"/api/v1/chat/sessions/{created['session_id']}"
+        )).json()['data']['messages']), 2)
+        await self.client.get(f"/api/v1/chat/messages/{first.json()['data']['message_id']}/stream")
+        await self.client.get(f"/api/v1/chat/messages/{repeated.json()['data']['message_id']}/stream")
+        self.assertEqual(len(FakeProvider.calls), 2)
+
     async def test_system_prompt_includes_fixed_current_utc_date(self):
         fixed_now = datetime(2026, 9, 6, 10, tzinfo=timezone.utc)
         with patch.object(chat, 'utc_now', return_value=fixed_now):
@@ -145,9 +231,10 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
         persist_started = asyncio.Event()
         release_persist = asyncio.Event()
 
-        async def delayed_persist(_message):
+        async def delayed_persist(_message, _worker_id=None):
             persist_started.set()
             await release_persist.wait()
+            return True
 
         message = await repository.message(created['message_id'], OWNER_KEY)
         with patch.object(repository, 'persist_message', side_effect=delayed_persist):

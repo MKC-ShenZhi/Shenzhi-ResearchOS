@@ -8,8 +8,10 @@ from dataclasses import dataclass
 from pydantic import ValidationError
 from app.core.config import MAX_HISTORY_CHARS
 from app.core.errors import BusinessError
+from app.core.idempotency import request_fingerprint
 from app.core.logging import log_event
 from app.core.time import utc_now
+from app.core.worker_lease import WorkerLeaseLost, current_worker_id, run_with_heartbeat
 from app.services.chat.attachments import attachment_context, format_paper_context
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 from app.services.chat.grounding import (
@@ -64,7 +66,20 @@ class ReferenceContext:
     knowledge_grounding: str | None
 
 
-async def prepare_message(body, owner: str, session: Session | None = None):
+async def prepare_message(body, owner: str, session: Session | None = None,
+                         idempotency_key: str | None = None):
+    scope = 'chat:create' if session is None else f'chat:session:{session.id}:message'
+    fingerprint = request_fingerprint({
+        **body.model_dump(mode='json'),
+        'capabilities': capabilities_for_body(body),
+    })
+    if idempotency_key is not None:
+        existing = await repository.find_idempotent_message(
+            owner, scope, idempotency_key, fingerprint,
+        )
+        if existing is not None:
+            return existing
+
     settings = dict(session.settings) if session else {'type': body.type}
     settings.pop('knowledge_grounding', None)
     settings.update({k: getattr(body, k) for k in ('mode', 'model', 'web_search') if getattr(body, k) is not None})
@@ -103,8 +118,19 @@ async def prepare_message(body, owner: str, session: Session | None = None):
     context, warnings = attachment_context(attachments, owner, repository, paper_contexts)
     warnings.extend(paper_warnings)
     if session is None:
+        if idempotency_key is not None:
+            return await repository.create_with_message(
+                owner, body.question, settings, context, warnings, scope=scope,
+                key=idempotency_key, fingerprint=fingerprint,
+            )
         session = await repository.create(owner, body.question, settings)
-    return await repository.add_message(session, body.question, settings, context, warnings)
+    return await repository.add_message(
+        session, body.question, settings, context, warnings,
+        idempotency_owner=owner if idempotency_key is not None else None,
+        idempotency_scope=scope if idempotency_key is not None else None,
+        idempotency_key=idempotency_key,
+        idempotency_fingerprint=fingerprint if idempotency_key is not None else None,
+    )
 
 
 def model_messages(session: Session, message: Message, source_context: str) -> tuple[list[dict], bool]:
@@ -387,7 +413,8 @@ def _log_stream_terminal(message: Message, error: BaseException | None = None) -
         pass
 
 
-async def generate(message: Message) -> None:
+async def generate(message: Message, worker_id: str | None = None) -> None:
+    worker_id = worker_id or message.worker_id or current_worker_id()
     started = time.monotonic()
     knowledge_grounding: str | None = None
     knowledge_enabled = False
@@ -531,7 +558,10 @@ async def generate(message: Message) -> None:
         message.emit('followups', {'items': message.followups})
         message.status = 'done'
     except asyncio.CancelledError:
-        if message.stop_requested and candidate_in_progress:
+        if not message.stop_requested:
+            message.status, message.error = 'failed', '任务执行租约已失效'
+            message.emit('error', {'code': 20004, 'message': message.error})
+        elif candidate_in_progress:
             knowledge_grounding = KNOWLEDGE_GROUNDING_UNVERIFIED
             message.settings['knowledge_grounding'] = knowledge_grounding
             message.warnings.append(KNOWLEDGE_CITATION_WARNING)
@@ -542,7 +572,8 @@ async def generate(message: Message) -> None:
                 knowledge_grounding=knowledge_grounding,
             ))
             _commit_candidate(message, candidate_deltas)
-        message.status = 'stopped'
+        if message.stop_requested:
+            message.status = 'stopped'
     except BusinessError as exc:
         terminal_error = exc
         message.status, message.error = 'failed', exc.message
@@ -560,7 +591,10 @@ async def generate(message: Message) -> None:
         try:
             # A terminal event is an acknowledgement that the final message is
             # durable.  Do not send it before the database write succeeds.
-            await repository.persist_message(message)
+            persisted = await repository.persist_message(message, worker_id)
+            if not persisted:
+                message.status, message.error = 'failed', '任务执行租约已失效'
+                message.emit('error', {'code': 20004, 'message': message.error})
         except Exception as exc:
             terminal_error = exc
             logger.exception('Final Chat persistence failure message_id=%s', message.id)
@@ -590,20 +624,71 @@ async def stop_message(message: Message) -> None:
         message.status = 'stopped'
         terminal_error: BaseException | None = None
         try:
-            await repository.persist_message(message)
+            persisted = await repository.persist_message(message)
         except Exception as exc:
             terminal_error = exc
             logger.exception('Stopped Chat persistence failure message_id=%s', message.id)
             message.status, message.error = 'failed', '对话保存失败，请稍后重试'
             message.emit('error', {'code': 20004, 'message': message.error})
+        else:
+            if not persisted:
+                message.status, message.stop_requested = 'streaming', False
+                raise BusinessError(20009, '消息已由其他工作进程认领或结束，请重新读取状态', 409)
         _log_stream_terminal(message, terminal_error)
         message.emit('done', {'duration_ms': message.duration_ms, 'status': message.status})
+
+
+async def start_message_generation(message: Message) -> None:
+    if message.status != 'streaming' or message.task is not None:
+        return
+    worker_id = current_worker_id()
+    if not await repository.claim_generation(message, worker_id):
+        if message.status != 'streaming':
+            restore_terminal_events(message)
+            return
+        raise BusinessError(20009, '该消息正在其他工作进程生成', 409)
+    if repository.is_durable:
+        message.task = asyncio.create_task(_generate_with_heartbeat(message, worker_id))
+    else:
+        message.task = asyncio.create_task(generate(message, worker_id))
+
+
+async def _generate_with_heartbeat(message: Message, worker_id: str) -> None:
+    try:
+        await run_with_heartbeat(
+            lambda: generate(message, worker_id),
+            lambda: repository.renew_generation(message.id, worker_id),
+        )
+    except WorkerLeaseLost:
+        return
+    except Exception:
+        logger.exception('Chat generation lease heartbeat failed message_id=%s', message.id)
+
+
+def restore_terminal_events(message: Message) -> None:
+    if message.status == 'streaming' or message.events:
+        return
+    if message.references:
+        message.emit('refs', {'references': message.references})
+    if message.content or message.reasoning:
+        message.emit('delta', {'text': message.content, 'reasoning': message.reasoning})
+    if message.followups:
+        message.emit('followups', {'items': message.followups})
+    if message.error:
+        message.emit('error', {'code': 20004, 'message': message.error})
+    done = {'duration_ms': message.duration_ms, 'status': message.status}
+    grounding = message.settings.get('knowledge_grounding')
+    if grounding:
+        done['knowledge_grounding'] = grounding
+    message.emit('done', done)
 
 
 async def stream_events(message: Message, cursor: int = 0):
     message.subscribers += 1
     if message.status == 'streaming' and message.task is None:
-        message.task = asyncio.create_task(generate(message))
+        await start_message_generation(message)
+    else:
+        restore_terminal_events(message)
     try:
         while True:
             # Clear before reading; an event arriving during wait always wakes us.

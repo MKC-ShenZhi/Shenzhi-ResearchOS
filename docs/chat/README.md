@@ -45,6 +45,8 @@ JSON 使用 `{code: 0, data: ...}` 或 `{code, message}`；错误同时使用适
 | POST | `/chat/messages/{id}/resume` | 继续最近一条停止/失败的回答 |
 | POST / GET | `/uploads` / `/uploads/{id}` | 内存解析上传 / 状态 |
 
+首轮创建和续问 POST 可带 `Idempotency-Key`。Web 为每次用户发送生成 UUID，提交失败后按同一逻辑操作重试时复用；新发送使用新键。Backend 按可信 owner、创建/续问范围和键隔离，并在 message 同一事务保存规范化请求的 SHA-256 指纹。相同键、不同请求返回 409；首轮的 Session 与 Message 原子创建。该键与 `X-Request-ID` 无关。
+
 创建入参：`{type, question, mode, model, web_search, attachments, capabilities}`，其中
 `capabilities` 的 MVP 结构为
 `{knowledge: {enabled: boolean}}`。问题 1–2000 字，`mode` 为
@@ -164,7 +166,8 @@ Web 仅配置 `BUSINESS_BACKEND_URL` 和 `BACKEND_BFF_SECRET`。模型/搜索 Ke
 ## 临时 Session 与 Auth
 
 - `MemorySessionRepository`：单进程 / **一个 worker**；最多 500 会话、500 已解析附件、每会话 100 轮；24 小时过期，访问列表/创建时惰性清理。未配置 `CHAT_DATABASE_URL` 时使用；重启丢失，API 返回 `ephemeral: true`，不具备 durable anonymous cleanup。
-- 配置 `CHAT_DATABASE_URL` 后启用 PostgreSQL 持久化（见 `PERSISTENCE-PLAN.md`）：会话与消息跨重启保留，`ephemeral: false`；流式生成仍绑定单 worker 进程内缓存。迁移：`cd apps/backend && uv run alembic -c alembic.ini upgrade head`。
+- 配置 `CHAT_DATABASE_URL` 后启用 PostgreSQL 持久化（见 `PERSISTENCE-PLAN.md`）：会话与消息跨重启保留，`ephemeral: false`。message 唯一索引协调相同操作并发，数据库条件更新只允许一个 worker 启动生成；每个活动生成保存进程级 Worker ID 和五分钟租约，每三十秒续租。启动恢复、会话/消息详情读取、同键重放和续问创建只处理租约已过期的 `streaming` message，终态写入还会校验 Worker 所有权与租约，过期或已恢复的旧 worker 不能覆盖结果。SSE 事件缓冲仍绑定单 worker，其他 worker 在生成期间的流读取和 stop 请求会收到 409，不能加入该流或远程取消任务；前端不自动轮询，用户可在远端任务完成后显式重新读取同一消息的持久化结果。跨 Worker 实时事件续传尚未实现。迁移前已有的 `streaming` message 获得十分钟过渡租约。迁移：`cd apps/backend && uv run alembic -c alembic.ini upgrade head`。
+- 未配置 PostgreSQL 时，幂等键只在当前内存仓储和进程生命周期内有效；进程重启不保留会话、键或结果。
 - BFF 继续使用 dev 的 Better Auth 获取用户身份；不改登录、注册、邮箱验证、OAuth、PostgreSQL schema。
 - 登录身份变化时 Chat 工作区按身份重新挂载，侧栏会先清除旧身份的历史快照与选择，再重新请求当前身份的会话列表；无需整页刷新。
 - BFF 清除浏览器伪造的用户/内部凭据头，再注入经 Better Auth 验证的用户 ID。匿名请求使用 HttpOnly、SameSite=Lax 随机会话 cookie，不按 IP 共用数据。

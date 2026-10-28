@@ -38,16 +38,39 @@ test("进入运行中的最后一轮时清空增量状态，复用 handlers 续�
   assert.match(PAGE, /cause instanceof ApiError && cause\.status === 404/);
   assert.match(PAGE, /const refreshed = await getAgentSession\(sessionId\)/);
   assert.equal((PAGE.match(/const refreshed = await getAgentSession\(sessionId\)/g) ?? []).length, 1);
+  assert.match(PAGE, /refreshed\.turns\.at\(-1\)\?\.status === "running"/);
+  assert.match(PAGE, /当前连接无法接续/);
   assert.match(PAGE, /active && isCurrentRun\(context, controller\) && !controller\.signal\.aborted/);
   assert.doesNotMatch(PAGE, /AbortError[^}]*stopped: true/);
   assert.match(PAGE, /finishRun\(context, controller\)/);
+});
+
+test("新 Agent 提交生成新操作键，显式重试才沿用原键", () => {
+  assert.match(PAGE, /retryOperationKey \?\? newTurnId\("operation"\)/);
+  assert.match(PAGE, /retryPendingOperation/);
+  assert.match(PAGE, /operation\.body, operation\.key/);
+  assert.doesNotMatch(PAGE, /pendingOperation\?\.request === request/);
+  assert.match(PAGE, /onCompleted\?\.\(\)/);
+});
+
+test("Agent 网络重试复用同一组乐观消息行", () => {
+  assert.match(PAGE, /userId: string; assistantId: string/);
+  assert.match(PAGE, /const retry = retryOperationKey && pendingOperationRef\.current\?\.key === retryOperationKey/);
+  assert.match(PAGE, /pendingOperationRef\.current = \{ sessionId, body: requestBody, key: idempotencyKey, userId, assistantId \}/);
+  assert.match(PAGE, /turn\.id === assistantId/);
+});
+
+test("Agent 409 明确提示跨进程续接限制并保留同键重试", () => {
+  assert.match(PAGE, /error instanceof ApiError && error\.status === 409[\s\S]*?当前连接无法实时续接/);
+  assert.match(PAGE, /operation\.body, operation\.key/);
+  assert.match(PAGE, /pendingOperationRef\.current = null/);
 });
 
 test("客户端导出 GET 续接入口并与新发送共享事件分发", async () => {
   assert.match(CLIENT, /export async function attachAgentSessionRun/);
   assert.match(CLIENT, /\/run\/stream\?after=0/);
   const originalFetch = globalThis.fetch;
-  const requests: Array<{ url: string; method?: string; body?: BodyInit | null }> = [];
+  const requests: Array<{ url: string; method?: string; body?: BodyInit | null; headers?: HeadersInit }> = [];
   const events = [
     ["run_start", { run_id: "run-replay" }],
     ["meta", { warnings: ["提示"] }],
@@ -59,7 +82,7 @@ test("客户端导出 GET 续接入口并与新发送共享事件分发", async 
     ["result", { status: "done", final_text: "答案", turns: 1, duration_ms: 10 }],
   ] as const;
   globalThis.fetch = async (url, options) => {
-    requests.push({ url: String(url), method: options?.method, body: options?.body });
+    requests.push({ url: String(url), method: options?.method, body: options?.body, headers: options?.headers });
     return new Response(events.map(([name, data], index) =>
       `id: ${index}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`).join("") + ": ping\n\n", {
       headers: { "Content-Type": "text/event-stream" },
@@ -86,8 +109,9 @@ test("客户端导出 GET 续接入口并与新发送共享事件分发", async 
     received.length = 0;
     await streamAgentSessionRun("session/encoded", {
       prompt: "提问", mode: "fast", attachments: [], skills: [],
-    }, handlers);
+    }, handlers, "agent-operation-1");
     assert.equal(requests[1].method, "POST");
+    assert.equal(new Headers(requests[1].headers).get("Idempotency-Key"), "agent-operation-1");
     assert.deepEqual(received, replayed);
     globalThis.fetch = async () => new Response(null, { status: 404 });
     await assert.rejects(attachAgentSessionRun("missing", handlers),

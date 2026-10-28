@@ -13,7 +13,7 @@ from app.services.agent import AgentRuntime
 from app.services.agent.provider import Finish, TextDelta, ToolCallEvent
 from app.services.agent.types import StopReason, ToolCall
 from app.services.agent_sessions import live as live_runs
-from app.services.agent_sessions.service import TimelineCapture
+from app.services.agent_sessions.service import TimelineCapture, get_session_detail
 from app.services.agent_sessions.repository import MemoryAgentSessionRepository
 from app.services.agent_uploads import agent_upload_store
 from tests.test_agent import FakeProvider, make_echo
@@ -60,12 +60,13 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
         self.api_repo.stop()
         self.env.stop()
 
-    async def request(self, method: str, path: str, *, owner=None, json_body=None):
+    async def request(self, method: str, path: str, *, owner=None, json_body=None, headers=None):
+        request_headers = {**(owner or self.OWNER_A), **(headers or {})}
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url='http://test',
         ) as client:
             return await client.request(
-                method, path, headers=owner or self.OWNER_A, json=json_body,
+                method, path, headers=request_headers, json=json_body,
             )
 
     async def create(self, prompt='第一条问题', owner=None):
@@ -184,6 +185,163 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item['kind'] for item in self.repo.sessions[session_id].runtime_history],
                          ['user', 'assistant', 'tool', 'assistant'])
 
+    async def test_idempotent_agent_run_reuses_turn_and_new_key_allows_new_turn(self):
+        session_id = await self.create('幂等任务')
+        provider = FakeProvider([
+            [TextDelta('第一次回答'), Finish(StopReason.STOP)],
+            [TextDelta('新的逻辑操作'), Finish(StopReason.STOP)],
+        ])
+        runtime = AgentRuntime(provider=provider)
+        body = {'prompt': '幂等任务', 'mode': 'fast'}
+        first_headers = {'Idempotency-Key': 'agent-operation-1'}
+        with patch('app.services.agent.service.default_runtime', return_value=runtime):
+            first = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body=body, headers=first_headers,
+            )
+            live_runs._live.pop(session_id, None)
+            repeated = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body=body, headers=first_headers,
+            )
+
+            self.assertEqual(first.status_code, 200)
+            self.assertEqual(repeated.status_code, 200)
+            self.assertEqual(parse_sse(first.text)[-1][1]['final_text'], '第一次回答')
+            self.assertEqual(parse_sse(repeated.text)[-1][1]['final_text'], '第一次回答')
+            self.assertEqual(len(provider.requests), 1)
+
+            second_operation = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body=body, headers={'Idempotency-Key': 'agent-operation-2'},
+            )
+            self.assertEqual(second_operation.status_code, 200)
+            self.assertEqual(parse_sse(second_operation.text)[-1][1]['final_text'], '新的逻辑操作')
+            self.assertEqual(len(provider.requests), 2)
+
+            conflict = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body={'prompt': '不同任务', 'mode': 'fast'}, headers=first_headers,
+            )
+        self.assertEqual(conflict.status_code, 409)
+        turns = (await self.repo.get(session_id, f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}")).turns
+        self.assertEqual(len(turns), 2)
+        self.assertNotEqual(turns[0].id, turns[1].id)
+
+    async def test_concurrent_agent_retry_reuses_one_turn_and_one_model_run(self):
+        session_id = await self.create('并发幂等任务')
+        release = asyncio.Event()
+
+        class GatedProvider(FakeProvider):
+            def __init__(self):
+                super().__init__([[TextDelta('并发回答'), Finish(StopReason.STOP)]])
+                self.entered = asyncio.Event()
+
+            async def stream(self, request):
+                self.entered.set()
+                await release.wait()
+                async for event in super().stream(request):
+                    yield event
+
+        provider = GatedProvider()
+        runtime = AgentRuntime(provider=provider)
+        body = {'prompt': '并发幂等任务', 'mode': 'fast'}
+        headers = {'Idempotency-Key': 'agent-concurrent-operation'}
+        with patch('app.services.agent.service.default_runtime', return_value=runtime):
+            first_request = asyncio.create_task(self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body=body, headers=headers,
+            ))
+            second_request = asyncio.create_task(self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body=body, headers=headers,
+            ))
+            await asyncio.wait_for(provider.entered.wait(), 3)
+            await asyncio.sleep(0)
+            release.set()
+            first, second = await asyncio.gather(first_request, second_request)
+
+        self.assertEqual((first.status_code, second.status_code), (200, 200))
+        self.assertEqual(parse_sse(first.text)[-1][1]['final_text'], '并发回答')
+        self.assertEqual(parse_sse(second.text)[-1][1]['final_text'], '并发回答')
+        self.assertEqual(len(provider.requests), 1)
+        turns = (await self.repo.get(session_id, f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}")).turns
+        self.assertEqual(len(turns), 1)
+
+    async def test_active_agent_retry_without_local_stream_returns_conflict_without_hanging(self):
+        session_id = await self.create('其他工作进程中的任务')
+        release = asyncio.Event()
+
+        class GatedProvider(FakeProvider):
+            def __init__(self):
+                super().__init__([[TextDelta('跨进程回答'), Finish(StopReason.STOP)]])
+                self.entered = asyncio.Event()
+
+            async def stream(self, request):
+                self.entered.set()
+                await release.wait()
+                async for event in super().stream(request):
+                    yield event
+
+        provider = GatedProvider()
+        runtime = AgentRuntime(provider=provider)
+        body = {'prompt': '其他工作进程中的任务', 'mode': 'fast'}
+        headers = {'Idempotency-Key': 'agent-other-worker-operation'}
+        with patch('app.services.agent.service.default_runtime', return_value=runtime):
+            first_request = asyncio.create_task(self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body=body, headers=headers,
+            ))
+            try:
+                await asyncio.wait_for(provider.entered.wait(), 3)
+                live_runs._live.pop(session_id, None)
+                retry = await asyncio.wait_for(self.request(
+                    'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                    json_body=body, headers=headers,
+                ), 1)
+                self.assertEqual(retry.status_code, 409)
+                self.assertNotIn('text/event-stream', retry.headers.get('content-type', ''))
+            finally:
+                release.set()
+            first = await asyncio.wait_for(first_request, 3)
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(parse_sse(first.text)[-1][1]['final_text'], '跨进程回答')
+        self.assertEqual(len(provider.requests), 1)
+        turns = (await self.repo.get(
+            session_id, f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        )).turns
+        self.assertEqual(len(turns), 1)
+
+    async def test_failed_before_turn_insert_can_retry_same_idempotency_key(self):
+        session_id = await self.create('创建失败后重试')
+        body = {'prompt': '创建失败后重试', 'mode': 'fast'}
+        headers = {'Idempotency-Key': 'agent-retry-before-turn'}
+        with patch('app.services.agent_sessions.service.agent_runtime.build_run_runtime',
+                   side_effect=BusinessError(20004, 'runtime unavailable', 503)):
+            failed = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body=body, headers=headers,
+            )
+        self.assertEqual(failed.status_code, 503)
+        self.assertEqual((await self.repo.get(
+            session_id, f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        )).turns, [])
+
+        runtime = AgentRuntime(provider=FakeProvider(
+            [[TextDelta('重试成功'), Finish(StopReason.STOP)]]
+        ))
+        with patch('app.services.agent.service.default_runtime', return_value=runtime):
+            retried = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body=body, headers=headers,
+            )
+        self.assertEqual(retried.status_code, 200)
+        self.assertEqual(parse_sse(retried.text)[-1][1]['final_text'], '重试成功')
+        self.assertEqual(len((await self.repo.get(
+            session_id, f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        )).turns), 1)
+
     async def test_file_attachment_is_bound_to_one_turn_without_persisting_file_id(self):
         owner = 'anon:00000000-0000-4000-8000-000000000011'
         uploaded = await agent_upload_store.save(owner, 'notes.md', {
@@ -223,7 +381,7 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
                          'failed')
 
         stopped_id = await self.create('停止测试')
-        turn = await self.repo.start_turn(
+        turn, _ = await self.repo.start_turn(
             stopped_id, 'anon:00000000-0000-4000-8000-000000000011', '停止测试', {}, [],
         )
         await self.repo.finish_turn(
@@ -352,13 +510,13 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_orphan_reconciliation_closes_history_and_preserves_previous_turn(self):
         owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
         session_id = await self.create('历史')
-        previous = await self.repo.start_turn(session_id, owner, '上一问', {}, [])
+        previous, _ = await self.repo.start_turn(session_id, owner, '上一问', {}, [])
         history = [{'kind': 'user', 'text': '上一问'},
                    {'kind': 'assistant', 'content': '上一答', 'reasoning': '', 'tool_calls': [],
                     'stop_reason': 'stop', 'usage_tokens': 0}]
         await self.repo.finish_turn(session_id, owner, previous.id,
                                     {'status': 'done', 'transcript': history})
-        orphan = await self.repo.start_turn(session_id, owner, '中断前的用户原文', {}, [])
+        orphan, _ = await self.repo.start_turn(session_id, owner, '中断前的用户原文', {}, [])
         orphan.assistant_content = '部分结果'
         orphan.transcript = [{'kind': 'assistant', 'tool_calls': [{'id': 'unclosed'}]}]
         detail = (await self.request('GET', f'/api/v1/agent/sessions/{session_id}')).json()['data']
@@ -374,6 +532,17 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(transcript[-1]['content'], '部分结果')
         again = (await self.request('GET', f'/api/v1/agent/sessions/{session_id}')).json()['data']
         self.assertEqual(again, detail)
+
+    async def test_durable_remote_active_turn_is_not_reconciled_as_orphan(self):
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('其他进程中的持久任务')
+        turn, _ = await self.repo.start_turn(session_id, owner, '其他进程中的持久任务', {}, [])
+        self.repo.is_durable = True
+
+        detail = await get_session_detail(session_id, owner)
+
+        self.assertEqual(detail.turns[0].id, turn.id)
+        self.assertEqual(detail.turns[0].status, 'running')
 
     async def test_unexpected_bridge_failure_persists_failed_and_sends_result(self):
         session_id = await self.create('异常兜底')
