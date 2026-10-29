@@ -13,7 +13,7 @@ export const COMING_SOON_NOTICE = {
  */
 export const FEATURE_AVAILABILITY = {
   exactPaths: ["/knowledge/graph"],
-  pathPrefixes: ["/projects", "/submit"],
+  pathPrefixes: ["/projects", "/submit/journals"],
   agentSessionPath: "/agents",
 } as const;
 

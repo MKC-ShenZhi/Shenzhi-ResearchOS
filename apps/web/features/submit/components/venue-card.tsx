@@ -10,7 +10,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { VenueBadge } from "./venue-badge";
-import { Countdown } from "./countdown";
 import { cn } from "@/lib/utils";
 import type { Venue, VenueMetaIcon } from "@/types";
 
@@ -93,14 +92,6 @@ export function VenueCard({ venue, index }: { venue: Venue; index: number }) {
           </div>
         )}
 
-        {/* 截稿倒计时(仅会议) */}
-        {venue.deadline && (
-          <Countdown
-            label={venue.deadline.label}
-            dateText={venue.deadline.dateText}
-            offsetMs={venue.deadline.offsetMs}
-          />
-        )}
       </div>
     </motion.article>
   );

@@ -23,6 +23,7 @@ test("keeps currently released research routes available", () => {
     "/knowledge/funding",
     "/papers/paper-1",
     "/papers/paper-1/graph",
+    "/submit",
   ];
 
   for (const pathname of availableRoutes) {
@@ -36,12 +37,11 @@ test("blocks only the knowledge overview graph route", () => {
   assert.equal(isUnavailableFeatureHref("/knowledge/graph-preview"), false);
 });
 
-test("blocks projects and submit routes at every depth", () => {
+test("blocks projects and journal submission routes at every depth", () => {
   for (const href of [
     "/projects",
     "/projects/demo",
     "/projects/demo/settings",
-    "/submit",
     "/submit/journals",
     "/submit/journals/demo",
   ]) {
