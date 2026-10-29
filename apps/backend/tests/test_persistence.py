@@ -161,13 +161,15 @@ class PostgresPersistenceTests(unittest.IsolatedAsyncioTestCase):
     async def test_streaming_recover_marks_failed(self):
         session = await self.repo.create('user:a', 'q', {'type': 'ask', 'mode': 'fast', 'model': 'm', 'web_search': False})
         message = await self.repo.add_message(session, 'q', session.settings)
-        message.content = 'partial'
         self.assertTrue(await self.repo.claim_generation(message, 'worker-a'))
         async with session_scope() as db:
+            # Durable partial content (e.g. a checkpoint) survives recovery;
+            # unpersisted in-memory text of a crashed worker is not authoritative.
             await db.execute(
                 update(ChatMessageRow)
                 .where(ChatMessageRow.id == uuid.UUID(message.id))
-                .values(lease_expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+                .values(content='partial',
+                        lease_expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
             )
         await self.repo.recover()
         restored = await self.repo.get(session.id, 'user:a')
@@ -198,10 +200,11 @@ class PostgresPersistenceTests(unittest.IsolatedAsyncioTestCase):
         message = await self.repo.add_message(session, 'legacy live', session.settings)
         transition_lease = datetime.now(timezone.utc) + timedelta(minutes=10)
         async with session_scope() as db:
+            # 016_request_idempotency marks in-flight legacy rows this way.
             await db.execute(
                 update(ChatMessageRow)
                 .where(ChatMessageRow.id == uuid.UUID(message.id))
-                .values(lease_expires_at=transition_lease)
+                .values(generation_claimed=True, lease_expires_at=transition_lease)
             )
 
         claimed = await PostgresSessionRepository().claim_generation(message, 'worker-b')
@@ -209,7 +212,7 @@ class PostgresPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(claimed)
         async with session_scope() as db:
             row = await db.get(ChatMessageRow, uuid.UUID(message.id))
-        self.assertFalse(row.generation_claimed)
+        self.assertTrue(row.generation_claimed)
         self.assertIsNone(row.worker_id)
         self.assertGreater(row.lease_expires_at, datetime.now(timezone.utc))
 
@@ -258,7 +261,8 @@ class PostgresPersistenceTests(unittest.IsolatedAsyncioTestCase):
 
         from app.services.chat.service import stop_message
 
-        with patch('app.services.chat.service.repository', worker_b):
+        with patch('app.services.chat.service.repository', worker_b), \
+                patch('app.services.chat.service.REMOTE_STOP_WAIT_SECONDS', 0.05):
             with self.assertRaises(BusinessError) as caught:
                 await stop_message(remote_message)
 
@@ -277,6 +281,97 @@ class PostgresPersistenceTests(unittest.IsolatedAsyncioTestCase):
         async with session_scope() as db:
             unclaimed_row = await db.get(ChatMessageRow, uuid.UUID(unclaimed_message.id))
         self.assertEqual(unclaimed_row.status, 'stopped')
+
+    async def test_chat_stop_on_another_worker_confirms_owner_finalization(self):
+        session = await self.repo.create('user:a', 'remote stop', {'mode': 'fast'})
+        message = await self.repo.add_message(session, 'remote stop', session.settings)
+        self.assertTrue(await self.repo.claim_generation(message, 'worker-a'))
+        worker_b = PostgresSessionRepository()
+        remote_message = await worker_b.message(message.id, 'user:a')
+
+        async def owner_stops_after_sse_disconnect():
+            await asyncio.sleep(0.1)
+            message.content, message.status = 'partial before stop', 'stopped'
+            self.assertTrue(await self.repo.persist_message(message, 'worker-a'))
+
+        from app.services.chat.service import stop_message
+
+        owner = asyncio.create_task(owner_stops_after_sse_disconnect())
+        with patch('app.services.chat.service.repository', worker_b), \
+                patch('app.services.chat.service.REMOTE_STOP_POLL_SECONDS', 0.02):
+            await stop_message(remote_message)
+        await owner
+
+        self.assertEqual(remote_message.status, 'stopped')
+        self.assertEqual(remote_message.content, 'partial before stop')
+        self.assertNotIn(message.id, worker_b.messages)
+
+    async def test_unclaimed_chat_message_expires_instead_of_blocking_session(self):
+        session = await self.repo.create('user:a', 'never streamed', {'mode': 'fast'})
+        message = await self.repo.add_message(session, 'never streamed', session.settings)
+        async with session_scope() as db:
+            row = await db.get(ChatMessageRow, uuid.UUID(message.id))
+            self.assertFalse(row.generation_claimed)
+            self.assertGreater(row.lease_expires_at, datetime.now(timezone.utc))
+            await db.execute(
+                update(ChatMessageRow).where(ChatMessageRow.id == uuid.UUID(message.id))
+                .values(lease_expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+            )
+
+        self.assertFalse(await PostgresSessionRepository().claim_generation(message, 'worker-b'))
+        self.assertEqual(message.status, 'failed')
+        restored = await self.repo.get(session.id, 'user:a')
+        next_message = await self.repo.add_message(restored, 'next', restored.settings)
+        self.assertEqual(next_message.status, 'streaming')
+
+    async def test_resumed_chat_message_can_be_claimed_by_another_worker(self):
+        session = await self.repo.create('user:a', 'resume elsewhere', {'mode': 'fast'})
+        message = await self.repo.add_message(session, 'resume elsewhere', session.settings)
+        self.assertTrue(await self.repo.claim_generation(message, 'worker-a'))
+        message.content, message.status = 'partial', 'stopped'
+        self.assertTrue(await self.repo.persist_message(message, 'worker-a'))
+
+        message.status, message.error, message.generation_claimed = 'streaming', None, False
+        self.assertTrue(await self.repo.persist_message(message))
+        worker_b = PostgresSessionRepository()
+        remote_message = await worker_b.message(message.id, 'user:a')
+
+        self.assertTrue(await worker_b.claim_generation(remote_message, 'worker-b'))
+        self.assertEqual(remote_message.content, 'partial')
+
+    async def test_cached_copy_does_not_override_remote_completion(self):
+        session = await self.repo.create('user:a', 'stale cache', {'mode': 'fast'})
+        message = await self.repo.add_message(session, 'stale cache', session.settings)
+        self.assertTrue(await self.repo.claim_generation(message, 'worker-a'))
+        worker_b = PostgresSessionRepository()
+        stale = await worker_b.message(message.id, 'user:a')
+        self.assertEqual(stale.status, 'streaming')
+
+        message.content, message.status = 'final answer', 'done'
+        self.assertTrue(await self.repo.persist_message(message, 'worker-a'))
+
+        detail = await worker_b.get(session.id, 'user:a')
+        self.assertEqual(detail.messages[0].status, 'done')
+        self.assertEqual(detail.messages[0].content, 'final answer')
+        reread = await worker_b.message(message.id, 'user:a')
+        self.assertEqual(reread.status, 'done')
+
+    async def test_chat_resume_cursor_from_another_worker_restarts_local_buffer(self):
+        session = await self.repo.create('user:a', 'cursor elsewhere', {'mode': 'fast'})
+        message = await self.repo.add_message(session, 'cursor elsewhere', session.settings)
+        message.status = 'stopped'
+        self.assertTrue(await self.repo.persist_message(message))
+        message.status, message.error = 'streaming', None
+        self.assertTrue(await self.repo.persist_message(message))
+        worker_b = PostgresSessionRepository()
+
+        from app.api.chat import stream
+
+        with patch('app.api.chat.repository', worker_b), \
+                patch('app.api.chat.start_message_generation') as start:
+            response = await stream(message.id, 'user:a', '7')
+        self.assertEqual(response.status_code, 200)
+        start.assert_awaited_once()
 
     async def test_chat_remote_terminal_stream_replays_when_worker_cursor_is_unavailable(self):
         session = await self.repo.create('user:a', 'completed remotely', {'mode': 'fast'})
@@ -695,6 +790,31 @@ class PostgresAgentClaimTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row.worker_id, 'worker-a')
         self.assertGreater(row.lease_expires_at, datetime.now(timezone.utc))
 
+
+    async def test_agent_shutdown_releases_only_own_worker_leases(self):
+        from app.core.worker_lease import current_worker_id
+
+        own_session = await self.repo.create(self.SOURCE, 'own', {})
+        own, _ = await self.repo.start_turn(
+            own_session.id, self.SOURCE, 'own task', {}, [], worker_id=current_worker_id(),
+        )
+        other_session = await self.repo.create(self.SOURCE, 'other', {})
+        other, _ = await self.repo.start_turn(
+            other_session.id, self.SOURCE, 'other task', {}, [], worker_id='worker-a',
+        )
+
+        await PostgresAgentSessionRepository().close()
+
+        async with session_scope() as db:
+            own_row = await db.get(AgentTurnRow, own.id)
+            other_row = await db.get(AgentTurnRow, other.id)
+        self.assertEqual((own_row.status, own_row.stop_reason), ('failed', 'backend_restart'))
+        self.assertIsNone(own_row.lease_expires_at)
+        self.assertEqual((other_row.status, other_row.worker_id), ('running', 'worker-a'))
+        _, created = await self.repo.start_turn(
+            own_session.id, self.SOURCE, 'after restart', {}, [], worker_id='worker-b',
+        )
+        self.assertTrue(created)
 
 if __name__ == '__main__':
     unittest.main()

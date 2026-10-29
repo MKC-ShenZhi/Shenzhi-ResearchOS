@@ -1,6 +1,7 @@
 """PostgreSQL implementation of Agent session persistence."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +15,8 @@ from app.core.idempotency import ensure_same_request
 from app.core.worker_lease import LEASE_SECONDS, current_worker_id
 from app.models.agent_session import AgentSessionRow, AgentTurnRow
 from app.services.agent_sessions.entities import AgentSession, AgentTurn
+
+logger = logging.getLogger(__name__)
 
 
 def _ts(value: datetime | None) -> float | None:
@@ -68,11 +71,14 @@ def _turn_row(turn: AgentTurn) -> AgentTurnRow:
 class PostgresAgentSessionRepository:
     is_durable = True
 
-    async def _recover_expired_turns(self, db, *, session_id: str | None = None) -> None:
-        statement = update(AgentTurnRow).where(
-            AgentTurnRow.status == 'running',
-            AgentTurnRow.lease_expires_at <= func.clock_timestamp(),
-        )
+    async def _recover_expired_turns(self, db, *, session_id: str | None = None,
+                                     worker_id: str | None = None) -> None:
+        statement = update(AgentTurnRow).where(AgentTurnRow.status == 'running')
+        if worker_id is None:
+            statement = statement.where(AgentTurnRow.lease_expires_at <= func.clock_timestamp())
+        else:
+            # Graceful shutdown releases this worker's own leases immediately.
+            statement = statement.where(AgentTurnRow.worker_id == worker_id)
         if session_id is not None:
             statement = statement.where(AgentTurnRow.session_id == session_id)
         running_sessions = list((await db.scalars(
@@ -401,5 +407,10 @@ class PostgresAgentSessionRepository:
             return len(deleted.all())
 
     async def close(self) -> None:
+        # Runs are process-local tasks; once this process stops they cannot finish.
         # The shared database engine is owned and disposed by the Chat repository.
-        return None
+        try:
+            async with session_scope() as db:
+                await self._recover_expired_turns(db, worker_id=current_worker_id())
+        except Exception:
+            logger.exception('Failed to release Agent turn leases during shutdown')
