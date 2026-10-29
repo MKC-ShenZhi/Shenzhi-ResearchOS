@@ -6,7 +6,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -18,7 +18,7 @@ from app.core.errors import BusinessError
 from app.main import app
 from app.models.interactions import PaperLikeRow
 from app.models.reading_history import ReadingHistoryRow
-from app.models.recommendation import BehaviorEventRow, RecommendationSnapshotRow
+from app.models.recommendation import BehaviorEventRow, RecommendationSnapshotRow, UserInterestProfileRow
 from app.schemas.behavior import BehaviorBatchRequest, BehaviorEventInput
 from app.schemas.knowledge import PaperDetail, Provenance
 from app.services.knowledge.service import KnowledgeServiceError
@@ -100,6 +100,23 @@ class BehaviorContractTests(unittest.TestCase):
             BehaviorEventInput.model_validate({
                 'event_id': str(uuid4()), 'event_type': 'paper_click',
                 'paper_id': 'paper:1', 'source': 'discovery', 'query_id': str(uuid4()),
+            })
+
+
+    def test_attribution_ids_are_only_accepted_on_verified_recommendation_events(self):
+        # A discovery or search event cannot carry a request_id that the
+        # server would not verify against the caller's own snapshot.
+        for event_type, source in [('paper_click', 'discovery'), ('search_result_click', 'search'),
+                                   ('abstract_expand', 'recommendation')]:
+            with self.assertRaises(ValidationError):
+                BehaviorEventInput.model_validate({
+                    'event_id': str(uuid4()), 'event_type': event_type,
+                    'paper_id': 'paper:1', 'source': source, 'request_id': str(uuid4()),
+                })
+        with self.assertRaises(ValidationError):
+            BehaviorEventInput.model_validate({
+                'event_id': str(uuid4()), 'event_type': 'recommendation_click',
+                'paper_id': 'paper:1', 'source': 'recommendation', 'request_id': 'not-a-uuid', 'rank': 1,
             })
 
 
@@ -263,6 +280,68 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
         score, reason = _rank(candidates[0], interests, None, 2026)
         self.assertGreater(score, 0.15)
         self.assertEqual(reason, '与你近期搜索的方向相关')
+
+    async def test_unexpected_source_errors_and_timeouts_are_isolated(self):
+        paper = SimpleNamespace(id='paper:ok', title='Survivor', abstract=None,
+                                authors=[], year=2026, venue=None,
+                                subjects=['RAG'], keywords=[])
+
+        async def never_returns(*_args, **_kwargs):
+            await asyncio.sleep(60)
+
+        knowledge = SimpleNamespace(
+            search_by_subject=AsyncMock(side_effect=[
+                RuntimeError('contract drift'), SimpleNamespace(results=[paper]),
+            ]),
+            search=never_returns,
+        )
+
+        def broken_page(**_):
+            raise ValueError('snapshot schema drift')
+
+        with patch('app.services.recommendation.config.RECALL_TIMEOUT_SECONDS', 0.05), \
+                self.assertLogs('app.services.recommendation.recommendations', 'WARNING') as logs:
+            result = await CandidateRecallService(knowledge, SimpleNamespace(page=broken_page)).recall(profile(
+                explicit_subjects=['private subject a', 'RAG'], long_keywords={'secret query': 1},
+            ))
+        self.assertEqual([item.paper['id'] for item in result], ['paper:ok'])
+        # Recall values may be private search text; logs carry only error types.
+        self.assertFalse(any('secret query' in line or 'private subject' in line for line in logs.output))
+
+    async def test_recall_limits_queries_and_merges_duplicate_ids_across_sources(self):
+        paper = SimpleNamespace(id='shared', title='Shared', abstract=None,
+                                authors=[], year=2026, venue=None,
+                                subjects=['RAG'], keywords=['retrieval'])
+        knowledge = SimpleNamespace(
+            search_by_subject=AsyncMock(return_value=SimpleNamespace(results=[paper, paper])),
+            search=AsyncMock(return_value=SimpleNamespace(results=[paper])),
+        )
+        global_paper = SimpleNamespace(id='shared', model_dump=lambda **_: {'id': 'shared'})
+        discovery = SimpleNamespace(page=lambda **_: SimpleNamespace(items=[global_paper]))
+        result = await CandidateRecallService(knowledge, discovery).recall(profile(
+            explicit_subjects=['a', 'b', 'c', 'd', 'e'], long_topics={'f': 1}, long_keywords={'g': 1},
+        ))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].sources, {'followed_topic', 'inferred_topic', 'keyword', 'global_discovery'})
+        calls = knowledge.search_by_subject.await_count + knowledge.search.await_count
+        self.assertEqual(calls, 4)
+
+    async def test_metadata_failures_never_fail_or_invent_profile_features(self):
+        detail = PaperDetail(id='paper:ok', title='OK', subjects=['RAG'], keywords=[],
+                             provenance=Provenance(external_id='paper:ok'))
+
+        async def get_paper(paper_id):
+            if paper_id == 'paper:broken':
+                raise ValueError('unexpected payload')
+            if paper_id == 'paper:slow':
+                await asyncio.sleep(60)
+            return detail
+
+        with patch('app.services.recommendation.config.METADATA_TIMEOUT_SECONDS', 0.05):
+            result = await PaperFeatureService(SimpleNamespace(get_paper=get_paper)).get_many(
+                ['paper:ok', 'paper:broken', 'paper:slow', 'paper:ok'],
+            )
+        self.assertEqual(list(result), ['paper:ok'])
 
     def test_diversity_never_promotes_distant_candidate(self):
         def item(index, subject, score):
@@ -600,3 +679,134 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 BehaviorEventRow.user_id == self.user_id,
             ))
         self.assertEqual(remaining, 1)
+
+    def _service_with(self, candidates, interests=None):
+        return RecommendationService(
+            profiles=SimpleNamespace(get=AsyncMock(return_value=interests or profile())),
+            recall=SimpleNamespace(recall=AsyncMock(return_value=candidates)),
+        )
+
+    def _candidates(self, count):
+        return [Candidate({
+            'id': f'{self.paper_id}:{index}', 'title': f'Paper {index}',
+            'abstract': '', 'authors': [], 'year': 2026, 'venue': None,
+            'pdf_url': None, 'thumbnail_url': None,
+        }, [], [], {'global_discovery'}) for index in range(count)]
+
+    async def test_snapshot_cursor_traverses_without_duplicates_or_loss(self):
+        service = self._service_with(self._candidates(29))
+        first = await service.page(self.user_id, limit=12)
+        pages, cursor = [first], first['next_cursor']
+        while cursor:
+            again = await service.page(self.user_id, limit=12, cursor=cursor)
+            # Re-reading one cursor (a retried request) returns the same slice.
+            self.assertEqual(again, await service.page(self.user_id, limit=12, cursor=cursor))
+            pages.append(again)
+            cursor = again['next_cursor']
+        ids = [item['id'] for page in pages for item in page['items']]
+        ranks = [item['rank'] for page in pages for item in page['items']]
+        self.assertEqual(len(ids), 29)
+        self.assertEqual(len(set(ids)), 29)
+        self.assertEqual(ranks, list(range(1, 30)))
+        self.assertEqual({page['request_id'] for page in pages}, {first['request_id']})
+        self.assertFalse(pages[-1]['has_more'])
+        # Recall ran once: later pages never re-rank or mix another snapshot.
+        service.recall.recall.assert_awaited_once()
+
+    async def test_stale_foreign_and_malformed_cursors(self):
+        service = self._service_with(self._candidates(3))
+        first = await service.page(self.user_id, limit=1)
+        for user in (self.other_id,):
+            with self.assertRaises(BusinessError) as foreign:
+                await service.page(user, limit=1, cursor=first['next_cursor'])
+            self.assertEqual(foreign.exception.status, 409)
+        with self.assertRaises(BusinessError) as missing:
+            await service.page(self.user_id, limit=1, cursor=f'{uuid4()}:1')
+        self.assertEqual(missing.exception.status, 409)
+        for malformed in ('nope', f'{first["request_id"]}:x', f'{first["request_id"]}:99'):
+            with self.assertRaises(BusinessError) as invalid:
+                await service.page(self.user_id, limit=1, cursor=malformed)
+            self.assertEqual(invalid.exception.status, 400)
+        async with session_scope() as session:
+            await session.execute(update(RecommendationSnapshotRow).where(
+                RecommendationSnapshotRow.request_id == UUID(first['request_id']),
+            ).values(expires_at=datetime.now(UTC) - timedelta(seconds=1)))
+        with self.assertRaises(BusinessError) as expired:
+            await service.page(self.user_id, limit=1, cursor=first['next_cursor'])
+        self.assertEqual(expired.exception.status, 409)
+        # Feedback against the expired request is rejected, not attributed.
+        with self.assertRaises(BusinessError):
+            await BehaviorEventService().record_batch(self.user_id, BehaviorBatchRequest.model_validate({'events': [{
+                'event_id': str(uuid4()), 'event_type': 'recommendation_click',
+                'paper_id': first['items'][0]['id'], 'source': 'recommendation',
+                'request_id': first['request_id'], 'rank': 1,
+            }]}))
+
+    async def test_feedback_must_match_the_snapshot_item_and_rank(self):
+        service = self._service_with(self._candidates(2))
+        first = await service.page(self.user_id, limit=2)
+        for paper_id, rank in [(first['items'][0]['id'], 2), ('paper:not-recommended', 1)]:
+            with self.assertRaises(BusinessError):
+                await BehaviorEventService().record_batch(self.user_id, BehaviorBatchRequest.model_validate({'events': [{
+                    'event_id': str(uuid4()), 'event_type': 'recommendation_impression',
+                    'paper_id': paper_id, 'source': 'recommendation',
+                    'request_id': first['request_id'], 'rank': rank,
+                }]}))
+
+    async def _collect_events(self, paper_id=None):
+        async with session_scope() as session:
+            return list(await session.scalars(select(BehaviorEventRow.event_type).where(
+                BehaviorEventRow.user_id == self.user_id,
+                BehaviorEventRow.entity_id == (paper_id or self.paper_id),
+                BehaviorEventRow.event_type.in_(['paper_collect', 'paper_uncollect']),
+            ).order_by(BehaviorEventRow.received_at)))
+
+    async def test_multi_folder_moves_and_folder_deletion_emit_only_real_transitions(self):
+        collections = CollectionService()
+        a, b, c = (await collections.folders(self.user_id)).folders[:3]
+        await collections.update_paper_folders(self.user_id, self.paper_id, [a.id, b.id])
+        await collections.move_paper(self.user_id, a.id, self.paper_id, c.id)
+        await collections.move_paper(self.user_id, c.id, self.paper_id, b.id)
+        await collections.update_paper_folders(self.user_id, self.paper_id, [c.id])
+        self.assertEqual(await self._collect_events(), ['paper_collect'])
+        extra = await collections.create_folder(self.user_id, 'extra')
+        await collections.update_paper_folders(self.user_id, self.paper_id, [c.id, extra.id])
+        await collections.delete_folder(self.user_id, extra.id)
+        self.assertEqual(await self._collect_events(), ['paper_collect'])
+        await collections.delete_folder(self.user_id, c.id)
+        self.assertEqual(await self._collect_events(), ['paper_collect', 'paper_uncollect'])
+
+    async def test_concurrent_collects_into_different_folders_record_one_interest(self):
+        collections = CollectionService()
+        folders = (await collections.folders(self.user_id)).folders
+        await asyncio.gather(*(
+            collections.update_paper_folders(self.user_id, self.paper_id, [folder.id]) for folder in folders
+        ))
+        self.assertEqual(await self._collect_events(), ['paper_collect'])
+        self.assertEqual(len(await collections.paper_folders(self.user_id, self.paper_id)), 1)
+
+    async def test_capacity_rejection_rolls_back_the_collect_event(self):
+        collections = CollectionService()
+        folder = (await collections.folders(self.user_id)).folders[0]
+        async with session_scope() as session:
+            from app.models.collections import CollectionItemRow
+            for index in range(100):
+                session.add(CollectionItemRow(folder_id=folder.id, paper_id=f'filler:{index}'))
+        with self.assertRaises(BusinessError):
+            await collections.update_paper_folders(self.user_id, self.paper_id, [folder.id])
+        self.assertEqual(await self._collect_events(), [])
+
+    async def test_account_deletion_removes_events_profile_and_snapshots(self):
+        await PaperLikeService().like(self.user_id, self.paper_id)
+        await UserProfileService(features=SimpleNamespace(get_many=AsyncMock(return_value={}))).rebuild(self.user_id)
+        await self._service_with(self._candidates(2)).page(self.user_id, limit=1)
+        await PaperLikeService().like(self.other_id, self.paper_id)
+        await AccountDeletionService().delete_all_for_user(self.user_id)
+        async with session_scope() as session:
+            for model in (BehaviorEventRow, UserInterestProfileRow, RecommendationSnapshotRow):
+                self.assertEqual(await session.scalar(select(func.count()).select_from(model).where(
+                    model.user_id == self.user_id,
+                )), 0)
+            self.assertEqual(await session.scalar(select(func.count()).select_from(BehaviorEventRow).where(
+                BehaviorEventRow.user_id == self.other_id,
+            )), 1)

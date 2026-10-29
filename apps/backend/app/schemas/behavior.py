@@ -35,6 +35,10 @@ class BehaviorEventInput(BaseModel):
             raise ValueError('paper events require paper_id and no query')
         if self.query_id is not None and (self.source != 'search' or self.event_type not in ('search_submit', 'search_result_click')):
             raise ValueError('query_id only applies to search events')
+        if self.request_id is not None and not self.event_type.startswith('recommendation_'):
+            # Attribution ids are only accepted where the server verifies them
+            # against the caller's own recommendation snapshot.
+            raise ValueError('request_id only applies to recommendation events')
         if self.event_type.startswith('recommendation_') and (self.source != 'recommendation' or not self.request_id or self.rank is None):
             raise ValueError('recommendation events require source, request_id and rank')
         if self.event_type.startswith('recommendation_'):

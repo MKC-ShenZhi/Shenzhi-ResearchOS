@@ -5,6 +5,7 @@ import logging
 
 from app.schemas.knowledge import PaperDetail
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
+from app.services.recommendation import config
 
 logger = logging.getLogger(__name__)
 
@@ -17,20 +18,25 @@ class PaperFeatureService:
         ids = list(dict.fromkeys(paper_ids))
         if not ids:
             return {}
-        semaphore = asyncio.Semaphore(4)
+        semaphore = asyncio.Semaphore(config.METADATA_CONCURRENCY)
 
         async def load(paper_id: str) -> tuple[str, PaperDetail | None]:
             async with semaphore:
                 try:
-                    return paper_id, await asyncio.wait_for(self.knowledge.get_paper(paper_id), timeout=4)
+                    return paper_id, await asyncio.wait_for(
+                        self.knowledge.get_paper(paper_id), timeout=config.METADATA_TIMEOUT_SECONDS,
+                    )
                 except (KnowledgeServiceError, TimeoutError):
                     # Missing metadata never invents an interest feature. The
                     # behavior fact remains durable for a later rebuild.
                     logger.debug('Recommendation paper metadata unavailable')
                     return paper_id, None
+                except Exception as error:  # noqa: BLE001 - one paper must not fail the profile
+                    logger.warning('Recommendation paper metadata failed (%s)', type(error).__name__)
+                    return paper_id, None
 
         tasks = [asyncio.create_task(load(paper_id)) for paper_id in ids]
-        done, pending = await asyncio.wait(tasks, timeout=6)
+        done, pending = await asyncio.wait(tasks, timeout=config.METADATA_BATCH_TIMEOUT_SECONDS)
         for task in pending:
             task.cancel()
         if pending:

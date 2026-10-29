@@ -17,8 +17,9 @@ from app.models.interactions import PaperLikeRow
 from app.models.recommendation import RecommendationSnapshotRow
 from app.models.stats import PaperStatDailyRow, StatsSnapshotRunRow
 from app.schemas.knowledge import KnowledgeSearchRequest, PaperSearchResult
-from app.services.discovery import DiscoverySnapshotError, HomeDiscoveryService
+from app.services.discovery import HomeDiscoveryService
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
+from app.services.recommendation import config
 from app.services.recommendation.config import (
     ALGORITHM_VERSION,
     MAX_RECALL_QUERIES,
@@ -131,13 +132,18 @@ class CandidateRecallService:
                 if kind == 'keyword':
                     result = await asyncio.wait_for(self.knowledge.search(
                         KnowledgeSearchRequest(query=value, topK=RECALL_PER_SOURCE),
-                    ), timeout=5)
+                    ), timeout=config.RECALL_TIMEOUT_SECONDS)
                 else:
                     result = await asyncio.wait_for(self.knowledge.search_by_subject(
                         value, limit=RECALL_PER_SOURCE,
-                    ), timeout=5)
+                    ), timeout=config.RECALL_TIMEOUT_SECONDS)
                 return kind, value, result.results
             except (KnowledgeServiceError, TimeoutError):
+                return kind, value, []
+            except Exception as error:  # noqa: BLE001 - one source must not sink the others
+                # Unexpected adapter/contract failures are isolated per source.
+                # Log only the type: the recall value can be a private search query.
+                logger.warning('Recommendation recall source failed (%s, %s)', kind, type(error).__name__)
                 return kind, value, []
 
         for kind, value, papers in await asyncio.gather(*(fetch(kind, value) for kind, value in selected)):
@@ -160,14 +166,14 @@ class CandidateRecallService:
                     )
 
         try:
-            global_page = self.discovery.page(limit=48)
+            global_page = self.discovery.page(limit=config.GLOBAL_DISCOVERY_RECALL_LIMIT)
             for paper in global_page.items:
                 entry = candidates.get(paper.id)
                 if entry is None:
                     entry = Candidate(paper=paper.model_dump(mode='json'), subjects=[], keywords=[], sources=set())
                     candidates[paper.id] = entry
                 entry.sources.add('global_discovery')
-        except DiscoverySnapshotError as error:
+        except Exception as error:  # noqa: BLE001 - personal recall stays usable
             logger.warning(
                 'Global discovery snapshot unavailable during recommendation recall (%s)',
                 type(error).__name__,
@@ -192,8 +198,11 @@ class RecommendationService:
                 raise BusinessError(20001, '推荐分页游标无效', 400) from error
             async with session_scope() as session:
                 snapshot = await session.get(RecommendationSnapshotRow, request_id)
+                # Purged, expired and other accounts' snapshots look identical.
+                # Same stale-cursor contract as platform stats: 409 means this
+                # cursor cannot be retried and the client restarts at page one.
                 if snapshot is None or snapshot.user_id != user_id or snapshot.expires_at <= utc_now():
-                    raise BusinessError(20001, '推荐列表已过期，请重新加载', 400)
+                    raise BusinessError(20001, '推荐列表已过期，请刷新后重新浏览', 409)
                 items = snapshot.items
                 version = snapshot.algorithm_version
         else:

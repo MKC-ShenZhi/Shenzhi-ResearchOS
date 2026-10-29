@@ -34,14 +34,16 @@ export function PaperCard({
 }) {
   const returnTo = useCurrentInternalPath();
   const { session } = useAuth();
+  const userId = session?.user.id ?? "";
   const articleRef = useRef<HTMLElement>(null);
   const impressionSent = useRef(false);
   const status = usePaperReadStatus(paper.id);
   const detailHref = paperHref(paper.id, { mode: "create", source: returnTo });
   const source = paper.recommendationRequestId ? "recommendation" : "discovery";
   const trackClick = () => {
-    if (!session?.user.id) return;
+    if (!userId) return;
     recordPaperBehavior({
+      userId,
       eventType: source === "recommendation" ? "recommendation_click" : "paper_click",
       paperId: paper.id, source,
       requestId: paper.recommendationRequestId,
@@ -52,7 +54,7 @@ export function PaperCard({
 
   useEffect(() => {
     const element = articleRef.current;
-    if (!element || !session?.user.id || impressionSent.current) return;
+    if (!element || !userId || impressionSent.current) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let visibleEnough = false;
     const clearTimer = () => {
@@ -70,6 +72,7 @@ export function PaperCard({
         if (document.visibilityState !== "visible" || !visibleEnough || impressionSent.current) return;
         impressionSent.current = true;
         recordPaperBehavior({
+          userId,
           eventType: source === "recommendation" ? "recommendation_impression" : "paper_impression",
           paperId: paper.id, source,
           requestId: paper.recommendationRequestId,
@@ -84,7 +87,7 @@ export function PaperCard({
     observer.observe(element);
     document.addEventListener("visibilitychange", updateTimer);
     return () => { observer.disconnect(); document.removeEventListener("visibilitychange", updateTimer); clearTimer(); };
-  }, [paper.id, paper.recommendationRank, paper.recommendationRequestId, session?.user.id, source]);
+  }, [paper.id, paper.recommendationRank, paper.recommendationRequestId, userId, source]);
 
   return (
     <motion.article
@@ -119,7 +122,7 @@ export function PaperCard({
             abstract={paper.abstract}
             paperId={paper.id}
             source={source}
-            enabled={Boolean(session?.user.id)}
+            userId={userId}
             className="mt-3 text-sm leading-relaxed text-muted"
             collapsedClassName="line-clamp-4"
           />

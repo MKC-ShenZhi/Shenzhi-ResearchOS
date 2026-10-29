@@ -45,9 +45,10 @@ export function KnowledgeResultCard({
 }) {
   const authors = hit.authors.length ? hit.authors.join(" · ") : "未知作者";
   const { session } = useAuth();
+  const userId = session?.user.id ?? "";
   const trackSearchClick = () => {
-    if (session?.user.id && returnTo.startsWith("/knowledge/search") && !historyMode) {
-      recordPaperBehavior({ eventType: "search_result_click", paperId: hit.id, source: "search", rank: index + 1, queryId });
+    if (userId && returnTo.startsWith("/knowledge/search") && !historyMode) {
+      recordPaperBehavior({ userId, eventType: "search_result_click", paperId: hit.id, source: "search", rank: index + 1, queryId });
     }
     onNavigate?.();
   };
@@ -103,7 +104,7 @@ export function KnowledgeResultCard({
             abstract={hit.abstract ?? ""}
             paperId={hit.id}
             source="search"
-            enabled={Boolean(session?.user.id)}
+            userId={userId}
             className="text-sm leading-relaxed text-muted"
             collapsedClassName="line-clamp-4 @min-[600px]:line-clamp-6"
           />

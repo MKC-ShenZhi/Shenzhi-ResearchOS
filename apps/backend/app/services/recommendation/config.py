@@ -41,3 +41,10 @@ RANK_WEIGHTS = {
 MAX_PROFILE_PAPERS = 40
 MAX_RECALL_QUERIES = 4
 RECALL_PER_SOURCE = 12
+# Each recall query and each metadata lookup is bounded independently, so one
+# slow upstream path degrades to fewer candidates instead of a failed page.
+RECALL_TIMEOUT_SECONDS = 5.0
+GLOBAL_DISCOVERY_RECALL_LIMIT = 48
+METADATA_TIMEOUT_SECONDS = 4.0
+METADATA_BATCH_TIMEOUT_SECONDS = 6.0
+METADATA_CONCURRENCY = 4

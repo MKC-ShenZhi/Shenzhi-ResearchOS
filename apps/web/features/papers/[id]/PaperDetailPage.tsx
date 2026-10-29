@@ -117,7 +117,6 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
       // A visit is still in progress until the PDF's final page is reached.
       queryClient.invalidateQueries({ queryKey: paperReadStatusQueryKey(userId, loadedPaperId) });
       publishPaperRead(userId, loadedPaperId, "reading");
-      void queryClient.invalidateQueries({ queryKey: ["home-feed", userId] });
     }).catch(() => {});
   }, [isIdentityPending, loadedPaperId, queryClient, userId]);
 
@@ -132,7 +131,7 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
       );
       if (visibleSeconds === null || visibleSeconds === undefined) return;
       recordPaperBehavior({
-        eventType: "active_read", paperId: loadedPaperId,
+        userId, eventType: "active_read", paperId: loadedPaperId,
         source: "paper_detail", durationSeconds: visibleSeconds,
       });
     }, 5000);
@@ -154,7 +153,6 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
       if (!result.success || result.user_id !== userId) return;
       queryClient.setQueryData(paperReadStatusQueryKey(userId, loadedPaperId), "read");
       publishPaperRead(userId, loadedPaperId, "read");
-      void queryClient.invalidateQueries({ queryKey: ["home-feed", userId] });
     }).catch(() => {});
   };
 

@@ -1,10 +1,12 @@
 # 搜索推荐第一阶段实现
 
+> 当前状态以 [`search-recommendation-delivery.md`](./search-recommendation-delivery.md)（2026-10-30 集成到 dev 后的验收）为准。本文下方历史验证段落保留原分支时期记录，其中 Vercel Cron、“推荐接口异常时整体回退发现”等描述已被集成修订覆盖。
+
 ## 边界与模块
 
 论文主动搜索仍走原有 Knowledge API、Service 和 Adapter。推荐由独立的 `/api/v1/recommendations` 路由提供，不向主动搜索注入画像，也不改变其查询、过滤、原始排序和分页。身份沿用 Better Auth → Web BFF → `require_user`，请求体不接受用户 ID。
 
-Backend 中 `BehaviorEventService` 负责事件校验后的幂等写入；`PaperFeatureService` 通过现有 Knowledge Service 有界获取论文详情；`UserProfileService` 从当前关系状态和近 90 天隐式事件重建画像；`CandidateRecallService` 调用现有主题检索、增强检索及发现快照；`RecommendationService` 排序、过滤并保存一小时的分页快照。Web 的首页 Feed 对登录用户请求推荐，接口失败时使用现有全局发现候选。
+Backend 中 `BehaviorEventService` 负责事件校验后的幂等写入；`PaperFeatureService` 通过现有 Knowledge Service 有界获取论文详情；`UserProfileService` 从当前关系状态和近 90 天隐式事件重建画像；`CandidateRecallService` 调用现有主题检索、增强检索及发现快照；`RecommendationService` 排序、过滤并保存一小时的分页快照。Web 的首页 Feed 对登录用户请求推荐；只有第一页失败或为空时整份列表降级为现有全局发现，推荐分页开始后的失败保留已加载内容并重试同一游标，快照过期（409）时提示刷新并从第一页重建。
 
 ## 事件与数据库
 
@@ -32,7 +34,7 @@ Backend 中 `BehaviorEventService` 负责事件校验后的幂等写入；`Paper
 
 排序有效特征权重：主题 0.40、关键词 0.25、显式关注 0.20、已发布平台热度 0.10、论文年份时效 0.05；缺失特征不参与分母。关键词检索命中可作为该次兴趣查询的证据，即使知识底座没有返回完全相同的关键词标签；该信号按上游结果位置有界衰减，并使用“与你近期搜索的方向相关”理由。没有个人匹配的候选分数封顶为 0.15，避免仅凭时效超过相关论文。冷启动直接保留现有每日发现顺序。主题多样性只在替代候选分数至少达到当前候选的 80% 时调整，避免引入明显不相关论文。推荐理由由实际匹配特征决定，不暴露行为明细。分数是排序信号，不是喜欢概率。
 
-`GET /api/v1/recommendations/papers?limit=12&cursor=...` 返回论文基础信息、理由、来源、位置、请求 ID、下一页游标、总数和算法版本。首次请求保存一小时用户私有快照；游标请求验证拥有者与过期时间。`POST /api/v1/behavior-events/batch` 只接受登录用户受控事件；推荐曝光和点击携带推荐请求 ID 与位置。前端 Feed 的查询缓存按当前用户 ID 隔离，匿名用户继续使用全局发现列表。
+`GET /api/v1/recommendations/papers?limit=12&cursor=...` 返回论文基础信息、理由、来源、位置、请求 ID、下一页游标、总数和算法版本。首次请求保存一小时用户私有快照；游标请求验证拥有者与过期时间：格式错误返回 400，快照不存在、已过期或属于他人统一返回 `20001/409`（与统计快照游标一致，表示不可重试、需从第一页重新开始）。`POST /api/v1/behavior-events/batch` 只接受登录用户受控事件；推荐曝光和点击携带推荐请求 ID 与位置。前端 Feed 的查询缓存按当前用户 ID 隔离，匿名用户继续使用全局发现列表。
 
 三个接口都使用现有 BFF 身份，响应由现有 `{code, data}` 封装：
 
@@ -42,7 +44,7 @@ Backend 中 `BehaviorEventService` 负责事件校验后的幂等写入；`Paper
 | `GET /api/v1/recommendations/me/profile` | 无 | `long_topics`、`short_topics`、`long_keywords`、`short_keywords`、`explicit_subjects`、`has_history`、`computed_at`、`algorithm_version` |
 | `POST /api/v1/behavior-events/batch` | `{events:[...]}`，每批 1–20 条；事件含 UUID `event_id`、类型、来源和对象，推荐事件另含 `request_id/rank`，搜索事件可含 UUID `query_id` | `inserted`（幂等后实际新增条数） |
 
-前端采集失败会被吞掉，不影响原跳转；后端非法字段返回 422、非本人推荐反馈返回 400、未登录返回 401、超出每分钟限额返回 429。推荐召回单路知识底座异常保留其他来源和全局发现，整个推荐接口异常时 Web Feed 回退原发现 API。主动搜索继续调用原 Knowledge 路由，推荐画像不进入搜索请求参数或排序。
+前端采集失败会被吞掉，不影响原跳转；后端非法字段返回 422、非本人推荐反馈返回 400、未登录返回 401、超出每分钟限额返回 429。推荐召回单路知识底座异常（含超时与非预期异常）保留其他来源和全局发现；首屏推荐接口异常时 Web Feed 回退原发现 API，后续页不回退。主动搜索继续调用原 Knowledge 路由，推荐画像不进入搜索请求参数或排序。
 
 ## 验证与限制
 
@@ -70,7 +72,7 @@ Backend 中 `BehaviorEventService` 负责事件校验后的幂等写入；`Paper
 
 对仓库内打包的 300 篇发现快照做只读字段统计：标题、摘要、作者、venue、年份均有值 300/300；subjects、keywords 均为 0/300。它是静态发现候选集，不代表知识底座真实覆盖率。当前 PaperDetail/搜索 Schema 中作者为字符串列表，没有稳定作者 ID；作者偏好和 venue 偏好尚未加入画像或排序。需要先从获准的 Knowledge API 样本统计真实字段覆盖，并用标注数据验证价值，再决定是否新增特征与升级算法版本。
 
-维护任务已配置在 `apps/backend/vercel.json`，每天 UTC 17:18 调用 `/api/v1/internal/recommendation-maintenance`（上海时间次日 01:18）。该路由要求 Vercel 环境变量 `CRON_SECRET`，只接受匹配的 `Authorization: Bearer ...` 请求；成功响应包含本次清理计数。清理是可重复执行的删除操作，适合 Vercel Cron 至少一次/可能漏发的投递语义。部署后仍需在 Vercel Cron Jobs 和函数日志中确认生产调度已激活；本地代码和配置检查不代表线上已运行。手动执行仍可用 `cd apps/backend && uv run --frozen python -m app.services.recommendation.maintenance`。
+（历史记录，集成时已撤销：本轮未修改 `vercel.json`，未注册 Cron。）原分支曾将维护任务配置在 `apps/backend/vercel.json`，每天 UTC 17:18 调用 `/api/v1/internal/recommendation-maintenance`（上海时间次日 01:18）。该路由要求 Vercel 环境变量 `CRON_SECRET`，只接受匹配的 `Authorization: Bearer ...` 请求；成功响应包含本次清理计数。清理是可重复执行的删除操作，适合 Vercel Cron 至少一次/可能漏发的投递语义。部署后仍需在 Vercel Cron Jobs 和函数日志中确认生产调度已激活；本地代码和配置检查不代表线上已运行。手动执行仍可用 `cd apps/backend && uv run --frozen python -m app.services.recommendation.maintenance`。
 
 ## Embedding 后续评估
 

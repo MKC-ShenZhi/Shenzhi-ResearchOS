@@ -60,7 +60,7 @@ export function SearchHero({
   const send = async (payload: ComposerSubmitPayload) => {
     if (!payload.question.trim()) return;
     if (payload.entryMode === "search") {
-      if (session?.user.id) recordSearchSubmit(payload.question);
+      if (session?.user.id) recordSearchSubmit(payload.question, session.user.id);
       draft.clear();
       router.push(`/knowledge/search?q=${encodeURIComponent(payload.question)}`);
       return;

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/auth-provider";
 import { discoveryQueryRetry } from "@/clients/backend/discovery";
 import {
   fetchHomeFeedPage,
+  RecommendationFeedExpiredError,
 } from "../services/discovery-feed";
 import { PaperCard } from "./paper-card";
 
@@ -23,13 +24,22 @@ function FeedLoading() {
   );
 }
 
-/** Single snapshot-backed discovery feed with cursor-based infinite loading. */
+/**
+ * Snapshot-backed home feed with cursor-based infinite loading.
+ *
+ * Signed-in users page through one recommendation snapshot; anonymous users
+ * (and a failed first recommendation page) use global discovery. Loaded pages
+ * are never replaced by a failing next page.
+ */
 export function FeedList() {
   const { session, isPending: authPending } = useAuth();
   const userId = session?.user.id ?? null;
+  const queryClient = useQueryClient();
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const queryKey = ["home-feed", userId] as const;
   const {
     data,
+    error,
     isPending,
     isError,
     isFetchingNextPage,
@@ -38,14 +48,20 @@ export function FeedList() {
     fetchNextPage,
     refetch,
   } = useInfiniteQuery({
-    queryKey: ["home-feed", userId],
-    queryFn: ({ pageParam }) => fetchHomeFeedPage(pageParam, Boolean(userId)),
+    queryKey,
+    queryFn: ({ pageParam }) => fetchHomeFeedPage(pageParam, userId),
     enabled: !authPending,
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.hasMore ? page.nextCursor ?? undefined : undefined,
-    staleTime: 60 * 1000,
-    retry: discoveryQueryRetry,
+    staleTime: 10 * 60 * 1000,
+    // A personal refetch creates a new recommendation snapshot; never swap the
+    // list under a reader just because the tab regained focus or network.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: (failureCount, failure) =>
+      !(failure instanceof RecommendationFeedExpiredError) && discoveryQueryRetry(failureCount, failure),
   });
+  const snapshotExpired = isFetchNextPageError && error instanceof RecommendationFeedExpiredError;
 
   const papers = useMemo(() => {
     const unique = new Map<string, NonNullable<typeof data>["pages"][number]["items"][number]>();
@@ -101,14 +117,20 @@ export function FeedList() {
         )}
         {isFetchNextPageError && (
           <div className="text-center" role="alert">
-            <p className="text-sm text-muted">后续论文加载失败，已加载内容不受影响。</p>
+            <p className="text-sm text-muted">
+              {snapshotExpired
+                ? "推荐列表已过期，刷新后将重新生成推荐。"
+                : "后续论文加载失败，已加载内容不受影响。"}
+            </p>
             <Button
               variant="outline"
               size="sm"
               className="mt-3"
-              onClick={() => void fetchNextPage()}
+              onClick={() => void (snapshotExpired
+                ? queryClient.resetQueries({ queryKey })
+                : fetchNextPage())}
             >
-              重试加载
+              {snapshotExpired ? "刷新推荐" : "重试加载"}
             </Button>
           </div>
         )}

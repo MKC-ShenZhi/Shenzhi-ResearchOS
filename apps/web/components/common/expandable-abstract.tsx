@@ -11,14 +11,15 @@ export function ExpandableAbstract({
   abstract,
   paperId,
   source,
-  enabled,
+  userId,
   className,
   collapsedClassName,
 }: {
   abstract: string;
   paperId: string;
   source: BehaviorSource;
-  enabled: boolean;
+  /** Signed-in owner for the positive-intent event; empty for anonymous readers. */
+  userId: string;
   className?: string;
   collapsedClassName: string;
 }) {
@@ -48,8 +49,8 @@ export function ExpandableAbstract({
   if (!abstract.trim()) return null;
 
   const toggleExpanded = () => {
-    if (enabled && !expanded && !reportedRef.current) {
-      recordPaperBehavior({ eventType: "abstract_expand", paperId, source });
+    if (userId && !expanded && !reportedRef.current) {
+      recordPaperBehavior({ userId, eventType: "abstract_expand", paperId, source });
       reportedRef.current = true;
     }
     setExpanded((current) => !current);

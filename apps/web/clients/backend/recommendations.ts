@@ -1,4 +1,4 @@
-import { apiJson } from "./http";
+import { apiJson, expectedUserHeaders } from "./http";
 import type { DiscoveryPaperDto } from "./discovery";
 
 export interface RecommendationPaperDto extends Omit<DiscoveryPaperDto, "year"> {
@@ -18,8 +18,11 @@ export interface RecommendationPageDto {
   algorithm_version: string;
 }
 
-export async function fetchRecommendationPapers(cursor: string | null, limit = 12) {
+/** `userId` is a stale-tab precondition only; the BFF session still decides the owner. */
+export async function fetchRecommendationPapers(cursor: string | null, userId: string, limit = 12) {
   const query = new URLSearchParams({ limit: String(limit) });
   if (cursor) query.set("cursor", cursor);
-  return apiJson<RecommendationPageDto>(`/recommendations/papers?${query.toString()}`);
+  return apiJson<RecommendationPageDto>(`/recommendations/papers?${query.toString()}`, {
+    headers: expectedUserHeaders(userId),
+  });
 }

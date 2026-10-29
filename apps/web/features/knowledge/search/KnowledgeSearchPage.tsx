@@ -99,7 +99,7 @@ function KeywordSearchContent() {
     draft.clear();
     discardSearchScroll(returnTo, scope);
     const text = q.trim();
-    const queryId = text && session?.user.id ? recordSearchSubmit(text) : null;
+    const queryId = text && session?.user.id ? recordSearchSubmit(text, session.user.id) : null;
     setSearchIntent(queryId ? { query: text, id: queryId } : null);
     if (!text) clearRestoration();
     discardSearchScroll(buildKnowledgeSearchUrl({ query: text, filters, page: 1 }), scope);

@@ -145,7 +145,13 @@ GET /api/v1/stats/topics?date=&limit=&cursor=&topic_id=…     主题关注人�
 ## 七、账号注销
 
 `AccountDeletionService` 在同一事务内额外删除 `paper_likes` 与 `topic_follows`；
-下一次查询与下一次快照即反映人数变化。
+下一次查询与下一次快照即反映人数变化。推荐阶段（`015_recommendation_foundation`）集成后，
+同一事务还删除该用户的 `behavior_events`、`user_interest_profiles` 与 `recommendation_snapshots`。
+
+点赞/取消点赞、关注/取消关注、收藏状态变化会在原业务事务内追加推荐行为事件（由服务端写入，
+浏览器不能提交这些类型）。收藏事件按“用户 × 论文”判定：加入第二个文件夹、文件夹间移动不产生
+事件，删除最后一个包含该论文的文件夹或移除最后一处收藏才记 `paper_uncollect`；
+沿用本文的账号级行锁与 100 篇容量限制，容量失败时事件随事务回滚。
 
 ## 八、已知边界
 
@@ -160,6 +166,8 @@ GET /api/v1/stats/topics?date=&limit=&cursor=&topic_id=…     主题关注人�
 - 账号注销保留已经发布的匿名历史汇总；实时人数和后续重建/新快照反映关系删除。
 - 本阶段不配置线上调度，不集成推荐与请求幂等 Feature；迁移链为
   `011_agent_uploads → 012_topic_follows → 013_paper_likes → 014_platform_snapshots`。
+  推荐集成后链尾追加 `015_recommendation_foundation`，见
+  [`search-recommendation-delivery.md`](../engineering/search-recommendation-delivery.md)。
 
 ## 九、验收对照
 
