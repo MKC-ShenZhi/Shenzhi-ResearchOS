@@ -45,6 +45,14 @@
 
 写操作返回服务端重新统计的人数，前端以此为准，不做本地 +1/-1 推算。
 
+个人列表读取与互动写入携带可选 `x-shenzhi-expected-user-id` 前置条件。BFF 只转发此条件，
+仍从 Better Auth 注入真实身份；FastAPI `require_user` 在两者不一致时返回 409，且不调用
+业务服务。条件不能指定请求所属账号，仅用于阻止旧页面请求在 Cookie 切换后读写新账号。
+
+BFF 对 JSON 请求体保留可重放文本，空请求不附带流式请求体，以确保 Node fetch 能正常
+传递后端 401（不可重放的流式请求体会导致 `expected non-null body source`，被误报成 503）。
+二进制上传继续使用原有流式传输。
+
 ## 四、批量读接口
 
 ```text
@@ -83,8 +91,11 @@ uv run --env-file .env python -m app.services.stats               # 上海时区
 - 论文行覆盖“当天在收藏或点赞关系中出现过的论文”，无互动论文不产生行，读取方按 0 处理；
   也可用 `paper_id` 精确查询并得到 `missing_paper_ids`。
 - 主题行覆盖目录中全部启用主题（当前 293 条），因此知识底座能读到完整集合（含 0）。
+- 生成事务采用 PostgreSQL `REPEATABLE READ`，收藏、点赞、关注使用同一个 MVCC 视图。
+  首次读取前以 `SHARE ROW EXCLUSIVE` 锁串行化所有快照生成任务；普通统计查询不被该锁阻塞。
 - 当日运行记录、当日全部明细行在同一事务内写入并提交；读取方只采纳
-  `status='completed'` 的日期，因此不会看到半成品。
+  `status='completed'` 的日期，单次分页/精确查询也采用只读 `REPEATABLE READ`，
+  使发布元信息、总数和明细始终来自同一版数据。
 - 同日重跑会删除当日旧行并整体替换；失败时事务回滚，上一次完整发布继续对外可见，
   `failure_reason` 只记录最近一次尝试的错误类型。
 - CLI 只生成运行时上海时区的当天快照。源表只保存当前有效关系，不能用当前人数回填过去日期并称作历史统计。
@@ -104,7 +115,9 @@ GET /api/v1/stats/topics?date=&limit=&cursor=&topic_id=…     主题关注人�
   不匹配返回 401。该凭据与 `BACKEND_BFF_SECRET` 和用户会话完全分离，只打开
   `/api/v1/stats/*`，不能读取 `/api/v1/likes` 等个人数据。
 - `date` 省略时使用最近一次完整发布日；`limit` 1–500，默认 100；分页使用不透明游标，
-  游标绑定发布日期，跨日或篡改会被拒绝。
+  游标绑定发布日期、资源类型与本次 `computed_at`。不合法或类型不符返回 400；
+  同日重建后使用旧游标返回 409，读取方应从第一页重新同步，以免跨页混入不同发布结果。
+  原分支仅绑定日期的旧格式游标也需从第一页重新获取。
 - `paper_id` / `topic_id` 可直接精确查询（≤100 个），与游标互斥；未命中的 ID 通过
   `missing_paper_ids` / `missing_topic_ids` 显式返回，由调用方按 0 处理。
 
@@ -117,8 +130,14 @@ GET /api/v1/stats/topics?date=&limit=&cursor=&topic_id=…     主题关注人�
 - 卡片通过 `clients/backend/interactions.ts` 的微批队列读取：同一事件循环内的所有卡片
   合并为一次请求，每批最多 100 个 ID，避免逐卡 N+1。
 - 缓存键包含身份（登录用户 ID 或匿名的空串）；账号切换或退出后，其他身份的个人状态
-  缓存被移除，公开人数保留。同一账号在其他标签页点赞/关注后，`BroadcastChannel`
-  广播使当前页卡片同步更新。
+  及个人列表缓存被移除，会话解析期间隐藏个人互动状态，收藏选择草稿按账号/论文重建。
+- 写入成功后先取消旧读请求再失效对应 TanStack Query 缓存，统一刷新卡片、详情、点赞/
+  收藏/关注列表和文件夹内容。`BroadcastChannel` 只提供失效通知，接收方重新读取服务端，
+  不把消息中的个人字段当成真实状态。其他账号/匿名标签页也刷新公开人数，但各自查询自己的关系。
+- 收藏选择器在关系读取失败或未完成时禁止确认，避免把未加载的空数组误提交为清空收藏。
+- 收藏替换、移动、移除和文件夹删除通过既有 `collection_user_states` 行锁按账号串行化。
+  替换为空集合或不同目标文件夹也使用同一锁，避免并发替换错误合并；移动到已满文件夹会
+  整体回滚，来源关系保留。
 - `stores/user-preferences.ts` 不再保存 `followedTopics`、`likedPapers`、
   `bookmarkedPapers`；持久化版本升到 2，旧浏览器的这三个字段在迁移时直接丢弃，
   不导入账号。
@@ -136,8 +155,11 @@ GET /api/v1/stats/topics?date=&limit=&cursor=&topic_id=…     主题关注人�
   再决定是否统一版本号并迁移历史收藏数据。
 - 平台快照只覆盖有互动记录的论文，没有全量论文清单可枚举。
 - 快照按 `Asia/Shanghai` 自然日切分；跨时区读取方需自行换算。
-- 尚未提供“我点赞的论文 / 我关注的主题”页面，只提供对应读接口
-  （`GET /api/v1/likes`、`GET /api/v1/topic-follows`）。
+- `/knowledge/papers` 的“点赞与收藏”面板提供账号的点赞论文、跨文件夹收藏论文和关注主题，
+  支持取消关系；论文列表分页、搜索当前页。上游元数据不可用时遵循既有 Knowledge 错误契约。
+- 账号注销保留已经发布的匿名历史汇总；实时人数和后续重建/新快照反映关系删除。
+- 本阶段不配置线上调度，不集成推荐与请求幂等 Feature；迁移链为
+  `011_agent_uploads → 012_topic_follows → 013_paper_likes → 014_platform_snapshots`。
 
 ## 九、验收对照
 
@@ -153,3 +175,22 @@ GET /api/v1/stats/topics?date=&limit=&cursor=&topic_id=…     主题关注人�
 | 同日重跑快照 | 无重复行，读取方只看到完整结果 |
 | 快照生成失败 | 上一次完整发布仍可读，失败原因被记录 |
 | 知识底座凭据 | 只能读 `/api/v1/stats/*`，读不到个人数据 |
+
+
+## 十、隔离验收
+
+仅将下列变量指向已确认的临时 PostgreSQL 实例，禁止使用生产连接。迁移回滚测试独立使用
+`SHENZHI_MIGRATION_TEST_URL`，拒绝非本机、非 `*_migration_test` 或非空数据库；
+不会隐式回退到 `CHAT_DATABASE_URL`。
+
+```bash
+cd apps/backend
+CHAT_DATABASE_URL="$LOCAL_INTERACTION_TEST_URL" uv run --locked alembic upgrade head
+CHAT_DATABASE_URL="$LOCAL_INTERACTION_TEST_URL" uv run --locked python -m unittest \
+  tests.test_interactions_persistence tests.test_stats_snapshot tests.test_account_deletion_persistence -v
+SHENZHI_MIGRATION_TEST_URL="$EMPTY_LOCAL_MIGRATION_TEST_URL" uv run --locked python -m unittest \
+  tests.test_interaction_migrations -v
+```
+
+数据库测试未配置连接时的 Skip 不代表通过。迁移测试执行后会留下升级至 014 的测试表，
+重复验收需另建空库；实际环境回滚会删除互动关系与快照，不能作为无损操作。
