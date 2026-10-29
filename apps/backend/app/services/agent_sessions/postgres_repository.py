@@ -4,17 +4,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import and_, delete, exists, func, or_, select, update
+from sqlalchemy import and_, delete, exists, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_session_factory, session_scope
 from app.core.errors import BusinessError
+from app.core.idempotency import ensure_same_request
+from app.core.worker_lease import LEASE_SECONDS, current_worker_id
 from app.models.agent_session import AgentSessionRow, AgentTurnRow
 from app.services.agent_sessions.entities import AgentSession, AgentTurn
-from app.services.agent_sessions.repository import (
-    _populate_legacy_turns, decode_cursor, encode_cursor, new_session_id, new_turn_id,
-)
 
 
 def _ts(value: datetime | None) -> float | None:
@@ -31,6 +30,10 @@ def _turn_from_row(row: AgentTurnRow) -> AgentTurn:
         stop_reason=row.stop_reason, status=row.status, usage=dict(row.usage),
         transcript=list(row.transcript), created_at=_ts(row.created_at) or 0,
         completed_at=_ts(row.completed_at),
+        idempotency_key=row.idempotency_key,
+        idempotency_fingerprint=row.idempotency_fingerprint,
+        worker_id=row.worker_id,
+        lease_expires_at=row.lease_expires_at,
     )
 
 
@@ -52,6 +55,10 @@ def _turn_row(turn: AgentTurn) -> AgentTurnRow:
         warnings=turn.warnings, error=turn.error, stopped=turn.stopped,
         stop_reason=turn.stop_reason, status=turn.status, usage=turn.usage,
         transcript=turn.transcript,
+        idempotency_key=turn.idempotency_key,
+        idempotency_fingerprint=turn.idempotency_fingerprint,
+        worker_id=turn.worker_id,
+        lease_expires_at=turn.lease_expires_at,
         created_at=datetime.fromtimestamp(turn.created_at, timezone.utc),
         completed_at=(datetime.fromtimestamp(turn.completed_at, timezone.utc)
                       if turn.completed_at else None),
@@ -61,25 +68,34 @@ def _turn_row(turn: AgentTurn) -> AgentTurnRow:
 class PostgresAgentSessionRepository:
     is_durable = True
 
+    async def _recover_expired_turns(self, db, *, session_id: str | None = None) -> None:
+        statement = update(AgentTurnRow).where(
+            AgentTurnRow.status == 'running',
+            AgentTurnRow.lease_expires_at <= func.clock_timestamp(),
+        )
+        if session_id is not None:
+            statement = statement.where(AgentTurnRow.session_id == session_id)
+        running_sessions = list((await db.scalars(
+            statement.values(
+                status='failed', stopped=True, stop_reason='backend_restart',
+                error='服务重启，运行已中断，请重新发送',
+                completed_at=func.clock_timestamp(), worker_id=None, lease_expires_at=None,
+            ).returning(AgentTurnRow.session_id)
+        )).all())
+        if running_sessions:
+            await db.execute(
+                update(AgentSessionRow).where(AgentSessionRow.id.in_(running_sessions))
+                .values(updated_at=func.clock_timestamp())
+            )
+
     async def recover(self) -> None:
         async with session_scope() as db:
-            running_sessions = list((await db.scalars(
-                select(AgentTurnRow.session_id).where(AgentTurnRow.status == 'running')
-            )).all())
-            await db.execute(
-                update(AgentTurnRow).where(AgentTurnRow.status == 'running').values(
-                    status='failed', stopped=True, stop_reason='backend_restart',
-                    error='服务重启，运行已中断，请重新发送', completed_at=func.now(),
-                )
-            )
-            if running_sessions:
-                await db.execute(
-                    update(AgentSessionRow).where(AgentSessionRow.id.in_(running_sessions))
-                    .values(updated_at=func.now())
-                )
+            await self._recover_expired_turns(db)
 
     async def create(self, owner: str, prompt: str, settings: dict,
                      branched_from: str | None = None) -> AgentSession:
+        from app.services.agent_sessions.repository import new_session_id
+
         now = datetime.now(timezone.utc)
         row = AgentSessionRow(
             id=new_session_id(), owner=owner, title=prompt.strip()[:50] or '新会话',
@@ -90,17 +106,26 @@ class PostgresAgentSessionRepository:
         return _session_from_row(row, with_turns=False)
 
     async def get(self, session_id: str, owner: str) -> AgentSession:
-        async with get_session_factory()() as db:
-            row = await db.scalar(
-                select(AgentSessionRow)
-                .where(AgentSessionRow.id == session_id, AgentSessionRow.owner == owner)
-                .options(selectinload(AgentSessionRow.turns))
-            )
+        async with session_scope() as db:
+            found = await db.scalar(select(AgentSessionRow.id).where(
+                AgentSessionRow.id == session_id, AgentSessionRow.owner == owner,
+            ))
+            if found is None:
+                row = None
+            else:
+                await self._recover_expired_turns(db, session_id=session_id)
+                row = await db.scalar(
+                    select(AgentSessionRow)
+                    .where(AgentSessionRow.id == session_id, AgentSessionRow.owner == owner)
+                    .options(selectinload(AgentSessionRow.turns))
+                )
         if row is None:
             raise BusinessError(20004, 'Agent 会话不存在或无权访问', 404)
         return _session_from_row(row)
 
     async def list_page(self, owner: str, limit: int, cursor: str | None) -> dict:
+        from app.services.agent_sessions.repository import decode_cursor, encode_cursor
+
         boundary = decode_cursor(cursor)
         query = select(AgentSessionRow).where(AgentSessionRow.owner == owner)
         if boundary:
@@ -158,17 +183,72 @@ class PostgresAgentSessionRepository:
         if deleted is None:
             raise BusinessError(20004, 'Agent 会话不存在或无权访问', 404)
 
+    async def find_idempotent_turn(self, session_id: str, owner: str, key: str,
+                                   fingerprint: str) -> AgentTurn | None:
+        async with session_scope() as db:
+            session_exists = await db.scalar(select(exists().where(
+                AgentSessionRow.id == session_id, AgentSessionRow.owner == owner,
+            )))
+            if not session_exists:
+                raise BusinessError(20004, 'Agent 会话不存在或无权访问', 404)
+            await self._recover_expired_turns(db, session_id=session_id)
+            row = await db.scalar(select(AgentTurnRow).where(
+                AgentTurnRow.session_id == session_id,
+                AgentTurnRow.idempotency_key == key,
+            ))
+        if row is None:
+            return None
+        ensure_same_request(row.idempotency_fingerprint, fingerprint)
+        return _turn_from_row(row)
+
     async def start_turn(self, session_id: str, owner: str, prompt: str,
-                         settings: dict, warnings: list[str]) -> AgentTurn:
-        turn = AgentTurn(new_turn_id(), session_id, prompt, dict(settings), warnings=list(warnings))
+                         settings: dict, warnings: list[str], *,
+                         worker_id: str | None = None,
+                         idempotency_key: str | None = None,
+                         idempotency_fingerprint: str | None = None) -> tuple[AgentTurn, bool]:
+        from app.services.agent_sessions.repository import new_turn_id
+
+        worker_id = worker_id or current_worker_id()
         try:
             async with session_scope() as db:
-                found = await db.scalar(select(AgentSessionRow.id).where(
-                    AgentSessionRow.id == session_id, AgentSessionRow.owner == owner,
-                ))
-                if found is None:
+                session = await db.scalar(
+                    select(AgentSessionRow)
+                    .where(AgentSessionRow.id == session_id, AgentSessionRow.owner == owner)
+                    .with_for_update()
+                )
+                if session is None:
                     raise BusinessError(20004, 'Agent 会话不存在或无权访问', 404)
+                await self._recover_expired_turns(db, session_id=session_id)
+                if idempotency_key is not None:
+                    existing = await db.scalar(select(AgentTurnRow).where(
+                        AgentTurnRow.session_id == session_id,
+                        AgentTurnRow.idempotency_key == idempotency_key,
+                    ))
+                    if existing is not None:
+                        ensure_same_request(
+                            existing.idempotency_fingerprint,
+                            idempotency_fingerprint or '',
+                        )
+                        return _turn_from_row(existing), False
+                running = await db.scalar(select(exists().where(
+                    AgentTurnRow.session_id == session_id, AgentTurnRow.status == 'running',
+                )))
+                if running:
+                    raise BusinessError(20009, '该会话已有正在运行的任务', 409)
+                turn = AgentTurn(
+                    new_turn_id(), session_id, prompt, dict(settings), warnings=list(warnings),
+                    worker_id=worker_id,
+                    idempotency_key=idempotency_key,
+                    idempotency_fingerprint=idempotency_fingerprint,
+                )
                 db.add(_turn_row(turn))
+                turn.lease_expires_at = await db.scalar(
+                    update(AgentTurnRow)
+                    .where(AgentTurnRow.id == turn.id)
+                    .values(lease_expires_at=func.clock_timestamp()
+                            + text(f"INTERVAL '{LEASE_SECONDS} seconds'"))
+                    .returning(AgentTurnRow.lease_expires_at)
+                )
                 await db.execute(
                     update(AgentSessionRow).where(AgentSessionRow.id == session_id)
                     .values(settings=dict(settings), updated_at=func.now())
@@ -176,16 +256,19 @@ class PostgresAgentSessionRepository:
                 await db.flush()
         except IntegrityError:
             raise BusinessError(20009, '该会话已有正在运行的任务', 409) from None
-        return turn
+        return turn, True
 
     async def finish_turn(self, session_id: str, owner: str, turn_id: str,
-                          payload: dict[str, Any]) -> AgentTurn:
+                          payload: dict[str, Any], *, worker_id: str | None = None) -> AgentTurn:
         allowed = {
             'assistant_content', 'reasoning', 'process', 'steers', 'report', 'sources',
             'question', 'warnings', 'error', 'stopped', 'stop_reason', 'status', 'usage', 'transcript',
         }
         values = {key: value for key, value in payload.items() if key in allowed}
         values['completed_at'] = func.now()
+        worker_id = worker_id or current_worker_id()
+        values['worker_id'] = worker_id
+        values['lease_expires_at'] = None
         async with session_scope() as db:
             owner_exists = select(AgentSessionRow.id).where(
                 AgentSessionRow.id == session_id, AgentSessionRow.owner == owner,
@@ -193,7 +276,9 @@ class PostgresAgentSessionRepository:
             row = await db.scalar(
                 update(AgentTurnRow)
                 .where(AgentTurnRow.id == turn_id, AgentTurnRow.session_id == session_id,
-                       AgentTurnRow.status == 'running', owner_exists)
+                       AgentTurnRow.status == 'running',
+                       AgentTurnRow.worker_id == worker_id,
+                       AgentTurnRow.lease_expires_at > func.clock_timestamp(), owner_exists)
                 .values(**values).returning(AgentTurnRow)
             )
             if row is not None:
@@ -205,7 +290,30 @@ class PostgresAgentSessionRepository:
             raise BusinessError(20004, 'Agent 轮次不存在或已经结束', 404)
         return _turn_from_row(row)
 
+    async def renew_turn(self, turn_id: str, worker_id: str) -> bool | None:
+        async with session_scope() as db:
+            renewed = await db.scalar(
+                update(AgentTurnRow)
+                .where(
+                    AgentTurnRow.id == turn_id,
+                    AgentTurnRow.status == 'running',
+                    AgentTurnRow.worker_id == worker_id,
+                    AgentTurnRow.lease_expires_at > func.clock_timestamp(),
+                )
+                .values(lease_expires_at=func.clock_timestamp()
+                        + text(f"INTERVAL '{LEASE_SECONDS} seconds'"))
+                .returning(AgentTurnRow.id)
+            )
+            if renewed is not None:
+                return True
+            row = await db.scalar(select(AgentTurnRow).where(AgentTurnRow.id == turn_id))
+        if row is not None and row.status != 'running' and row.worker_id == worker_id:
+            return None
+        return False
+
     async def import_legacy(self, owner: str, payload: dict[str, Any]) -> AgentSession:
+        from app.services.agent_sessions.repository import _populate_legacy_turns, new_session_id
+
         import_key = str(payload['import_key'])
         async with get_session_factory()() as db:
             existing = await db.scalar(select(AgentSessionRow).where(

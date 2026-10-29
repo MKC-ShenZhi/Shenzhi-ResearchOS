@@ -6,10 +6,11 @@ import { NextRequest } from "next/server";
 import * as identity from "../../clients/backend/identity";
 import { forwardToBusinessBackend } from "../../clients/backend/forward";
 
-function request(requestId?: string, range?: string) {
+function request(requestId?: string, range?: string, idempotencyKey?: string) {
   const headers = new Headers();
   if (requestId) headers.set("X-Request-ID", requestId);
   if (range) headers.set("Range", range);
+  if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
   return new NextRequest("http://web.test/api/v1/health", {
     headers,
   });
@@ -32,6 +33,26 @@ test("BFF forwards and returns the same request ID", async (t) => {
 
   assert.equal(outgoingHeaders?.get("X-Request-ID"), "request-forward-1");
   assert.equal(response.headers.get("X-Request-ID"), "request-forward-1");
+});
+
+test("BFF forwards the idempotency key without treating it as a request ID", async (t) => {
+  t.mock.method(identity, "resolveBackendIdentity", async () => ({ kind: "anonymous" }));
+
+  let outgoingHeaders: Headers | undefined;
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    outgoingHeaders = new Headers(init.headers);
+    return new Response(null, { status: 204 });
+  });
+
+  const response = await forwardToBusinessBackend(
+    request("trace-request-1", undefined, "chat-operation-1"),
+    "http://backend.test",
+    ["chat", "sessions"],
+  );
+
+  assert.equal(outgoingHeaders?.get("Idempotency-Key"), "chat-operation-1");
+  assert.equal(outgoingHeaders?.get("X-Request-ID"), "trace-request-1");
+  assert.equal(response.headers.get("X-Request-ID"), "trace-request-1");
 });
 
 test("BFF generates a request ID for a missing incoming ID", async (t) => {

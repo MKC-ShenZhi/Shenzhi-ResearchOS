@@ -7,13 +7,15 @@ export async function readSseStream(
   url: string,
   options: {
     body?: unknown;
+    headers?: HeadersInit;
     signal?: AbortSignal;
     lastEventId?: string;
     onEvent: (event: SseEvent) => void;
     onRequestId?: (requestId: string | null) => void;
   },
 ): Promise<void> {
-  const headers = requestHeaders({ Accept: "text/event-stream" });
+  const headers = requestHeaders(options.headers);
+  headers.set("Accept", "text/event-stream");
   if (options.body !== undefined) headers.set("Content-Type", "application/json");
   if (options.lastEventId) headers.set("Last-Event-ID", options.lastEventId);
   const res = await fetch(url, {

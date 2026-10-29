@@ -231,10 +231,12 @@ export async function streamAgentSessionRun(
   sessionId: string,
   body: AgentRunInput,
   handlers: Parameters<typeof streamAgentRun>[1],
+  idempotencyKey: string,
   signal?: AbortSignal,
 ): Promise<void> {
   await streamAgentEndpoint(
     apiPath(`/agent/sessions/${encodeURIComponent(sessionId)}/run`), body, handlers, signal,
+    { "Idempotency-Key": idempotencyKey },
   );
 }
 
@@ -254,9 +256,11 @@ async function streamAgentEndpoint(
   body: unknown,
   handlers: Parameters<typeof streamAgentRun>[1],
   signal?: AbortSignal,
+  headers?: HeadersInit,
 ): Promise<void> {
   await readSseStream(url, {
     body,
+    headers,
     signal,
     onEvent: (event) => dispatchAgentEvent(event, handlers),
   });

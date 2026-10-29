@@ -2,6 +2,7 @@
 import asyncio
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 
@@ -27,6 +28,13 @@ class Message:
     stop_requested: bool = False
     stream_request_id: str | None = None
     stop_request_id: str | None = None
+    idempotency_owner: str | None = None
+    idempotency_scope: str | None = None
+    idempotency_key: str | None = None
+    idempotency_fingerprint: str | None = None
+    generation_claimed: bool = False
+    worker_id: str | None = None
+    lease_expires_at: datetime | None = None
 
     def emit(self, event: str, data: dict) -> None:
         self.events.append((event, data))

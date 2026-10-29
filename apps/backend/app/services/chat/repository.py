@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Protocol
 
 from app.core.errors import BusinessError
+from app.core.idempotency import ensure_same_request
+from app.core.worker_lease import current_worker_id
 from app.services.chat.entities import Message, Session
 
 __all__ = ['Message', 'Session', 'SessionRepository', 'MemorySessionRepository',
@@ -17,13 +19,24 @@ class SessionRepository(Protocol):
     is_durable: bool
 
     async def recover(self) -> None: ...
-    async def persist_message(self, message: Message) -> None: ...
+    async def persist_message(self, message: Message, worker_id: str | None = None) -> bool: ...
     async def create(self, owner: str, question: str, settings: dict) -> Session: ...
     async def get(self, session_id: str, owner: str) -> Session: ...
     async def session_for_message(self, message: Message) -> Session: ...
     async def message(self, message_id: str, owner: str) -> Message: ...
+    async def find_idempotent_message(self, owner: str, scope: str, key: str,
+                                      fingerprint: str) -> Message | None: ...
+    async def create_with_message(self, owner: str, question: str, settings: dict,
+                                  context: str, warnings: list[str], *, scope: str,
+                                  key: str, fingerprint: str) -> Message: ...
     async def add_message(self, session: Session, question: str, settings: dict,
-                          context: str = '', warnings: list[str] | None = None) -> Message: ...
+                          context: str = '', warnings: list[str] | None = None, *,
+                          idempotency_owner: str | None = None,
+                          idempotency_scope: str | None = None,
+                          idempotency_key: str | None = None,
+                          idempotency_fingerprint: str | None = None) -> Message: ...
+    async def claim_generation(self, message: Message, worker_id: str | None = None) -> bool: ...
+    async def renew_generation(self, message_id: str, worker_id: str) -> bool | None: ...
     async def list(self, owner: str) -> list[dict]: ...
     async def touch_owner(self, owner: str) -> None: ...
     async def update(self, session_id: str, owner: str, *, title: str | None = None,
@@ -50,12 +63,13 @@ class MemorySessionRepository:
         self.uploads: dict[str, dict] = {}
         self.max_sessions = max_sessions
         self.ttl = ttl
+        self._lock = asyncio.Lock()
 
     async def recover(self) -> None:
         return None
 
-    async def persist_message(self, message: Message) -> None:
-        return None
+    async def persist_message(self, message: Message, worker_id: str | None = None) -> bool:
+        return True
 
     def _prune(self) -> None:
         cutoff = time.time() - self.ttl
@@ -91,18 +105,82 @@ class MemorySessionRepository:
         await self.get(message.session_id, owner)
         return message
 
+    def _find_idempotent_message(self, owner: str, scope: str, key: str,
+                                 fingerprint: str) -> Message | None:
+        for message in self.messages.values():
+            session = self.sessions.get(message.session_id)
+            if (session is not None and session.owner == owner
+                    and message.idempotency_scope == scope
+                    and message.idempotency_key == key):
+                ensure_same_request(message.idempotency_fingerprint, fingerprint)
+                return message
+        return None
+
+    async def find_idempotent_message(self, owner: str, scope: str, key: str,
+                                      fingerprint: str) -> Message | None:
+        return self._find_idempotent_message(owner, scope, key, fingerprint)
+
+    async def create_with_message(self, owner: str, question: str, settings: dict,
+                                  context: str, warnings: list[str], *, scope: str,
+                                  key: str, fingerprint: str) -> Message:
+        async with self._lock:
+            existing = self._find_idempotent_message(owner, scope, key, fingerprint)
+            if existing is not None:
+                return existing
+            self._prune()
+            if len(self.sessions) >= self.max_sessions:
+                raise BusinessError(20009, '临时会话容量已满，请删除旧会话', 429)
+            session = Session(str(uuid.uuid4()), owner, question[:50], dict(settings))
+            message = Message(
+                str(uuid.uuid4()), session.id, question, dict(settings), context, list(warnings),
+                idempotency_owner=owner, idempotency_scope=scope, idempotency_key=key,
+                idempotency_fingerprint=fingerprint,
+            )
+            session.messages.append(message)
+            self.sessions[session.id] = session
+            self.messages[message.id] = message
+            return message
+
     async def add_message(self, session: Session, question: str, settings: dict,
-                          context: str = '', warnings: list[str] | None = None) -> Message:
-        if any(item.status == 'streaming' for item in session.messages):
-            raise BusinessError(20009, '请先停止当前生成', 409)
-        if len(session.messages) >= 100:
-            raise BusinessError(20009, '单个临时会话最多 100 轮，请新建会话', 429)
-        message = Message(str(uuid.uuid4()), session.id, question, dict(settings), context, warnings or [])
-        session.messages.append(message)
-        session.settings = dict(settings)
-        session.updated_at = time.time()
-        self.messages[message.id] = message
-        return message
+                          context: str = '', warnings: list[str] | None = None, *,
+                          idempotency_owner: str | None = None,
+                          idempotency_scope: str | None = None,
+                          idempotency_key: str | None = None,
+                          idempotency_fingerprint: str | None = None) -> Message:
+        async with self._lock:
+            if idempotency_key is not None:
+                existing = self._find_idempotent_message(
+                    idempotency_owner or session.owner, idempotency_scope or '',
+                    idempotency_key, idempotency_fingerprint or '',
+                )
+                if existing is not None:
+                    return existing
+            if any(item.status == 'streaming' for item in session.messages):
+                raise BusinessError(20009, '请先停止当前生成', 409)
+            if len(session.messages) >= 100:
+                raise BusinessError(20009, '单个临时会话最多 100 轮，请新建会话', 429)
+            message = Message(
+                str(uuid.uuid4()), session.id, question, dict(settings), context, warnings or [],
+                idempotency_owner=idempotency_owner, idempotency_scope=idempotency_scope,
+                idempotency_key=idempotency_key,
+                idempotency_fingerprint=idempotency_fingerprint,
+            )
+            session.messages.append(message)
+            session.settings = dict(settings)
+            session.updated_at = time.time()
+            self.messages[message.id] = message
+            return message
+
+    async def claim_generation(self, message: Message, worker_id: str | None = None) -> bool:
+        if message.status != 'streaming' or message.generation_claimed:
+            return False
+        message.generation_claimed = True
+        message.worker_id = worker_id or current_worker_id()
+        return True
+
+    async def renew_generation(self, message_id: str, worker_id: str) -> bool:
+        message = self.messages.get(message_id)
+        return bool(message and message.status == 'streaming' and message.worker_id == worker_id)
 
     async def list(self, owner: str) -> list[dict]:
         self._prune()

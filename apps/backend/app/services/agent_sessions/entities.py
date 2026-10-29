@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 
@@ -28,6 +29,10 @@ class AgentTurn:
     transcript: list[dict[str, Any]] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     completed_at: float | None = None
+    idempotency_key: str | None = None
+    idempotency_fingerprint: str | None = None
+    worker_id: str | None = None
+    lease_expires_at: datetime | None = None
 
     def public(self) -> dict[str, Any]:
         return {

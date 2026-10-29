@@ -127,6 +127,14 @@ test("historical streaming restores as stopped so continuation is explicit", () 
   assert.equal(turns[1]?.status, "stopped");
 });
 
+test("remote active Chat stream retries reconnect to its persisted message", () => {
+  const hook = readFileSync("features/chat/hooks/use-chat-session.ts", "utf8");
+
+  assert.match(hook, /error instanceof ApiError && error\.status === 409/);
+  assert.match(hook, /if \(last\.resumeFromStreaming\)/);
+  assert.match(hook, /runStream\(generation, last\.messageId, last\.localId/);
+});
+
 test("only a missing or expired session is classified as stale", () => {
   const errors = readFileSync("features/chat/services/errors.ts", "utf8");
   assert.match(errors, /export function isMissingSessionError/);

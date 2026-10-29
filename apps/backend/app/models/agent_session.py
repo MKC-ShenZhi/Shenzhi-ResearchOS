@@ -58,6 +58,10 @@ class AgentTurnRow(Base):
     stopped: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
     stop_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idempotency_fingerprint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    worker_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     usage: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     transcript: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
@@ -73,4 +77,6 @@ class AgentTurnRow(Base):
         Index('idx_agent_turns_session_created', 'session_id', 'created_at', 'id'),
         Index('uq_agent_turns_active', 'session_id', unique=True,
               postgresql_where=text("status = 'running'")),
+        Index('uq_agent_turns_idempotency', 'session_id', 'idempotency_key', unique=True,
+              postgresql_where=text('idempotency_key IS NOT NULL')),
     )
