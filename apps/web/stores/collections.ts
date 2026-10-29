@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { apiJson, ApiError } from "@/clients/backend/http";
+import { apiJson, ApiError, expectedUserHeaders } from "@/clients/backend/http";
 import { invalidateKnowledgeOverviewCache } from "@/features/knowledge/lib/overview-cache";
 
 export interface CollectionFolder {
@@ -50,10 +50,10 @@ export const useCollections = create<CollectionState>((set, get) => ({
     };
   }),
   loadFolders: async () => {
-    const generation = get().generation;
+    const { generation, identityKey } = get();
     set({ loading: true });
     try {
-      const response = await apiJson<{ folders: CollectionFolder[] }>("/collections/folders");
+      const response = await apiJson<{ folders: CollectionFolder[] }>("/collections/folders", { headers: expectedUserHeaders(identityKey ?? "") });
       if (get().generation === generation) set({ folders: response.folders });
     } catch (error) {
       // 未登录：固定展示三个默认文件夹占位，使展示与上次登录状态无关；
@@ -68,9 +68,10 @@ export const useCollections = create<CollectionState>((set, get) => ({
     }
   },
   createFolder: async (name) => {
-    const generation = get().generation;
+    const { generation, identityKey } = get();
     const folder = await apiJson<CollectionFolder>("/collections/folders", {
       method: "POST",
+      headers: expectedUserHeaders(identityKey ?? ""),
       body: JSON.stringify({ name }),
     });
     if (get().generation !== generation) return folder;
@@ -79,9 +80,10 @@ export const useCollections = create<CollectionState>((set, get) => ({
     return folder;
   },
   renameFolder: async (folderId, name) => {
-    const generation = get().generation;
+    const { generation, identityKey } = get();
     const folder = await apiJson<CollectionFolder>(`/collections/folders/${folderId}`, {
       method: "PATCH",
+      headers: expectedUserHeaders(identityKey ?? ""),
       body: JSON.stringify({ name }),
     });
     if (get().generation !== generation) return folder;
@@ -90,8 +92,8 @@ export const useCollections = create<CollectionState>((set, get) => ({
     return folder;
   },
   deleteFolder: async (folderId) => {
-    const generation = get().generation;
-    await apiJson<unknown>(`/collections/folders/${folderId}`, { method: "DELETE" });
+    const { generation, identityKey } = get();
+    await apiJson<unknown>(`/collections/folders/${folderId}`, { method: "DELETE", headers: expectedUserHeaders(identityKey ?? "") });
     if (get().generation !== generation) return;
     set((state) => ({
       folders: state.folders.filter((item) => item.id !== folderId),
@@ -99,9 +101,10 @@ export const useCollections = create<CollectionState>((set, get) => ({
     invalidateKnowledgeOverviewCache();
   },
   updatePaperFolders: async (paperId, folderIds) => {
-    const generation = get().generation;
+    const { generation, identityKey } = get();
     await apiJson<unknown>(`/papers/${encodeURIComponent(paperId)}/collections`, {
       method: "PUT",
+      headers: expectedUserHeaders(identityKey ?? ""),
       body: JSON.stringify({ folder_ids: folderIds }),
     });
     if (get().generation !== generation) return;

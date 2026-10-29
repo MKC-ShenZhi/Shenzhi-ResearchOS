@@ -19,7 +19,7 @@ export function useTopicInteraction(topicId: string, enabled = true) {
     retry: false,
   });
   return {
-    interaction: query.data ?? null,
+    interaction: isSessionPending ? null : query.data ?? null,
     isResolving: isSessionPending || (Boolean(topicId) && query.isPending),
     isError: query.isError,
     refetch: query.refetch,

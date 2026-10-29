@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useRefreshPaperInteraction } from "@/features/knowledge/interactions/use-refresh-paper-interaction";
 import { Heart, History, LoaderCircle, Network, Square } from "lucide-react";
 import { ApiError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -27,8 +27,8 @@ export function LibraryPanel({
   selectedFolderId: number | null;
   onFolderClick: (folderId: number) => void;
 }) {
-  const { folders, loading, loadFolders, createFolder, renameFolder, deleteFolder } = useCollections();
-  const queryClient = useQueryClient();
+  const { folders: storedFolders, loading, loadFolders, createFolder, renameFolder, deleteFolder } = useCollections();
+  const refreshInteractions = useRefreshPaperInteraction();
   const identityKey = useCollections((state) => state.identityKey);
   const [dialog, setDialog] = useState<"create" | "rename" | "delete" | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -36,6 +36,7 @@ export function LibraryPanel({
   const [error, setError] = useState("");
   const { session, isPending } = useAuth();
   const sessionUserId = session?.user?.id ?? null;
+  const folders = !isPending && identityKey === sessionUserId ? storedFolders : [];
 
   useEffect(() => {
     if (isPending || identityKey !== sessionUserId) return;
@@ -51,7 +52,7 @@ export function LibraryPanel({
       try {
         await deleteFolder(editingId);
         // Deleting a folder can remove the last collection of several papers.
-        void queryClient.invalidateQueries({ queryKey: ["paper-interaction"] });
+        void refreshInteractions();
         if (selectedFolderId === editingId) onFolderClick(folders.find((folder) => folder.id !== editingId)?.id ?? 0);
         setDialog(null);
       }

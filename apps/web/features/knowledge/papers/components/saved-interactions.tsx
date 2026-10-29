@@ -5,11 +5,11 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Search, Shapes } from "lucide-react";
 import { fetchMyCollectedPapers, fetchMyLikes, fetchMyTopicFollows } from "@/clients/backend/interactions";
-import type { LikedPaperItem, LikedPaperListResponse, TopicFollowListResponse } from "@/clients/backend/interactions";
+import type { LikedPaperItem } from "@/clients/backend/interactions";
 import { ApiError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getKnowledgeClient } from "@/clients/knowledge";
-import type { CollectionPaperItem, CollectionPaperListResponse, KnowledgeTopic } from "@/clients/knowledge";
+import type { CollectionPaperItem, KnowledgeTopic } from "@/clients/knowledge";
 import { usePaperLike } from "@/features/knowledge/interactions/use-paper-like";
 import { useRefreshPaperInteraction } from "@/features/knowledge/interactions/use-refresh-paper-interaction";
 import { useTopicFollow } from "@/features/knowledge/interactions/use-topic-follow";
@@ -32,19 +32,19 @@ export function SavedInteractions({ userId }: { userId: string | null }) {
   const enabled = Boolean(userId);
   const likes = useQuery({
     queryKey: ["my-likes", userId, pages.likes],
-    queryFn: () => fetchMyLikes(pages.likes, PAGE_SIZE),
+    queryFn: () => fetchMyLikes(userId!, pages.likes, PAGE_SIZE),
     enabled,
     retry: false,
   });
   const collections = useQuery({
     queryKey: ["my-collected-papers", userId, pages.collections],
-    queryFn: () => fetchMyCollectedPapers(pages.collections, PAGE_SIZE),
+    queryFn: () => fetchMyCollectedPapers(userId!, pages.collections, PAGE_SIZE),
     enabled,
     retry: false,
   });
   const follows = useQuery({
     queryKey: ["my-topic-follows", userId],
-    queryFn: fetchMyTopicFollows,
+    queryFn: () => fetchMyTopicFollows(userId!),
     enabled,
     retry: false,
   });
@@ -124,22 +124,12 @@ function PaperRow({ paper, liked, userId, onRemoved }: {
     try {
       if (liked) {
         await toggle(true);
-        queryClient.setQueriesData<LikedPaperListResponse>({ queryKey: ["my-likes", userId] }, (current) => current && ({
-          ...current,
-          items: current.items.filter((item) => item.paper_id !== paper.paper_id),
-          total: Math.max(0, current.total - 1),
-        }));
         onRemoved();
         await queryClient.invalidateQueries({ queryKey: ["my-likes", userId] });
       } else {
         setCollectionSaving(true);
         await updatePaperFolders(paper.paper_id, []);
         await refreshInteraction();
-        queryClient.setQueriesData<CollectionPaperListResponse>({ queryKey: ["my-collected-papers", userId] }, (current) => current && ({
-          ...current,
-          items: current.items.filter((item) => item.paper_id !== paper.paper_id),
-          total: Math.max(0, current.total - 1),
-        }));
         onRemoved();
         await queryClient.invalidateQueries({ queryKey: ["my-collected-papers", userId] });
       }
@@ -173,11 +163,6 @@ function TopicRow({ topicId, topic, userId }: { topicId: string; topic: Knowledg
     setError("");
     try {
       await toggle(true);
-      queryClient.setQueryData<TopicFollowListResponse>(["my-topic-follows", userId], (current) => current && ({
-        ...current,
-        items: current.items.filter((item) => item.topic_id !== topicId),
-        total: Math.max(0, current.total - 1),
-      }));
       await queryClient.invalidateQueries({ queryKey: ["my-topic-follows", userId] });
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) openLogin({ notice: "登录状态已失效，请重新登录" });

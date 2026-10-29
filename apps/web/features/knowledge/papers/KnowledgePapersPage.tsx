@@ -15,7 +15,9 @@ export function KnowledgePapersPage() {
   const [historyActive, setHistoryActive] = useState(false);
   const [interactionsActive, setInteractionsActive] = useState(false);
   const [requestedFolderId, setRequestedFolderId] = useState<number | null>(null);
-  const folders = useCollections((state) => state.folders);
+  const collectionState = useCollections();
+  const folders = !isPending && collectionState.identityKey === (session?.user?.id ?? null)
+    ? collectionState.folders : [];
   const selectedFolderId = folders.some((folder) => folder.id === requestedFolderId)
     ? requestedFolderId : folders[0]?.id ?? null;
 
@@ -29,7 +31,7 @@ export function KnowledgePapersPage() {
     <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col items-stretch lg:flex-row lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden">
       <LibraryPanel historyActive={historyActive} interactionsActive={interactionsActive} selectedFolderId={selectedFolderId} onFolderClick={selectFolder} onHistoryClick={() => { setHistoryActive(true); setInteractionsActive(false); }} onInteractionsClick={() => { setInteractionsActive(true); setHistoryActive(false); }} />
       {interactionsActive
-        ? <SavedInteractions key={identityKey} userId={session?.user?.id ?? null} />
+        ? <SavedInteractions key={identityKey} userId={isPending ? null : session?.user?.id ?? null} />
         : historyActive
         ? <ReadingHistory key={identityKey} />
         : <LibraryTable key={`${identityKey}:${selectedFolderId ?? "empty"}`} folderId={selectedFolderId} />}

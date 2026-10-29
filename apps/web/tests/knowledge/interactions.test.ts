@@ -149,6 +149,7 @@ const FOLLOW_BUTTON = readFileSync(
   "utf8",
 );
 const PREFERENCES = readFileSync("stores/user-preferences.ts", "utf8");
+const CACHE = readFileSync("features/knowledge/interactions/cache.ts", "utf8");
 const SYNC = readFileSync("providers/interaction-sync.tsx", "utf8");
 
 test("cards no longer read counts or personal state from browser storage", () => {
@@ -175,7 +176,7 @@ test("anonymous clicks open the existing login dialog instead of writing", () =>
   }
   // 收藏在登录成功后仍需用户确认，不自动提交。
   assert.doesNotMatch(PICKER, /onSuccess: \(\) => void save/);
-  assert.match(PICKER, /onSuccess: \(\) => setOpen\(true\)/);
+  assert.match(PICKER, /onSuccess: \(\) => changeOpen\(true\)/);
 });
 
 test("local topic/like/bookmark truth is removed and migrated away", () => {
@@ -188,7 +189,7 @@ test("local topic/like/bookmark truth is removed and migrated away", () => {
 });
 
 test("account switches drop other identities' personal interaction cache", () => {
-  assert.match(SYNC, /removeQueries/);
-  assert.match(SYNC, /owner !== "" && owner !== userId/);
+  assert.match(CACHE, /removeQueries/);
+  assert.match(CACHE, /owner !== "" && owner !== userId/);
   assert.match(SYNC, /BroadcastChannel/);
 });

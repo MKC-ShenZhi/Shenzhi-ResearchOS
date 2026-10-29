@@ -1,4 +1,4 @@
-import { apiJson } from "./http";
+import { apiJson, expectedUserHeaders } from "./http";
 import type { CollectionPaperListResponse, KnowledgePaperDetail } from "@/clients/knowledge";
 
 /**
@@ -237,42 +237,42 @@ export function fetchTopicInteraction(identityKey: string, topicId: string): Pro
   });
 }
 
-export async function likePaper(paperId: string): Promise<LikeState> {
-  const dto = await apiJson<LikeStateDto>(`/papers/${encodeURIComponent(paperId)}/like`, { method: "PUT" });
+export async function likePaper(paperId: string, userId: string): Promise<LikeState> {
+  const dto = await apiJson<LikeStateDto>(`/papers/${encodeURIComponent(paperId)}/like`, { method: "PUT", headers: expectedUserHeaders(userId) });
   return { paperId: dto.paper_id, liked: dto.liked, likeCount: dto.like_count };
 }
 
-export async function unlikePaper(paperId: string): Promise<LikeState> {
-  const dto = await apiJson<LikeStateDto>(`/papers/${encodeURIComponent(paperId)}/like`, { method: "DELETE" });
+export async function unlikePaper(paperId: string, userId: string): Promise<LikeState> {
+  const dto = await apiJson<LikeStateDto>(`/papers/${encodeURIComponent(paperId)}/like`, { method: "DELETE", headers: expectedUserHeaders(userId) });
   return { paperId: dto.paper_id, liked: dto.liked, likeCount: dto.like_count };
 }
 
-export async function followTopic(topicId: string): Promise<TopicFollowState> {
+export async function followTopic(topicId: string, userId: string): Promise<TopicFollowState> {
   const dto = await apiJson<TopicFollowStateDto>(
     `/topic-follows/${encodeURIComponent(topicId)}`,
-    { method: "PUT" },
+    { method: "PUT", headers: expectedUserHeaders(userId) },
   );
   return { topicId: dto.topic_id, isFollowing: dto.is_following, followerCount: dto.follower_count };
 }
 
-export async function unfollowTopic(topicId: string): Promise<TopicFollowState> {
+export async function unfollowTopic(topicId: string, userId: string): Promise<TopicFollowState> {
   const dto = await apiJson<TopicFollowStateDto>(
     `/topic-follows/${encodeURIComponent(topicId)}`,
-    { method: "DELETE" },
+    { method: "DELETE", headers: expectedUserHeaders(userId) },
   );
   return { topicId: dto.topic_id, isFollowing: dto.is_following, followerCount: dto.follower_count };
 }
 
-export function fetchMyLikes(page = 1, pageSize = 20): Promise<LikedPaperListResponse> {
-  return apiJson<LikedPaperListResponse>(`/likes?page=${page}&page_size=${pageSize}`);
+export function fetchMyLikes(userId: string, page = 1, pageSize = 20): Promise<LikedPaperListResponse> {
+  return apiJson<LikedPaperListResponse>(`/likes?page=${page}&page_size=${pageSize}`, { headers: expectedUserHeaders(userId) });
 }
 
-export function fetchMyCollectedPapers(page = 1, pageSize = 20): Promise<CollectionPaperListResponse> {
-  return apiJson<CollectionPaperListResponse>(`/collections/papers?page=${page}&page_size=${pageSize}`);
+export function fetchMyCollectedPapers(userId: string, page = 1, pageSize = 20): Promise<CollectionPaperListResponse> {
+  return apiJson<CollectionPaperListResponse>(`/collections/papers?page=${page}&page_size=${pageSize}`, { headers: expectedUserHeaders(userId) });
 }
 
-export function fetchMyTopicFollows(): Promise<TopicFollowListResponse> {
-  return apiJson<TopicFollowListResponse>("/topic-follows");
+export function fetchMyTopicFollows(userId: string): Promise<TopicFollowListResponse> {
+  return apiJson<TopicFollowListResponse>("/topic-follows", { headers: expectedUserHeaders(userId) });
 }
 
 /** 通知其他标签页/其他卡片同一篇论文的最新状态。 */
@@ -293,4 +293,11 @@ export function publishTopicInteraction(
   if (typeof BroadcastChannel === "undefined") return;
   topicChannel ??= new BroadcastChannel(TOPIC_INTERACTION_CHANNEL);
   topicChannel.postMessage({ userId, ...update });
+}
+
+/** Invalidate collection membership and lists in other tabs, including folder deletion. */
+export function publishCollectionChange(userId: string, paperId?: string) {
+  if (typeof BroadcastChannel === "undefined") return;
+  paperChannel ??= new BroadcastChannel(PAPER_INTERACTION_CHANNEL);
+  paperChannel.postMessage({ userId, paperId, collectionsChanged: true });
 }

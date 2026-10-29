@@ -1,39 +1,30 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  followTopic,
-  publishTopicInteraction,
-  topicInteractionQueryKey,
-  unfollowTopic,
-  type TopicFollowState,
-  type TopicInteraction,
-} from "@/clients/backend/interactions";
+import { followTopic, publishTopicInteraction, unfollowTopic } from "@/clients/backend/interactions";
+import { useCollections } from "@/stores/collections";
+import { refreshTopicQueries } from "./cache";
 import { useInteractionIdentity } from "./use-interaction-identity";
 
-/** 关注/取消关注同样只写服务端结果，失败时界面保持上一次真实状态。 */
 export function useTopicFollow(topicId: string) {
-  const { identityKey, isAuthenticated } = useInteractionIdentity();
+  const { identityKey } = useInteractionIdentity();
   const queryClient = useQueryClient();
-  const mutation = useMutation<TopicFollowState, unknown, boolean>({
-    mutationFn: (following) => (following ? unfollowTopic(topicId) : followTopic(topicId)),
-    onSuccess: (state) => {
-      if (!isAuthenticated || !identityKey) return;
-      queryClient.setQueryData<TopicInteraction | undefined>(
-        topicInteractionQueryKey(identityKey, topicId),
-        (current) => current
-          ? { ...current, isFollowing: state.isFollowing, followerCount: state.followerCount }
-          : current,
-      );
-      publishTopicInteraction(identityKey, {
-        topicId,
-        isFollowing: state.isFollowing,
-        followerCount: state.followerCount,
-      });
+  const mutation = useMutation({
+    mutationFn: ({ following, userId }: { following: boolean; userId: string; generation: number }) =>
+      following ? unfollowTopic(topicId, userId) : followTopic(topicId, userId),
+    onSuccess: async (state, { userId, generation }) => {
+      const current = useCollections.getState();
+      if (current.identityKey !== userId || current.generation !== generation) return;
+      await refreshTopicQueries(queryClient, userId, topicId);
+      publishTopicInteraction(userId, state);
     },
   });
   return {
-    toggle: (currentlyFollowing: boolean) => mutation.mutateAsync(currentlyFollowing),
+    toggle: (following: boolean) => {
+      const { identityKey: current, generation } = useCollections.getState();
+      if (!identityKey || current !== identityKey) return Promise.reject(new Error("账号已切换"));
+      return mutation.mutateAsync({ following, userId: identityKey, generation });
+    },
     isSaving: mutation.isPending,
   };
 }

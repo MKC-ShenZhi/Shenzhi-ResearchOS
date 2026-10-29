@@ -9,28 +9,52 @@ import { usePaperInteraction } from "@/features/knowledge/interactions/use-paper
 import { useRefreshPaperInteraction } from "@/features/knowledge/interactions/use-refresh-paper-interaction";
 import { useCollections } from "@/stores/collections";
 
-export function CollectionPicker({
-  paperId,
-  className = "",
-  iconOnly = false,
-  onOpenChange,
-}: {
+export function CollectionPicker(props: {
   paperId: string;
   className?: string;
   iconOnly?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
+  const { session, isPending } = useAuth();
+  const identity = isPending ? "pending" : session?.user?.id ?? "anonymous";
   const [open, setOpen] = useState(false);
+  return <CollectionPickerContent key={`${identity}:${props.paperId}`} {...props} open={!isPending && open} setOpen={setOpen} />;
+}
+
+function CollectionPickerContent({
+  paperId,
+  className = "",
+  iconOnly = false,
+  onOpenChange,
+  open,
+  setOpen,
+}: {
+  paperId: string;
+  className?: string;
+  iconOnly?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  open: boolean;
+  setOpen: (open: boolean) => void;
+}) {
   const [selected, setSelected] = useState<number[]>([]);
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [ready, setReady] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const { session, isPending: isAuthPending, openLogin } = useAuth();
   const { interaction, refetch: refetchInteraction } = usePaperInteraction(paperId);
   const refreshInteraction = useRefreshPaperInteraction(paperId);
-  const { folders, loadFolders, createFolder, updatePaperFolders } = useCollections();
+  const collections = useCollections();
+  const { loadFolders, createFolder, updatePaperFolders } = collections;
+  const folders = collections.identityKey === session?.user?.id ? collections.folders : [];
   const checked = interaction?.folderIds ?? [];
+
+  const changeOpen = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen);
+    setReady(false);
+    onOpenChange?.(nextOpen);
+  }, [onOpenChange, setOpen]);
 
   const promptLogin = useCallback(() => {
     changeOpen(false);
@@ -40,24 +64,28 @@ export function CollectionPicker({
       // 登录成功只把论文上下文带回选择器，收藏仍需用户确认。
       onSuccess: () => changeOpen(true),
     });
-  }, [openLogin, onOpenChange]);
-  function changeOpen(nextOpen: boolean) {
-    setOpen(nextOpen);
-    onOpenChange?.(nextOpen);
-  }
+  }, [openLogin, changeOpen]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || isAuthPending || !session || collections.identityKey !== session.user.id) return;
+    let cancelled = false;
     void Promise.all([loadFolders(), refetchInteraction()])
-      .then(([, result]) => setSelected(result.data?.folderIds ?? []))
+      .then(([, result]) => {
+        if (cancelled) return;
+        if (result.isError || !result.data?.folderIds) throw new Error("收藏信息加载失败");
+        setSelected(result.data.folderIds);
+        setReady(true);
+      })
       .catch((error) => {
+        if (cancelled) return;
         if (error instanceof ApiError && error.status === 401) {
           promptLogin();
           return;
         }
         setMessage("收藏信息加载失败");
       });
-  }, [loadFolders, open, promptLogin, refetchInteraction]);
+    return () => { cancelled = true; };
+  }, [collections.identityKey, isAuthPending, loadFolders, open, promptLogin, refetchInteraction, session]);
 
   useEffect(() => {
     if (!open) return;
@@ -68,7 +96,7 @@ export function CollectionPicker({
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [onOpenChange, open]);
+  }, [changeOpen, open]);
 
   async function addFolder() {
     const value = name.trim();
@@ -85,6 +113,7 @@ export function CollectionPicker({
   }
 
   async function save() {
+    if (!ready || saving || isAuthPending || !session) return;
     setSaving(true);
     setMessage("");
     try {
@@ -165,7 +194,7 @@ export function CollectionPicker({
           {message && <p className="mt-2 text-xs text-danger">{message}</p>}
           <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
             <Button type="button" variant="ghost" size="sm" onClick={() => changeOpen(false)}>取消</Button>
-            <Button type="button" size="sm" onClick={() => void save()} disabled={saving}>
+            <Button type="button" size="sm" onClick={() => void save()} disabled={saving || !ready || isAuthPending}>
               {saving && <LoaderCircle className="size-3.5 animate-spin" />}
               确认
             </Button>
