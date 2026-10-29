@@ -44,7 +44,7 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 3. `/agents?session=<id>&launch=<id>` 先向后端恢复 Session，然后消费一次 launch，调用 `POST /api/v1/agent/sessions/{id}/run`。首轮的 model / mode / attachments / skills 以显式入参传入，不依赖 React state flush。
 4. Backend 校验 owner，从已存最新 transcript 恢复 runtime history，预留 running Turn，再开始 SSE。
 5. 运行期间 SSE 实时传输 delta / tool / steer / report 等事件。正常结束、`ask_user`、失败、超时和手动停止都在终态时一次性写入 Turn。
-6. SSE 连接在 RunResult 产生前断开时，桥接层会把已可见的正文和 timeline 作为 `connection_closed` 停止轮次保存。PostgreSQL 中每个新 Turn 在创建时记录进程级 Worker ID 和五分钟租约，运行时每三十秒续租；启动恢复、会话详情读取、同键重放和新轮创建只将租约已过期的 `running` Turn 标记为 `failed` / `backend_restart`。租约续期、终态写入和恢复都以状态、Worker ID 与数据库时钟为条件，因此失去租约的 Worker 不能覆盖恢复后的终态。
+6. SSE 连接在 RunResult 产生前断开时，桥接层会把已可见的正文和 timeline 作为 `connection_closed` 停止轮次保存。PostgreSQL 中每个新 Turn 在创建时记录进程级 Worker ID 和五分钟租约，运行时每三十秒续租；启动恢复、会话详情读取、同键重放和新轮创建只将租约已过期的 `running` Turn 标记为 `failed` / `backend_restart`。租约续期、终态写入和恢复都以状态、Worker ID 与数据库时钟为条件，因此失去租约的 Worker 不能覆盖恢复后的终态。续租遇到瞬时数据库错误时在租约到期前重试；进程正常关闭时立即把本 Worker 的 running Turn 标记为 `backend_restart`，会话无需等待租约到期即可重新发送；进程异常退出时最长等待一个租约周期。
 7. `LiveRun` 与 SSE 事件缓冲仍是进程内状态。相同操作落到没有该 `LiveRun` 的进程时，运行中的重复 POST 返回 409，GET 续接和远端 stop 返回 404；前端不会无限自动重试，详情读取会按租约回收过期任务，远端任务仍在运行时提示稍后重新打开，完成后可从持久化 Turn 读取结果。跨 Worker 实时事件续传与远程取消尚未实现。迁移前已有的 running Turn 会获得十分钟过渡租约，避免升级时立即误恢复；过渡期后仍未完成的任务会在启动或后续访问时被恢复。Memory Repository 仍只提供单进程行为。
 
 ## API

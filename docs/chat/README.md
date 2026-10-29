@@ -166,7 +166,7 @@ Web 仅配置 `BUSINESS_BACKEND_URL` 和 `BACKEND_BFF_SECRET`。模型/搜索 Ke
 ## 临时 Session 与 Auth
 
 - `MemorySessionRepository`：单进程 / **一个 worker**；最多 500 会话、500 已解析附件、每会话 100 轮；24 小时过期，访问列表/创建时惰性清理。未配置 `CHAT_DATABASE_URL` 时使用；重启丢失，API 返回 `ephemeral: true`，不具备 durable anonymous cleanup。
-- 配置 `CHAT_DATABASE_URL` 后启用 PostgreSQL 持久化（见 `PERSISTENCE-PLAN.md`）：会话与消息跨重启保留，`ephemeral: false`。message 唯一索引协调相同操作并发，数据库条件更新只允许一个 worker 启动生成；每个活动生成保存进程级 Worker ID 和五分钟租约，每三十秒续租。启动恢复、会话/消息详情读取、同键重放和续问创建只处理租约已过期的 `streaming` message，终态写入还会校验 Worker 所有权与租约，过期或已恢复的旧 worker 不能覆盖结果。SSE 事件缓冲仍绑定单 worker，其他 worker 在生成期间的流读取和 stop 请求会收到 409，不能加入该流或远程取消任务；前端不自动轮询，用户可在远端任务完成后显式重新读取同一消息的持久化结果。跨 Worker 实时事件续传尚未实现。迁移前已有的 `streaming` message 获得十分钟过渡租约。迁移：`cd apps/backend && uv run alembic -c alembic.ini upgrade head`。
+- 配置 `CHAT_DATABASE_URL` 后启用 PostgreSQL 持久化（见 `PERSISTENCE-PLAN.md`）：会话与消息跨重启保留，`ephemeral: false`。message 唯一索引协调相同操作并发，数据库条件更新只允许一个 worker 启动生成；新建或续接的 message 带五分钟认领截止时间，从未开始流式的 message 到期后按租约恢复为 `failed`，不会永久阻塞会话。每个活动生成保存进程级 Worker ID 和五分钟租约，每三十秒续租；续租遇到瞬时数据库错误时在租约到期前重试。启动恢复、会话/消息详情读取、同键重放和续问创建只处理租约已过期的 `streaming` message，终态写入还会校验 Worker 所有权与租约，过期或已恢复的旧 worker 不能覆盖结果。只有正在本 worker 生成的 message 使用内存对象，其余读取以数据库为准。SSE 事件缓冲仍绑定单 worker：其他 worker 在生成期间的流读取返回 409，不能加入该流；没有本地缓冲的 worker 收到其他 worker 签发的游标时从头重放（运行中则由其认领生成，已结束则重放持久化终态）。stop 落在非生成 worker 时，等待所属 worker 在 SSE 断开后落库终态（最多 5 秒）再确认成功，超时才返回 409。跨 Worker 实时事件续传尚未实现。迁移前已有的 `streaming` message 标记为遗留 worker 已认领并获得十分钟过渡租约。迁移：`cd apps/backend && uv run alembic -c alembic.ini upgrade head`。
 - 未配置 PostgreSQL 时，幂等键只在当前内存仓储和进程生命周期内有效；进程重启不保留会话、键或结果。
 - BFF 继续使用 dev 的 Better Auth 获取用户身份；不改登录、注册、邮箱验证、OAuth、PostgreSQL schema。
 - 登录身份变化时 Chat 工作区按身份重新挂载，侧栏会先清除旧身份的历史快照与选择，再重新请求当前身份的会话列表；无需整页刷新。
