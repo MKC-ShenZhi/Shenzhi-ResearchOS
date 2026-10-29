@@ -4,6 +4,9 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Network, Users } from "lucide-react";
 import type { KnowledgePaperHit } from "@/clients/knowledge";
+import { useAuth } from "@/components/auth/auth-provider";
+import { recordPaperBehavior } from "@/clients/backend/behavior";
+import { ExpandableAbstract } from "@/components/common/expandable-abstract";
 import { PaperThumbnail } from "@/components/common/paper-thumbnail";
 import { PAPER_CARD_INTERACTION_CLASS, usePaperCardNavigation } from "@/components/common/use-paper-card-navigation";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +30,7 @@ export function KnowledgeResultCard({
   hit,
   index,
   returnTo,
+  queryId,
   historyMode = false,
   lastViewedAt,
   onNavigate,
@@ -34,14 +38,23 @@ export function KnowledgeResultCard({
   hit: KnowledgePaperHit;
   index: number;
   returnTo: string;
+  queryId?: string;
   historyMode?: boolean;
   lastViewedAt?: string;
   onNavigate?: () => void;
 }) {
   const authors = hit.authors.length ? hit.authors.join(" · ") : "未知作者";
+  const { session } = useAuth();
+  const userId = session?.user.id ?? "";
+  const trackSearchClick = () => {
+    if (userId && returnTo.startsWith("/knowledge/search") && !historyMode) {
+      recordPaperBehavior({ userId, eventType: "search_result_click", paperId: hit.id, source: "search", rank: index + 1, queryId });
+    }
+    onNavigate?.();
+  };
   const status = usePaperReadStatus(hit.id);
   const detailHref = paperHref(hit.id, { mode: "create", source: returnTo });
-  const cardNavigation = usePaperCardNavigation(detailHref, hit.title, onNavigate);
+  const cardNavigation = usePaperCardNavigation(detailHref, hit.title, trackSearchClick);
 
   return (
     <motion.article
@@ -76,6 +89,7 @@ export function KnowledgeResultCard({
           {/* 标题 */}
           <Link
             href={detailHref}
+            onClick={trackSearchClick}
             className="group mt-2 block"
           >
             <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
@@ -86,11 +100,14 @@ export function KnowledgeResultCard({
 
         <div className="min-w-0">
           {/* 摘要 */}
-          {hit.abstract && (
-            <p className="line-clamp-4 text-sm leading-relaxed text-muted @min-[600px]:line-clamp-6">
-              {hit.abstract}
-            </p>
-          )}
+          <ExpandableAbstract
+            abstract={hit.abstract ?? ""}
+            paperId={hit.id}
+            source="search"
+            userId={userId}
+            className="text-sm leading-relaxed text-muted"
+            collapsedClassName="line-clamp-4 @min-[600px]:line-clamp-6"
+          />
         </div>
 
         <div className="hidden w-full max-w-[320px] justify-self-center self-start @min-[400px]:block @min-[600px]:max-w-none">
@@ -122,13 +139,13 @@ export function KnowledgeResultCard({
             <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
               <PaperLikeButton paperId={hit.id} />
               <PaperCollectorCount paperId={hit.id} />
-              <Link href={detailHref}>
+              <Link href={detailHref} onClick={trackSearchClick}>
                 <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-xs">
                   论文详情
                   <ArrowRight className="size-3.5" />
                 </Button>
               </Link>
-              <Link href={paperHref(hit.id, { mode: "create", source: returnTo, graph: true })}>
+              <Link href={paperHref(hit.id, { mode: "create", source: returnTo, graph: true })} onClick={trackSearchClick}>
                 <Button size="sm" className="h-8 rounded-lg px-3 text-xs">
                   <Network className="size-3.5" />
                   关系图谱

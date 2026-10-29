@@ -1,8 +1,8 @@
 import unittest
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from app.schemas.knowledge import PaperSummary, Provenance
 from app.services.library.reading_history import ReadingHistoryService
@@ -51,7 +51,7 @@ class BatchKnowledge:
 
 class ReadingHistoryListTests(unittest.IsolatedAsyncioTestCase):
     def make_rows(self, count=120):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return [
             SimpleNamespace(
                 id=index + 1,
@@ -115,6 +115,48 @@ class ReadingHistoryListTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.total, 100)
         self.assertEqual([item.paper_id for item in response.items], ["paper-1", "paper-3"] + [f"paper-{index}" for index in range(5, 21)])
         self.assertEqual(len(knowledge.requested_ids[0]), 20)
+
+
+class RecordingSession:
+    def __init__(self, previous_view=None):
+        self.previous_view = previous_view
+        self.operations = []
+        self.added = []
+
+    async def execute(self, statement):
+        self.operations.append(("execute", statement))
+        return SimpleNamespace(rowcount=1)
+
+    async def scalar(self, statement):
+        self.operations.append(("scalar", statement))
+        return self.previous_view
+
+    def add(self, value):
+        self.added.append(value)
+
+
+class ReadingHistoryRecordTests(unittest.IsolatedAsyncioTestCase):
+    async def run_record(self, session):
+        @asynccontextmanager
+        async def fake_scope():
+            yield session
+
+        with patch("app.services.library.reading_history.session_scope", fake_scope):
+            await ReadingHistoryService().record("user-1", "paper:1")
+
+    async def test_record_locks_before_debounce_check_and_event_write(self):
+        session = RecordingSession()
+        await self.run_record(session)
+
+        self.assertEqual([operation for operation, _ in session.operations], ["execute", "scalar", "execute"])
+        self.assertIn("pg_advisory_xact_lock", str(session.operations[0][1]))
+        self.assertEqual([event.event_type for event in session.added], ["paper_detail_view"])
+
+    async def test_recent_view_does_not_emit_another_detail_event(self):
+        session = RecordingSession(previous_view=datetime.now(UTC) - timedelta(minutes=5))
+        await self.run_record(session)
+
+        self.assertEqual(session.added, [])
 
 
 if __name__ == "__main__":

@@ -1,0 +1,67 @@
+{
+  "dataset_id": "robot-visuomotor-v0",
+  "created_at": "2026-10-26",
+  "annotation_status": "provisional_single_reviewer",
+  "annotator": "Codex; manual title/abstract review, pending human domain review",
+  "relevance_scale": "binary",
+  "protocol": {
+    "query": "Diffusion-based visuomotor imitation learning for robotic manipulation",
+    "positive_rule": "A paper directly studies robot visuomotor/manipulation policy learning from demonstrations or action sequences, including diffusion policy, action chunking, behavior cloning, or closely related embodied behavior generation.",
+    "negative_rule": "General language-model reasoning, generic robot control without the scoped imitation-learning task, and unrelated planning/RL are negative for this query.",
+    "evidence": "Title and abstract only; no clicks, impressions, popularity, or algorithm output were used to assign relevance.",
+    "candidate_pool": "Union of the actual global-discovery first 5, explicit Imitation Learning recall results, and content-v1 first 8; after each captured prefix, unreturned pooled candidates are appended by stable ID for full-permutation metric input.",
+    "ranking_sources": {
+      "global_discovery": "HomeDiscoveryService daily order, first 5; remaining pooled candidates appended by ID.",
+      "explicit_topic": "KnowledgeService.search_by_subject('Imitation Learning') result order from the isolated local knowledge test fixture; remaining pooled candidates appended by ID.",
+      "content-v1": "RecommendationService.page for the isolated synthetic E2E account after a Diffusion Policy search and foreground PDF read; remaining pooled candidates appended by stable ID."
+    },
+    "limitations": [
+      "One query and one provisional reviewer are insufficient for a quality conclusion.",
+      "The explicit-topic and content-v1 candidate rankings were captured with a local deterministic Knowledge API fixture and mock paper catalog, not the production knowledge base.",
+      "The first five global-discovery items form a deliberately broad negative sample; this pilot is not representative of the full candidate distribution."
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "robot-diffusion-policy-001",
+      "query": "Diffusion-based visuomotor imitation learning for robotic manipulation",
+      "relevant_ids": [
+        "p-diffusion-policy",
+        "p-3d-diffusion-policy",
+        "p-act",
+        "p-bc-transformer",
+        "p-vqbet",
+        "p-mobile-aloha"
+      ],
+      "papers": [
+        {"id":"paper:2601.09696v2","title":"Empathy Applicability Modeling for General Health Queries","grade":0,"rationale":"Clinical empathy and health-query modeling; outside robotic policy learning."},
+        {"id":"paper:2603.27481v1","title":"On Token’s Dilemma: Dynamic MoE with Drift-Aware Token Assignment for Continual Learning of Large Vision Language Models","grade":0,"rationale":"Continual learning for vision-language models; not robot manipulation or imitation learning."},
+        {"id":"paper:2604.13592v2","title":"Foresight Optimization for Strategic Reasoning in Large Language Models","grade":0,"rationale":"LLM strategic reasoning; outside the query scope."},
+        {"id":"paper:2604.09265v1","title":"EthicMind: A Risk-Aware Framework for Ethical-Emotional Alignment in Multi-Turn Dialogue","grade":0,"rationale":"Dialogue alignment; outside the query scope."},
+        {"id":"paper:2604.06695v1","title":"Reasoning Fails Where Step Flow Breaks","grade":0,"rationale":"Reasoning-model information flow; outside robotic policy learning."},
+        {"id":"p-diffusion-policy","title":"Diffusion Policy: Visuomotor Policy Learning via Action Diffusion","grade":1,"rationale":"Direct match: diffusion-based visuomotor policy learning for robot control."},
+        {"id":"p-3d-diffusion-policy","title":"3D Diffusion Policy: Generalizable Visuomotor Policy Learning via Simple 3D Representations","grade":1,"rationale":"Direct match: 3D visual representations and diffusion policy for manipulation tasks."},
+        {"id":"p-act","title":"Learning Precise Pick-and-Place with a Minimalist Dual-Arm Robot","grade":1,"rationale":"Directly studies visuomotor action-chunking policy learning for manipulation."},
+        {"id":"p-bc-transformer","title":"Robust Manipulation with Transformer-Based Behavior Cloning","grade":1,"rationale":"Directly studies behavior cloning for robot manipulation."},
+        {"id":"p-vqbet","title":"VQ-BeT: Behavior Generation with Latent Actions","grade":1,"rationale":"Embodied behavior generation from latent actions; close match to action-policy learning."},
+        {"id":"p-mobile-aloha","title":"Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware","grade":1,"rationale":"Directly studies learning bimanual robot manipulation skills from teleoperation data."},
+        {"id":"p-rt-1","title":"RT-1: Robotics Transformer for Real-World Control at Scale","grade":0,"rationale":"Broad multi-task robot control; the abstract does not center the scoped diffusion/visuomotor imitation methods."},
+        {"id":"p-rt-2","title":"RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control","grade":0,"rationale":"Vision-language transfer for robot control; outside the selected imitation-learning scope."}
+      ],
+      "rankings": {
+        "global_discovery": [
+          "paper:2601.09696v2", "paper:2603.27481v1", "paper:2604.13592v2", "paper:2604.09265v1", "paper:2604.06695v1",
+          "p-3d-diffusion-policy", "p-act", "p-bc-transformer", "p-diffusion-policy", "p-mobile-aloha", "p-rt-1", "p-rt-2", "p-vqbet"
+        ],
+        "explicit_topic": [
+          "p-diffusion-policy", "p-3d-diffusion-policy", "p-act", "p-bc-transformer", "p-vqbet", "p-mobile-aloha",
+          "p-rt-1", "p-rt-2", "paper:2601.09696v2", "paper:2603.27481v1", "paper:2604.06695v1", "paper:2604.09265v1", "paper:2604.13592v2"
+        ],
+        "content-v1": [
+          "p-3d-diffusion-policy", "p-diffusion-policy", "p-act", "p-mobile-aloha", "p-vqbet", "p-bc-transformer", "p-rt-1", "p-rt-2",
+          "paper:2601.09696v2", "paper:2603.27481v1", "paper:2604.06695v1", "paper:2604.09265v1", "paper:2604.13592v2"
+        ]
+      }
+    }
+  ]
+}

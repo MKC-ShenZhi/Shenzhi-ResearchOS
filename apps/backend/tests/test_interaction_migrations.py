@@ -47,12 +47,14 @@ class InteractionMigrationTests(unittest.TestCase):
             )
             return result.stdout + result.stderr
 
-        self.assertIn('014_platform_snapshots (head)', alembic('heads'))
+        # 015_recommendation_foundation now builds on this chain; its own test
+        # owns the single-head check. This test keeps the 011-014 contract.
+        self.assertIn('013_paper_likes -> 014_platform_snapshots', alembic('history'))
         alembic('upgrade', '011_agent_uploads')
         baseline = set(asyncio.run(inspect_db()))
         self.assertIn('agent_uploads', baseline)
         self.assertNotIn('paper_likes', baseline)
-        alembic('upgrade', 'head')
+        alembic('upgrade', '014_platform_snapshots')
         self.assertIn('014_platform_snapshots', alembic('current'))
 
         async def check_schema():
@@ -84,7 +86,7 @@ class InteractionMigrationTests(unittest.TestCase):
             alembic('downgrade', revision)
             self.assertTrue(absent.isdisjoint(asyncio.run(inspect_db())))
         self.assertEqual(set(asyncio.run(inspect_db())), baseline)
-        alembic('upgrade', 'head')
+        alembic('upgrade', '014_platform_snapshots')
 
         async def verify_sentinel():
             engine = create_async_engine(async_url)

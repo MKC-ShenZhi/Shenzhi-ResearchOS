@@ -14,6 +14,9 @@ export interface FeedPaper {
   citations?: number;
   /** 由数据适配层提供；为空时由展示组件使用统一 fallback。 */
   thumbnailUrl?: string | null;
+  recommendationReason?: string;
+  recommendationRequestId?: string;
+  recommendationRank?: number;
 }
 
 /** 投稿目标(会议/期刊) */

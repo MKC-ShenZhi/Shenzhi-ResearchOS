@@ -3,6 +3,8 @@ import type { QueryClient } from "@tanstack/react-query";
 export const INTERACTION_QUERY_KINDS = new Set([
   "paper-interaction", "topic-interaction", "my-likes", "my-collected-papers",
   "my-topic-follows", "collection-folder-papers",
+  // Personal recommendation pages (and their request ids) belong to one account.
+  "home-feed",
 ]);
 
 /** Cancel old reads before refetching so a pre-write response cannot win. */

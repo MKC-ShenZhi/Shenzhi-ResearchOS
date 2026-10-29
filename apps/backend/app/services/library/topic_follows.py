@@ -10,6 +10,7 @@ from app.core.errors import BusinessError
 from app.models.interactions import TopicFollowRow
 from app.schemas.interactions import TopicFollowItem, TopicFollowListResponse
 from app.services.topics.registry import TopicRegistry, TopicRegistryError
+from app.services.recommendation.behavior import BehaviorEventService
 
 
 class TopicFollowService:
@@ -21,21 +22,32 @@ class TopicFollowService:
     async def follow(self, user_id: str, topic_id: str) -> int:
         require_followable_topic(self.registry, topic_id)
         async with session_scope() as session:
-            await session.execute(
+            inserted = await session.scalar(
                 insert(TopicFollowRow)
                 .values(user_id=user_id, topic_id=topic_id)
                 .on_conflict_do_nothing(index_elements=['user_id', 'topic_id'])
+                .returning(TopicFollowRow.topic_id)
             )
+            if inserted is not None:
+                await BehaviorEventService().record_explicit(
+                    session, user_id=user_id, event_type='topic_follow',
+                    entity_type='topic', entity_id=topic_id,
+                )
             return await self._count(session, topic_id)
 
     async def unfollow(self, user_id: str, topic_id: str) -> int:
         # Unfollowing is idempotent and does not validate the catalog, so a topic
         # removed from the catalog can always be released.
         async with session_scope() as session:
-            await session.execute(delete(TopicFollowRow).where(
+            removed = await session.scalar(delete(TopicFollowRow).where(
                 TopicFollowRow.user_id == user_id,
                 TopicFollowRow.topic_id == topic_id,
-            ))
+            ).returning(TopicFollowRow.topic_id))
+            if removed is not None:
+                await BehaviorEventService().record_explicit(
+                    session, user_id=user_id, event_type='topic_unfollow',
+                    entity_type='topic', entity_id=topic_id,
+                )
             return await self._count(session, topic_id)
 
     async def follower_counts(self, topic_ids: list[str]) -> dict[str, int]:

@@ -20,6 +20,13 @@ class CaptureSession:
         self.statement = statement
         return self
 
+    async def scalar(self, statement):
+        # mark_read uses RETURNING to emit the read event only on the first
+        # completion; None models "already read", so no event row is added.
+        self.parameters = statement.compile().params
+        self.statement = statement
+        return None
+
     def all(self):
         return [('paper:a', None), ('paper:b', '2026-10-14')]
 
@@ -39,6 +46,8 @@ class PaperReadStatusTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('ON CONFLICT', sql)
         self.assertIn('read_at', sql)
         self.assertNotIn('last_viewed_at =', sql)
+        # A repeated completion keeps the first read_at instead of moving it.
+        self.assertIn('WHERE reading_history.read_at IS NULL', sql)
         self.assertIn('user-a', session.parameters.values())
         self.assertIn('paper:a', session.parameters.values())
 

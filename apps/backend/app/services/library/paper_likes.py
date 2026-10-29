@@ -9,6 +9,7 @@ from app.core.database import session_scope
 from app.models.interactions import PaperLikeRow
 from app.schemas.interactions import LikedPaperItem, LikedPaperListResponse
 from app.services.knowledge.service import KnowledgeService
+from app.services.recommendation.behavior import BehaviorEventService
 
 
 class PaperLikeService:
@@ -19,19 +20,30 @@ class PaperLikeService:
 
     async def like(self, user_id: str, paper_id: str) -> int:
         async with session_scope() as session:
-            await session.execute(
+            inserted = await session.scalar(
                 insert(PaperLikeRow)
                 .values(user_id=user_id, paper_id=paper_id)
                 .on_conflict_do_nothing(index_elements=['user_id', 'paper_id'])
+                .returning(PaperLikeRow.paper_id)
             )
+            if inserted is not None:
+                await BehaviorEventService().record_explicit(
+                    session, user_id=user_id, event_type='paper_like',
+                    entity_type='paper', entity_id=paper_id,
+                )
             return await self._count(session, paper_id)
 
     async def unlike(self, user_id: str, paper_id: str) -> int:
         async with session_scope() as session:
-            await session.execute(delete(PaperLikeRow).where(
+            removed = await session.scalar(delete(PaperLikeRow).where(
                 PaperLikeRow.user_id == user_id,
                 PaperLikeRow.paper_id == paper_id,
-            ))
+            ).returning(PaperLikeRow.paper_id))
+            if removed is not None:
+                await BehaviorEventService().record_explicit(
+                    session, user_id=user_id, event_type='paper_unlike',
+                    entity_type='paper', entity_id=paper_id,
+                )
             return await self._count(session, paper_id)
 
     async def like_counts(self, paper_ids: list[str]) -> dict[str, int]:

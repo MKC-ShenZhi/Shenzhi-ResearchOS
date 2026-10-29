@@ -18,11 +18,13 @@ export function KnowledgeResultsSection({
   params,
   returnTo,
   page,
+  queryId,
   onPageChange,
 }: {
   params: KnowledgeSearchParams;
   returnTo: string;
   page: number;
+  queryId?: string;
   onPageChange: (page: number) => void;
 }) {
   const query = params.query.trim();
@@ -70,6 +72,7 @@ export function KnowledgeResultsSection({
             hit={hit}
             index={index}
             returnTo={returnTo}
+            queryId={queryId}
             onNavigate={() => saveCurrentSearchScroll(returnTo, scope)}
           />
         ))}
