@@ -31,7 +31,7 @@ app/data/conference_deadlines_snapshot.json（随后端打包的版本化快照�
 修正 `abstract deadline` 键名；`N` / 空等级归一为 `null`。会议 ID 为 `<方向>-<简称>`（如 `se-fse` 与 `sc-fse` 是不同会议，
 `cg-dcc` 与 `ds-dcc` 是同一会议在两个方向下的不同等级记录）。截稿时间在快照中保留官方本地时间 + 时区，便于与上游比对。
 
-当前快照为 2026-10-29 从旧 ccfddl 后端导出，**上游已较久未维护**，页面明确展示快照日期并提示以官网为准。
+当前快照为 2026-10-29 从旧 ccfddl 后端导出，上游最后维护时间未知。接口仍返回 `data_as_of` 与 `source_url`，页面暂不展示。
 
 ## 业务规则（`app/services/conferences.py`）
 

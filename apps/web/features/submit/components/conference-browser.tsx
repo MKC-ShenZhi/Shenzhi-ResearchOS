@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Info, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -93,17 +93,6 @@ export function ConferenceBrowser() {
           </span>
         </div>
       </div>
-
-      {data && (
-        <p className="mt-3 flex items-center gap-1.5 text-xs text-faint">
-          <Info className="size-3.5 shrink-0" />
-          数据快照 {data.data_as_of}，来源
-          <a href={data.source_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-            ccf-deadlines
-          </a>
-          ；时间已换算为你的本地时区，截稿信息以会议官网为准。
-        </p>
-      )}
 
       <div className="mt-5 grid items-start gap-6 xl:grid-cols-[300px_1fr]">
         <ConferenceFilterPanel
