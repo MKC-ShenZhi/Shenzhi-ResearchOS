@@ -108,7 +108,7 @@ Vercel Postgres (Neon):Auth 表 + Chat 表共存于 neondb 库
 | 路由 | 页面 | 对应原型 | 实现位置 |
 |------|------|----------|----------|
 | `/` | 主发现页(搜索 + Feed 流) | 深知-主发现页.svg | [HomePage.tsx](apps/web/features/home/HomePage.tsx) |
-| `/submit` | 投稿详情页(期刊/会议 + 倒计时) | 深知-投稿详情页.svg | [SubmitPage.tsx](apps/web/features/submit/SubmitPage.tsx) |
+| `/submit` | 投稿 · 会议截稿(CCF/CORE/TH-CPL 筛选 + 实时倒计时,FastAPI 快照驱动,见 [docs/conferences](docs/conferences/README.md)) | 深知-投稿详情页.svg | [SubmitPage.tsx](apps/web/features/submit/SubmitPage.tsx) |
 | `/papers/[id]` | 论文详情页(沉浸式阅读器) | 深知-论文详情页.svg | [PaperDetailPage.tsx](apps/web/features/papers/[id]/PaperDetailPage.tsx) |
 | `/scholars` | 学者画像(检索/排序/关注) | 深知-学者画像页.svg | [page.tsx](apps/web/app/scholars/page.tsx) |
 | `/scholars/[id]` | 学者详情(引用图表/发表列表) | 深知-学者详情页.svg | [ScholarDetailPage.tsx](apps/web/features/scholars/[id]/ScholarDetailPage.tsx) |

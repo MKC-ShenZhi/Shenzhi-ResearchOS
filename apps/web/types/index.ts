@@ -27,13 +27,6 @@ export interface Venue {
   metaRows: [VenueMetaIcon, string][][];
   chips: string[];
   accent: "danger" | "success";
-  /** 仅会议有倒计时 */
-  deadline?: {
-    label: string;
-    dateText: string;
-    /** 相对当前时间的毫秒偏移(演示用实时倒计时) */
-    offsetMs: number;
-  };
 }
 
 export type VenueMetaIcon = "folder" | "pin" | "cal" | "chart" | "quote";

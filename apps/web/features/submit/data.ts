@@ -49,83 +49,8 @@ export const DIRECTION_ROWS: { lines: string[]; count: string }[] = [
   { lines: ["交叉/综合/新兴"], count: "136" },
 ];
 
-/** 会议/期刊卡片 —— 内容提取自「深知-投稿详情页.svg」 */
+/** 期刊卡片 —— 内容提取自「深知-投稿详情页.svg」;会议已改由 FastAPI 会议截稿快照提供 */
 export const venues: Venue[] = [
-  {
-    id: "dai-2026",
-    kind: "conference",
-    abbr: "DAI",
-    fullName: "International Conference on Distributed Artificial Intelligence",
-    badges: ["CCF C"],
-    metaRows: [
-      [
-        ["folder", "人工智能"],
-        ["pin", "Hong Kong, China"],
-        ["cal", "November 29-December 2, 2026"],
-      ],
-    ],
-    chips: [],
-    accent: "danger",
-    deadline: {
-      label: "摘要截止",
-      dateText: "2026年7月28日 19:59",
-      offsetMs: 28 * 60_000 + 11_000,
-    },
-  },
-  {
-    id: "aaai-2027",
-    kind: "conference",
-    abbr: "AAAI",
-    fullName: "AAAI人工智能会议",
-    badges: ["CCF A", "CORE A*", "TH-CPL A", "CSRanking", "CAAI A"],
-    metaRows: [
-      [
-        ["folder", "人工智能"],
-        ["chart", "2026录用率: 17.6%"],
-        ["pin", "Montréal, Québec, Canada"],
-        ["cal", "February 16-23, 2027"],
-        ["quote", "平均引用: 8.09964"],
-      ],
-    ],
-    chips: [
-      "Artificial Intelligence",
-      "Machine Learning",
-      "Knowledge Representation",
-      "Planning",
-    ],
-    accent: "success",
-    deadline: {
-      label: "全文截止",
-      dateText: "2026年7月29日 19:59",
-      offsetMs: 24 * 3600_000 + 28 * 60_000 + 11_000,
-    },
-  },
-  {
-    id: "hpca-2027",
-    kind: "conference",
-    abbr: "HPCA",
-    fullName:
-      "IEEE International Symposium on High-Performance Computer Architecture",
-    badges: ["CCF A", "CORE A*", "TH-CPL B", "CAAI C"],
-    metaRows: [
-      [
-        ["folder", "计算机体系结构/并行与分布计算/存储系统"],
-        ["chart", "2026录用率: 19.8%"],
-      ],
-      [
-        ["pin", "Salt Lake City, Utah, USA"],
-        ["cal", "March 20-24, 2027"],
-        ["quote", "平均引用: 18.5792"],
-      ],
-    ],
-    chips: ["Computer Architecture", "Parallel Computing", "Storage Systems"],
-    accent: "success",
-    deadline: {
-      label: "全文截止",
-      dateText: "2026年8月1日 19:59",
-      offsetMs: 4 * 24 * 3600_000 + 28 * 60_000 + 11_000,
-    },
-  },
   {
     id: "ieee-tkde",
     kind: "journal",

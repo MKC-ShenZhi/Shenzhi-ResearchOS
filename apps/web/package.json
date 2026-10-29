@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test:paper-navigation": "node --test tests/knowledge/paper-search-navigation.integration.test.mjs",
-    "test": "tsc -p tsconfig.test.json && node --test .next/test-output/tests/agent/*.test.js .next/test-output/tests/auth/*.test.js .next/test-output/tests/config/*.test.js .next/test-output/tests/chat/*.test.js .next/test-output/tests/knowledge/*.test.js .next/test-output/tests/search/*.test.js .next/test-output/tests/settings/*.test.js tests/auth/*.integration.test.mjs"
+    "test": "tsc -p tsconfig.test.json && node --test .next/test-output/tests/agent/*.test.js .next/test-output/tests/auth/*.test.js .next/test-output/tests/config/*.test.js .next/test-output/tests/chat/*.test.js .next/test-output/tests/knowledge/*.test.js .next/test-output/tests/search/*.test.js .next/test-output/tests/settings/*.test.js .next/test-output/tests/submit/*.test.js tests/auth/*.integration.test.mjs"
   },
   "dependencies": {
     "@alicloud/dm20151123": "1.10.2",
