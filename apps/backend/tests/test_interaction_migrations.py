@@ -47,12 +47,13 @@ class InteractionMigrationTests(unittest.TestCase):
             )
             return result.stdout + result.stderr
 
-        self.assertIn('014_platform_snapshots (head)', alembic('heads'))
+        # Later features may stack on 014; this roundtrip covers 011 -> 014 only.
+        self.assertEqual(alembic('heads').count('(head)'), 1)
         alembic('upgrade', '011_agent_uploads')
         baseline = set(asyncio.run(inspect_db()))
         self.assertIn('agent_uploads', baseline)
         self.assertNotIn('paper_likes', baseline)
-        alembic('upgrade', 'head')
+        alembic('upgrade', '014_platform_snapshots')
         self.assertIn('014_platform_snapshots', alembic('current'))
 
         async def check_schema():
@@ -84,7 +85,7 @@ class InteractionMigrationTests(unittest.TestCase):
             alembic('downgrade', revision)
             self.assertTrue(absent.isdisjoint(asyncio.run(inspect_db())))
         self.assertEqual(set(asyncio.run(inspect_db())), baseline)
-        alembic('upgrade', 'head')
+        alembic('upgrade', '014_platform_snapshots')
 
         async def verify_sentinel():
             engine = create_async_engine(async_url)
