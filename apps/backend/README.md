@@ -29,6 +29,8 @@ BUSINESS_BACKEND_URL=http://127.0.0.1:8000
 
 两端配置相同 `BACKEND_BFF_SECRET`；后端只允许私网/BFF 访问，不能直接暴露公网。
 
+推荐行为事件保留 90 天、分页快照 1 小时。清理入口为维护命令 `uv run --frozen python -m app.services.recommendation.maintenance`（可安全重复执行），以及只接受 `Authorization: Bearer $CRON_SECRET` 的 `GET /api/v1/internal/recommendation-maintenance`（未配置 `CRON_SECRET` 时返回 503）。仓库当前**未**在 `vercel.json` 注册任何 Cron，线上调度需部署负责人另行配置并确认。
+
 未配置 Secret 时默认拒绝；仅 loopback 本地开发可在两端显式设置：
 
 ```text

@@ -5,11 +5,9 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = '016_request_idempotency'
-# 015 is reserved for the parallel recommendation foundation, which also builds
-# on 014 and touches disjoint tables. Whichever lands in dev second must restore
-# a single head (see docs/engineering/idempotency-delivery.md) without editing a
-# revision that a shared database has already applied.
-down_revision: Union[str, Sequence[str], None] = '014_platform_snapshots'
+# Chained after the recommendation foundation, which landed in dev first; the
+# two touch disjoint tables (see docs/engineering/idempotency-delivery.md).
+down_revision: Union[str, Sequence[str], None] = '015_recommendation_foundation'
 branch_labels = None
 depends_on = None
 

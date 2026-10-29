@@ -43,7 +43,7 @@
 
 | 问题及原因 | 修改位置 | 修复与验证 |
 |---|---|---|
-| `012_request_idempotency` 以 `011` 为父，与 dev 的 `012~014` 互动迁移形成双 Head，`upgrade head` 失败 | `migrations/versions/016_request_idempotency.py` | 改为 `016`，父为 `014_platform_snapshots`，`015` 留给推荐模块；单一 Head、`alembic check` 无差异 |
+| `012_request_idempotency` 以 `011` 为父，与 dev 的 `012~014` 互动迁移形成双 Head，`upgrade head` 失败 | `migrations/versions/016_request_idempotency.py` | 改为 `016`；推荐模块合入后父为 `015_recommendation_foundation`（见 §5）；单一 Head、`alembic check` 无差异 |
 | 迁移给在途消息设置宽限租约，但新认领条件依赖 `lease IS NULL`，与下一项修复冲突 | 同上、`chat/postgres_repository.py` | 迁移把在途 `streaming` 行标记为遗留 Worker 已认领，并保留 10 分钟宽限；宽限期内新版本不会重复生成 |
 | 只按租约恢复后，创建了但从未拉流的消息（`lease` 为 NULL）永远是 `streaming`，会话一直“请先停止当前生成” | `chat/postgres_repository.py` | 新建/续接消息带 5 分钟认领截止时间，到期按租约恢复为 failed；HTTP 验收 S7（修复前失败） |
 | 停止请求落到非生成 Worker 时直接返回 409；实际上生成 Worker 会因 SSE 断开立即停止，前端却显示“停止请求未确认” | `chat/service.py` | 非所属 Worker 最多等 5 秒，所属 Worker 落库终态即确认成功，超时才 409；HTTP 验收 S4（修复前失败） |
@@ -63,7 +63,7 @@
 |---|---:|---:|---:|---|
 | Backend 全量（无数据库） | 538 | 0 | 71 | 609 个用例；71 个需数据库或迁移库，已在下两行实际运行 |
 | Backend PostgreSQL 幂等/持久化相关模块 | 78 | 0 | 0 | `test_persistence`、`Acceptance2a`、`test_chat_api`、`test_knowledge2chat_degradation`、`test_worker_lease` |
-| PostgreSQL 迁移往返 | 2 | 0 | 0 | 014↔016 往返，以及 011→014 互动迁移回归，均使用独立空库 |
+| PostgreSQL 迁移往返 | 3 | 0 | 0 | 合入推荐模块后：015↔016、014↔015 往返，以及 011→014 互动迁移回归，均使用独立空库 |
 | 多 Worker HTTP 验收（两个 uvicorn 进程 + 同一 PostgreSQL） | 33 | 0 | 0 | 见下文；同一脚本在修复前的合并提交上为 28/33 |
 | Frontend `pnpm test` | 454 | 0 | 0 | 另有 `typecheck` 通过；`lint` 0 错误，2 个既有警告 |
 
@@ -108,20 +108,16 @@ pnpm test && pnpm typecheck && pnpm lint
 
 ## 5. 数据库迁移
 
-- 迁移链：`011_agent_uploads → 012_topic_follows → 013_paper_likes → 014_platform_snapshots → 016_request_idempotency`，
+- 迁移链：`011_agent_uploads → 012_topic_follows → 013_paper_likes → 014_platform_snapshots → 015_recommendation_foundation → 016_request_idempotency`，
   唯一 Head 为 `016_request_idempotency`。原 `012_request_idempotency` 只存在于 Feature 分支，从未进入 dev，
   因此没有改动任何已合并的迁移。
 - 016 内容：给 `chat_messages` 增加 7 列，给 `agent_turns` 增加 4 列，各建一个 `idempotency_key IS NOT NULL` 部分唯一索引；
   给在途行设置 10 分钟过渡租约。downgrade 删除这些列与索引，业务行保留（已由测试验证）。
-- **与推荐模块 `015_recommendation_foundation` 的衔接**：两者都以 014 为父，改动的表互不相交。
-  后合入 dev 的一方负责恢复单一 Head。
-  - 推荐先合入：在 016 尚未被任何共享库执行时，把 016 的 `down_revision` 改为 `015_recommendation_foundation`，得到线性链。
-  - 幂等先合入（或 016 已在共享环境执行）：不要改动 016，新增空的合并迁移，
-    `down_revision = ('015_recommendation_foundation', '016_request_idempotency')`。
-  - 两种方式都已在临时副本中实测（推荐迁移只读复制到临时目录，未改动推荐分支）：
-    已位于 016 的库升级到合并 Head，降级回 014，以及空库直接升级到 Head，均成功。
-  - 注意：revision ID 不能超过 32 个字符（`alembic_version.version_num` 为 `varchar(32)`）。
-    超长时 PostgreSQL 会在最后一步报错并回滚整个升级，例如 `017_merge_recommendation_idempotency` 会失败，可用 `017_merge_rec_idempotency`。
+- **与推荐模块 `015_recommendation_foundation` 的衔接**：推荐模块（PR #58）先合入 dev。016 此前未在任何共享库执行，
+  因此直接把 016 的 `down_revision` 由 `014_platform_snapshots` 改为 `015_recommendation_foundation`，得到线性链；两者改动的表互不相交。
+  单一 Head 校验由 `test_idempotency_migrations` 负责，互动与推荐迁移测试分别显式升级到 014、015。
+  - 若将来需要合并已在共享环境执行过的平行迁移，应新增空的合并迁移而非改动已执行的 revision；
+    revision ID 不能超过 32 个字符（`alembic_version.version_num` 为 `varchar(32)`），超长时 PostgreSQL 会在最后一步报错并回滚整个升级。
 - 如果某个环境曾执行过 Feature 分支的 `012_request_idempotency`，其 `alembic_version` 不在新链中，需要人工核对后处理，
   不能直接 `upgrade`。本轮没有访问任何共享库，无法确认是否存在这种环境。
 

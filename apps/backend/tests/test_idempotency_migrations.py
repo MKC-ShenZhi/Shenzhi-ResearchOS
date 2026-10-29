@@ -1,4 +1,4 @@
-"""Destructive 014 <-> 016 roundtrip ONLY in an explicitly supplied empty local test database.
+"""Destructive 015 <-> 016 roundtrip ONLY in an explicitly supplied empty local test database.
 
 Run with SHENZHI_MIGRATION_TEST_URL pointing at a disposable *_migration_test
 PostgreSQL database. Never uses CHAT_DATABASE_URL implicitly.
@@ -29,7 +29,7 @@ AGENT_COLUMNS = {'idempotency_key', 'idempotency_fingerprint', 'worker_id', 'lea
 
 @unittest.skipUnless(MIGRATION_URL, 'SHENZHI_MIGRATION_TEST_URL not set (disposable local database required)')
 class IdempotencyMigrationTests(unittest.TestCase):
-    def test_upgrade_preserves_in_flight_rows_and_downgrade_restores_014(self):
+    def test_upgrade_preserves_in_flight_rows_and_downgrade_restores_015(self):
         url = make_url(MIGRATION_URL)
         self.assertIn(url.host, ('127.0.0.1', 'localhost', '::1'))
         self.assertTrue((url.database or '').endswith('_migration_test'))
@@ -59,9 +59,9 @@ class IdempotencyMigrationTests(unittest.TestCase):
         heads = alembic('heads')
         self.assertEqual(heads.count('(head)'), 1)
         self.assertIn('016_request_idempotency (head)', heads)
-        self.assertIn('014_platform_snapshots -> 016_request_idempotency', alembic('history'))
+        self.assertIn('015_recommendation_foundation -> 016_request_idempotency', alembic('history'))
 
-        alembic('upgrade', '014_platform_snapshots')
+        alembic('upgrade', '015_recommendation_foundation')
 
         async def seed(connection):
             await connection.execute(text(
@@ -138,7 +138,7 @@ class IdempotencyMigrationTests(unittest.TestCase):
             asyncio.run(run(duplicate_key))
         self.assertIn('uq_chat_messages_idempotency', str(caught.exception))
 
-        alembic('downgrade', '014_platform_snapshots')
+        alembic('downgrade', '015_recommendation_foundation')
 
         async def check_downgraded(connection):
             chat_columns = {item['name'] for item in await connection.run_sync(
@@ -153,7 +153,7 @@ class IdempotencyMigrationTests(unittest.TestCase):
             self.assertEqual(count, 2)
 
         asyncio.run(run(check_downgraded))
-        self.assertIn('014_platform_snapshots', alembic('current'))
+        self.assertIn('015_recommendation_foundation', alembic('current'))
         alembic('upgrade', 'head')
         self.assertIn('016_request_idempotency', alembic('current'))
 

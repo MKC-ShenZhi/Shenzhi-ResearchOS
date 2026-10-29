@@ -10,6 +10,7 @@ import {
 import { PanelRightOpen } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "@/clients/backend/http";
+import { recordPaperBehavior } from "@/clients/backend/behavior";
 import { paperReadStatusQueryKey, publishPaperRead } from "@/clients/backend/read-status";
 import { KnowledgeClientError } from "@/clients/knowledge";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -25,6 +26,7 @@ import { PaperAbstractView } from "./components/paper-abstract-view";
 import { PaperPdfViewer, type ViewerState } from "./components/paper-pdf-viewer";
 import { PaperRightPanel } from "./components/right-panel";
 import { useVisualViewport } from "@/hooks/use-visual-viewport";
+import { ActiveReadTracker } from "../active-read-tracker";
 
 type PaperViewMode = "abstract" | "paper";
 
@@ -55,6 +57,8 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
   const [assistantWidthPercent, setAssistantWidthPercent] = useState(DEFAULT_ASSISTANT_WIDTH_PERCENT);
   const [isResizing, setIsResizing] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
+  const activeReadTrackerRef = useRef<ActiveReadTracker | null>(null);
+  activeReadTrackerRef.current ??= new ActiveReadTracker();
   const [zoom, setZoom] = useState(1);
   const [viewerState, setViewerState] = useState<ViewerState>("loading");
   const [mobilePanel, setMobilePanel] = useState<"reader" | "assistant">("reader");
@@ -115,6 +119,30 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
       publishPaperRead(userId, loadedPaperId, "reading");
     }).catch(() => {});
   }, [isIdentityPending, loadedPaperId, queryClient, userId]);
+
+  useEffect(() => {
+    if (!loadedPaperId || !userId || viewMode !== "paper" || viewerState !== "ready" || mobilePanel !== "reader") return;
+    const interval = window.setInterval(() => {
+      const visibleSeconds = activeReadTrackerRef.current?.tick(
+        userId,
+        loadedPaperId,
+        document.visibilityState === "visible",
+        performance.now(),
+      );
+      if (visibleSeconds === null || visibleSeconds === undefined) return;
+      recordPaperBehavior({
+        userId, eventType: "active_read", paperId: loadedPaperId,
+        source: "paper_detail", durationSeconds: visibleSeconds,
+      });
+    }, 5000);
+    const resetInterval = () => activeReadTrackerRef.current?.resetInterval();
+    document.addEventListener("visibilitychange", resetInterval);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", resetInterval);
+      resetInterval();
+    };
+  }, [loadedPaperId, mobilePanel, userId, viewMode, viewerState]);
 
   const handleReachedEnd = () => {
     if (!loadedPaperId || !userId || isIdentityPending) return;

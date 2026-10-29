@@ -47,8 +47,9 @@ class InteractionMigrationTests(unittest.TestCase):
             )
             return result.stdout + result.stderr
 
-        # Later features may stack on 014; this roundtrip covers 011 -> 014 only.
-        self.assertEqual(alembic('heads').count('(head)'), 1)
+        # Later revisions build on this chain; test_idempotency_migrations owns
+        # the single-head check. This test keeps the 011-014 contract.
+        self.assertIn('013_paper_likes -> 014_platform_snapshots', alembic('history'))
         alembic('upgrade', '011_agent_uploads')
         baseline = set(asyncio.run(inspect_db()))
         self.assertIn('agent_uploads', baseline)
