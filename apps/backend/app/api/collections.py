@@ -45,6 +45,15 @@ async def folder_papers(
     return ok((await service.papers(identity.subject_id, folder_id, page, page_size)).model_dump(mode='json'))
 
 
+@router.get('/collections/papers')
+async def collected_papers(
+    identity: RequestIdentity = Depends(require_user),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=20),
+):
+    return ok((await service.collected_papers(identity.subject_id, page, page_size)).model_dump(mode='json'))
+
+
 @router.get('/papers/{paper_id}/collections')
 async def paper_collections(paper_id: str, identity: RequestIdentity = Depends(require_user)):
     return ok({'folder_ids': await service.paper_folders(identity.subject_id, paper_id)})

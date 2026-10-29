@@ -2,12 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { AudioLines, BookOpen, Boxes, BrainCircuit, Bot, Check, Eye, Languages, Network, Plus, Sparkles, Users } from "lucide-react";
+import { AudioLines, BookOpen, Boxes, BrainCircuit, Bot, Eye, Languages, Network, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { TopicCover } from "./topic-cover";
-import { Button } from "@/components/ui/button";
+import { TopicFollowButton } from "@/features/knowledge/interactions/components/topic-follow-button";
+import { TopicFollowerCount } from "@/features/knowledge/interactions/components/topic-follower-count";
 import type { KnowledgeTopic } from "@/clients/knowledge";
-import { useUserPreferences } from "@/stores/user-preferences";
 import { topicHref } from "./topic-url-state";
 
 const categoryIcons: Record<string, LucideIcon> = {
@@ -58,8 +58,6 @@ export function TopicCard({
   returnTo: string;
   featured?: boolean;
 }) {
-  const following = useUserPreferences((state) => state.followedTopics[topic.id] ?? topic.isFollowing ?? false);
-  const toggleTopicFollow = useUserPreferences((state) => state.toggleTopicFollow);
   const author = typeof topic.author === "string" ? { name: topic.author } : topic.author;
   const authorName = author.name.toLocaleLowerCase() === "shenzhi" ? "ShenZhi" : author.name;
   const href = topicHref(topic.id, returnTo);
@@ -75,7 +73,7 @@ export function TopicCard({
         <div className="mb-1.5 min-w-0"><Link href={href} className="block"><h3 className="truncate text-lg font-semibold leading-6 tracking-tight text-ink transition group-hover:text-primary">{topic.nameZh}</h3><p className="mt-0.5 truncate text-[11px] font-medium leading-4 tracking-[0.02em] text-muted">{formatEnglishTitle(topic.nameEn)}</p></Link></div>
         <p className="mb-2 line-clamp-2 min-h-10 text-[13px] leading-5 text-muted" title={topic.descriptionZh}>{topic.descriptionZh}</p>
         <div className="mb-2"><span className="inline-flex h-7 items-center gap-2 rounded-lg bg-primary/8 px-2.5 text-xs text-primary" title={`创作者：${authorName}`}><CreatorLogo /><span>{authorName}</span></span></div>
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-line/60 pt-2.5"><div className="flex min-w-0 items-center gap-2.5 text-xs text-muted"><span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="目录收录时的论文统计"><BookOpen className="size-3.5" />目录统计 {topic.paperCount.toLocaleString()} 篇</span><span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="关注人数"><Users className="size-3.5" />{topic.followersCount.toLocaleString()} 人关注</span></div><Button type="button" variant={following ? "soft" : "default"} size="sm" aria-pressed={following} onClick={() => toggleTopicFollow(topic.id, topic.isFollowing)} title={following ? "取消关注主题" : "关注主题"}>{following ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}{following ? "已关注" : "关注"}</Button></div>
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-line/60 pt-2.5"><div className="flex min-w-0 items-center gap-2.5 text-xs text-muted"><span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="目录收录时的论文统计"><BookOpen className="size-3.5" />目录统计 {topic.paperCount.toLocaleString()} 篇</span><TopicFollowerCount topicId={topic.id} className="whitespace-nowrap" /></div><TopicFollowButton topicId={topic.id} /></div>
       </div>
     </article>
   );

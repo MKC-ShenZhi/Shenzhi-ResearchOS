@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { LibraryPanel } from "@/features/knowledge/papers/components/library-panel";
 import { LibraryTable } from "@/features/knowledge/papers/components/library-table";
 import { ReadingHistory } from "@/features/knowledge/papers/components/reading-history";
+import { SavedInteractions } from "@/features/knowledge/papers/components/saved-interactions";
 import { useCollections } from "@/stores/collections";
 
 /** 我的文献 `/knowledge/papers` —— 保留收藏、文件夹与阅读历史能力。 */
@@ -12,6 +13,7 @@ export function KnowledgePapersPage() {
   const { session, isPending } = useAuth();
   const identityKey = isPending ? "pending" : session?.user?.id ?? "anonymous";
   const [historyActive, setHistoryActive] = useState(false);
+  const [interactionsActive, setInteractionsActive] = useState(false);
   const [requestedFolderId, setRequestedFolderId] = useState<number | null>(null);
   const folders = useCollections((state) => state.folders);
   const selectedFolderId = folders.some((folder) => folder.id === requestedFolderId)
@@ -20,12 +22,15 @@ export function KnowledgePapersPage() {
   function selectFolder(folderId: number) {
     setRequestedFolderId(folderId);
     setHistoryActive(false);
+    setInteractionsActive(false);
   }
 
   return (
     <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col items-stretch lg:flex-row lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden">
-      <LibraryPanel historyActive={historyActive} selectedFolderId={selectedFolderId} onFolderClick={selectFolder} onHistoryClick={() => setHistoryActive(true)} />
-      {historyActive
+      <LibraryPanel historyActive={historyActive} interactionsActive={interactionsActive} selectedFolderId={selectedFolderId} onFolderClick={selectFolder} onHistoryClick={() => { setHistoryActive(true); setInteractionsActive(false); }} onInteractionsClick={() => { setInteractionsActive(true); setHistoryActive(false); }} />
+      {interactionsActive
+        ? <SavedInteractions key={identityKey} userId={session?.user?.id ?? null} />
+        : historyActive
         ? <ReadingHistory key={identityKey} />
         : <LibraryTable key={`${identityKey}:${selectedFolderId ?? "empty"}`} folderId={selectedFolderId} />}
     </div>

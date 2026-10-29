@@ -28,6 +28,7 @@ class FolderListResponse(BaseModel):
 class CollectionPaperItem(PaperDetail):
     paper_id: str
     added_at: datetime
+    is_available: bool = True
 
 
 class CollectionPaperListResponse(BaseModel):

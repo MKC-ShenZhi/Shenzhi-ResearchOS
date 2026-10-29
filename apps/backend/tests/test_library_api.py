@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.schemas.collections import CollectionFolder, FolderListResponse
+from app.schemas.collections import CollectionFolder, CollectionPaperListResponse, FolderListResponse
 from app.schemas.history import ReadingHistoryItem, ReadingHistoryResponse
 from app.schemas.knowledge import PaperDetail, Provenance
 
@@ -29,6 +29,7 @@ class LibraryApiTests(unittest.TestCase):
     def test_collections_and_history_reject_anonymous_access(self):
         for method, path in (
             ('get', '/api/v1/collections/folders'),
+            ('get', '/api/v1/collections/papers'),
             ('get', '/api/v1/history'),
             ('post', '/api/v1/papers/paper-a/view'),
             ('post', '/api/v1/papers/view'),
@@ -40,14 +41,17 @@ class LibraryApiTests(unittest.TestCase):
 
     def test_authenticated_routes_use_trusted_user(self):
         folders = FolderListResponse(folders=[CollectionFolder(id=1, name='想读', is_default=True, paper_count=0)])
+        collected = CollectionPaperListResponse(items=[], total=0, page=2, page_size=10)
         history = ReadingHistoryResponse(items=[], total=0, page=1, page_size=20)
         with (
             patch('app.api.collections.service.folders', new=AsyncMock(return_value=folders)) as get_folders,
+            patch('app.api.collections.service.collected_papers', new=AsyncMock(return_value=collected)) as get_collected,
             patch('app.api.history.service.list', new=AsyncMock(return_value=history)) as get_history,
             patch('app.api.history.service.record', new=AsyncMock()) as record,
             patch('app.api.history.service.mark_read', new=AsyncMock()) as mark_read,
         ):
             self.assertEqual(self.client.get('/api/v1/collections/folders', headers=self.user_headers).json()['data']['folders'][0]['name'], '想读')
+            self.assertEqual(self.client.get('/api/v1/collections/papers?page=2&page_size=10', headers=self.user_headers).json()['data']['total'], 0)
             self.assertEqual(self.client.get('/api/v1/history', headers=self.user_headers).json()['data']['total'], 0)
             self.assertEqual(self.client.post('/api/v1/papers/paper-a/view', headers=self.user_headers).status_code, 200)
             self.assertEqual(self.client.post(
@@ -59,6 +63,7 @@ class LibraryApiTests(unittest.TestCase):
                 json={'paper_id': 'doi:10.1/example/paper'},
             ).status_code, 200)
         get_folders.assert_awaited_once_with('user-a')
+        get_collected.assert_awaited_once_with('user-a', 2, 10)
         get_history.assert_awaited_once_with('user-a', 1, 20, '')
         self.assertEqual(record.await_args_list[0].args, ('user-a', 'paper-a'))
         self.assertEqual(record.await_args_list[1].args, ('user-a', 'doi:10.1/example/paper'))

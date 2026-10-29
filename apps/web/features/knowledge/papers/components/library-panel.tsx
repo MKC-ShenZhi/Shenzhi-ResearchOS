@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { History, LoaderCircle, Network, Square } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Heart, History, LoaderCircle, Network, Square } from "lucide-react";
 import { ApiError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -13,16 +14,21 @@ import { FolderMoreButton } from "./collection-picker";
 /** 我的文献库面板 —— 文件夹树 + 标签(对应知识库页面 SVG 第二栏) */
 export function LibraryPanel({
   historyActive,
+  interactionsActive,
+  onInteractionsClick,
   onHistoryClick,
   selectedFolderId,
   onFolderClick,
 }: {
   historyActive: boolean;
+  interactionsActive: boolean;
+  onInteractionsClick: () => void;
   onHistoryClick: () => void;
   selectedFolderId: number | null;
   onFolderClick: (folderId: number) => void;
 }) {
   const { folders, loading, loadFolders, createFolder, renameFolder, deleteFolder } = useCollections();
+  const queryClient = useQueryClient();
   const identityKey = useCollections((state) => state.identityKey);
   const [dialog, setDialog] = useState<"create" | "rename" | "delete" | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -42,7 +48,13 @@ export function LibraryPanel({
 
   async function submitDialog() {
     if (dialog === "delete" && editingId !== null) {
-      try { await deleteFolder(editingId); if (selectedFolderId === editingId) onFolderClick(folders.find((folder) => folder.id !== editingId)?.id ?? 0); setDialog(null); }
+      try {
+        await deleteFolder(editingId);
+        // Deleting a folder can remove the last collection of several papers.
+        void queryClient.invalidateQueries({ queryKey: ["paper-interaction"] });
+        if (selectedFolderId === editingId) onFolderClick(folders.find((folder) => folder.id !== editingId)?.id ?? 0);
+        setDialog(null);
+      }
       catch (reason) { setError(reason instanceof ApiError && reason.status === 401 ? "该功能需要登录后使用，请先登录" : "删除失败，请重试"); }
       return;
     }
@@ -87,7 +99,7 @@ export function LibraryPanel({
               onClick={() => onFolderClick(folder.id)}
               className={cn(
                 "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-sm transition-colors",
-                !historyActive && folder.id === selectedFolderId
+                !historyActive && !interactionsActive && folder.id === selectedFolderId
                   ? "bg-primary-soft font-medium text-primary"
                   : "text-ink-2 hover:bg-chip",
               )}
@@ -95,14 +107,14 @@ export function LibraryPanel({
               <span
                 className={cn(
                   "size-3.5 rounded-[4px]",
-                  !historyActive && folder.id === selectedFolderId ? "bg-primary" : "bg-ink-2/70",
+                  !historyActive && !interactionsActive && folder.id === selectedFolderId ? "bg-primary" : "bg-ink-2/70",
                 )}
               />
               <span className="min-w-0 flex-1 truncate text-left">{folder.name}</span>
               <span
                 className={cn(
                   "text-xs",
-                  !historyActive && folder.id === selectedFolderId
+                  !historyActive && !interactionsActive && folder.id === selectedFolderId
                     ? "rounded-full bg-primary px-1.5 py-0.5 leading-none text-white"
                     : "text-faint",
                 )}
@@ -116,6 +128,15 @@ export function LibraryPanel({
       </ul>
 
       <div className="mt-auto">
+        <button
+          type="button"
+          onClick={onInteractionsClick}
+          aria-pressed={interactionsActive}
+          className={cn("mb-2 flex w-full items-center gap-2.5 rounded-lg p-2.5 text-left text-sm font-medium transition-colors hover:bg-primary-soft", interactionsActive ? "bg-primary-soft text-primary" : "bg-panel text-ink-2")}
+        >
+          <Heart className="size-4 text-primary" />
+          点赞与收藏
+        </button>
         <FeatureNavigationLink href="/knowledge/graph" className="mb-3 flex items-center gap-2.5 rounded-lg bg-panel p-2.5 text-xs text-ink-2 transition-colors hover:bg-primary-soft">
           <Network className="size-4 text-primary" />
           关系图谱

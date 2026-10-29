@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Search, Upload } from "lucide-react";
 import { apiJson, ApiError } from "@/clients/backend/http";
 import { deletePrivatePaper, listPrivatePapers, privatePaperFileHref, uploadPrivatePaper, type PrivatePaper } from "@/clients/backend/private-papers";
 import type { CollectionPaperListResponse } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
+import { PaperCollectorCount } from "@/features/knowledge/interactions/components/paper-collector-count";
 import { paperHref } from "@/lib/navigation/paper";
 import { useCollections } from "@/stores/collections";
 import { PaperReadBadgeForPaper } from "./paper-read-badge";
@@ -27,6 +29,14 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const folders = useCollections((state) => state.folders);
   const loadFolders = useCollections((state) => state.loadFolders);
+  const queryClient = useQueryClient();
+
+  /** 收藏关系变化后，全平台收藏人数以服务端重新统计为准。 */
+  function refreshCollectorCounts() {
+    void queryClient.invalidateQueries({
+      predicate: (query) => query.queryKey[0] === "paper-interaction",
+    });
+  }
 
   function handleLoadError(reason: unknown) {
     if (reason instanceof ApiError && reason.status === 401) {
@@ -114,6 +124,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
       await apiJson<unknown>(`/collections/folders/${folderId}/papers/${encodeURIComponent(paperId)}`, { method: "DELETE" });
       await loadPage(page);
       await loadFolders();
+      refreshCollectorCounts();
       setMenu(null);
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) setUnauthenticated(true);
@@ -130,6 +141,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
       });
       await loadPage(page);
       await loadFolders();
+      refreshCollectorCounts();
       setMenu(null);
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) setUnauthenticated(true);
@@ -156,7 +168,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
         <div className="divide-y divide-line">
           {items.map((item) => (
             <div key={item.paper_id} className="grid grid-cols-[minmax(0,1fr)_36px] lg:grid-cols-[minmax(0,1fr)_220px_100px_36px] items-center gap-4 rounded-xl px-3 py-3 transition-colors hover:bg-panel">
-              <Link href={paperHref(item.paper_id, { mode: "create", source: "/knowledge/papers" })} className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-9 shrink-0 items-end justify-center rounded-md bg-primary-soft pb-1 text-[10px] font-bold text-primary">PDF</span><span className="min-w-0"><span className="flex min-w-0 items-center gap-2"><span className="truncate text-[15px] font-semibold text-ink">{item.title}</span><PaperReadBadgeForPaper paperId={item.paper_id} /></span><span className="mt-0.5 block truncate text-xs text-faint">{item.venue ?? "暂无会议"} · {item.year ?? "—"}</span></span></Link>
+              <Link href={paperHref(item.paper_id, { mode: "create", source: "/knowledge/papers" })} className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-9 shrink-0 items-end justify-center rounded-md bg-primary-soft pb-1 text-[10px] font-bold text-primary">PDF</span><span className="min-w-0"><span className="flex min-w-0 items-center gap-2"><span className="truncate text-[15px] font-semibold text-ink">{item.title}</span><PaperReadBadgeForPaper paperId={item.paper_id} /></span><span className="mt-0.5 block truncate text-xs text-faint">{item.venue ?? "暂无会议"} · {item.year ?? "—"} · <PaperCollectorCount paperId={item.paper_id} className="align-middle text-xs" /></span></span></Link>
               <p className="hidden truncate text-[13px] text-muted lg:block">{item.authors.join(" · ") || "未知作者"}</p>
               <time className="hidden text-[13px] text-muted lg:block">{new Date(item.added_at).toLocaleDateString("zh-CN")}</time>
               <span className="relative"><button type="button" onClick={() => setMenu(menu === item.paper_id ? null : item.paper_id)} aria-label="论文操作" className="rounded-md p-1 text-faint hover:bg-chip"><MoreHorizontal className="size-4" /></button>{menu === item.paper_id && <span className="absolute right-0 top-full z-20 w-36 rounded-lg border border-line bg-card p-1 text-xs shadow-card"><button type="button" onClick={() => void removePaper(item.paper_id)} className="block w-full rounded-md px-2 py-1.5 text-left text-danger hover:bg-danger-soft">删除</button><span className="mt-1 block border-t border-line pt-1"><span className="block px-2 py-1 text-faint">移至</span>{folders.filter((folder) => folder.id !== folderId).map((folder) => <button key={folder.id} type="button" onClick={() => void movePaper(item.paper_id, folder.id)} className="block w-full truncate rounded-md px-2 py-1.5 text-left text-ink-2 hover:bg-chip">{folder.name}</button>)}</span></span>}</span>

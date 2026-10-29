@@ -9,6 +9,7 @@ from app.models.chat import ChatSessionRow
 from app.models.agent_session import AgentSessionRow
 from app.models.agent_upload import AgentUploadRow
 from app.models.collections import CollectionFolderRow, CollectionItemRow, CollectionUserStateRow
+from app.models.interactions import PaperLikeRow, TopicFollowRow
 from app.models.profile import UserProfileRow
 from app.models.reading_history import ReadingHistoryRow
 from app.models.settings import UserSettingsRow
@@ -51,6 +52,8 @@ class AccountDeletionService:
             await db.execute(delete(CollectionItemRow).where(CollectionItemRow.folder_id.in_(folder_ids)))
             await db.execute(delete(CollectionFolderRow).where(CollectionFolderRow.user_id == user_id))
             await db.execute(delete(CollectionUserStateRow).where(CollectionUserStateRow.user_id == user_id))
+            await db.execute(delete(PaperLikeRow).where(PaperLikeRow.user_id == user_id))
+            await db.execute(delete(TopicFollowRow).where(TopicFollowRow.user_id == user_id))
             await db.execute(delete(ReadingHistoryRow).where(ReadingHistoryRow.user_id == user_id))
             profiles = await db.execute(
                 delete(UserProfileRow)
