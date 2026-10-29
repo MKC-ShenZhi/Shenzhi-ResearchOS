@@ -29,7 +29,9 @@ test("Agent conversation restores Backend turns and runs without browser-supplie
   assert.match(source, /getAgentSession\(sessionId\)/);
   assert.match(source, /storedTurns\(session\.turns\)/);
   assert.match(source, /const runPrompt = useCallback/);
-  assert.match(source, /streamAgentSessionRun\(sessionId, runInput/);
+  // The idempotent retry path re-sends the same trimmed run input, never history.
+  assert.match(source, /const requestBody = \{ \.\.\.runInput, prompt \}/);
+  assert.match(source, /streamAgentSessionRun\(\s*sessionId, requestBody,/);
   assert.match(source, /takeAgentLaunch/);
   assert.match(source, /void runPrompt\(launch\)/);
   assert.doesNotMatch(source, /saveSession\(|listSessions\(|newSessionId\(/);
