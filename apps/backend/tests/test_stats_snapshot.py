@@ -1,5 +1,6 @@
 """Live PostgreSQL acceptance for atomic daily snapshots and the read contract."""
 
+import asyncio
 import os
 import unittest
 import uuid
@@ -7,6 +8,9 @@ from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.services.user.account_deletion import AccountDeletionService
 
 from app.core.database import session_scope
 from app.core.errors import BusinessError
@@ -167,6 +171,7 @@ class SnapshotPersistenceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_pagination_and_explicit_lookup(self):
         await self._seed()
+        await PaperLikeService().like(self.user_a, self.absent_paper_id + "-page")
         await SnapshotService().build(self.day)
 
         first = await self.service.papers_page(snapshot_date=self.day, limit=1)
@@ -190,6 +195,84 @@ class SnapshotPersistenceTests(unittest.IsolatedAsyncioTestCase):
             await self.service.papers_page(snapshot_date=None, limit=10, cursor='not-a-cursor')
         with self.assertRaises(BusinessError):
             await self.service.topics_page(snapshot_date=self.unpublished_day, limit=10)
+
+    async def test_source_counts_share_one_snapshot_during_account_deletion(self):
+        await self._seed()
+        original = SnapshotService._collector_counts
+
+        async def delete_after_collectors(session):
+            counts = await original(session)
+            await AccountDeletionService().delete_all_for_user(self.user_b)
+            return counts
+
+        with patch.object(SnapshotService, '_collector_counts', side_effect=delete_after_collectors):
+            await SnapshotService().build(self.day)
+        page = await self.service.papers_page(snapshot_date=self.day, limit=10, paper_ids=[self.paper_id])
+        self.assertEqual((page.items[0].collector_count, page.items[0].like_count), (2, 2))
+        topics = await self.service.topics_page(snapshot_date=self.day, limit=10, topic_ids=[self.topic_id])
+        self.assertEqual(topics.items[0].follower_count, 2)
+        self.assertEqual(await PaperLikeService().like_counts([self.paper_id]), {self.paper_id: 1})
+        await SnapshotService().build(self.day)
+        page = await self.service.papers_page(snapshot_date=self.day, limit=10, paper_ids=[self.paper_id])
+        self.assertEqual((page.items[0].collector_count, page.items[0].like_count), (1, 1))
+        topics = await self.service.topics_page(snapshot_date=self.day, limit=10, topic_ids=[self.topic_id])
+        self.assertEqual(topics.items[0].follower_count, 1)
+
+    async def test_reader_keeps_run_and_rows_consistent_during_rebuild(self):
+        await self._seed()
+        old = await SnapshotService().build(self.day)
+        await AccountDeletionService().delete_all_for_user(self.user_b)
+        original = PlatformStatsService._count
+
+        async def rebuild_after_resolving_run(session, model, day):
+            await SnapshotService().build(day)
+            return await original(session, model, day)
+
+        with patch.object(PlatformStatsService, '_count', side_effect=rebuild_after_resolving_run):
+            page = await self.service.papers_page(snapshot_date=self.day, limit=500)
+        self.assertEqual(page.computed_at, old.computed_at)
+        row = next(item for item in page.items if item.paper_id == self.paper_id)
+        self.assertEqual((row.collector_count, row.like_count), (2, 2))
+
+    async def test_concurrent_first_builds_and_rebuilds_are_serialized(self):
+        await self._seed()
+        for _ in range(2):
+            results = await asyncio.gather(*(SnapshotService().build(self.day) for _ in range(4)))
+            self.assertEqual(len(results), 4)
+        page = await self.service.papers_page(snapshot_date=self.day, limit=10, paper_ids=[self.paper_id])
+        self.assertEqual((page.total, page.items[0].collector_count, page.items[0].like_count), (1, 2, 2))
+
+    async def test_failure_after_writing_rows_rolls_back_the_whole_publication(self):
+        await self._seed()
+        old = await SnapshotService().build(self.day)
+        await PaperLikeService().unlike(self.user_b, self.paper_id)
+        original = AsyncSession.execute
+
+        async def fail_on_topic_insert(session, statement, *args, **kwargs):
+            if getattr(statement, 'is_insert', False) and statement.table.name == 'topic_stats_daily':
+                raise RuntimeError('fail after paper rows were replaced')
+            return await original(session, statement, *args, **kwargs)
+
+        with patch.object(AsyncSession, 'execute', new=fail_on_topic_insert):
+            with self.assertRaises(RuntimeError):
+                await SnapshotService().build(self.day)
+        page = await self.service.papers_page(snapshot_date=self.day, limit=10, paper_ids=[self.paper_id])
+        self.assertEqual(page.computed_at, old.computed_at)
+        self.assertEqual(page.items[0].like_count, 2)
+
+    async def test_cursor_rejects_another_resource_and_a_rebuilt_publication(self):
+        await self._seed()
+        await PaperLikeService().like(self.user_a, self.absent_paper_id + '-page')
+        await SnapshotService().build(self.day)
+        first = await self.service.papers_page(snapshot_date=self.day, limit=1)
+        self.assertIsNotNone(first.next_cursor)
+        with self.assertRaises(BusinessError) as caught:
+            await self.service.topics_page(snapshot_date=self.day, limit=1, cursor=first.next_cursor)
+        self.assertEqual(caught.exception.status, 400)
+        await SnapshotService().build(self.day)
+        with self.assertRaises(BusinessError) as caught:
+            await self.service.papers_page(snapshot_date=self.day, limit=1, cursor=first.next_cursor)
+        self.assertEqual(caught.exception.status, 409)
 
 
 if __name__ == '__main__':

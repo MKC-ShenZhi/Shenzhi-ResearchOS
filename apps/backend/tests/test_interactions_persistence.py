@@ -1,5 +1,6 @@
 """Live PostgreSQL acceptance for distinct-user counters and idempotent writes."""
 
+import asyncio
 import os
 import unittest
 import uuid
@@ -200,6 +201,57 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         # Repeating the deletion stays safe and leaves the other account untouched.
         await AccountDeletionService().delete_all_for_user(self.user_a)
         self.assertEqual(await likes.liked_paper_ids(self.user_b, [self.like_paper_id]), {self.like_paper_id})
+
+    async def test_concurrent_likes_and_follows_preserve_unique_user_relations(self):
+        likes, follows = PaperLikeService(), TopicFollowService()
+        await asyncio.gather(*(
+            operation(user, identifier)
+            for _ in range(8)
+            for user in (self.user_a, self.user_b)
+            for operation, identifier in ((likes.like, self.paper_id), (follows.follow, self.topic_id))
+        ))
+        self.assertEqual(await likes.like_counts([self.paper_id]), {self.paper_id: 2})
+        self.assertEqual(await follows.follower_counts([self.topic_id]), {self.topic_id: 2})
+        await asyncio.gather(*(
+            operation(self.user_a, identifier)
+            for _ in range(8)
+            for operation, identifier in ((likes.unlike, self.paper_id), (follows.unfollow, self.topic_id))
+        ))
+        self.assertEqual(await likes.liked_paper_ids(self.user_a, [self.paper_id]), set())
+        self.assertEqual(await likes.liked_paper_ids(self.user_b, [self.paper_id]), {self.paper_id})
+        self.assertEqual(await follows.followed_topic_ids(self.user_a, [self.topic_id]), set())
+        self.assertEqual(await follows.followed_topic_ids(self.user_b, [self.topic_id]), {self.topic_id})
+
+    async def test_concurrent_disjoint_collection_replacements_do_not_union(self):
+        collections = CollectionService()
+        folders = [item.id for item in (await collections.folders(self.user_a)).folders]
+        for _ in range(4):
+            await collections.update_paper_folders(self.user_a, self.paper_id, [])
+            await asyncio.gather(*(
+                collections.update_paper_folders(self.user_a, self.paper_id, [folder]) for folder in folders
+            ))
+            memberships = await collections.paper_folders(self.user_a, self.paper_id)
+            self.assertEqual(len(memberships), 1)
+            self.assertIn(memberships[0], folders)
+            self.assertEqual(await collections.collector_counts([self.paper_id]), {self.paper_id: 1})
+        with self.assertRaises(BusinessError):
+            await collections.update_paper_folders(self.user_b, self.paper_id, [folders[0]])
+        self.assertEqual(await collections.paper_folders(self.user_b, self.paper_id), [])
+
+    async def test_move_preserves_counts_and_rolls_back_if_target_is_full(self):
+        collections = CollectionService()
+        folders = [item.id for item in (await collections.folders(self.user_a)).folders]
+        await collections.update_paper_folders(self.user_a, self.paper_id, [folders[0]])
+        await collections.move_paper(self.user_a, folders[0], self.paper_id, folders[1])
+        self.assertEqual(await collections.collector_counts([self.paper_id]), {self.paper_id: 1})
+        async with session_scope() as db:
+            db.add_all([CollectionItemRow(folder_id=folders[2], paper_id=f'capacity:{i}') for i in range(100)])
+        with self.assertRaises(BusinessError) as caught:
+            await collections.move_paper(self.user_a, folders[1], self.paper_id, folders[2])
+        self.assertEqual(caught.exception.status, 400)
+        self.assertEqual(await collections.paper_folders(self.user_a, self.paper_id), [folders[1]])
+        await collections.delete_folder(self.user_a, folders[1])
+        self.assertEqual(await collections.collector_counts([self.paper_id]), {})
 
 
 if __name__ == '__main__':

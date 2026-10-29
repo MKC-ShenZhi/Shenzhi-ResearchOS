@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -65,9 +65,14 @@ class SnapshotService:
         return result
 
     async def _publish(self, target: date) -> SnapshotResult:
-        computed_at = utc_now()
         topic_ids = [topic.id for topic in self.registry.list_topics().items]
         async with session_scope() as session:
+            # LOCK precedes the first MVCC read. Serialize builders before taking
+            # a repeatable snapshot, including two simultaneous first builds.
+            # Ordinary readers remain unblocked by this table lock.
+            await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ'))
+            await session.execute(text('LOCK TABLE stats_snapshot_runs IN SHARE ROW EXCLUSIVE MODE'))
+            computed_at = utc_now()
             collector_counts = await self._collector_counts(session)
             like_counts = await self._like_counts(session)
             follower_counts = await self._follower_counts(session)

@@ -30,6 +30,11 @@ class LibraryApiTests(unittest.TestCase):
         for method, path in (
             ('get', '/api/v1/collections/folders'),
             ('get', '/api/v1/collections/papers'),
+            ('put', '/api/v1/papers/paper-a/collections'),
+            ('delete', '/api/v1/collections/folders/1/papers/paper-a'),
+            ('delete', '/api/v1/collections/folders/1'),
+            ('post', '/api/v1/collections/folders'),
+            ('post', '/api/v1/collections/folders/1/papers/paper-a/move'),
             ('get', '/api/v1/history'),
             ('post', '/api/v1/papers/paper-a/view'),
             ('post', '/api/v1/papers/view'),

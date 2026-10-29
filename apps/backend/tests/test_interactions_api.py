@@ -157,6 +157,17 @@ class InteractionApiTests(unittest.TestCase):
         liked_papers.assert_awaited_once_with('user-a', 2, 10)
         list_follows.assert_awaited_once_with('user-a')
 
+    def test_stale_account_precondition_rejects_without_changing_request_owner(self):
+        with patch('app.api.interactions.likes.like', new=AsyncMock(return_value=1)) as like:
+            headers = {**self.user_headers, 'x-shenzhi-expected-user-id': 'user-b'}
+            response = self.client.put('/api/v1/papers/paper-1/like', headers=headers)
+            self.assertEqual(response.status_code, 409)
+            like.assert_not_awaited()
+            headers['x-shenzhi-expected-user-id'] = 'user-a'
+            response = self.client.put('/api/v1/papers/paper-1/like', headers=headers)
+            self.assertEqual(response.status_code, 200)
+            like.assert_awaited_once_with('user-a', 'paper-1')
+
     def test_batch_and_identifier_limits_are_enforced(self):
         for payload in ({'paper_ids': []}, {'paper_ids': ['']}, {'paper_ids': [f'paper-{index}' for index in range(101)]}):
             with self.subTest(count=len(payload['paper_ids'])):

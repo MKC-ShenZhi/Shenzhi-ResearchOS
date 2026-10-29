@@ -8,10 +8,10 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import session_scope
@@ -34,18 +34,23 @@ class StatsCursorError(ValueError):
     """The opaque cursor cannot address the requested published day."""
 
 
-def _encode_cursor(snapshot_date: date, after: str) -> str:
-    raw = json.dumps({'d': snapshot_date.isoformat(), 'a': after}, separators=(',', ':')).encode('utf-8')
+def _encode_cursor(run: StatsSnapshotRunRow, after: str, kind: str) -> str:
+    raw = json.dumps({
+        'd': run.snapshot_date.isoformat(), 'a': after,
+        'c': run.computed_at.isoformat(), 'k': kind,
+    }, separators=(',', ':')).encode('utf-8')
     return base64.urlsafe_b64encode(raw).decode('ascii').rstrip('=')
 
 
-def _decode_cursor(cursor: str) -> tuple[date, str]:
+def _decode_cursor(cursor: str) -> tuple[date, str, datetime, str]:
     try:
         padding = '=' * (-len(cursor) % 4)
         raw = base64.b64decode(cursor + padding, altchars=b'-_', validate=True)
         value: Any = json.loads(raw)
         snapshot_date = date.fromisoformat(value['d'])
         after = value['a']
+        computed_at = datetime.fromisoformat(value['c'])
+        kind = value['k']
     except (
         binascii.Error, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError,
     ) as error:
@@ -55,9 +60,11 @@ def _decode_cursor(cursor: str) -> tuple[date, str]:
         or not after
         or len(after) > MAX_CURSOR_ID_LENGTH
         or snapshot_date.isoformat() != value['d']
+        or computed_at.tzinfo is None
+        or kind not in ('papers', 'topics')
     ):
         raise StatsCursorError('分页游标无效')
-    return snapshot_date, after
+    return snapshot_date, after, computed_at, kind
 
 
 class PlatformStatsService:
@@ -83,7 +90,8 @@ class PlatformStatsService:
     ) -> PaperStatsPage:
         requested = list(dict.fromkeys(paper_ids)) if paper_ids is not None else None
         async with session_scope() as session:
-            run, after = await self._resolve(session, snapshot_date, cursor)
+            await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+            run, after = await self._resolve(session, snapshot_date, cursor, 'papers')
             if requested is not None:
                 if after is not None:
                     raise BusinessError(20001, '按论文 ID 查询时不能同时使用分页游标', 400)
@@ -132,7 +140,7 @@ class PlatformStatsService:
                 for row in page
             ],
             total=total,
-            next_cursor=_encode_cursor(run.snapshot_date, page[-1].paper_id) if has_more and page else None,
+            next_cursor=_encode_cursor(run, page[-1].paper_id, 'papers') if has_more and page else None,
             has_more=has_more,
         )
 
@@ -146,7 +154,8 @@ class PlatformStatsService:
     ) -> TopicStatsPage:
         requested = list(dict.fromkeys(topic_ids)) if topic_ids is not None else None
         async with session_scope() as session:
-            run, after = await self._resolve(session, snapshot_date, cursor)
+            await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+            run, after = await self._resolve(session, snapshot_date, cursor, 'topics')
             if requested is not None:
                 if after is not None:
                     raise BusinessError(20001, '按主题 ID 查询时不能同时使用分页游标', 400)
@@ -190,22 +199,25 @@ class PlatformStatsService:
                 for row in page
             ],
             total=total,
-            next_cursor=_encode_cursor(run.snapshot_date, page[-1].topic_id) if has_more and page else None,
+            next_cursor=_encode_cursor(run, page[-1].topic_id, 'topics') if has_more and page else None,
             has_more=has_more,
         )
 
     async def _resolve(
-        self, session: AsyncSession, requested: date | None, cursor: str | None,
+        self, session: AsyncSession, requested: date | None, cursor: str | None, kind: str,
     ) -> tuple[StatsSnapshotRunRow, str | None]:
         after: str | None = None
         cursor_date: date | None = None
+        cursor_computed_at: datetime | None = None
         if cursor is not None:
             try:
-                cursor_date, after = _decode_cursor(cursor)
+                cursor_date, after, cursor_computed_at, cursor_kind = _decode_cursor(cursor)
             except StatsCursorError as error:
                 raise BusinessError(20001, str(error), 400) from error
             if requested is not None and requested != cursor_date:
                 raise BusinessError(20001, '分页游标与请求日期不一致', 400)
+            if cursor_kind != kind:
+                raise BusinessError(20001, '分页游标与统计类型不一致', 400)
 
         target = requested or cursor_date
         if target is None:
@@ -217,6 +229,8 @@ class PlatformStatsService:
         run = await session.get(StatsSnapshotRunRow, target)
         if run is None or run.status != 'completed' or run.computed_at is None:
             raise BusinessError(40401, '该日期暂无已发布的统计快照', 404)
+        if cursor_computed_at is not None and cursor_computed_at != run.computed_at:
+            raise BusinessError(20001, '统计快照已更新，请从第一页重新读取', 409)
         return run, after
 
     @staticmethod

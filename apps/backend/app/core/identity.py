@@ -61,6 +61,11 @@ def require_user(request: Request) -> RequestIdentity:
     identity = request_identity(request)
     if identity.kind != 'user':
         raise BusinessError(10001, '请登录后使用此功能', 401)
+    expected_user = request.headers.get('x-shenzhi-expected-user-id')
+    if expected_user is not None and expected_user != identity.subject_id:
+        # A browser precondition can only reject a stale request, never select
+        # its owner. Authentication still comes exclusively from the BFF.
+        raise BusinessError(10003, '账号已切换，请刷新后重试', 409)
     return identity
 
 

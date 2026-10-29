@@ -103,7 +103,9 @@ class CollectionService:
                                     paper_count=(count or 0) + (private_count or 0))
 
     async def delete_folder(self, user_id: str, folder_id: int) -> None:
+        await self.ensure_default_folders(user_id)
         async with session_scope() as session:
+            await self._lock_membership(session, user_id)
             await self._folder(session, user_id, folder_id)
             await session.execute(delete(CollectionFolderRow).where(
                 CollectionFolderRow.id == folder_id, CollectionFolderRow.user_id == user_id,
@@ -166,6 +168,7 @@ class CollectionService:
     async def update_paper_folders(self, user_id: str, paper_id: str, folder_ids: list[int]) -> None:
         await self.ensure_default_folders(user_id)
         async with session_scope() as session:
+            await self._lock_membership(session, user_id)
             folders = list(await session.scalars(select(CollectionFolderRow).where(
                 CollectionFolderRow.user_id == user_id, CollectionFolderRow.id.in_(set(folder_ids)),
             ).order_by(CollectionFolderRow.id).with_for_update())) if folder_ids else []
@@ -187,7 +190,9 @@ class CollectionService:
                 session.add(CollectionItemRow(folder_id=folder_id, paper_id=paper_id))
 
     async def remove_paper(self, user_id: str, folder_id: int, paper_id: str) -> None:
+        await self.ensure_default_folders(user_id)
         async with session_scope() as session:
+            await self._lock_membership(session, user_id)
             await self._folder(session, user_id, folder_id)
             result = await session.execute(delete(CollectionItemRow).where(
                 CollectionItemRow.folder_id == folder_id, CollectionItemRow.paper_id == paper_id,
@@ -198,7 +203,9 @@ class CollectionService:
     async def move_paper(self, user_id: str, folder_id: int, paper_id: str, target_folder_id: int) -> None:
         if folder_id == target_folder_id:
             raise BusinessError(40004, '目标文件夹不能与当前文件夹相同', 400)
+        await self.ensure_default_folders(user_id)
         async with session_scope() as session:
+            await self._lock_membership(session, user_id)
             await self._folder(session, user_id, folder_id)
             await self._folder(session, user_id, target_folder_id)
             result = await session.execute(delete(CollectionItemRow).where(
@@ -210,7 +217,20 @@ class CollectionService:
                 CollectionItemRow.folder_id == target_folder_id, CollectionItemRow.paper_id == paper_id,
             ))
             if not exists:
+                count = await session.scalar(select(func.count(CollectionItemRow.id)).where(
+                    CollectionItemRow.folder_id == target_folder_id,
+                ))
+                if (count or 0) >= 100:
+                    raise BusinessError(40005, '每个文件夹最多收藏 100 篇论文', 400)
                 session.add(CollectionItemRow(folder_id=target_folder_id, paper_id=paper_id))
+
+    @staticmethod
+    async def _lock_membership(session, user_id: str) -> None:
+        # A replacement can target disjoint folders (or the empty set). Lock a
+        # stable per-account row so replace/move/remove/delete serialize alike.
+        await session.execute(select(CollectionUserStateRow).where(
+            CollectionUserStateRow.user_id == user_id,
+        ).with_for_update())
 
     async def collector_counts(self, paper_ids: list[str]) -> dict[str, int]:
         """Distinct users per paper across every folder.
