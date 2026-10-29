@@ -286,6 +286,9 @@ export function ShenzhiAiPage() {
   const pendingOperationRef = useRef<{
     sessionId: string; body: AgentRunInput; key: string; userId: string; assistantId: string;
   } | null>(null);
+  // Render-visible mirror of the ref: the retry action must appear and disappear
+  // with the pending operation, not only when another state change re-renders.
+  const [pendingOperationSessionId, setPendingOperationSessionId] = useState<string | null>(null);
   const runContextRef = useRef<{
     sessionId: string;
     generation: number;
@@ -540,6 +543,7 @@ export function ShenzhiAiPage() {
     const userId = retry?.userId ?? newTurnId("user");
     const assistantId = retry?.assistantId ?? newTurnId("assistant");
     pendingOperationRef.current = { sessionId, body: requestBody, key: idempotencyKey, userId, assistantId };
+    setPendingOperationSessionId(sessionId);
     const context = { sessionId, generation, assistantId };
     const userTurn: Turn = {
       id: userId, role: "user", content: prompt, attachments: runInput.attachments as ChatAttachment[],
@@ -574,6 +578,7 @@ export function ShenzhiAiPage() {
         }, () => {
           if (pendingOperationRef.current?.key === idempotencyKey) {
             pendingOperationRef.current = null;
+            setPendingOperationSessionId(null);
           }
         }),
         idempotencyKey, controller.signal,
@@ -895,7 +900,7 @@ export function ShenzhiAiPage() {
             />
             {steerError && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{steerError}</div>}
             {runError && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{runError}</div>}
-            {!running && pendingOperationRef.current?.sessionId === sessionId && (
+            {!running && pendingOperationSessionId === sessionId && (
               <button type="button" onClick={retryPendingOperation}
                 className="mt-2 cursor-pointer text-xs text-primary hover:underline">
                 重试上次提交
