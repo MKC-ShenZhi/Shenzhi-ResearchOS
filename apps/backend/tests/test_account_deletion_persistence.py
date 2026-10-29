@@ -18,6 +18,16 @@ from app.services.user.account_deletion import AccountDeletionService
 
 @unittest.skipUnless(os.getenv('CHAT_DATABASE_URL'), 'CHAT_DATABASE_URL not set')
 class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        from app.core.database import dispose_engine
+
+        await dispose_engine()
+
+    async def asyncTearDown(self):
+        from app.core.database import dispose_engine
+
+        await dispose_engine()
+
     async def test_deletes_all_target_data_preserves_other_user_and_is_idempotent(self):
         target_user = f'delete-test-{uuid.uuid4()}'
         other_user = f'keep-test-{uuid.uuid4()}'

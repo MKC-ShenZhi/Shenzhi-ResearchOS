@@ -39,6 +39,13 @@ export function requestHeaders(extra?: HeadersInit): Headers {
   return new Headers(extra);
 }
 
+/** Reject a request if cookies changed accounts before the BFF resolved them.
+ * This is a precondition, never an authentication credential.
+ */
+export function expectedUserHeaders(userId: string): HeadersInit {
+  return { "x-shenzhi-expected-user-id": userId };
+}
+
 // Serialize first contact so parallel config/history/upload requests cannot issue
 // different anonymous cookies. This is transport bootstrap, not an account system.
 let identityReady: Promise<void> | undefined;

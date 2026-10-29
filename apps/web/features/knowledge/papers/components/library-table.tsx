@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useInteractionIdentity } from "@/features/knowledge/interactions/use-interaction-identity";
+import { useRefreshPaperInteraction } from "@/features/knowledge/interactions/use-refresh-paper-interaction";
 import { MoreHorizontal, Search, Upload } from "lucide-react";
-import { apiJson, ApiError } from "@/clients/backend/http";
+import { apiJson, ApiError, expectedUserHeaders } from "@/clients/backend/http";
 import { deletePrivatePaper, listPrivatePapers, privatePaperFileHref, uploadPrivatePaper, type PrivatePaper } from "@/clients/backend/private-papers";
 import type { CollectionPaperListResponse } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
+import { PaperCollectorCount } from "@/features/knowledge/interactions/components/paper-collector-count";
 import { paperHref } from "@/lib/navigation/paper";
 import { useCollections } from "@/stores/collections";
 import { PaperReadBadgeForPaper } from "./paper-read-badge";
@@ -14,8 +18,6 @@ import { PaperReadBadgeForPaper } from "./paper-read-badge";
 export function LibraryTable({ folderId }: { folderId: number | null }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<CollectionPaperListResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(folderId !== null);
   const [error, setError] = useState("");
   const [unauthenticated, setUnauthenticated] = useState(false);
   const [menu, setMenu] = useState<string | null>(null);
@@ -27,24 +29,21 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const folders = useCollections((state) => state.folders);
   const loadFolders = useCollections((state) => state.loadFolders);
-
-  function handleLoadError(reason: unknown) {
-    if (reason instanceof ApiError && reason.status === 401) {
-      setError("");
-      setUnauthenticated(true);
-      return;
-    }
-    setError(reason instanceof ApiError && reason.status === 403 ? "无权访问该文件夹" : "文件夹内容加载失败");
-  }
-
-  useEffect(() => {
-    if (folderId === null) return;
-    let cancelled = false;
-    void apiJson<CollectionPaperListResponse>(`/collections/folders/${folderId}/papers?page=1&page_size=20`)
-      .then((response) => { if (!cancelled) { setError(""); setUnauthenticated(false); setData(response); setPage(1); setIsLoading(false); } })
-      .catch((reason) => { if (!cancelled) { handleLoadError(reason); setIsLoading(false); } });
-    return () => { cancelled = true; };
-  }, [folderId]);
+  const refreshCollectorCounts = useRefreshPaperInteraction();
+  const { identityKey, isSessionPending } = useInteractionIdentity();
+  const papers = useQuery({
+    queryKey: ["collection-folder-papers", identityKey, folderId, page],
+    queryFn: () => apiJson<CollectionPaperListResponse>(`/collections/folders/${folderId}/papers?page=${page}&page_size=20`, {
+      headers: expectedUserHeaders(identityKey),
+    }),
+    enabled: !isSessionPending && Boolean(identityKey) && folderId !== null && folderId > 0,
+    retry: false,
+  });
+  const data = papers.data;
+  const isLoading = papers.isFetching;
+  const queryError = papers.error instanceof ApiError && papers.error.status === 401
+    ? "该功能需要登录后使用，请先登录" : papers.isError ? "文件夹内容加载失败" : "";
+  const visibleError = error || queryError;
 
   useEffect(() => {
     if (folderId === null || folderId < 1) return;
@@ -95,25 +94,18 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
   }
 
   async function loadPage(nextPage: number) {
-    if (!folderId) return;
     setError("");
-    setIsLoading(true);
-    try {
-      setData(await apiJson<CollectionPaperListResponse>(`/collections/folders/${folderId}/papers?page=${nextPage}&page_size=20`));
-      setPage(nextPage);
-    } catch (reason) {
-      handleLoadError(reason);
-    } finally {
-      setIsLoading(false);  
-    }
+    if (nextPage === page) await papers.refetch();
+    else setPage(nextPage);
   }
 
   async function removePaper(paperId: string) {
     if (!folderId) return;
     try {
-      await apiJson<unknown>(`/collections/folders/${folderId}/papers/${encodeURIComponent(paperId)}`, { method: "DELETE" });
+      await apiJson<unknown>(`/collections/folders/${folderId}/papers/${encodeURIComponent(paperId)}`, { method: "DELETE", headers: expectedUserHeaders(identityKey) });
       await loadPage(page);
       await loadFolders();
+      void refreshCollectorCounts();
       setMenu(null);
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) setUnauthenticated(true);
@@ -126,10 +118,12 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
     try {
       await apiJson<unknown>(`/collections/folders/${folderId}/papers/${encodeURIComponent(paperId)}/move`, {
         method: "POST",
+        headers: expectedUserHeaders(identityKey),
         body: JSON.stringify({ target_folder_id: targetFolderId }),
       });
       await loadPage(page);
       await loadFolders();
+      void refreshCollectorCounts();
       setMenu(null);
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) setUnauthenticated(true);
@@ -150,13 +144,13 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
       </div>
       <section className="mt-5 rounded-2xl bg-card p-3 sm:p-5 shadow-card" aria-label="深知论文">
       <h2 className="text-base font-semibold text-ink">深知论文</h2>
-      {error && <div className="mt-4 rounded-xl bg-danger-soft p-4 text-sm text-danger">{error}<button type="button" onClick={() => void loadPage(page)} className="ml-3 underline">重试</button></div>}
-      {unauthenticated ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-muted">该功能需要登录后使用，请先登录</div> : !folderId ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-faint">暂无文件夹</div> : isLoading ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-muted">加载中...</div> : error ? null : data && data.items.length === 0 ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-faint">当前文件夹暂无深知论文</div> : !error && <>
+      {visibleError && <div className="mt-4 rounded-xl bg-danger-soft p-4 text-sm text-danger">{visibleError}<button type="button" onClick={() => void loadPage(page)} className="ml-3 underline">重试</button></div>}
+      {unauthenticated || (!isSessionPending && !identityKey) ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-muted">该功能需要登录后使用，请先登录</div> : !folderId ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-faint">暂无文件夹</div> : isLoading ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-muted">加载中...</div> : visibleError ? null : data && data.items.length === 0 ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-faint">当前文件夹暂无深知论文</div> : !visibleError && <>
         <div className="mt-4 hidden lg:grid grid-cols-[minmax(0,1fr)_220px_100px_36px] items-center gap-4 border-b border-line px-3 py-2 text-xs text-faint"><span>论文</span><span>作者</span><span>添加时间</span><span /></div>
         <div className="divide-y divide-line">
           {items.map((item) => (
             <div key={item.paper_id} className="grid grid-cols-[minmax(0,1fr)_36px] lg:grid-cols-[minmax(0,1fr)_220px_100px_36px] items-center gap-4 rounded-xl px-3 py-3 transition-colors hover:bg-panel">
-              <Link href={paperHref(item.paper_id, { mode: "create", source: "/knowledge/papers" })} className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-9 shrink-0 items-end justify-center rounded-md bg-primary-soft pb-1 text-[10px] font-bold text-primary">PDF</span><span className="min-w-0"><span className="flex min-w-0 items-center gap-2"><span className="truncate text-[15px] font-semibold text-ink">{item.title}</span><PaperReadBadgeForPaper paperId={item.paper_id} /></span><span className="mt-0.5 block truncate text-xs text-faint">{item.venue ?? "暂无会议"} · {item.year ?? "—"}</span></span></Link>
+              <Link href={paperHref(item.paper_id, { mode: "create", source: "/knowledge/papers" })} className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-9 shrink-0 items-end justify-center rounded-md bg-primary-soft pb-1 text-[10px] font-bold text-primary">PDF</span><span className="min-w-0"><span className="flex min-w-0 items-center gap-2"><span className="truncate text-[15px] font-semibold text-ink">{item.title}</span><PaperReadBadgeForPaper paperId={item.paper_id} /></span><span className="mt-0.5 block truncate text-xs text-faint">{item.venue ?? "暂无会议"} · {item.year ?? "—"} · <PaperCollectorCount paperId={item.paper_id} className="align-middle text-xs" /></span></span></Link>
               <p className="hidden truncate text-[13px] text-muted lg:block">{item.authors.join(" · ") || "未知作者"}</p>
               <time className="hidden text-[13px] text-muted lg:block">{new Date(item.added_at).toLocaleDateString("zh-CN")}</time>
               <span className="relative"><button type="button" onClick={() => setMenu(menu === item.paper_id ? null : item.paper_id)} aria-label="论文操作" className="rounded-md p-1 text-faint hover:bg-chip"><MoreHorizontal className="size-4" /></button>{menu === item.paper_id && <span className="absolute right-0 top-full z-20 w-36 rounded-lg border border-line bg-card p-1 text-xs shadow-card"><button type="button" onClick={() => void removePaper(item.paper_id)} className="block w-full rounded-md px-2 py-1.5 text-left text-danger hover:bg-danger-soft">删除</button><span className="mt-1 block border-t border-line pt-1"><span className="block px-2 py-1 text-faint">移至</span>{folders.filter((folder) => folder.id !== folderId).map((folder) => <button key={folder.id} type="button" onClick={() => void movePaper(item.paper_id, folder.id)} className="block w-full truncate rounded-md px-2 py-1.5 text-left text-ink-2 hover:bg-chip">{folder.name}</button>)}</span></span>}</span>

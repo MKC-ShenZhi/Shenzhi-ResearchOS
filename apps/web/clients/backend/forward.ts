@@ -5,7 +5,7 @@ import { logError, logInfo } from "../../lib/observability/logger";
 import { REQUEST_ID_HEADER, resolveRequestId } from "../../lib/observability/request-id";
 import { attachIdentity, resolveBackendIdentity } from "./identity";
 
-const FORWARDED_REQUEST_HEADERS = ["accept", "content-type", "last-event-id", "range"] as const;
+const FORWARDED_REQUEST_HEADERS = ["accept", "content-type", "last-event-id", "range", "x-shenzhi-expected-user-id"] as const;
 
 function forwardedHeaders(requestHeaders: Headers): Headers {
   const headers = new Headers();
@@ -14,6 +14,16 @@ function forwardedHeaders(requestHeaders: Headers): Headers {
     if (value) headers.set(name, value);
   }
   return headers;
+}
+
+/** Node fetch cannot deliver a 401 response to a non-replayable request body.
+ * Keep small JSON protocol bodies replayable; binary uploads still stream.
+ */
+export async function readForwardedBody(request: Request): Promise<BodyInit | undefined> {
+  if (request.headers.get("content-length") === "0" || !request.body) return undefined;
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  if (contentType === "application/json" || contentType?.endsWith("+json")) return request.text();
+  return request.body;
 }
 
 /**
@@ -59,7 +69,7 @@ export async function forwardToBusinessBackend(
   };
 
   if (req.method !== "GET" && req.method !== "HEAD") {
-    Object.assign(init, { body: req.body, duplex: "half" });
+    Object.assign(init, { body: await readForwardedBody(req), duplex: "half" });
   }
 
   let upstream: Response;

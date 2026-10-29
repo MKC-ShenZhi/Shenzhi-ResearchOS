@@ -15,6 +15,8 @@ import { KnowledgeClientError } from "@/clients/knowledge";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
+import { PaperCollectorCount } from "@/features/knowledge/interactions/components/paper-collector-count";
+import { PaperLikeButton } from "@/features/knowledge/interactions/components/paper-like-button";
 import { useKnowledgePaper } from "@/features/knowledge/paper/use-knowledge-paper";
 import { KnowledgePaperSkeleton } from "@/features/knowledge/paper/components/paper-skeleton";
 import { normalizeInternalReturnTo } from "@/lib/navigation/internal-return-to";
@@ -171,6 +173,8 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
                 setZoom={setZoom}
               >
                 <div className="flex min-w-0 items-center gap-1.5">
+                  <PaperLikeButton paperId={paper.id} />
+                  <PaperCollectorCount paperId={paper.id} withIcon compact />
                   <CollectionPicker paperId={paper.id} iconOnly />
                   <TabsList aria-label="论文内容" className="h-10 shrink-0 gap-0.5 rounded-full bg-chip p-1">
                     <TabsTrigger
