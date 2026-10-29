@@ -165,7 +165,7 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
         )
         message_id = response.json()['data']['message_id']
         message = await repository.message(message_id, OWNER_KEY)
-        message.generation_claimed = True
+        self.assertTrue(await repository.claim_generation(message, 'other-worker'))
 
         conflict = await self.client.get(f'/api/v1/chat/messages/{message_id}/stream')
 
@@ -327,7 +327,15 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
         replay = await self.client.get(path, headers={'Last-Event-ID': '1'})
         self.assertNotEqual(first.text, replay.text)
         self.assertEqual(len(FakeProvider.calls), 1)
-        self.assertEqual((await self.client.get(path, headers={'Last-Event-ID': '999999'})).status_code, 400)
+        beyond = await self.client.get(path, headers={'Last-Event-ID': '999999'})
+        if repository.is_durable:
+            # Durable workers keep no buffer for finished rows; a cursor from any
+            # worker restarts the reconstructed terminal replay instead.
+            self.assertEqual(beyond.status_code, 200)
+            self.assertIn('event: done', beyond.text)
+        else:
+            self.assertEqual(beyond.status_code, 400)
+        self.assertEqual(len(FakeProvider.calls), 1)
 
     async def test_stop_resume_appends_and_cancels_upstream(self):
         yielded, cancelled = asyncio.Event(), asyncio.Event()
@@ -339,6 +347,7 @@ class ChatApiTests(unittest.IsolatedAsyncioTestCase):
                     await asyncio.Event().wait()
                 finally: cancelled.set()
         created = await self.create(); mid = created['message_id']; message = await repository.message(mid, OWNER_KEY)
+        self.assertTrue(await repository.claim_generation(message))
         with patch.object(chat, 'ModelProvider', SlowProvider):
             message.task = asyncio.create_task(chat.generate(message))
             await asyncio.wait_for(yielded.wait(), 2)

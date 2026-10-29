@@ -44,6 +44,12 @@ KNOWLEDGE_GROUNDING_UNVERIFIED = 'unverified'
 NO_KNOWLEDGE_WARNING = '本轮未检索到可用于回答的知识资料，以下回答未使用知识底座。'
 KNOWLEDGE_SERVICE_WARNING = '知识检索服务暂时不可用，以下回答未使用知识底座。'
 KNOWLEDGE_CITATION_WARNING = '本轮未能形成可验证的知识引用，以下回答未作为知识增强结果。'
+GENERATION_INTERRUPTED_ERROR = '生成已中断，请重试'
+LEASE_LOST_ERROR = '任务执行租约已失效'
+# A stop that lands on a worker without the generation task waits briefly for
+# the owner, which normally finalizes as soon as the client drops its SSE.
+REMOTE_STOP_WAIT_SECONDS = 5.0
+REMOTE_STOP_POLL_SECONDS = 0.25
 
 
 # Constructed once so Chat has one server-side Capability boundary. The
@@ -559,8 +565,8 @@ async def generate(message: Message, worker_id: str | None = None) -> None:
         message.status = 'done'
     except asyncio.CancelledError:
         if not message.stop_requested:
-            message.status, message.error = 'failed', '任务执行租约已失效'
-            message.emit('error', {'code': 20004, 'message': message.error})
+            # Shutdown or lease loss; the error event follows the durable write.
+            message.status, message.error = 'failed', GENERATION_INTERRUPTED_ERROR
         elif candidate_in_progress:
             knowledge_grounding = KNOWLEDGE_GROUNDING_UNVERIFIED
             message.settings['knowledge_grounding'] = knowledge_grounding
@@ -593,7 +599,9 @@ async def generate(message: Message, worker_id: str | None = None) -> None:
             # durable.  Do not send it before the database write succeeds.
             persisted = await repository.persist_message(message, worker_id)
             if not persisted:
-                message.status, message.error = 'failed', '任务执行租约已失效'
+                # Another worker recovered or finalized the row; this result is stale.
+                message.status, message.error = 'failed', LEASE_LOST_ERROR
+            if message.error in (GENERATION_INTERRUPTED_ERROR, LEASE_LOST_ERROR):
                 message.emit('error', {'code': 20004, 'message': message.error})
         except Exception as exc:
             terminal_error = exc
@@ -633,9 +641,23 @@ async def stop_message(message: Message) -> None:
         else:
             if not persisted:
                 message.status, message.stop_requested = 'streaming', False
-                raise BusinessError(20009, '消息已由其他工作进程认领或结束，请重新读取状态', 409)
+                await _await_remote_terminal(message)
+                return
         _log_stream_terminal(message, terminal_error)
         message.emit('done', {'duration_ms': message.duration_ms, 'status': message.status})
+
+
+async def _await_remote_terminal(message: Message) -> None:
+    """Confirm a stop handled by the worker that owns the generation lease."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + REMOTE_STOP_WAIT_SECONDS
+    while True:
+        await repository.refresh_message(message)
+        if message.status != 'streaming':
+            return
+        if loop.time() >= deadline:
+            raise BusinessError(20009, '消息正在其他工作进程生成，停止尚未确认，请稍后重试', 409)
+        await asyncio.sleep(REMOTE_STOP_POLL_SECONDS)
 
 
 async def start_message_generation(message: Message) -> None:

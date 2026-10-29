@@ -94,9 +94,9 @@ async def followup(
 async def stream(message_id: str, owner: str = Depends(request_owner),
                  last_event_id: str | None = Header(default=None)):
     message = await repository.message(message_id, owner)
-    worker_buffer_unavailable = (
-        message.generation_claimed and message.task is None and not message.events
-    )
+    # Event buffers are process-local. A cursor issued by another worker (or
+    # before a resume on another worker) cannot index this worker's buffer.
+    worker_buffer_unavailable = message.task is None and not message.events
     if message.status == 'streaming' and message.task is None:
         message.stream_request_id = get_request_id()
     restore_terminal_events(message)

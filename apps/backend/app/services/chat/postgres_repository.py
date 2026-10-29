@@ -45,6 +45,25 @@ def _message_from_row(row: ChatMessageRow) -> Message:
     )
 
 
+def _lease_deadline():
+    return func.clock_timestamp() + text(f"INTERVAL '{LEASE_SECONDS} seconds'")
+
+
+def _sync_message_from_row(message: Message, row: ChatMessageRow) -> None:
+    message.content = row.content
+    message.reasoning = row.reasoning
+    message.status = row.status
+    message.references = list(row.message_refs)
+    message.followups = list(row.followups)
+    message.duration_ms = row.duration_ms
+    message.error = row.error
+    message.warnings = list(row.warnings)
+    message.settings = dict(row.settings)
+    message.generation_claimed = row.generation_claimed
+    message.worker_id = row.worker_id
+    message.lease_expires_at = row.lease_expires_at
+
+
 def _session_from_row(row: ChatSessionRow, messages: list[Message]) -> Session:
     return Session(
         str(row.id), row.owner, row.title, dict(row.settings), row.favorite,
@@ -69,8 +88,17 @@ class PostgresSessionRepository:
     def _untrack(self, message_id: str) -> None:
         self.messages.pop(message_id, None)
 
+    def _local_message(self, message_id: str) -> Message | None:
+        """Return the cached object only while this worker owns its generation task.
+
+        Any other cached copy may be stale after another worker finished the row,
+        so the database stays authoritative for it.
+        """
+        message = self.messages.get(message_id)
+        return message if message is not None and message.task is not None else None
+
     def _overlay_messages(self, messages: list[Message]) -> list[Message]:
-        return [self.messages.get(message.id, message) for message in messages]
+        return [self._local_message(message.id) or message for message in messages]
 
     async def _recover_expired_messages(self, db, *, session_id=None, message_id=None) -> set[str]:
         statement = update(ChatMessageRow).where(
@@ -113,7 +141,8 @@ class PostgresSessionRepository:
                     .where(ChatMessageRow.id == message_id)
                     .where(ChatMessageRow.status.in_(('stopped', 'failed')))
                     .values(status='streaming', error=None, completed_at=None,
-                            generation_claimed=False, worker_id=None, lease_expires_at=None)
+                            generation_claimed=False, worker_id=None,
+                            lease_expires_at=_lease_deadline())
                     .returning(ChatMessageRow.id)
                 )
             else:
@@ -128,10 +157,11 @@ class PostgresSessionRepository:
                         ChatMessageRow.lease_expires_at > func.clock_timestamp(),
                     )
                 else:
+                    # Only a row no worker has claimed may be finalized without
+                    # a lease owner, e.g. a stop before the SSE stream started.
                     statement = statement.where(
                         ChatMessageRow.generation_claimed.is_(False),
                         ChatMessageRow.worker_id.is_(None),
-                        ChatMessageRow.lease_expires_at.is_(None),
                     )
                 persisted = await db.scalar(
                     statement.values(
@@ -193,8 +223,9 @@ class PostgresSessionRepository:
         self._sync_recovered_messages(recovered_ids)
         if row is None:
             return None
-        message = self.messages.get(str(row.id)) or _message_from_row(row)
-        self._track(message)
+        message = self._local_message(str(row.id)) or _message_from_row(row)
+        if message.status == 'streaming':
+            self._track(message)
         return message
 
     async def create_with_message(self, owner: str, question: str, settings: dict,
@@ -219,7 +250,7 @@ class PostgresSessionRepository:
                     settings=dict(settings), attachment_context=context, warnings=list(warnings),
                     status='streaming', idempotency_owner=owner, idempotency_scope=scope,
                     idempotency_key=key, idempotency_fingerprint=fingerprint,
-                    created_at=now,
+                    lease_expires_at=_lease_deadline(), created_at=now,
                 ))
         except IntegrityError:
             existing = await self.find_idempotent_message(owner, scope, key, fingerprint)
@@ -263,6 +294,7 @@ class PostgresSessionRepository:
         messages = self._overlay_messages([_message_from_row(item) for item in row.messages])
         tracked = self.messages.get(message.id)
         if tracked is not None:
+            # The generating message itself is always the in-memory object.
             messages = [tracked if item.id == message.id else item for item in messages]
         session = _session_from_row(row, messages)
         if not any(item is message for item in session.messages):
@@ -273,10 +305,19 @@ class PostgresSessionRepository:
         return session
 
     async def message(self, message_id: str, owner: str) -> Message:
-        if message_id in self.messages:
-            message = self.messages[message_id]
-            await self.get(message.session_id, owner)
-            return message
+        cached = self.messages.get(message_id)
+        if cached is not None:
+            await self.get(cached.session_id, owner)
+            if cached.task is None:
+                # Keep one object per message on this worker, but never trust
+                # its fields when another worker may have finished the row.
+                async with get_session_factory()() as db:
+                    row = await db.get(ChatMessageRow, uuid.UUID(message_id))
+                if row is not None:
+                    _sync_message_from_row(cached, row)
+                if cached.status != 'streaming':
+                    self._untrack(message_id)
+            return cached
         mid = uuid.UUID(message_id)
         recovered_ids: set[str] = set()
         async with session_scope() as db:
@@ -294,8 +335,12 @@ class PostgresSessionRepository:
         if msg_row is None:
             raise BusinessError(20004, '消息不存在或已过期', 404)
         message = _message_from_row(msg_row)
-        # Track so resume/stop/stream share one object with session.messages overlay.
-        self._track(message)
+        # Track only runnable rows so this worker's stream/stop share one object;
+        # terminal or remotely owned rows are re-read from the database next time.
+        if message.status == 'streaming':
+            self._track(message)
+        else:
+            self._untrack(message.id)
         return message
 
     async def add_message(self, session: Session, question: str, settings: dict,
@@ -334,7 +379,8 @@ class PostgresSessionRepository:
                     if existing_row is not None:
                         ensure_same_request(existing_row.idempotency_fingerprint,
                                             idempotency_fingerprint or '')
-                        replay = self.messages.get(str(existing_row.id)) or _message_from_row(existing_row)
+                        replay = (self._local_message(str(existing_row.id))
+                                  or _message_from_row(existing_row))
                     else:
                         active = await db.scalar(select(exists().where(
                             ChatMessageRow.session_id == sid, ChatMessageRow.status == 'streaming',
@@ -365,7 +411,7 @@ class PostgresSessionRepository:
                         idempotency_scope=idempotency_scope,
                         idempotency_key=idempotency_key,
                         idempotency_fingerprint=idempotency_fingerprint,
-                        created_at=now,
+                        lease_expires_at=_lease_deadline(), created_at=now,
                     ))
         except IntegrityError as error:
             if idempotency_key is not None:
@@ -380,7 +426,8 @@ class PostgresSessionRepository:
             raise
         self._sync_recovered_messages(recovered_ids)
         if replay is not None:
-            self._track(replay)
+            if replay.status == 'streaming':
+                self._track(replay)
             return replay
         session.messages.append(message)
         session.settings = dict(settings)
@@ -397,37 +444,41 @@ class PostgresSessionRepository:
                     ChatMessageRow.id == uuid.UUID(message.id),
                     ChatMessageRow.status == 'streaming',
                     ChatMessageRow.generation_claimed.is_(False),
-                    ChatMessageRow.lease_expires_at.is_(None),
+                    ChatMessageRow.worker_id.is_(None),
+                    # A runnable row carries a claim deadline; once it lapses the
+                    # row is recovered as failed instead of starting late.
+                    ChatMessageRow.lease_expires_at > func.clock_timestamp(),
                 )
                 .values(
                     generation_claimed=True,
                     worker_id=worker_id,
-                    lease_expires_at=func.clock_timestamp() + text(f"INTERVAL '{LEASE_SECONDS} seconds'"),
+                    lease_expires_at=_lease_deadline(),
                 )
                 .returning(ChatMessageRow.lease_expires_at)
             )
         if claimed is None:
-            async with get_session_factory()() as db:
-                row = await db.get(ChatMessageRow, uuid.UUID(message.id))
-            if row is not None:
-                message.content = row.content
-                message.reasoning = row.reasoning
-                message.status = row.status
-                message.references = list(row.message_refs)
-                message.followups = list(row.followups)
-                message.duration_ms = row.duration_ms
-                message.error = row.error
-                message.warnings = list(row.warnings)
-                message.settings = dict(row.settings)
-                message.generation_claimed = row.generation_claimed
-                message.worker_id = row.worker_id
-                message.lease_expires_at = row.lease_expires_at
-                message.events.clear()
+            await self.refresh_message(message)
             return False
         message.generation_claimed = True
         message.worker_id = worker_id
         message.lease_expires_at = claimed
         return True
+
+    async def refresh_message(self, message: Message) -> None:
+        """Mirror the durable row onto an object whose generation runs elsewhere."""
+        recovered_ids: set[str] = set()
+        async with session_scope() as db:
+            recovered_ids = await self._recover_expired_messages(
+                db, message_id=uuid.UUID(message.id),
+            )
+            row = await db.get(ChatMessageRow, uuid.UUID(message.id))
+        self._sync_recovered_messages(recovered_ids)
+        if row is None:
+            return
+        _sync_message_from_row(message, row)
+        message.events.clear()
+        if message.status != 'streaming':
+            self._untrack(message.id)
 
     async def renew_generation(self, message_id: str, worker_id: str) -> bool | None:
         async with session_scope() as db:
@@ -439,8 +490,7 @@ class PostgresSessionRepository:
                     ChatMessageRow.worker_id == worker_id,
                     ChatMessageRow.lease_expires_at > func.clock_timestamp(),
                 )
-                .values(lease_expires_at=func.clock_timestamp()
-                        + text(f"INTERVAL '{LEASE_SECONDS} seconds'"))
+                .values(lease_expires_at=_lease_deadline())
                 .returning(ChatMessageRow.id)
             )
             if renewed is not None:
