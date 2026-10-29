@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getChatSession, resumeChatMessage, stopChatMessage, streamChatMessage } from "@/clients/backend/chat";
+import { ApiError } from "@/clients/backend/http";
 import { useAskSidebarBridge } from "@/stores/ask-sidebar-bridge";
 import { beginTurn, restoreTurns } from "../services/conversation";
 import { clearAskDraft } from "../services/draft";
@@ -108,6 +109,7 @@ export function useChatSession({
   const lifecycleEpochRef = useRef(0);
   const currentMessageId = useRef<string | null>(null);
   const lastInput = useRef<ChatSendInput | null>(null);
+  const lastOperationKey = useRef<string | null>(null);
   const pendingCreate = useRef<PendingCreate | null>(null);
   // A user can stop after the UI becomes busy but before create-session has
   // returned its server message ID. Keep that intent until `send` can retire
@@ -285,6 +287,7 @@ export function useChatSession({
           finalStatus = done.status;
           patch(localId, {
             status: done.status,
+            resumeFromStreaming: undefined,
             durationMs: done.duration_ms,
             thought: "生成结束",
             ...(done.knowledge_grounding ? { knowledgeGrounding: done.knowledge_grounding } : {}),
@@ -293,7 +296,7 @@ export function useChatSession({
         onError: (error) => {
           if (!active()) return;
           finalStatus = "failed";
-          patch(localId, { status: "failed", error: error.message });
+          patch(localId, { status: "failed", error: error.message, resumeFromStreaming: undefined });
         },
       }, { signal: generation.controller.signal, lastEventId: cursor });
     } catch (error) {
@@ -303,7 +306,10 @@ export function useChatSession({
         finalStatus = "failed";
         patch(localId, {
           status: "failed",
-          error: messageForApiError(error),
+          error: error instanceof ApiError && error.status === 409
+            ? "任务仍在其他工作进程运行，稍后可继续读取结果。"
+            : messageForApiError(error),
+          ...(error instanceof ApiError && error.status === 409 ? { resumeFromStreaming: true } : {}),
           ...(requestIdForApiError(error) ? { requestId: requestIdForApiError(error) } : {}),
         });
       }
@@ -330,10 +336,12 @@ export function useChatSession({
     bumpHistoryRefresh();
   }, [bumpHistoryRefresh, embedded, identityScope, setLocalId]);
 
-  const send = useCallback(async (input: ChatSendInput) => {
+  const send = useCallback(async (input: ChatSendInput, retryOperationKey?: string) => {
     const question = input.question.trim();
     if (!question || busyRef.current || hydratingRef.current || interactionLockedRef.current) return;
 
+    const operationKey = retryOperationKey ?? crypto.randomUUID();
+    lastOperationKey.current = operationKey;
     const generation = startGeneration(sessionRef.current);
     const retiringLocalId = localHistoryIdRef.current;
     setLocalId(null);
@@ -346,7 +354,10 @@ export function useChatSession({
 
     let finalStatus: ChatMessageStatus | undefined;
     try {
-      const request = beginTurn(sessionRef.current, { ...input, question }, { signal: generation.controller.signal });
+      const request = beginTurn(sessionRef.current, { ...input, question }, {
+        signal: generation.controller.signal,
+        headers: { "Idempotency-Key": operationKey },
+      });
       pendingCreate.current = { request, localId: assistant.localId, generation };
       const created = await request;
       if (!generation.isCurrent()) {
@@ -354,6 +365,7 @@ export function useChatSession({
         return;
       }
       if (pendingCreate.current?.generation === generation) pendingCreate.current = null;
+      if (lastOperationKey.current === operationKey) lastOperationKey.current = null;
       setActiveSession(created.session_id);
       if (retiringLocalId) deleteLocalAskSession(identityScope, retiringLocalId);
       patch(assistant.localId, { messageId: created.message_id });
@@ -478,7 +490,7 @@ export function useChatSession({
     if (!last.messageId) {
       if (lastInput.current) {
         writeTurns((previous) => previous.slice(0, -2));
-        await send(lastInput.current);
+        await send(lastInput.current, lastOperationKey.current ?? undefined);
       }
       return;
     }
@@ -491,12 +503,19 @@ export function useChatSession({
     let finalStatus: ChatMessageStatus | undefined;
     let resend: ChatSendInput | null = null;
     try {
-      const resumed = await resumeChatMessage(last.messageId, { signal: generation.controller.signal });
-      if (!generation.isCurrent()) {
-        await stopChatMessage(resumed.message_id).catch(() => {});
-        return;
+      if (last.resumeFromStreaming) {
+        writeTurns((previous) => previous.map((turn) => turn.localId === last.localId
+          ? { ...turn, content: "", reasoning: "", references: [], followups: [] }
+          : turn));
+        finalStatus = await runStream(generation, last.messageId, last.localId, last.lastEventId);
+      } else {
+        const resumed = await resumeChatMessage(last.messageId, { signal: generation.controller.signal });
+        if (!generation.isCurrent()) {
+          await stopChatMessage(resumed.message_id).catch(() => {});
+          return;
+        }
+        finalStatus = await runStream(generation, resumed.message_id, last.localId, resumed.last_event_id);
       }
-      finalStatus = await runStream(generation, resumed.message_id, last.localId, resumed.last_event_id);
     } catch (error) {
       if (generation.isCurrent() && !isAbortError(error)) {
         if (isMissingSessionError(error) && lastInput.current) {
@@ -538,6 +557,7 @@ export function useChatSession({
     setSessionPreferences(null);
     writeTurns([]);
     lastInput.current = null;
+    lastOperationKey.current = null;
     setLoadError(null);
     setPhase("LANDING");
   }, [invalidateGeneration, setActiveSession, setHydration, setInteraction, setLocalId, writeTurns]);
@@ -554,6 +574,7 @@ export function useChatSession({
     setSessionPreferences(null);
     writeTurns([]);
     lastInput.current = null;
+    lastOperationKey.current = null;
     setLoadError(null);
 
     let settled = false;
@@ -581,6 +602,7 @@ export function useChatSession({
           attachments: [],
           capabilities: { knowledge: { enabled: preferences.knowledgeEnabled } },
         };
+        lastOperationKey.current = null;
       }
       // A successful hydration reasserts the canonical URL. This is a no-op
       // for normal URL entry, but repairs a retry after a stale response.
@@ -596,6 +618,7 @@ export function useChatSession({
         setLocalId(null);
         writeTurns([]);
         lastInput.current = null;
+        lastOperationKey.current = null;
         removeHistoryItem(id, "db");
         // The 404 branch owns the cleared URL. Mark that identity as handled
         // before replaceState so the URL effect preserves the visible STALE
@@ -611,6 +634,7 @@ export function useChatSession({
       setLocalId(null);
       writeTurns([]);
       lastInput.current = null;
+      lastOperationKey.current = null;
       setLoadError(messageForApiError(error));
       return undefined;
     } finally {
@@ -651,6 +675,7 @@ export function useChatSession({
       attachments: [],
       capabilities: { knowledge: { enabled: item.knowledge_enabled ?? false } },
     };
+    lastOperationKey.current = null;
   }, [invalidateGeneration, setActiveSession, setBusyValue, setHydration, setInteraction, setLocalId, writeTurns]);
 
   const activeHistoryId = phase === "HYDRATING"

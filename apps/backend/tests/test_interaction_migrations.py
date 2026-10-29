@@ -47,8 +47,8 @@ class InteractionMigrationTests(unittest.TestCase):
             )
             return result.stdout + result.stderr
 
-        # 015_recommendation_foundation now builds on this chain; its own test
-        # owns the single-head check. This test keeps the 011-014 contract.
+        # Later revisions build on this chain; test_idempotency_migrations owns
+        # the single-head check. This test keeps the 011-014 contract.
         self.assertIn('013_paper_likes -> 014_platform_snapshots', alembic('history'))
         alembic('upgrade', '011_agent_uploads')
         baseline = set(asyncio.run(inspect_db()))

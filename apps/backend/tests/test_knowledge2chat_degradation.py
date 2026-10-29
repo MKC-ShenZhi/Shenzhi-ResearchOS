@@ -77,6 +77,8 @@ class Knowledge2ChatDegradationTests(unittest.IsolatedAsyncioTestCase):
             "capabilities": {"knowledge": {"enabled": enabled}},
         })
         message = await chat.prepare_message(body, OWNER_KEY)
+        # Production starts generation only after claiming its worker lease.
+        self.assertTrue(await repository.claim_generation(message))
         await chat.generate(message)
         return message
 
@@ -159,6 +161,7 @@ class Knowledge2ChatDegradationTests(unittest.IsolatedAsyncioTestCase):
             "capabilities": {"knowledge": {"enabled": True}},
         })
         message = await chat.prepare_message(body, OWNER_KEY)
+        self.assertTrue(await repository.claim_generation(message))
         with patch.object(chat, "ModelProvider", SlowProvider):
             message.task = asyncio.create_task(chat.generate(message))
             await asyncio.wait_for(yielded.wait(), 1)
@@ -176,6 +179,8 @@ class Knowledge2ChatDegradationTests(unittest.IsolatedAsyncioTestCase):
             "capabilities": {"knowledge": {"enabled": False}},
         })
         message = await chat.prepare_message(body, OWNER_KEY)
+        # Production starts generation only after claiming its worker lease.
+        self.assertTrue(await repository.claim_generation(message))
         await chat.generate(message)
 
         self.assertEqual(message.status, "done", repr(message.events))

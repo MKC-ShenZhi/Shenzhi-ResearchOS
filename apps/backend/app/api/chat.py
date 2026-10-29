@@ -7,7 +7,11 @@ from app.core.identity import MigrationIdentity, migration_identity, request_own
 from app.core.request_context import get_request_id
 from app.core.responses import ok
 from app.schemas.chat import AnonymousClaimResult, CreateSessionBody, FollowupBody, UpdateSessionBody
-from app.services.chat.service import prepare_message, stop_message, stream_events
+from app.services.chat.service import (
+    prepare_message, restore_terminal_events, start_message_generation, stop_message,
+    stream_events,
+)
+from app.core.idempotency import validate_idempotency_key
 from app.services.chat.repository import repository
 from app.services.identity.anonymous_claim import (
     claim_anonymous_sessions as claim_all_anonymous_sessions,
@@ -42,8 +46,13 @@ async def claim_anonymous_sessions(identity: MigrationIdentity = Depends(migrati
 
 
 @router.post('/sessions')
-async def create_session(body: CreateSessionBody, owner: str = Depends(request_owner)):
-    message = await prepare_message(body, owner)
+async def create_session(
+    body: CreateSessionBody,
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
+    owner: str = Depends(request_owner),
+):
+    key = validate_idempotency_key(idempotency_key)
+    message = await prepare_message(body, owner, idempotency_key=key)
     return ok({'session_id': message.session_id, 'message_id': message.id})
 
 
@@ -68,8 +77,16 @@ async def delete_session(session_id: str, owner: str = Depends(request_owner)):
 
 
 @router.post('/sessions/{session_id}/messages')
-async def followup(session_id: str, body: FollowupBody, owner: str = Depends(request_owner)):
-    message = await prepare_message(body, owner, await repository.get(session_id, owner))
+async def followup(
+    session_id: str,
+    body: FollowupBody,
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
+    owner: str = Depends(request_owner),
+):
+    key = validate_idempotency_key(idempotency_key)
+    message = await prepare_message(
+        body, owner, await repository.get(session_id, owner), idempotency_key=key,
+    )
     return ok({'session_id': session_id, 'message_id': message.id})
 
 
@@ -77,14 +94,25 @@ async def followup(session_id: str, body: FollowupBody, owner: str = Depends(req
 async def stream(message_id: str, owner: str = Depends(request_owner),
                  last_event_id: str | None = Header(default=None)):
     message = await repository.message(message_id, owner)
+    # Event buffers are process-local. A cursor issued by another worker (or
+    # before a resume on another worker) cannot index this worker's buffer.
+    worker_buffer_unavailable = message.task is None and not message.events
     if message.status == 'streaming' and message.task is None:
         message.stream_request_id = get_request_id()
+    restore_terminal_events(message)
     try:
         cursor = int(last_event_id or '0')
     except ValueError:
         raise BusinessError(20001, '无效的 SSE 游标') from None
-    if cursor < 0 or cursor > len(message.events):
+    if cursor < 0:
         raise BusinessError(20001, 'SSE 游标超出范围')
+    if cursor > len(message.events):
+        if worker_buffer_unavailable:
+            cursor = 0
+        else:
+            raise BusinessError(20001, 'SSE 游标超出范围')
+    if message.status == 'streaming' and message.task is None:
+        await start_message_generation(message)
     return StreamingResponse(stream_events(message, cursor), media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no'})
 
@@ -106,6 +134,7 @@ async def resume(message_id: str, owner: str = Depends(request_owner)):
     await stop_message(message)
     cursor = str(len(message.events))
     message.status, message.error, message.task = 'streaming', None, None
+    message.generation_claimed = False
     message.stop_requested = False
     try:
         await repository.persist_message(message)

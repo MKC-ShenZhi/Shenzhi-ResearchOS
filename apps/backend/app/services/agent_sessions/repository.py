@@ -10,6 +10,8 @@ import uuid
 from typing import Any, Protocol
 
 from app.core.errors import BusinessError
+from app.core.idempotency import ensure_same_request
+from app.core.worker_lease import current_worker_id
 from app.services.agent_sessions.entities import AgentSession, AgentTurn
 
 __all__ = [
@@ -55,10 +57,16 @@ class AgentSessionRepository(Protocol):
     async def list_page(self, owner: str, limit: int, cursor: str | None) -> dict: ...
     async def update_title(self, session_id: str, owner: str, title: str) -> AgentSession: ...
     async def delete(self, session_id: str, owner: str) -> None: ...
+    async def find_idempotent_turn(self, session_id: str, owner: str, key: str,
+                                   fingerprint: str) -> AgentTurn | None: ...
     async def start_turn(self, session_id: str, owner: str, prompt: str,
-                         settings: dict, warnings: list[str]) -> AgentTurn: ...
+                         settings: dict, warnings: list[str], *,
+                         worker_id: str | None = None,
+                         idempotency_key: str | None = None,
+                         idempotency_fingerprint: str | None = None) -> tuple[AgentTurn, bool]: ...
     async def finish_turn(self, session_id: str, owner: str, turn_id: str,
-                          payload: dict[str, Any]) -> AgentTurn: ...
+                          payload: dict[str, Any], *, worker_id: str | None = None) -> AgentTurn: ...
+    async def renew_turn(self, turn_id: str, worker_id: str) -> bool | None: ...
     async def import_legacy(self, owner: str, payload: dict[str, Any]) -> AgentSession: ...
     async def claimable_session_ids(self, source_owner: str) -> list[str]: ...
     async def claim_anonymous_sessions(
@@ -132,23 +140,49 @@ class MemoryAgentSessionRepository:
             del self.sessions[session_id]
 
     async def start_turn(self, session_id: str, owner: str, prompt: str,
-                         settings: dict, warnings: list[str]) -> AgentTurn:
+                         settings: dict, warnings: list[str], *,
+                         worker_id: str | None = None,
+                         idempotency_key: str | None = None,
+                         idempotency_fingerprint: str | None = None) -> tuple[AgentTurn, bool]:
         async with self._lock:
             session = await self.get(session_id, owner)
+            if idempotency_key is not None:
+                for existing in session.turns:
+                    if existing.idempotency_key == idempotency_key:
+                        ensure_same_request(
+                            existing.idempotency_fingerprint, idempotency_fingerprint or '',
+                        )
+                        return existing, False
             if any(turn.status == 'running' for turn in session.turns):
                 raise BusinessError(20009, '该会话已有正在运行的任务', 409)
-            turn = AgentTurn(new_turn_id(), session.id, prompt, dict(settings), warnings=list(warnings))
+            turn = AgentTurn(
+                new_turn_id(), session.id, prompt, dict(settings), warnings=list(warnings),
+                worker_id=worker_id or current_worker_id(),
+                idempotency_key=idempotency_key,
+                idempotency_fingerprint=idempotency_fingerprint,
+            )
             session.turns.append(turn)
             session.settings = dict(settings)
             session.updated_at = time.time()
-            return turn
+            return turn, True
+
+    async def find_idempotent_turn(self, session_id: str, owner: str, key: str,
+                                   fingerprint: str) -> AgentTurn | None:
+        session = await self.get(session_id, owner)
+        for turn in session.turns:
+            if turn.idempotency_key == key:
+                ensure_same_request(turn.idempotency_fingerprint, fingerprint)
+                return turn
+        return None
 
     async def finish_turn(self, session_id: str, owner: str, turn_id: str,
-                          payload: dict[str, Any]) -> AgentTurn:
+                          payload: dict[str, Any], *, worker_id: str | None = None) -> AgentTurn:
         async with self._lock:
             session = await self.get(session_id, owner)
             turn = next((item for item in session.turns if item.id == turn_id), None)
             if turn is None or turn.status != 'running':
+                raise BusinessError(20004, 'Agent 轮次不存在或已经结束', 404)
+            if worker_id is not None and turn.worker_id != worker_id:
                 raise BusinessError(20004, 'Agent 轮次不存在或已经结束', 404)
             for key, value in payload.items():
                 if hasattr(turn, key):
@@ -156,6 +190,12 @@ class MemoryAgentSessionRepository:
             turn.completed_at = turn.completed_at or time.time()
             session.updated_at = turn.completed_at
             return turn
+
+    async def renew_turn(self, turn_id: str, worker_id: str) -> bool:
+        return any(
+            turn.id == turn_id and turn.status == 'running' and turn.worker_id == worker_id
+            for session in self.sessions.values() for turn in session.turns
+        )
 
     async def import_legacy(self, owner: str, payload: dict[str, Any]) -> AgentSession:
         import_key = str(payload['import_key'])

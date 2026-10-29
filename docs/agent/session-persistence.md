@@ -32,9 +32,10 @@ Migration `007_agent_sessions` 创建两张表。
 - `steers`、`report`、`sources`、`question`、`warnings`。
 - `error`、`stopped`、`stop_reason`、`status`、`usage`。
 - `transcript` JSONB：经 Agent Runtime 编码的完整、闭合历史，下一轮由后端从最新 Turn 恢复。
+- `idempotency_key` 与 `idempotency_fingerprint`：同一 Session 内识别一次运行操作并检查请求内容；文件上传 ID 不写入 Turn。
 - `created_at` / `completed_at`。
 
-Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'running'` 的部分唯一索引保证同一 Session 最多一个 active run，竞争请求返回 409。
+Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'running'` 的部分唯一索引保证同一 Session 最多一个 active run，其他操作竞争时返回 409。`POST /sessions/{id}/run` 使用 `Idempotency-Key` 请求头；相同 owner、Session、键和请求复用原 Turn，不重复执行模型或工具。同键请求内容不同返回 409。新一轮任务必须使用新键。键和指纹随 Turn 在一条数据库事务中建立，因此事务失败不会留下脱离业务资源的键记录。
 
 ## 生命周期
 
@@ -43,7 +44,8 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 3. `/agents?session=<id>&launch=<id>` 先向后端恢复 Session，然后消费一次 launch，调用 `POST /api/v1/agent/sessions/{id}/run`。首轮的 model / mode / attachments / skills 以显式入参传入，不依赖 React state flush。
 4. Backend 校验 owner，从已存最新 transcript 恢复 runtime history，预留 running Turn，再开始 SSE。
 5. 运行期间 SSE 实时传输 delta / tool / steer / report 等事件。正常结束、`ask_user`、失败、超时和手动停止都在终态时一次性写入 Turn。
-6. SSE 连接在 RunResult 产生前断开时，桥接层会把已可见的正文和 timeline 作为 `connection_closed` 停止轮次保存。后端重启时，遗留的 running Turn 标记为 `failed` / `backend_restart`。
+6. SSE 连接在 RunResult 产生前断开时，桥接层会把已可见的正文和 timeline 作为 `connection_closed` 停止轮次保存。PostgreSQL 中每个新 Turn 在创建时记录进程级 Worker ID 和五分钟租约，运行时每三十秒续租；启动恢复、会话详情读取、同键重放和新轮创建只将租约已过期的 `running` Turn 标记为 `failed` / `backend_restart`。租约续期、终态写入和恢复都以状态、Worker ID 与数据库时钟为条件，因此失去租约的 Worker 不能覆盖恢复后的终态。续租遇到瞬时数据库错误时在租约到期前重试；进程正常关闭时立即把本 Worker 的 running Turn 标记为 `backend_restart`，会话无需等待租约到期即可重新发送；进程异常退出时最长等待一个租约周期。
+7. `LiveRun` 与 SSE 事件缓冲仍是进程内状态。相同操作落到没有该 `LiveRun` 的进程时，运行中的重复 POST 返回 409，GET 续接和远端 stop 返回 404；前端不会无限自动重试，详情读取会按租约回收过期任务，远端任务仍在运行时提示稍后重新打开，完成后可从持久化 Turn 读取结果。跨 Worker 实时事件续传与远程取消尚未实现。迁移前已有的 running Turn 会获得十分钟过渡租约，避免升级时立即误恢复；过渡期后仍未完成的任务会在启动或后续访问时被恢复。Memory Repository 仍只提供单进程行为。
 
 ## API
 
@@ -53,7 +55,7 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 - `GET /api/v1/agent/sessions/{id}`：返回 Session 和全部 Turns。
 - `PATCH /api/v1/agent/sessions/{id}`：重命名。
 - `DELETE /api/v1/agent/sessions/{id}`：删除 DB Session 及其 Turns。
-- `POST /api/v1/agent/sessions/{id}/run`：基于后端历史启动一轮 SSE Run。
+- `POST /api/v1/agent/sessions/{id}/run`：基于后端历史启动一轮 SSE Run；前端必须为一次用户提交生成并在该操作重试时复用 `Idempotency-Key`。
 - `POST /api/v1/agent/run/{run_id}/steer`：向当前 owner 的 active run 插话。
 - `POST /api/v1/agent/run/{run_id}/stop`：请求当前 owner 的 active run 正常停止。
 - `POST /api/v1/agent/sessions/import`：按 `(owner, import_key)` 幂等导入旧本地会话。
@@ -88,4 +90,4 @@ Sidebar 首次连接到 durable Repository 时检查 `shenzhi-agent-sessions`：
 - 当前删除只删除 Session / Turn 数据库行。不会根据模型或请求提供的路径递归删除 workspace；需要后续增加以 owner + session id 为边界的产物保留/清理任务。
 - Repository 已预留匿名 owner 转移能力，但正式 Agent UI 本次未接入“登录后认领”确认流程。匿名会话已按浏览器 UUID 严格隔离；认领 UI/API 应后续复用现有 Chat 的双身份授权模式，不能由客户端任意指定 source owner。
 - Agent 匿名会话目前没有接入旧 Chat 的 TTL 清理任务；上线前应为 `agent_sessions` 增加同等的保留期策略，避免匿名数据无限增长。
-- PostgreSQL 会在后端启动时恢复遗留 running Turn；Memory fallback 不存在跨重启恢复。
+- PostgreSQL 会在后端启动、会话详情读取、同键重放和新轮创建时恢复租约过期的 running Turn；Memory fallback 不存在跨进程租约或重启恢复。

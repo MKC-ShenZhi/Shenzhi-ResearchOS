@@ -187,7 +187,7 @@ class Acceptance2a(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resumed.json()['data']['message_id'], mid)
 
     async def test_C09_recover_marks_streaming_failed(self):
-        from sqlalchemy import update
+        from sqlalchemy import func, text, update
         session = await repository.create(OWNER_KEY, 'recover', {
             'type': 'ask', 'mode': 'fast', 'model': 'deepseek-chat', 'web_search': False,
         })
@@ -198,6 +198,15 @@ class Acceptance2a(unittest.IsolatedAsyncioTestCase):
                 update(ChatMessageRow)
                 .where(ChatMessageRow.id == uuid.UUID(message.id))
                 .values(content='半截')
+            )
+        # Recovery is lease based so a starting worker never fails another
+        # worker's live generation; simulate the crashed owner's lease lapsing.
+        self.assertTrue(await repository.claim_generation(message, 'crashed-worker'))
+        async with session_scope() as db:
+            await db.execute(
+                update(ChatMessageRow)
+                .where(ChatMessageRow.id == uuid.UUID(message.id))
+                .values(lease_expires_at=func.clock_timestamp() - text("INTERVAL '1 second'"))
             )
         await repository.recover()
         repository.messages.clear()

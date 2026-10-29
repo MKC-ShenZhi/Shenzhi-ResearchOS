@@ -5,7 +5,7 @@ from pathlib import PurePosixPath
 from typing import Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 from app.api._support.upload_reader import read_upload
 from app.core.config import MAX_FILES, UPLOAD_ACCEPT
 from app.core.errors import BusinessError
+from app.core.idempotency import request_fingerprint, validate_idempotency_key
 from app.integrations.llm.resolver import load_registry
 from app.core.identity import request_owner, require_bff
 from app.core.responses import ok
@@ -177,12 +178,17 @@ async def delete_agent_session(session_id: str, owner: str = Depends(request_own
 
 @router.post('/sessions/{session_id}/run')
 async def run_agent_session(
-    session_id: str, body: AgentSessionRun, owner: str = Depends(request_owner),
+    session_id: str, body: AgentSessionRun,
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
+    owner: str = Depends(request_owner),
 ):
+    key = validate_idempotency_key(idempotency_key)
     live = await start_session_run(
         owner=owner, session_id=session_id, prompt=body.prompt, model=body.model,
         mode=body.mode, attachments=body.attachments, workspace_id=body.workspace_id,
-        skills=body.skills, allow_shell=False,
+        skills=body.skills, allow_shell=False, idempotency_key=key,
+        idempotency_fingerprint=(request_fingerprint(body.model_dump(mode='json'))
+                                 if key is not None else None),
     )
 
     return session_run_stream(live)

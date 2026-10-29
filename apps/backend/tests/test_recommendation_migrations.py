@@ -53,12 +53,9 @@ class RecommendationMigrationTests(unittest.TestCase):
             )
             return result.stdout + result.stderr
 
-        heads = [line for line in alembic('heads').splitlines() if '(head)' in line]
-        self.assertEqual(heads, ['015_recommendation_foundation (head)'])
-        history = alembic('history')
-        self.assertIn('014_platform_snapshots -> 015_recommendation_foundation', history)
-        # The later idempotency feature is not part of this chain.
-        self.assertNotIn('request_idempotency', history)
+        # 016_request_idempotency now builds on 015 and owns the single-head
+        # check; this test keeps the 014-015 contract.
+        self.assertIn('014_platform_snapshots -> 015_recommendation_foundation', alembic('history'))
 
         alembic('upgrade', '014_platform_snapshots')
         baseline = tables()
@@ -70,8 +67,8 @@ class RecommendationMigrationTests(unittest.TestCase):
             ))
         asyncio.run(run(seed))
 
-        alembic('upgrade', 'head')
-        self.assertIn('015_recommendation_foundation (head)', alembic('current'))
+        alembic('upgrade', '015_recommendation_foundation')
+        self.assertIn('015_recommendation_foundation', alembic('current'))
         self.assertEqual(tables(), baseline | RECOMMENDATION_TABLES)
 
         async def check_schema(connection):
@@ -121,6 +118,6 @@ class RecommendationMigrationTests(unittest.TestCase):
             ))
         self.assertEqual(asyncio.run(run(sentinel)), 1)
 
-        alembic('upgrade', 'head')
-        self.assertIn('015_recommendation_foundation (head)', alembic('current'))
+        alembic('upgrade', '015_recommendation_foundation')
+        self.assertIn('015_recommendation_foundation', alembic('current'))
         self.assertEqual(asyncio.run(run(sentinel)), 1)

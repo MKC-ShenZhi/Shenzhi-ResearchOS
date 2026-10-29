@@ -56,6 +56,15 @@ class ChatMessageRow(Base):
     followups: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('0'))
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idempotency_owner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idempotency_scope: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idempotency_fingerprint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    worker_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    generation_claimed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text('false'),
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text('now()'))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     session: Mapped[ChatSessionRow] = relationship(back_populates='messages')
@@ -71,5 +80,11 @@ class ChatMessageRow(Base):
             'session_id',
             unique=True,
             postgresql_where=text("status = 'streaming'"),
+        ),
+        Index(
+            'uq_chat_messages_idempotency',
+            'idempotency_owner', 'idempotency_scope', 'idempotency_key',
+            unique=True,
+            postgresql_where=text('idempotency_key IS NOT NULL'),
         ),
     )
