@@ -1,3 +1,5 @@
+"use client";
+
 import { cn } from "@/lib/utils";
 import type { ConferenceDeadlineDto } from "@/clients/backend/conferences";
 import {
@@ -9,6 +11,7 @@ import {
   upcomingMilestone,
   type DeadlineUrgency,
 } from "@/features/submit/lib/deadline-time";
+import { useNow } from "@/features/submit/hooks/use-now";
 
 const UNITS = ["天", "小时", "分钟", "秒"] as const;
 
@@ -115,4 +118,10 @@ export function DeadlineCountdown({
       </span>
     </div>
   );
+}
+
+/** 进行中的会议每秒走动：只有倒计时这一小块订阅秒级时钟，卡片本身不随之重渲染 */
+export function LiveDeadlineCountdown({ conference }: { conference: ConferenceDeadlineDto }) {
+  const now = useNow(1000);
+  return <DeadlineCountdown conference={conference} now={now} />;
 }

@@ -125,3 +125,8 @@ class ConferenceCategory(ConferenceModel):
 class ConferenceCategoryList(ConferenceModel):
     snapshot_id: str
     items: list[ConferenceCategory]
+
+
+class ConferenceFollowState(ConferenceModel):
+    conference_id: str
+    is_following: bool

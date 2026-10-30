@@ -23,6 +23,14 @@ export function remainingUntil(atMs: number, nowMs: number): Remaining {
   };
 }
 
+/** Compact remaining time for small tiles: `2 天 22 小时` / `5 小时 12 分` / `8 分钟`. */
+export function formatRemainingShort(atMs: number, nowMs: number): string {
+  const { days, hours, minutes } = remainingUntil(atMs, nowMs);
+  if (days > 0) return `${days} 天 ${hours} 小时`;
+  if (hours > 0) return `${hours} 小时 ${minutes} 分`;
+  return `${Math.max(minutes, 1)} 分钟`;
+}
+
 export type DeadlineUrgency = "passed" | "day" | "week" | "month" | "later";
 
 /** Thresholds are inclusive: exactly 24h left is still `day`. */
