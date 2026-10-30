@@ -65,9 +65,9 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 
 ## URL 和页面流
 
-- `/`：唯一新任务入口。简单搜索只跳转 `/knowledge/search?q=...`；智能搜索创建 Backend Session 后跳转 Agent 对话。
+- `/`：发现页。简单搜索只跳转 `/knowledge/search?q=...`；智能搜索创建 Backend Session 后跳转 Agent 对话。
+- `/agents`：深知 AI 新对话页（侧边栏「深知 AI」入口）。与发现页智能搜索共用 `features/agent-chat/use-agent-launcher.ts`，同样创建 Backend Session 后跳转 Agent 对话。
 - `/agents?session=<id>`：具体持久化会话。刷新和浏览器 back/forward 都按 URL 重新向后端加载。
-- `/agents`：没有 session 时返回发现页。
 - `/agents/ask`：旧 Chat 路由保留为安全 redirect，正式路径不再调用旧 Chat message API。
 
 ## Sidebar 分页

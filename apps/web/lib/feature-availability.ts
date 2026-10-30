@@ -14,20 +14,15 @@ export const COMING_SOON_NOTICE = {
 export const FEATURE_AVAILABILITY = {
   exactPaths: ["/knowledge/graph"],
   pathPrefixes: ["/projects", "/submit/journals"],
-  agentSessionPath: "/agents",
+  agentPath: "/agents",
 } as const;
-
-type SearchParamsReader = Pick<URLSearchParams, "get">;
 
 function isPathOrDescendant(pathname: string, prefix: string) {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
-/** `/agents?session=...` 是已上线的 Session Chat，其余 Agent 页面暂不开放。 */
-export function isUnavailableFeatureRoute(
-  pathname: string,
-  searchParams: SearchParamsReader = new URLSearchParams(),
-) {
+/** `/agents`（深知 AI 新对话页与 Session Chat）已上线，其余 Agent 子页面暂不开放。 */
+export function isUnavailableFeatureRoute(pathname: string) {
   if (FEATURE_AVAILABILITY.exactPaths.some((path) => pathname === path)) {
     return true;
   }
@@ -40,18 +35,13 @@ export function isUnavailableFeatureRoute(
     return true;
   }
 
-  if (pathname === FEATURE_AVAILABILITY.agentSessionPath) {
-    return !searchParams.get("session");
-  }
-
-  return pathname.startsWith(`${FEATURE_AVAILABILITY.agentSessionPath}/`);
+  return pathname.startsWith(`${FEATURE_AVAILABILITY.agentPath}/`);
 }
 
 export function isUnavailableFeatureHref(href: string) {
   if (!href.startsWith("/") || href.startsWith("//")) return false;
 
-  const url = new URL(href, "https://shenzhi.local");
-  return isUnavailableFeatureRoute(url.pathname, url.searchParams);
+  return isUnavailableFeatureRoute(new URL(href, "https://shenzhi.local").pathname);
 }
 
 export function comingSoonRedirectPath() {

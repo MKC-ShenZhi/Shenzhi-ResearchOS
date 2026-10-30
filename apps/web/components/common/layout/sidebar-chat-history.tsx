@@ -130,7 +130,7 @@ export function SidebarChatHistory({ collapsed }: { collapsed?: boolean }) {
       await deleteAgentSession(item.id);
       setItems((current) => current.filter((entry) => entry.id !== item.id));
       notifyAgentSessionsChanged();
-      if (currentSessionId === item.id) router.push("/");
+      if (currentSessionId === item.id) router.push("/agents");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "删除失败");
     }
