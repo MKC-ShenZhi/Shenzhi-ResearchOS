@@ -5,7 +5,7 @@ import { ConferenceBrowser } from "@/features/submit/components/conference-brows
 export function SubmitPage() {
   return (
     <AppShell>
-      <div className="mx-auto max-w-[1180px] px-8 py-6">
+      <div className="mx-auto max-w-[1180px] px-4 py-4 sm:px-8 sm:py-6">
         <ConferenceBrowser />
       </div>
     </AppShell>

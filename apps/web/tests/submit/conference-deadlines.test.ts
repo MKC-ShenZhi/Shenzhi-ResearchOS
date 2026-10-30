@@ -13,6 +13,7 @@ import {
   remainingUntil,
   upcomingMilestone,
 } from "../../features/submit/lib/deadline-time";
+import { googleCalendarUrl, outlookCalendarUrl } from "../../features/submit/lib/calendar-links";
 import { buildConferenceIcs } from "../../features/submit/lib/ics";
 import {
   EMPTY_CONFERENCE_FILTERS,
@@ -106,6 +107,24 @@ test("ICS export contains only upcoming dated milestones with escaped text", () 
   assert.ok(ics.endsWith("END:VCALENDAR\r\n"));
 
   assert.equal(buildConferenceIcs(conference(), new Date("2026-12-01T00:00:00Z")), null);
+});
+
+test("web calendar links prefill one milestone with title, UTC time and official time", () => {
+  const next = conference().edition.milestones[1] as ConferenceDeadlineDto["edition"]["milestones"][number] & { at: string };
+
+  const google = new URL(googleCalendarUrl(conference(), next));
+  assert.equal(google.origin + google.pathname, "https://calendar.google.com/calendar/render");
+  assert.equal(google.searchParams.get("action"), "TEMPLATE");
+  assert.equal(google.searchParams.get("text"), "AAAI 2027 全文截稿");
+  assert.equal(google.searchParams.get("dates"), "20261118T115959Z/20261118T115959Z");
+  assert.match(google.searchParams.get("details") ?? "", /官方时间：2026-11-17 23:59 AoE/);
+  assert.match(google.searchParams.get("details") ?? "", /会议官网：https:\/\/aaai\.org/);
+
+  const outlook = new URL(outlookCalendarUrl(conference(), next));
+  assert.equal(outlook.host, "outlook.live.com");
+  assert.equal(outlook.searchParams.get("subject"), "AAAI 2027 全文截稿");
+  assert.equal(outlook.searchParams.get("startdt"), "2026-11-18T11:59:59.000Z");
+  assert.equal(new URL(outlookCalendarUrl(conference(), next, "outlook.office.com")).host, "outlook.office.com");
 });
 
 test("filters toggle rank chips per system and hide closed venues by default", () => {

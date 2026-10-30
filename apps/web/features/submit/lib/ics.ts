@@ -14,6 +14,17 @@ function icsText(value: string): string {
     .replace(/,/g, "\\,");
 }
 
+/** Event title shared by the .ics export and the web-calendar links. */
+export function milestoneEventSummary(
+  conference: ConferenceDeadlineDto,
+  milestone: ConferenceDeadlineDto["edition"]["milestones"][number],
+): string {
+  return [
+    `${conference.title} ${conference.edition.year} ${milestoneLabel(milestone)}`,
+    milestone.comment ? `(${milestone.comment})` : "",
+  ].filter(Boolean).join(" ");
+}
+
 /**
  * One calendar event per upcoming dated milestone of the conference's current edition,
  * each with a reminder one day before. Past and TBD milestones are skipped.
@@ -24,10 +35,7 @@ export function buildConferenceIcs(conference: ConferenceDeadlineDto, now: Date)
     if (!milestone.at) return [];
     const at = new Date(milestone.at);
     if (at.getTime() <= now.getTime()) return [];
-    const summary = [
-      `${conference.title} ${edition.year} ${milestoneLabel(milestone)}`,
-      milestone.comment ? `(${milestone.comment})` : "",
-    ].filter(Boolean).join(" ");
+    const summary = milestoneEventSummary(conference, milestone);
     return [
       "BEGIN:VEVENT",
       `UID:${icsText(`${conference.id}-${edition.year}-${index}-${milestone.kind}@shenzhi`)}`,
