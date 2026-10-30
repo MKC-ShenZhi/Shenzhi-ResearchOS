@@ -3,7 +3,7 @@
 // ShenzhiAi 持久化对话页（ChatGPT 式排版）：
 // 左：全局 AppSidebar 中的 Backend Agent 会话历史
 // 中：用户右气泡 / 回答左通栏（头像 + 思考折叠 + 过程卡）/ 运行中插话右气泡
-// 空状态：轻量提示并引导回发现页开始新对话
+// 空状态：轻量提示并引导回深知 AI 新对话页（/agents）
 // 下：居中悬浮 Composer；运行中发送 = 插话（steer，不打断当前工具批）
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -400,7 +400,7 @@ export function ShenzhiAiPage() {
   useEffect(() => {
     if (isPending) return;
     if (!sessionId) {
-      router.replace("/");
+      router.replace("/agents");
       return;
     }
     const generation = sessionGenerationRef.current + 1;
@@ -770,9 +770,9 @@ export function ShenzhiAiPage() {
                   {loadingSession ? "正在加载会话…" : runError ? "无法打开这个会话" : "这个会话还没有消息"}
                 </p>
                 {!loadingSession && (
-                  <button type="button" onClick={() => router.push("/")}
+                  <button type="button" onClick={() => router.push("/agents")}
                     className="mt-4 cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary-deep">
-                    返回发现页开始新对话
+                    开始新对话
                   </button>
                 )}
               </div>

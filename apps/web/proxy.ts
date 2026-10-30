@@ -5,12 +5,7 @@ import {
 } from "@/lib/feature-availability";
 
 export function proxy(request: NextRequest) {
-  if (
-    !isUnavailableFeatureRoute(
-      request.nextUrl.pathname,
-      request.nextUrl.searchParams,
-    )
-  ) {
+  if (!isUnavailableFeatureRoute(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
 

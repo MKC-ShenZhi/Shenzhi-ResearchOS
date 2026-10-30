@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SITE } from "@/lib/constants";
 import { projects } from "@/features/projects/data";
+import { FollowedDeadlineBadge } from "@/features/submit/components/followed-deadline-badge";
 import { useAuth } from "@/components/auth/auth-provider";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { userAvatarSource } from "@/clients/profile";
@@ -50,6 +51,7 @@ interface NavItem {
 
 const RESEARCH_NAV: NavItem[] = [
   { href: "/", label: "发现", icon: Compass, badge: "新" },
+  { href: "/agents", label: "深知 AI", icon: Sparkles },
 ];
 
 const MY_PAPERS_NAV: NavItem = {
@@ -72,12 +74,6 @@ const KNOWLEDGE_SUB_NAV = [
   { href: "/knowledge/topics", label: "主题库" },
   { href: "/knowledge/funding", label: "项目基金库" },
   { href: "/knowledge/graph", label: "关系图谱" },
-];
-
-/** 「AI 助手」的子栏目;AI 助手本身有独立对话页(/agents),不与子栏目共享 */
-const AGENT_SUB_NAV = [
-  { href: "/agents/deep-research", label: "Deep Research" },
-  { href: "/agents/auto-research", label: "Auto Research" },
 ];
 
 /** 「科研项目」的子栏目即用户创建的项目列表(副标题 = 项目名称) */
@@ -182,6 +178,7 @@ function ExpandableNav({
   subNav,
   collapsed,
   footer,
+  badge,
 }: {
   href: string;
   label: string;
@@ -190,6 +187,8 @@ function ExpandableNav({
   collapsed: boolean;
   /** 子栏目列表末尾的附加内容(如「新建项目」) */
   footer?: React.ReactNode;
+  /** 主标题旁的提醒(如关注会议临近截稿);折叠时显示为图标角标 */
+  badge?: (compact: boolean) => React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -203,7 +202,7 @@ function ExpandableNav({
     (item) => !isUnavailableFeatureHref(item.href),
   );
   const open = stored ?? routeActive;
-  /** 主页是否独立于副标题(如 AI 助手:/agents 不是任何副标题页) */
+  /** 主页是否独立于副标题(如知识库:/knowledge 不是任何副标题页) */
   const hasOwnPage = !availableSubNav.some((s) => s.href === href);
   /** 跳转目标:有主标题页跳主标题页,没有则跳第一个副标题页 */
   const dest = hasOwnPage ? href : availableSubNav[0].href;
@@ -260,13 +259,14 @@ function ExpandableNav({
           }
         }}
         className={cn(
-          "flex h-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+          "relative flex h-10 shrink-0 items-center justify-center rounded-xl transition-colors",
           routeActive
             ? "bg-primary text-white shadow-sm"
             : "text-ink-2 hover:bg-card",
         )}
       >
         <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
+        {badge?.(true)}
       </button>
     );
   }
@@ -288,6 +288,7 @@ function ExpandableNav({
         >
           <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
           <span className="flex-1 text-[15px] font-medium">{label}</span>
+          {badge?.(false)}
         </button>
         <button
           type="button"
@@ -516,13 +517,6 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
           <NavLink key={item.label} item={item} collapsed={collapsed} />
         ))}
         <ExpandableNav
-          href="/agents"
-          label="AI 助手"
-          icon={Sparkles}
-          subNav={AGENT_SUB_NAV}
-          collapsed={collapsed}
-        />
-        <ExpandableNav
           href="/knowledge"
           label="知识库"
           icon={Library}
@@ -553,6 +547,7 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
           icon={Send}
           subNav={SUBMIT_SUB_NAV}
           collapsed={collapsed}
+          badge={(compact) => <FollowedDeadlineBadge compact={compact} />}
         />
         <React.Suspense fallback={null}>
           <SidebarChatHistory collapsed={collapsed} />

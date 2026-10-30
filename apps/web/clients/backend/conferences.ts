@@ -1,4 +1,4 @@
-import { apiJson, ApiError } from "./http";
+import { apiJson, ApiError, expectedUserHeaders } from "./http";
 
 export type CcfRank = "A" | "B" | "C";
 export type CoreRank = "A*" | "A" | "B" | "C";
@@ -73,6 +73,8 @@ export interface ConferenceDeadlineQuery {
   thcpl?: readonly RankFilterValue<ThcplRank>[];
   statuses?: readonly ConferenceDeadlineStatus[];
   q?: string;
+  /** 仅返回当前登录用户关注的会议（需要登录） */
+  followed?: boolean;
 }
 
 export function conferenceDeadlineSearchParams(query: ConferenceDeadlineQuery): URLSearchParams {
@@ -87,6 +89,7 @@ export function conferenceDeadlineSearchParams(query: ConferenceDeadlineQuery): 
   append("status", query.statuses);
   const q = query.q?.trim();
   if (q) params.set("q", q);
+  if (query.followed) params.set("followed", "true");
   return params;
 }
 
@@ -102,6 +105,25 @@ export async function fetchConferenceCategories(
   signal?: AbortSignal,
 ): Promise<ConferenceCategoryListDto> {
   return apiJson<ConferenceCategoryListDto>("/conferences/categories", { signal });
+}
+
+export interface ConferenceFollowStateDto {
+  conference_id: string;
+  is_following: boolean;
+}
+
+export async function followConference(conferenceId: string, userId: string): Promise<ConferenceFollowStateDto> {
+  return apiJson<ConferenceFollowStateDto>(`/conferences/${encodeURIComponent(conferenceId)}/follow`, {
+    method: "PUT",
+    headers: expectedUserHeaders(userId),
+  });
+}
+
+export async function unfollowConference(conferenceId: string, userId: string): Promise<ConferenceFollowStateDto> {
+  return apiJson<ConferenceFollowStateDto>(`/conferences/${encodeURIComponent(conferenceId)}/follow`, {
+    method: "DELETE",
+    headers: expectedUserHeaders(userId),
+  });
 }
 
 export function conferenceQueryRetry(failureCount: number, error: unknown): boolean {

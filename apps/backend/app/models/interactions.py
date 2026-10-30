@@ -1,4 +1,4 @@
-"""SQLAlchemy models for account-level paper likes and topic follows."""
+"""SQLAlchemy models for account-level paper likes, topic follows and conference follows."""
 from datetime import datetime
 
 from sqlalchemy import DateTime, Index, Text, text
@@ -34,4 +34,18 @@ class TopicFollowRow(Base):
     __table_args__ = (
         Index('idx_topic_follows_topic', 'topic_id'),
         Index('idx_topic_follows_user_created', 'user_id', 'created_at'),
+    )
+
+
+class ConferenceFollowRow(Base):
+    """One row per (user, snapshot conference id); the deadline snapshot stays the source of truth."""
+
+    __tablename__ = 'conference_follows'
+
+    user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    conference_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text('now()'))
+
+    __table_args__ = (
+        Index('idx_conference_follows_user_created', 'user_id', 'created_at'),
     )

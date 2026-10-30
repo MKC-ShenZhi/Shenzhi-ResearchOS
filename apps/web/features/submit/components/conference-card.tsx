@@ -1,13 +1,15 @@
 "use client";
 
-import { memo } from "react";
+import { memo, type Ref } from "react";
 import { motion } from "framer-motion";
-import { Calendar, CalendarPlus, ExternalLink, Folder, MapPin } from "lucide-react";
+import { Calendar, ExternalLink, Folder, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ConferenceDeadlineDto } from "@/clients/backend/conferences";
-import { DeadlineCountdown } from "./deadline-countdown";
+import { AddToCalendarMenu } from "./add-to-calendar-menu";
+import { ConferenceFollowButton } from "./conference-follow-button";
+import { DeadlineCountdown, LiveDeadlineCountdown } from "./deadline-countdown";
 import {
   compactTimeline,
   deadlineUrgency,
@@ -15,7 +17,6 @@ import {
   milestoneLabel,
   upcomingMilestone,
 } from "@/features/submit/lib/deadline-time";
-import { buildConferenceIcs } from "@/features/submit/lib/ics";
 
 function accentClass(conference: ConferenceDeadlineDto, now: number): string {
   const next = conference.status === "open"
@@ -28,33 +29,32 @@ function accentClass(conference: ConferenceDeadlineDto, now: number): string {
   return "bg-success";
 }
 
-function downloadIcs(conference: ConferenceDeadlineDto) {
-  const ics = buildConferenceIcs(conference, new Date());
-  if (!ics) return;
-  const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${conference.title.replace(/[^\w.-]+/g, "_")}-${conference.edition.year}.ics`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
-
 /**
  * 会议截稿卡片 —— 沿用投稿页卡片视觉，数据来自 FastAPI 会议截稿快照。
- * memo：只有进行中的会议会收到走动的 `now`，其余卡片不随每秒时钟重渲染。
+ * memo + 分钟级 `now`：卡片（及其布局动画）每分钟最多重渲染一次，秒级倒计时由 LiveDeadlineCountdown 单独订阅。
  */
 export const ConferenceCard = memo(function ConferenceCard({
+  ref,
   conference,
   categoryName,
   now,
   index,
+  animateLayout,
+  following,
+  followResolving,
+  highlighted,
 }: {
+  ref?: Ref<HTMLElement>;
   conference: ConferenceDeadlineDto;
   categoryName: string | undefined;
   now: number;
   index: number;
+  /** 只有首批卡片参与布局补位动画；后续批次在视口外，跳过布局追踪以降低追加成本 */
+  animateLayout: boolean;
+  following: boolean;
+  followResolving: boolean;
+  /** 从关注区或日历链接跳转过来时短暂高亮 */
+  highlighted: boolean;
 }) {
   const { edition, rank } = conference;
   const closed = conference.status === "closed";
@@ -68,12 +68,25 @@ export const ConferenceCard = memo(function ConferenceCard({
 
   return (
     <motion.article
+      ref={ref}
+      // 筛选变化时：留下的卡片平移到新位置，移除的淡出，新出现的淡入
+      layout={animateLayout ? "position" : false}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: Math.min(index, 8) * 0.04 }}
-      className="relative overflow-hidden rounded-2xl bg-card shadow-card"
+      exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.18 } }}
+      transition={{
+        duration: 0.3,
+        delay: Math.min(index, 8) * 0.04,
+        layout: { type: "spring", stiffness: 420, damping: 38 },
+      }}
+      // 日历菜单展开时浮在后续卡片之上
+      id={`conference-${conference.id}`}
+      className={cn(
+        "relative scroll-mt-32 rounded-2xl bg-card shadow-card ring-2 ring-transparent transition-[box-shadow] duration-500 has-[[data-open]]:z-10",
+        highlighted && "ring-primary/50",
+      )}
     >
-      <span className={cn("absolute inset-y-0 left-0 w-1", accentClass(conference, now))} />
+      <span className={cn("absolute inset-y-0 left-0 w-1 rounded-l-2xl", accentClass(conference, now))} />
 
       <div className={cn("p-6 pl-7", closed && "opacity-75")}>
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -101,7 +114,9 @@ export const ConferenceCard = memo(function ConferenceCard({
           </div>
         )}
 
-        <DeadlineCountdown conference={conference} now={now} />
+        {conference.status === "open"
+          ? <LiveDeadlineCountdown conference={conference} />
+          : <DeadlineCountdown conference={conference} now={now} />}
 
         {edition.milestones.length > 1 && (
           <ol className="mt-3 flex flex-wrap gap-2" aria-label={`${conference.title} ${edition.year} 时间线`}>
@@ -131,27 +146,21 @@ export const ConferenceCard = memo(function ConferenceCard({
           </ol>
         )}
 
-        {(edition.link || next) && (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {edition.link && (
-              <a
-                href={edition.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                <ExternalLink />
-                会议官网
-              </a>
-            )}
-            {next && (
-              <Button variant="soft" size="sm" onClick={() => downloadIcs(conference)}>
-                <CalendarPlus />
-                加入日历
-              </Button>
-            )}
-          </div>
-        )}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <ConferenceFollowButton conference={conference} following={following} resolving={followResolving} />
+          {edition.link && (
+            <a
+              href={edition.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <ExternalLink />
+              会议官网
+            </a>
+          )}
+          {next && <AddToCalendarMenu conference={conference} next={next} now={now} />}
+        </div>
       </div>
     </motion.article>
   );

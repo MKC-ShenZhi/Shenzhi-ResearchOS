@@ -52,9 +52,9 @@ test("blocks projects and journal submission routes at every depth", () => {
   assert.equal(isUnavailableFeatureHref("/submission-guide"), false);
 });
 
-test("allows only the formal Agent Session Chat route", () => {
-  assert.equal(isUnavailableFeatureHref("/agents"), true);
-  assert.equal(isUnavailableFeatureHref("/agents?session="), true);
+test("allows only the 深知 AI page and Agent Session Chat route", () => {
+  assert.equal(isUnavailableFeatureHref("/agents"), false);
+  assert.equal(isUnavailableFeatureHref("/agents?session="), false);
   assert.equal(isUnavailableFeatureHref("/agents?session=session-1"), false);
   assert.equal(
     isUnavailableFeatureHref("/agents?session=opaque%2Fid&launch=launch-1"),

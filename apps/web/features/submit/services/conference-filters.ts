@@ -33,6 +33,8 @@ export interface ConferenceFilterState {
   thcpl: RankFilterValue<ThcplRank>[];
   /** Closed venues are hidden by default; most of a stale snapshot is closed. */
   includeClosed: boolean;
+  /** Narrow to the signed-in user's followed conferences. */
+  followedOnly: boolean;
   q: string;
 }
 
@@ -42,6 +44,7 @@ export const EMPTY_CONFERENCE_FILTERS: ConferenceFilterState = {
   core: [],
   thcpl: [],
   includeClosed: false,
+  followedOnly: false,
   q: "",
 };
 
@@ -84,5 +87,6 @@ export function toDeadlineQuery(state: ConferenceFilterState): ConferenceDeadlin
     thcpl: state.thcpl,
     statuses: state.includeClosed ? [] : ["open", "tbd"],
     q: state.q.trim() || undefined,
+    followed: state.followedOnly,
   };
 }

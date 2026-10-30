@@ -56,9 +56,8 @@ class IdempotencyMigrationTests(unittest.TestCase):
 
         # Refuse to destroy any previously populated database, even a test one.
         self.assertEqual(asyncio.run(run(tables)), [], 'Migration roundtrip requires an EMPTY test database')
-        heads = alembic('heads')
-        self.assertEqual(heads.count('(head)'), 1)
-        self.assertIn('016_request_idempotency (head)', heads)
+        # 017_conference_follows now builds on 016 and owns the single-head
+        # check; this test keeps the 015-016 contract.
         self.assertIn('015_recommendation_foundation -> 016_request_idempotency', alembic('history'))
 
         alembic('upgrade', '015_recommendation_foundation')
@@ -83,7 +82,7 @@ class IdempotencyMigrationTests(unittest.TestCase):
             ))
 
         asyncio.run(run(seed))
-        alembic('upgrade', 'head')
+        alembic('upgrade', '016_request_idempotency')
         self.assertIn('016_request_idempotency', alembic('current'))
 
         async def check_upgraded(connection):
@@ -154,7 +153,7 @@ class IdempotencyMigrationTests(unittest.TestCase):
 
         asyncio.run(run(check_downgraded))
         self.assertIn('015_recommendation_foundation', alembic('current'))
-        alembic('upgrade', 'head')
+        alembic('upgrade', '016_request_idempotency')
         self.assertIn('016_request_idempotency', alembic('current'))
 
 

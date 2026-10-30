@@ -89,7 +89,7 @@ test("Agent delete removes the exact sidebar item and returns home for the activ
   const sidebar = readFileSync("components/common/layout/sidebar-chat-history.tsx", "utf8");
   assert.match(sidebar, /await deleteAgentSession\(item\.id\)/);
   assert.match(sidebar, /current\.filter\(\(entry\) => entry\.id !== item\.id\)/);
-  assert.match(sidebar, /currentSessionId === item\.id\) router\.push\("\/"\)/);
+  assert.match(sidebar, /currentSessionId === item\.id\) router\.push\("\/agents"\)/);
 });
 
 test("backend unix seconds become millisecond timestamps for sidebar dates", () => {

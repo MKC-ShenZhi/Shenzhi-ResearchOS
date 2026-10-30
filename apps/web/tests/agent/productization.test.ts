@@ -2,9 +2,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("Discover smart search creates a persistent Agent session and one-shot launch", () => {
-  const source = readFileSync("features/search/components/search-hero.tsx", "utf8");
-  assert.match(source, /components\/common\/composer\/composer/);
+test("Discover smart search and the 深知 AI page share one Agent launch path", () => {
+  for (const entry of ["features/search/components/search-hero.tsx", "features/agent-chat/agent-home-page.tsx"]) {
+    const page = readFileSync(entry, "utf8");
+    assert.match(page, /components\/common\/composer\/composer/, entry);
+    assert.match(page, /useAgentLauncher\(\)/, entry);
+    assert.match(page, /agent\.launch\(payload\.question\)/, entry);
+  }
+  const route = readFileSync("app/agents/page.tsx", "utf8");
+  assert.match(route, /if \(!\(await searchParams\)\.session\) return <AgentHomePage \/>/);
+});
+
+test("Agent launcher creates a persistent Agent session and one-shot launch", () => {
+  const source = readFileSync("features/agent-chat/use-agent-launcher.ts", "utf8");
   assert.match(source, /fetchAgentConfig/);
   assert.match(source, /await createAgentSession\(input\)/);
   assert.match(source, /saveAgentLaunch\(session\.id, input\)/);
