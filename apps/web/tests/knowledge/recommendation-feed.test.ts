@@ -49,6 +49,35 @@ test("authenticated home feed preserves recommendation attribution and nullable 
   }
 });
 
+test("recalled recommendations use knowledge images while curated papers keep static thumbnails", async () => {
+  const original = globalThis.fetch;
+  const originalFlag = process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
+  const item = { sources: ["keyword"], reason: "与你近期搜索的方向相关", request_id: "request-1" };
+  globalThis.fetch = async () => json({
+    items: [
+      { ...paper, id: "recalled", image_id: "/images/2026/recalled.webp", rank: 1, ...item },
+      { ...paper, id: "curated", thumbnail_url: "/paper-thumbnails/curated.webp", image_id: null, rank: 2, ...item },
+      { ...paper, id: "legacy", rank: 3, ...item },
+    ],
+    next_cursor: null, has_more: false, request_id: "request-1", total: 3, algorithm_version: "content-v1",
+  });
+  try {
+    process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = "true";
+    const enabled = await fetchHomeFeedPage(null, "user-a");
+    assert.deepEqual(enabled.items.map((entry) => entry.thumbnailUrl), [
+      "/api/paper-images/2026/recalled.webp", "/paper-thumbnails/curated.webp", null,
+    ]);
+    // The knowledge image flag still gates recalled images; static thumbnails are unaffected.
+    process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = "false";
+    const disabled = await fetchHomeFeedPage(null, "user-a");
+    assert.deepEqual(disabled.items.map((entry) => entry.thumbnailUrl), [null, "/paper-thumbnails/curated.webp", null]);
+  } finally {
+    globalThis.fetch = original;
+    if (originalFlag === undefined) delete process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
+    else process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = originalFlag;
+  }
+});
+
 test("recommendation failure falls back to the existing discovery cursor", async () => {
   const original = globalThis.fetch;
   const requested: string[] = [];

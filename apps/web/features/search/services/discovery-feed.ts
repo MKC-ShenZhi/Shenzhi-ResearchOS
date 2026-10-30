@@ -7,6 +7,7 @@ import {
 } from "../../../clients/backend/discovery";
 import type { FeedPaper } from "../../../types";
 import { ApiError } from "../../../clients/backend/http";
+import { getPaperThumbnailUrl } from "../../../lib/paper-thumbnail";
 import { fetchRecommendationPapers } from "../../../clients/backend/recommendations";
 
 export const DISCOVERY_PAGE_SIZE = 12;
@@ -84,6 +85,8 @@ async function recommendationPage(cursor: string | null, userId: string): Promis
   return {
     items: page.items.map((item) => ({
       ...mapDiscoveryPaper(item),
+      // Curated papers keep their static thumbnail; recalled papers use the knowledge image.
+      thumbnailUrl: item.thumbnail_url ?? getPaperThumbnailUrl(item.image_id),
       recommendationReason: item.reason,
       recommendationRequestId: item.request_id,
       recommendationRank: item.rank,

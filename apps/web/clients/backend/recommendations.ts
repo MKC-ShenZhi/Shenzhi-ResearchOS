@@ -3,6 +3,8 @@ import type { DiscoveryPaperDto } from "./discovery";
 
 export interface RecommendationPaperDto extends Omit<DiscoveryPaperDto, "year"> {
   year: number | null;
+  /** Knowledge image id of a recalled paper; absent in snapshots created before it was stored. */
+  image_id?: string | null;
   reason: string;
   sources: string[];
   request_id: string;

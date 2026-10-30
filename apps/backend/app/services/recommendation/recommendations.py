@@ -154,6 +154,8 @@ class CandidateRecallService:
                         'id': paper.id, 'title': paper.title, 'abstract': paper.abstract or '',
                         'authors': paper.authors, 'year': paper.year,
                         'venue': paper.venue, 'pdf_url': None, 'thumbnail_url': None,
+                        # Knowledge image id; the web layer resolves it to the image proxy.
+                        'image_id': paper.image_id,
                     }, subjects=paper.subjects, keywords=paper.keywords, sources=set())
                     candidates[paper.id] = entry
                 entry.sources.add(kind)
@@ -172,6 +174,9 @@ class CandidateRecallService:
                 if entry is None:
                     entry = Candidate(paper=paper.model_dump(mode='json'), subjects=[], keywords=[], sources=set())
                     candidates[paper.id] = entry
+                elif not entry.paper.get('thumbnail_url'):
+                    # A curated paper recalled by search first keeps its static thumbnail.
+                    entry.paper['thumbnail_url'] = paper.thumbnail_url
                 entry.sources.add('global_discovery')
         except Exception as error:  # noqa: BLE001 - personal recall stays usable
             logger.warning(

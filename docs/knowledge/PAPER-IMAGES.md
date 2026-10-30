@@ -11,6 +11,11 @@
 `imageId: null`，不从详情推断图片。首页 300 篇快照继续使用 `thumbnail_url` 和
 `public/paper-thumbnails/`，不受此开关影响。
 
+登录用户首页推荐：召回自知识检索的论文在推荐快照中保留 `image_id`，Web 仅在条目没有
+`thumbnail_url` 时用 `getPaperThumbnailUrl(image_id)` 解析，因此同样受此开关控制；
+300 篇入选论文即使先被检索召回，也保留静态缩略图。补丁上线前生成的快照没有 `image_id`，
+最长 1 小时后随快照过期自然恢复。
+
 2026-10-23 对任务指定上游进行只读抽样：检索 `FlowDIS` 返回
 `paper:2605.05077v2` 和 `/images/CVPR_2026/2605.05077v2.png`；
 同一篇论文的 `GET /api/kg/paper?paperId=paper:2605.05077v2` 响应未提供 `image_id`。

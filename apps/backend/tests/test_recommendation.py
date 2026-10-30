@@ -234,7 +234,8 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_deduplicates_sources_and_survives_partial_failure(self):
         paper = SimpleNamespace(id='paper:1', title='One', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=['RAG'], keywords=['retrieval'])
+                                subjects=['RAG'], keywords=['retrieval'],
+                                image_id='/images/2026/paper-1.webp')
         knowledge = SimpleNamespace(
             search_by_subject=AsyncMock(side_effect=[
                 SimpleNamespace(results=[paper]), KnowledgeServiceError('unavailable'),
@@ -247,6 +248,7 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
         ))
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].paper['id'], 'paper:1')
+        self.assertEqual(result[0].paper['image_id'], '/images/2026/paper-1.webp')
         self.assertEqual(result[0].sources, {'followed_topic', 'keyword'})
 
     async def test_all_knowledge_failures_use_global_discovery(self):
@@ -267,7 +269,7 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_keyword_retrieval_is_a_scored_search_interest_signal(self):
         paper = SimpleNamespace(id='paper:graph', title='Graph paper', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=[], keywords=['networks'])
+                                subjects=[], keywords=['networks'], image_id=None)
         knowledge = SimpleNamespace(
             search=AsyncMock(return_value=SimpleNamespace(results=[paper])),
             search_by_subject=AsyncMock(),
@@ -284,7 +286,7 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_unexpected_source_errors_and_timeouts_are_isolated(self):
         paper = SimpleNamespace(id='paper:ok', title='Survivor', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=['RAG'], keywords=[])
+                                subjects=['RAG'], keywords=[], image_id=None)
 
         async def never_returns(*_args, **_kwargs):
             await asyncio.sleep(60)
@@ -311,18 +313,21 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_recall_limits_queries_and_merges_duplicate_ids_across_sources(self):
         paper = SimpleNamespace(id='shared', title='Shared', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=['RAG'], keywords=['retrieval'])
+                                subjects=['RAG'], keywords=['retrieval'], image_id=None)
         knowledge = SimpleNamespace(
             search_by_subject=AsyncMock(return_value=SimpleNamespace(results=[paper, paper])),
             search=AsyncMock(return_value=SimpleNamespace(results=[paper])),
         )
-        global_paper = SimpleNamespace(id='shared', model_dump=lambda **_: {'id': 'shared'})
+        global_paper = SimpleNamespace(id='shared', thumbnail_url='/paper-thumbnails/shared.webp',
+                                       model_dump=lambda **_: {'id': 'shared'})
         discovery = SimpleNamespace(page=lambda **_: SimpleNamespace(items=[global_paper]))
         result = await CandidateRecallService(knowledge, discovery).recall(profile(
             explicit_subjects=['a', 'b', 'c', 'd', 'e'], long_topics={'f': 1}, long_keywords={'g': 1},
         ))
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].sources, {'followed_topic', 'inferred_topic', 'keyword', 'global_discovery'})
+        # Recalled first, the curated paper still keeps its static thumbnail.
+        self.assertEqual(result[0].paper['thumbnail_url'], '/paper-thumbnails/shared.webp')
         calls = knowledge.search_by_subject.await_count + knowledge.search.await_count
         self.assertEqual(calls, 4)
 
