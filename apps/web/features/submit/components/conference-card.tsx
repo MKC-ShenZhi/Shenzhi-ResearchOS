@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import type { ConferenceDeadlineDto } from "@/clients/backend/conferences";
 import { AddToCalendarMenu } from "./add-to-calendar-menu";
 import { ConferenceFollowButton } from "./conference-follow-button";
-import { DeadlineCountdown } from "./deadline-countdown";
+import { DeadlineCountdown, LiveDeadlineCountdown } from "./deadline-countdown";
 import {
   compactTimeline,
   deadlineUrgency,
@@ -31,7 +31,7 @@ function accentClass(conference: ConferenceDeadlineDto, now: number): string {
 
 /**
  * 会议截稿卡片 —— 沿用投稿页卡片视觉，数据来自 FastAPI 会议截稿快照。
- * memo：只有进行中的会议会收到走动的 `now`，其余卡片不随每秒时钟重渲染。
+ * memo + 分钟级 `now`：卡片（及其布局动画）每分钟最多重渲染一次，秒级倒计时由 LiveDeadlineCountdown 单独订阅。
  */
 export const ConferenceCard = memo(function ConferenceCard({
   ref,
@@ -39,6 +39,7 @@ export const ConferenceCard = memo(function ConferenceCard({
   categoryName,
   now,
   index,
+  animateLayout,
   following,
   followResolving,
   highlighted,
@@ -48,6 +49,8 @@ export const ConferenceCard = memo(function ConferenceCard({
   categoryName: string | undefined;
   now: number;
   index: number;
+  /** 只有首批卡片参与布局补位动画；后续批次在视口外，跳过布局追踪以降低追加成本 */
+  animateLayout: boolean;
   following: boolean;
   followResolving: boolean;
   /** 从关注区或日历链接跳转过来时短暂高亮 */
@@ -67,7 +70,7 @@ export const ConferenceCard = memo(function ConferenceCard({
     <motion.article
       ref={ref}
       // 筛选变化时：留下的卡片平移到新位置，移除的淡出，新出现的淡入
-      layout="position"
+      layout={animateLayout ? "position" : false}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.18 } }}
@@ -111,7 +114,9 @@ export const ConferenceCard = memo(function ConferenceCard({
           </div>
         )}
 
-        <DeadlineCountdown conference={conference} now={now} />
+        {conference.status === "open"
+          ? <LiveDeadlineCountdown conference={conference} />
+          : <DeadlineCountdown conference={conference} now={now} />}
 
         {edition.milestones.length > 1 && (
           <ol className="mt-3 flex flex-wrap gap-2" aria-label={`${conference.title} ${edition.year} 时间线`}>

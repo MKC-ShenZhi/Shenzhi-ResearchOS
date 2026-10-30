@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,9 @@ function ListLoading() {
   );
 }
 
+/** 首屏及每次追加渲染的卡片数；已截止会议全部展开时有 300+ 张，一次性挂载会明显卡顿 */
+const RENDER_BATCH = 20;
+
 /** 日历事件里的深知链接形如 `/submit?focus=<id>`，进入页面后定位到该会议 */
 function initialFocusId(): string | null {
   if (typeof window === "undefined") return null;
@@ -49,7 +52,8 @@ export function ConferenceBrowser() {
     () => toDeadlineQuery({ ...filters, followedOnly, q: debouncedQ }),
     [filters, followedOnly, debouncedQ],
   );
-  const now = useNow();
+  // 分钟级时钟：驱动卡片强调色、时间线和关注区；秒级倒计时在卡片内部单独订阅
+  const now = useNow(60_000);
   const [focusId, setFocusId] = useState(initialFocusId);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   // 目标会议不在当前筛选结果中时，放宽一次筛选再找
@@ -75,6 +79,31 @@ export function ConferenceBrowser() {
     [categories.data],
   );
   const data = deadlines.data;
+  // 分批渲染：先渲染一批，滚动接近底部再追加；筛选结果变化时回到第一批
+  const listKey = deadlines.isPlaceholderData ? null : conferenceDeadlineSearchParams(query).toString();
+  const [batch, setBatch] = useState({ key: listKey, count: RENDER_BATCH });
+  const renderCount = batch.key === listKey ? batch.count : RENDER_BATCH;
+  const visibleItems = data?.items.slice(0, renderCount) ?? [];
+  const hasMore = (data?.items.length ?? 0) > renderCount;
+  const showMore = useCallback(
+    (atLeast = 0) => setBatch({ key: listKey, count: Math.max(renderCount + RENDER_BATCH, atLeast) }),
+    [listKey, renderCount],
+  );
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) showMore();
+      },
+      { rootMargin: "1200px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, showMore]);
+
   const listSettled = Boolean(data) && !deadlines.isPlaceholderData && debouncedQ === filters.q;
 
   useEffect(() => {
@@ -89,6 +118,12 @@ export function ConferenceBrowser() {
     if (!focusId || !listSettled) return;
     // 等新列表完成布局后再定位
     const frame = window.requestAnimationFrame(() => {
+      // 目标在已加载但尚未渲染的批次里：先渲染到它，下一轮再定位
+      const index = data?.items.findIndex((item) => item.id === focusId) ?? -1;
+      if (index >= renderCount) {
+        showMore(index + RENDER_BATCH);
+        return;
+      }
       const target = document.getElementById(`conference-${focusId}`);
       if (target) {
         target.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -104,7 +139,7 @@ export function ConferenceBrowser() {
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [focusId, listSettled, data]);
+  }, [focusId, listSettled, data, renderCount, showMore]);
 
   useEffect(() => {
     if (!highlightId) return;
@@ -152,14 +187,16 @@ export function ConferenceBrowser() {
         <div className="relative flex flex-col gap-5">
           {/* popLayout：移除的卡片脱离文档流淡出，其余卡片同时平滑补位 */}
           <AnimatePresence mode="popLayout">
-            {data?.items.map((conference, index) => (
+            {visibleItems.map((conference, index) => (
               <ConferenceCard
                 key={conference.id}
                 conference={conference}
                 categoryName={categoryNames.get(conference.category)}
                 // Closed / TBD cannot change as time moves forward: freeze their clock.
                 now={conference.status === "open" ? now : deadlines.dataUpdatedAt}
-                index={index}
+                // 追加的批次按批内序号错落入场，不累积延迟
+                index={index % RENDER_BATCH}
+                animateLayout={index < RENDER_BATCH}
                 following={followed.ids.has(conference.id)}
                 followResolving={followed.isResolving}
                 highlighted={highlightId === conference.id}
@@ -190,6 +227,11 @@ export function ConferenceBrowser() {
               </motion.div>
             )}
           </AnimatePresence>
+          {hasMore && (
+            <div ref={sentinelRef} className="py-4 text-center text-xs text-faint" aria-live="polite">
+              已显示 {renderCount} / {data?.items.length} 个会议，继续滚动加载
+            </div>
+          )}
         </div>
       )}
     </div>
