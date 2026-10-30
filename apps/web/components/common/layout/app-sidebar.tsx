@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SITE } from "@/lib/constants";
 import { projects } from "@/features/projects/data";
+import { FollowedDeadlineBadge } from "@/features/submit/components/followed-deadline-badge";
 import { useAuth } from "@/components/auth/auth-provider";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { userAvatarSource } from "@/clients/profile";
@@ -182,6 +183,7 @@ function ExpandableNav({
   subNav,
   collapsed,
   footer,
+  badge,
 }: {
   href: string;
   label: string;
@@ -190,6 +192,8 @@ function ExpandableNav({
   collapsed: boolean;
   /** 子栏目列表末尾的附加内容(如「新建项目」) */
   footer?: React.ReactNode;
+  /** 主标题旁的提醒(如关注会议临近截稿);折叠时显示为图标角标 */
+  badge?: (compact: boolean) => React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -260,13 +264,14 @@ function ExpandableNav({
           }
         }}
         className={cn(
-          "flex h-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+          "relative flex h-10 shrink-0 items-center justify-center rounded-xl transition-colors",
           routeActive
             ? "bg-primary text-white shadow-sm"
             : "text-ink-2 hover:bg-card",
         )}
       >
         <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
+        {badge?.(true)}
       </button>
     );
   }
@@ -288,6 +293,7 @@ function ExpandableNav({
         >
           <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
           <span className="flex-1 text-[15px] font-medium">{label}</span>
+          {badge?.(false)}
         </button>
         <button
           type="button"
@@ -553,6 +559,7 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
           icon={Send}
           subNav={SUBMIT_SUB_NAV}
           collapsed={collapsed}
+          badge={(compact) => <FollowedDeadlineBadge compact={compact} />}
         />
         <React.Suspense fallback={null}>
           <SidebarChatHistory collapsed={collapsed} />

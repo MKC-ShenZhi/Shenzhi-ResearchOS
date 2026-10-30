@@ -12,8 +12,13 @@ import { buildConferenceIcs } from "@/features/submit/lib/ics";
 import { useDismiss } from "@/features/submit/hooks/use-dismiss";
 import { PopoverPanel } from "./popover-panel";
 
+/** 深知内该会议的定位链接；投稿页读取 `focus` 后滚动并高亮对应卡片 */
+export function conferencePageUrl(conferenceId: string): string {
+  return `${window.location.origin}/submit?focus=${encodeURIComponent(conferenceId)}`;
+}
+
 function downloadIcs(conference: ConferenceDeadlineDto) {
-  const ics = buildConferenceIcs(conference, new Date());
+  const ics = buildConferenceIcs(conference, new Date(), conferencePageUrl(conference.id));
   if (!ics) return;
   const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
   const anchor = document.createElement("a");
@@ -29,8 +34,9 @@ const itemClass =
   "flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-chip";
 
 /**
- * 加入日历 —— 网页日历（Google / Outlook）直接打开预填好的新建事件页，
+ * 导出日历（次要入口，主操作是站内「关注截稿」）—— 网页日历（Google / Outlook）打开预填好的新建事件页，
  * 一次添加下一个截稿节点；.ics 面向 Apple 日历、飞书等本地日历，包含全部未截止节点和提前 1 天提醒。
+ * 所有事件都带深知会议页链接，提醒点开后回到站内。
  */
 export function AddToCalendarMenu({
   conference,
@@ -50,30 +56,38 @@ export function AddToCalendarMenu({
   const upcomingCount = conference.edition.milestones.filter(
     (milestone) => milestone.at && Date.parse(milestone.at) > now,
   ).length;
-  const webCalendars = [
-    { label: "Google 日历", href: googleCalendarUrl(conference, next) },
-    { label: "Outlook（个人账户）", href: outlookCalendarUrl(conference, next) },
-    { label: "Outlook（工作 / 学校账户）", href: outlookCalendarUrl(conference, next, "outlook.office.com") },
-  ];
+  // 只在展开后生成链接：需要浏览器的 origin
+  const pageUrl = open ? conferencePageUrl(conference.id) : "";
+  const webCalendars = open
+    ? [
+      { label: "Google 日历", href: googleCalendarUrl(conference, next, pageUrl) },
+      { label: "Outlook（个人账户）", href: outlookCalendarUrl(conference, next, pageUrl) },
+      {
+        label: "Outlook（工作 / 学校账户）",
+        href: outlookCalendarUrl(conference, next, pageUrl, "outlook.office.com"),
+      },
+    ]
+    : [];
 
   return (
     <div ref={rootRef} className="relative" data-open={open || undefined}>
       <Button
-        variant="soft"
+        variant="ghost"
         size="sm"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
+        className="text-muted"
       >
         <CalendarPlus />
-        加入日历
+        导出日历
         <ChevronDown className={cn("transition-transform", open && "rotate-180")} />
       </Button>
 
       <PopoverPanel open={open} placement={placement} className="w-72">
-        <div role="menu" aria-label="加入日历">
+        <div role="menu" aria-label="导出日历">
           <p className="px-2.5 pb-1.5 pt-1 text-xs text-faint">
-            添加「{milestoneLabel(next)}{next.comment ? ` · ${next.comment}` : ""}」
+            导出「{milestoneLabel(next)}{next.comment ? ` · ${next.comment}` : ""}」
             <span className="block text-ink-2">{formatInstant(next.at)}</span>
           </p>
           {webCalendars.map((calendar) => (

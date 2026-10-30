@@ -11,8 +11,9 @@ from sqlalchemy import delete, select
 from app.core.database import session_scope
 from app.core.errors import BusinessError
 from app.models.collections import CollectionFolderRow, CollectionItemRow, CollectionUserStateRow
-from app.models.interactions import PaperLikeRow, TopicFollowRow
+from app.models.interactions import ConferenceFollowRow, PaperLikeRow, TopicFollowRow
 from app.services.library.collections import CollectionService
+from app.services.library.conference_follows import ConferenceFollowService
 from app.services.library.paper_likes import PaperLikeService
 from app.services.library.topic_follows import TopicFollowService
 from app.schemas.knowledge import PaperSummary, Provenance
@@ -53,6 +54,9 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
             await db.execute(delete(PaperLikeRow).where(PaperLikeRow.user_id.in_([self.user_a, self.user_b])))
             await db.execute(delete(TopicFollowRow).where(
                 TopicFollowRow.user_id.in_([self.user_a, self.user_b]),
+            ))
+            await db.execute(delete(ConferenceFollowRow).where(
+                ConferenceFollowRow.user_id.in_([self.user_a, self.user_b]),
             ))
 
     async def test_collector_count_deduplicates_users_across_folders(self):
@@ -201,6 +205,20 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         # Repeating the deletion stays safe and leaves the other account untouched.
         await AccountDeletionService().delete_all_for_user(self.user_a)
         self.assertEqual(await likes.liked_paper_ids(self.user_b, [self.like_paper_id]), {self.like_paper_id})
+
+    async def test_conference_follows_are_idempotent_and_removed_with_the_account(self):
+        follows = ConferenceFollowService()
+        await follows.follow(self.user_a, 'ai-aaai')
+        await follows.follow(self.user_a, 'ai-aaai')
+        await follows.follow(self.user_a, 'ai-ijcai')
+        await follows.follow(self.user_b, 'ai-aaai')
+        await follows.unfollow(self.user_a, 'ai-ijcai')
+        await follows.unfollow(self.user_a, 'ai-ijcai')
+        self.assertEqual(await follows.followed_ids(self.user_a), {'ai-aaai'})
+
+        await AccountDeletionService().delete_all_for_user(self.user_a)
+        self.assertEqual(await follows.followed_ids(self.user_a), frozenset())
+        self.assertEqual(await follows.followed_ids(self.user_b), {'ai-aaai'})
 
     async def test_concurrent_likes_and_follows_preserve_unique_user_relations(self):
         likes, follows = PaperLikeService(), TopicFollowService()

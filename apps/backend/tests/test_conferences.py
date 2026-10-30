@@ -166,6 +166,11 @@ class OrderingAndFilterTests(CatalogTestCase):
         self.assertEqual(self.ids(query='  SOON '), ['ai-soon'])
         self.assertEqual(self.ids(query='ai-late description'), ['ai-late'])
 
+    def test_id_filter_keeps_order_and_empty_set_matches_nothing(self):
+        self.assertEqual(self.ids(ids=frozenset({'nw-old', 'ai-late'})), ['ai-late', 'nw-old'])
+        self.assertEqual(self.ids(ids=frozenset({'ai-late'}), statuses=frozenset({'closed'})), [])
+        self.assertEqual(self.ids(ids=frozenset()), [])
+
     def test_unknown_category_is_rejected(self):
         with self.assertRaises(UnknownCategoryError):
             self.svc.deadlines(ConferenceFilters(categories=frozenset({'XX'})))
@@ -239,6 +244,37 @@ class ConferenceApiTests(unittest.TestCase):
 
     def test_requires_bff_identity(self):
         self.assertEqual(self.client.get('/api/v1/conferences').status_code, 401)
+
+    def user_headers(self, user_id: str = 'user-a') -> dict:
+        return {'x-shenzhi-bff-secret': 'test-secret', 'x-shenzhi-user-id': user_id}
+
+    def test_followed_list_requires_login_and_narrows_to_follows(self):
+        anonymous = self.client.get('/api/v1/conferences?followed=true', headers=self.headers)
+        self.assertEqual(anonymous.status_code, 401)
+
+        with patch('app.api.conferences.follows.followed_ids', return_value=frozenset({'ai-aaai', 'gone'})) as ids:
+            response = self.client.get('/api/v1/conferences?followed=true', headers=self.user_headers())
+        ids.assert_awaited_once_with('user-a')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item['id'] for item in response.json()['data']['items']], ['ai-aaai'])
+
+    def test_follow_validates_snapshot_id_and_unfollow_always_releases(self):
+        with patch('app.api.conferences.follows.follow') as follow:
+            ok = self.client.put('/api/v1/conferences/ai-aaai/follow', headers=self.user_headers())
+            missing = self.client.put('/api/v1/conferences/no-such/follow', headers=self.user_headers())
+        self.assertEqual(ok.status_code, 200)
+        self.assertEqual(ok.json()['data'], {'conference_id': 'ai-aaai', 'is_following': True})
+        follow.assert_awaited_once_with('user-a', 'ai-aaai')
+        self.assertEqual(missing.status_code, 404)
+
+        with patch('app.api.conferences.follows.unfollow') as unfollow:
+            released = self.client.delete('/api/v1/conferences/no-such/follow', headers=self.user_headers())
+        self.assertEqual(released.json()['data'], {'conference_id': 'no-such', 'is_following': False})
+        unfollow.assert_awaited_once_with('user-a', 'no-such')
+
+    def test_follow_requires_login(self):
+        response = self.client.put('/api/v1/conferences/ai-aaai/follow', headers=self.headers)
+        self.assertEqual(response.status_code, 401)
 
     def test_snapshot_failure_returns_recoverable_service_error(self):
         with patch(

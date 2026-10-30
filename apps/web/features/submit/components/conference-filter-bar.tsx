@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronDown, Loader2, Medal, RotateCcw, Search, Tag, X } from "lucide-react";
+import { BellRing, Check, ChevronDown, Loader2, Medal, RotateCcw, Search, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { usePopoverPlacement } from "@/lib/use-popover-placement";
@@ -88,6 +88,8 @@ function FilterPopover({
 interface ConferenceFilterBarProps {
   filters: ConferenceFilterState;
   categories: ConferenceCategoryDto[] | undefined;
+  /** 登录后才显示「只看关注」 */
+  canFilterFollowed: boolean;
   total: number | undefined;
   fetching: boolean;
   onChange: (next: ConferenceFilterState) => void;
@@ -101,6 +103,7 @@ interface ConferenceFilterBarProps {
 export function ConferenceFilterBar({
   filters,
   categories,
+  canFilterFollowed,
   total,
   fetching,
   onChange,
@@ -202,6 +205,23 @@ export function ConferenceFilterBar({
             })}
           </ul>
         </FilterPopover>
+
+        {canFilterFollowed && (
+          <button
+            type="button"
+            aria-pressed={filters.followedOnly}
+            onClick={() => onChange({ ...filters, followedOnly: !filters.followedOnly })}
+            className={cn(
+              "flex h-10 cursor-pointer items-center gap-1.5 rounded-xl border px-3.5 text-[13px] transition-colors",
+              filters.followedOnly
+                ? "border-primary bg-primary font-medium text-white"
+                : "border-line bg-card text-ink-2 hover:border-primary/40",
+            )}
+          >
+            <BellRing className="size-4" />
+            只看关注
+          </button>
+        )}
 
         <button
           type="button"

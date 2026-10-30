@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ConferenceDeadlineDto } from "@/clients/backend/conferences";
 import { AddToCalendarMenu } from "./add-to-calendar-menu";
+import { ConferenceFollowButton } from "./conference-follow-button";
 import { DeadlineCountdown } from "./deadline-countdown";
 import {
   compactTimeline,
@@ -38,12 +39,19 @@ export const ConferenceCard = memo(function ConferenceCard({
   categoryName,
   now,
   index,
+  following,
+  followResolving,
+  highlighted,
 }: {
   ref?: Ref<HTMLElement>;
   conference: ConferenceDeadlineDto;
   categoryName: string | undefined;
   now: number;
   index: number;
+  following: boolean;
+  followResolving: boolean;
+  /** 从关注区或日历链接跳转过来时短暂高亮 */
+  highlighted: boolean;
 }) {
   const { edition, rank } = conference;
   const closed = conference.status === "closed";
@@ -69,7 +77,11 @@ export const ConferenceCard = memo(function ConferenceCard({
         layout: { type: "spring", stiffness: 420, damping: 38 },
       }}
       // 日历菜单展开时浮在后续卡片之上
-      className="relative rounded-2xl bg-card shadow-card has-[[data-open]]:z-10"
+      id={`conference-${conference.id}`}
+      className={cn(
+        "relative scroll-mt-32 rounded-2xl bg-card shadow-card ring-2 ring-transparent transition-[box-shadow] duration-500 has-[[data-open]]:z-10",
+        highlighted && "ring-primary/50",
+      )}
     >
       <span className={cn("absolute inset-y-0 left-0 w-1 rounded-l-2xl", accentClass(conference, now))} />
 
@@ -129,22 +141,21 @@ export const ConferenceCard = memo(function ConferenceCard({
           </ol>
         )}
 
-        {(edition.link || next) && (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {edition.link && (
-              <a
-                href={edition.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                <ExternalLink />
-                会议官网
-              </a>
-            )}
-            {next && <AddToCalendarMenu conference={conference} next={next} now={now} />}
-          </div>
-        )}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <ConferenceFollowButton conference={conference} following={following} resolving={followResolving} />
+          {edition.link && (
+            <a
+              href={edition.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <ExternalLink />
+              会议官网
+            </a>
+          )}
+          {next && <AddToCalendarMenu conference={conference} next={next} now={now} />}
+        </div>
       </div>
     </motion.article>
   );

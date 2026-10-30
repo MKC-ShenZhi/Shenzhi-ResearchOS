@@ -4,9 +4,11 @@ import { milestoneEventSummary } from "./ics";
 
 type DatedMilestone = ConferenceMilestoneDto & { at: string };
 
-function eventDetails(conference: ConferenceDeadlineDto, milestone: DatedMilestone): string {
+/** 事件详情首行放深知会议页链接，日历提醒点开后回到站内 */
+function eventDetails(conference: ConferenceDeadlineDto, milestone: DatedMilestone, pageUrl: string): string {
   const { edition } = conference;
   return [
+    `在深知查看截稿倒计时：${pageUrl}`,
     conference.description,
     milestone.local ? `官方时间：${formatOfficialTime(milestone.local, edition.timezone)}` : "",
     edition.link ? `会议官网：${edition.link}` : "",
@@ -22,13 +24,17 @@ function googleDateTime(iso: string): string {
  * Google Calendar 预填事件链接。截稿是一个时刻，起止时间相同；
  * 网页日历一次只能预填一个事件，因此只取单个节点。
  */
-export function googleCalendarUrl(conference: ConferenceDeadlineDto, milestone: DatedMilestone): string {
+export function googleCalendarUrl(
+  conference: ConferenceDeadlineDto,
+  milestone: DatedMilestone,
+  pageUrl: string,
+): string {
   const at = googleDateTime(milestone.at);
   const params = new URLSearchParams({
     action: "TEMPLATE",
     text: milestoneEventSummary(conference, milestone),
     dates: `${at}/${at}`,
-    details: eventDetails(conference, milestone),
+    details: eventDetails(conference, milestone, pageUrl),
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
@@ -37,6 +43,7 @@ export function googleCalendarUrl(conference: ConferenceDeadlineDto, milestone: 
 export function outlookCalendarUrl(
   conference: ConferenceDeadlineDto,
   milestone: DatedMilestone,
+  pageUrl: string,
   host: "outlook.live.com" | "outlook.office.com" = "outlook.live.com",
 ): string {
   const at = new Date(milestone.at).toISOString();
@@ -46,7 +53,7 @@ export function outlookCalendarUrl(
     subject: milestoneEventSummary(conference, milestone),
     startdt: at,
     enddt: at,
-    body: eventDetails(conference, milestone),
+    body: eventDetails(conference, milestone, pageUrl),
   });
   return `https://${host}/calendar/0/deeplink/compose?${params.toString()}`;
 }

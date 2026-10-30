@@ -10,6 +10,7 @@ import {
   deadlineUrgency,
   formatInstant,
   formatOfficialTime,
+  formatRemainingShort,
   remainingUntil,
   upcomingMilestone,
 } from "../../features/submit/lib/deadline-time";
@@ -63,6 +64,12 @@ test("remainingUntil splits time left and clamps at zero", () => {
   assert.deepEqual(remainingUntil(0, 10_000), { days: 0, hours: 0, minutes: 0, seconds: 0 });
 });
 
+test("formatRemainingShort picks the two most useful units", () => {
+  assert.equal(formatRemainingShort(2 * DAY + 22 * HOUR + 59 * 60_000, 0), "2 天 22 小时");
+  assert.equal(formatRemainingShort(5 * HOUR + 12 * 60_000, 0), "5 小时 12 分");
+  assert.equal(formatRemainingShort(30_000, 0), "1 分钟");
+});
+
 test("deadlineUrgency uses inclusive day / week / month thresholds", () => {
   assert.equal(deadlineUrgency(0, 0), "passed");
   assert.equal(deadlineUrgency(DAY, 0), "day");
@@ -106,25 +113,32 @@ test("ICS export contains only upcoming dated milestones with escaped text", () 
   assert.match(ics, /TRIGGER:-P1D/);
   assert.ok(ics.endsWith("END:VCALENDAR\r\n"));
 
+  assert.match(ics, /URL:https:\/\/aaai\.org/);
+  const linked = buildConferenceIcs(conference(), new Date("2026-11-12T00:00:00Z"), "https://shenzhi.example/submit?focus=ai-aaai");
+  assert.match(linked ?? "", /URL:https:\/\/shenzhi\.example\/submit\?focus=ai-aaai\r\n/);
+  assert.match(linked ?? "", /DESCRIPTION:.*\\n在深知查看截稿倒计时：https:\/\/shenzhi\.example/);
+
   assert.equal(buildConferenceIcs(conference(), new Date("2026-12-01T00:00:00Z")), null);
 });
 
 test("web calendar links prefill one milestone with title, UTC time and official time", () => {
   const next = conference().edition.milestones[1] as ConferenceDeadlineDto["edition"]["milestones"][number] & { at: string };
 
-  const google = new URL(googleCalendarUrl(conference(), next));
+  const page = "https://shenzhi.example/submit?focus=ai-aaai";
+  const google = new URL(googleCalendarUrl(conference(), next, page));
   assert.equal(google.origin + google.pathname, "https://calendar.google.com/calendar/render");
   assert.equal(google.searchParams.get("action"), "TEMPLATE");
   assert.equal(google.searchParams.get("text"), "AAAI 2027 全文截稿");
   assert.equal(google.searchParams.get("dates"), "20261118T115959Z/20261118T115959Z");
+  assert.ok(google.searchParams.get("details")?.startsWith(`在深知查看截稿倒计时：${page}\n`));
   assert.match(google.searchParams.get("details") ?? "", /官方时间：2026-11-17 23:59 AoE/);
   assert.match(google.searchParams.get("details") ?? "", /会议官网：https:\/\/aaai\.org/);
 
-  const outlook = new URL(outlookCalendarUrl(conference(), next));
+  const outlook = new URL(outlookCalendarUrl(conference(), next, page));
   assert.equal(outlook.host, "outlook.live.com");
   assert.equal(outlook.searchParams.get("subject"), "AAAI 2027 全文截稿");
   assert.equal(outlook.searchParams.get("startdt"), "2026-11-18T11:59:59.000Z");
-  assert.equal(new URL(outlookCalendarUrl(conference(), next, "outlook.office.com")).host, "outlook.office.com");
+  assert.equal(new URL(outlookCalendarUrl(conference(), next, page, "outlook.office.com")).host, "outlook.office.com");
 });
 
 test("filters toggle rank chips per system and hide closed venues by default", () => {
@@ -142,7 +156,13 @@ test("filters toggle rank chips per system and hide closed venues by default", (
     thcpl: [],
     statuses: ["open", "tbd"],
     q: "neurips",
+    followed: false,
   });
+  assert.equal(
+    conferenceDeadlineSearchParams(toDeadlineQuery({ ...EMPTY_CONFERENCE_FILTERS, followedOnly: true })).get("followed"),
+    "true",
+  );
+  assert.equal(conferenceDeadlineSearchParams(toDeadlineQuery(EMPTY_CONFERENCE_FILTERS)).has("followed"), false);
 
   const reverted = toggleRankChip(state, ccfA);
   assert.deepEqual(reverted.ccf, []);

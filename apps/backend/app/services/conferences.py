@@ -206,6 +206,8 @@ class ConferenceFilters:
     thcpl: frozenset[str] = frozenset()
     statuses: frozenset[str] = frozenset()
     query: str | None = None
+    # None = no restriction; an empty set matches nothing (e.g. a user following no conference).
+    ids: frozenset[str] | None = None
 
 
 class UnknownCategoryError(ValueError):
@@ -235,6 +237,9 @@ class ConferenceDeadlineService:
             ],
         )
 
+    def has_conference(self, conference_id: str) -> bool:
+        return any(record.conference.id == conference_id for record in self._catalog_loader().records)
+
     def deadlines(self, filters: ConferenceFilters = ConferenceFilters()) -> ConferenceDeadlineList:
         """Rank filters are OR within one system and AND across systems."""
         catalog = self._catalog_loader()
@@ -247,6 +252,8 @@ class ConferenceDeadlineService:
         items: list[ConferenceDeadline] = []
         for record in catalog.records:
             conference = record.conference
+            if filters.ids is not None and conference.id not in filters.ids:
+                continue
             if filters.categories and conference.category not in filters.categories:
                 continue
             if not (
