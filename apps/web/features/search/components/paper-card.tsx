@@ -126,9 +126,6 @@ export function PaperCard({
             className="mt-3 text-sm leading-relaxed text-muted"
             collapsedClassName="line-clamp-4"
           />
-          {paper.recommendationReason && (
-            <p className="mt-2 text-xs text-primary">{paper.recommendationReason}</p>
-          )}
 
           {/* AI 解读入口 */}
           <Link

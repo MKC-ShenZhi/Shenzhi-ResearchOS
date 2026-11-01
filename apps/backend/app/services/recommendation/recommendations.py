@@ -191,6 +191,7 @@ class CandidateRecallService:
                         'venue': paper.venue, 'pdf_url': None, 'thumbnail_url': None,
                         # Knowledge image id; the web layer resolves it to the image proxy.
                         'image_id': paper.image_id,
+                        'keywords': paper.keywords, 'subjects': paper.subjects,
                     }, subjects=paper.subjects, keywords=paper.keywords, sources=set())
                     candidates[paper.id] = entry
                 entry.sources.add(kind)

@@ -3,7 +3,7 @@ import type { DiscoveryPaperDto } from "./discovery";
 
 export interface RecommendationPaperDto extends Omit<DiscoveryPaperDto, "year"> {
   year: number | null;
-  /** Only real signals carry a reason; shared daily papers usually have none. */
+  /** Kept for attribution analysis only; the home card does not display it. */
   reason: string | null;
   sources: string[];
   request_id: string;

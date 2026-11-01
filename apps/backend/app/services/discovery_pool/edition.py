@@ -160,8 +160,15 @@ class DailyEditionBuilder:
         papers: dict[str, DiscoveryPaper] = {row.paper_id: DiscoveryPaper(
             id=row.paper_id, title=row.title, abstract=row.abstract, authors=row.authors,
             year=row.year, venue=row.venue, image_id=row.image_id,
+            keywords=row.keywords, subjects=row.subjects,
         ) for row in pool}
-        # A curated paper always shows its optimized static thumbnail.
+        # A curated paper always shows its optimized static thumbnail, with the
+        # pool's topics when it has them (the packaged snapshot carries none).
+        for paper_id, paper in list(curated.items()):
+            if paper_id in papers:
+                curated[paper_id] = paper.model_copy(update={
+                    'keywords': papers[paper_id].keywords, 'subjects': papers[paper_id].subjects,
+                })
         papers.update(curated)
 
         def rotation(paper: DiscoveryPaper) -> tuple[date, bytes]:

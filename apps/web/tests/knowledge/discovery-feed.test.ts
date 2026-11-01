@@ -37,6 +37,7 @@ test("discovery mapper preserves display metadata without inventing engagement o
   assert.equal(mapped.date, "2026");
   assert.equal(mapped.venue, "预印本");
   assert.equal(mapped.authors, "A One · B Two · C Three · D Four · E Five 等");
+  // Without upstream topics there are no tags; none are invented.
   assert.deepEqual(mapped.tags, []);
   assert.equal(mapped.thumbnailUrl, "/paper-thumbnails/2604.17730v1.webp");
   assert.equal("likes" in mapped, false);
@@ -96,6 +97,13 @@ test("daily-edition pool papers resolve their knowledge image through the proxy 
     if (originalValue === undefined) delete process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
     else process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = originalValue;
   }
+});
+
+test("home cards show knowledge topics like search cards: keywords first, else subjects, at most five", () => {
+  assert.deepEqual(mapDiscoveryPaper(discoveryPaper({
+    keywords: ["k1", "k2", "k3", "k4", "k5", "k6"], subjects: ["s1"],
+  })).tags, ["k1", "k2", "k3", "k4", "k5"]);
+  assert.deepEqual(mapDiscoveryPaper(discoveryPaper({ keywords: [], subjects: ["RAG", "Agents"] })).tags, ["RAG", "Agents"]);
 });
 
 test("home static thumbnails bypass the knowledge image flag", () => {

@@ -16,6 +16,9 @@ class DiscoveryPaper(KnowledgeModel):
     thumbnail_url: str | None = None
     # Knowledge image path for pool papers; the web layer resolves it to its image proxy.
     image_id: str | None = None
+    # Card topics, shown like knowledge search cards: keywords first, else subjects.
+    keywords: list[str] = Field(default_factory=list)
+    subjects: list[str] = Field(default_factory=list)
 
 
 class DiscoveryPaperPage(KnowledgeModel):

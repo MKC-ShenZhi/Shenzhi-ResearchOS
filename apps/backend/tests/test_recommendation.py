@@ -271,6 +271,7 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].paper['id'], 'paper:1')
         self.assertEqual(result[0].paper['image_id'], '/images/2026/paper-1.webp')
+        self.assertEqual((result[0].paper['keywords'], result[0].paper['subjects']), (['retrieval'], ['RAG']))
         self.assertEqual(result[0].sources, {'followed_topic', 'keyword'})
 
     async def test_all_knowledge_failures_leave_no_personal_candidates(self):

@@ -11,6 +11,8 @@ export interface DiscoveryPaperDto {
   thumbnail_url: string | null;
   /** Knowledge image of a pool paper; curated papers carry `thumbnail_url` instead. */
   image_id?: string | null;
+  keywords?: string[];
+  subjects?: string[];
 }
 
 export interface DiscoveryPaperPageDto {

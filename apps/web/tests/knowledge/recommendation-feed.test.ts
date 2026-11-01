@@ -41,7 +41,8 @@ test("authenticated home feed preserves recommendation attribution and nullable 
     assert.equal(page.items[0].date, "年份未知");
     assert.equal(page.items[0].recommendationRequestId, "request-1");
     assert.equal(page.items[0].recommendationRank, 1);
-    assert.equal(page.items[0].recommendationReason, "与你关注的主题相匹配");
+    // The reason stays server-side for analysis; cards never surface it.
+    assert.equal("recommendationReason" in page.items[0], false);
     assert.equal(page.nextCursor, "request-1:1");
     assert.match(requested[0], /\/recommendations\/papers\?limit=12/);
   } finally {
@@ -66,10 +67,6 @@ test("recalled recommendations use knowledge images while curated papers keep st
     const enabled = await fetchHomeFeedPage(null, "user-a");
     assert.deepEqual(enabled.items.map((entry) => entry.thumbnailUrl), [
       "/api/paper-images/2026/recalled.webp", "/paper-thumbnails/curated.webp", null,
-    ]);
-    // Shared daily papers without a real signal show no reason at all.
-    assert.deepEqual(enabled.items.map((entry) => entry.recommendationReason), [
-      "与你近期搜索的方向相关", "与你近期搜索的方向相关", undefined,
     ]);
     // The knowledge image flag still gates recalled images; static thumbnails are unaffected.
     process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = "false";

@@ -35,7 +35,8 @@ export function mapDiscoveryPaper(item: Omit<DiscoveryPaperDto, "year"> & { year
     title: item.title,
     abstract: item.abstract,
     aiLink: "AI 深度解读",
-    tags: [],
+    // Same topics as knowledge search cards: upstream keywords, else subjects.
+    tags: (item.keywords?.length ? item.keywords : item.subjects ?? []).slice(0, 5),
     // Curated papers keep their static thumbnail; pool and recalled papers use the knowledge image.
     thumbnailUrl: item.thumbnail_url ?? getPaperThumbnailUrl(item.image_id),
   };
@@ -86,7 +87,6 @@ async function recommendationPage(cursor: string | null, userId: string): Promis
   return {
     items: page.items.map((item) => ({
       ...mapDiscoveryPaper(item),
-      recommendationReason: item.reason ?? undefined,
       recommendationRequestId: item.request_id,
       recommendationRank: item.rank,
     })),

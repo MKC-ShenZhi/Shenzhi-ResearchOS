@@ -34,7 +34,8 @@ def curated_snapshot(count=10):
 
 def pool_row(paper_id, venue, year=2026):
     return SimpleNamespace(paper_id=paper_id, title=f'Title {paper_id}', abstract='abstract', authors=['A'],
-                           year=year, venue=venue, image_id=f'/images/{paper_id.replace(":", "-")}.png')
+                           year=year, venue=venue, image_id=f'/images/{paper_id.replace(":", "-")}.png',
+                           keywords=[f'kw-{paper_id}'], subjects=['RAG'])
 
 
 def pool(count, venues=VENUES):
@@ -100,9 +101,15 @@ class EditionRuleTests(unittest.IsolatedAsyncioTestCase):
         by_id = {paper.id: paper for paper in result.papers}
         self.assertEqual(by_id['curated:3'].thumbnail_url, '/paper-thumbnails/c3.webp')
         self.assertIsNone(by_id['curated:3'].image_id)
+        # The packaged snapshot has no topics; the pool supplies them for the card.
+        self.assertEqual(by_id['curated:3'].keywords, ['kw-curated:3'])
+        others = [paper for paper_id, paper in by_id.items() if paper_id.startswith('curated:') and paper_id != 'curated:3']
+        self.assertTrue(others)
+        self.assertTrue(all(paper.keywords == [] for paper in others))
         pool_paper = next(paper for paper in result.papers if paper.id.startswith('pool:'))
         self.assertIsNone(pool_paper.thumbnail_url)
         self.assertTrue(pool_paper.image_id.startswith('/images/'))
+        self.assertEqual((pool_paper.keywords, pool_paper.subjects), ([f'kw-{pool_paper.id}'], ['RAG']))
 
     async def test_empty_pool_is_refused(self):
         with self.assertRaises(EditionError):
@@ -136,7 +143,7 @@ class EditionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         async with session_scope() as session:
             session.add_all(DiscoveryPoolPaperRow(
                 **{key: value for key, value in vars(pool_row(f'persist:{index}', VENUES[index % 6], self.YEAR)).items()},
-                subjects=[], keywords=[], synced_at=discovery.utc_now(),
+                synced_at=discovery.utc_now(),
             ) for index in range(40))
             # A legacy payload from the retired feature must neither break history nor be served.
             session.add(DailyRecommendationRow(recommendation_date=self.START, payload=[{'legacy': True}]))
