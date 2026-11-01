@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Plus, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, TrendingUp, Users } from "lucide-react";
 import { PaperThumbnail } from "@/components/common/paper-thumbnail";
 import { PAPER_CARD_INTERACTION_CLASS, usePaperCardNavigation } from "@/components/common/use-paper-card-navigation";
 import { Badge } from "@/components/ui/badge";
@@ -126,17 +126,6 @@ export function PaperCard({
             className="mt-3 text-sm leading-relaxed text-muted"
             collapsedClassName="line-clamp-4"
           />
-
-          {/* AI 解读入口 */}
-          <Link
-            href={detailHref}
-            onClick={trackClick}
-            className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
-          >
-            <Plus className="size-3.5" />
-            {paper.aiLink}
-            <ArrowRight className="size-3.5" />
-          </Link>
         </div>
 
         {layout === "feed" && (

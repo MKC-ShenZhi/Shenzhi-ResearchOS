@@ -79,7 +79,8 @@ test("paper cards keep the existing detail navigation and load thumbnails on mob
     PAPER_CARD_SOURCE,
     /const detailHref = paperHref\(paper\.id, \{ mode: "create", source: returnTo \}\)/,
   );
-  assert.equal(PAPER_CARD_SOURCE.match(/href=\{detailHref\}/g)?.length, 3);
+  // Title and 立即阅读; the card body itself navigates via usePaperCardNavigation.
+  assert.equal(PAPER_CARD_SOURCE.match(/href=\{detailHref\}/g)?.length, 2);
   assert.doesNotMatch(PAPER_CARD_SOURCE, /hidden w-full max-w-\[320px\]/);
 });
 

@@ -34,7 +34,6 @@ export function mapDiscoveryPaper(item: Omit<DiscoveryPaperDto, "year"> & { year
     authors: formatAuthors(item.authors),
     title: item.title,
     abstract: item.abstract,
-    aiLink: "AI 深度解读",
     // Same topics as knowledge search cards: upstream keywords, else subjects.
     tags: (item.keywords?.length ? item.keywords : item.subjects ?? []).slice(0, 5),
     // Curated papers keep their static thumbnail; pool and recalled papers use the knowledge image.

@@ -7,7 +7,6 @@ export interface FeedPaper {
   authors: string;
   title: string;
   abstract: string;
-  aiLink: string;
   tags: string[];
   /** 仅在真实数据源提供时展示；发现页 Knowledge 搜索结果不伪造指标。 */
   likes?: number;
