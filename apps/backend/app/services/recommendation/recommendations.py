@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID, uuid4
@@ -18,6 +18,7 @@ from app.models.recommendation import RecommendationSnapshotRow
 from app.models.stats import PaperStatDailyRow, StatsSnapshotRunRow
 from app.schemas.knowledge import KnowledgeSearchRequest, PaperSearchResult
 from app.services.discovery import HomeDiscoveryService
+from app.services.discovery_pool.sync import displayable_image_id
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 from app.services.recommendation import config
 from app.services.recommendation.config import (
@@ -126,7 +127,12 @@ class CandidateRecallService:
     def __init__(self, knowledge: KnowledgeService | None = None):
         self.knowledge = knowledge or KnowledgeService()
 
-    async def recall(self, profile: dict) -> list[Candidate]:
+    async def recall(self, profile: dict, *, year: int | None = None) -> list[Candidate]:
+        """Personal candidates; with `year`, only papers from the year the home feed shows.
+
+        Knowledge images exist almost only for the home year, so unbounded
+        retrieval would mostly return papers the image-only home feed drops.
+        """
         candidates: dict[str, Candidate] = {}
         followed = [('followed_topic', subject) for subject in profile['explicit_subjects']]
         combined = {
@@ -157,14 +163,16 @@ class CandidateRecallService:
         async def fetch(kind: str, value: str) -> tuple[str, str, list[PaperSearchResult]]:
             try:
                 if kind == 'keyword':
-                    result = await asyncio.wait_for(self.knowledge.search(
-                        KnowledgeSearchRequest(query=value, topK=RECALL_PER_SOURCE),
-                    ), timeout=config.RECALL_TIMEOUT_SECONDS)
-                else:
-                    result = await asyncio.wait_for(self.knowledge.search_by_subject(
-                        value, limit=RECALL_PER_SOURCE,
-                    ), timeout=config.RECALL_TIMEOUT_SECONDS)
-                return kind, value, result.results
+                    result = await asyncio.wait_for(self.knowledge.search(KnowledgeSearchRequest(
+                        query=value, topK=RECALL_PER_SOURCE, yearFrom=year, yearTo=year,
+                    )), timeout=config.RECALL_TIMEOUT_SECONDS)
+                    return kind, value, result.results
+                # Subject search has no year filter: over-fetch, then keep the home year.
+                result = await asyncio.wait_for(self.knowledge.search_by_subject(
+                    value, limit=RECALL_PER_SOURCE * (config.SUBJECT_YEAR_OVERFETCH if year else 1),
+                ), timeout=config.RECALL_TIMEOUT_SECONDS)
+                papers = [paper for paper in result.results if year is None or paper.year == year]
+                return kind, value, papers[:RECALL_PER_SOURCE]
             except (KnowledgeServiceError, TimeoutError):
                 return kind, value, []
             except Exception as error:  # noqa: BLE001 - one source must not sink the others
@@ -225,8 +233,9 @@ class RecommendationService:
         else:
             offset = 0
             profile = await self.profiles.get(user_id)
-            candidates = await self.recall.recall(profile)
             shared = await self._shared_papers()
+            years = Counter(paper['year'] for paper in shared if paper.get('year'))
+            candidates = await self.recall.recall(profile, year=years.most_common(1)[0][0] if years else None)
             excluded, popularity = await self._account_and_popularity(
                 user_id, [item.paper['id'] for item in candidates] + [paper['id'] for paper in shared],
             )
@@ -239,8 +248,8 @@ class RecommendationService:
                     continue
                 # A curated paper recalled by search keeps its static thumbnail.
                 candidate.paper['thumbnail_url'] = candidate.paper.get('thumbnail_url') or static_thumbnails.get(paper_id)
-                if not (candidate.paper['thumbnail_url'] or candidate.paper.get('image_id')):
-                    continue  # The home feed only shows papers with an image.
+                if not (candidate.paper['thumbnail_url'] or displayable_image_id(candidate.paper.get('image_id'))):
+                    continue  # The home feed only shows papers with an image the web proxy serves.
                 score, reason = _rank(candidate, profile, popularity.get(paper_id), current_year)
                 scored.append((score, candidate, reason))
             scored.sort(key=lambda item: (-item[0], item[1].paper['id']))

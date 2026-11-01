@@ -44,6 +44,8 @@ RECALL_PER_SOURCE = 12
 # Each recall query and each metadata lookup is bounded independently, so one
 # slow upstream path degrades to fewer candidates instead of a failed page.
 RECALL_TIMEOUT_SECONDS = 5.0
+# Subject search cannot filter by year; fetch this many times more and keep the home year.
+SUBJECT_YEAR_OVERFETCH = 3
 # A personal feed is two bounded lists: at most this many personal picks,
 # interleaved PERSONAL_PER_SHARED : 1 with the complete shared daily list.
 PERSONAL_RECOMMENDATION_LIMIT = 100

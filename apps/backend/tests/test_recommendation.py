@@ -338,6 +338,24 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
         calls = knowledge.search_by_subject.await_count + knowledge.search.await_count
         self.assertEqual(calls, 4)
 
+    async def test_home_year_bounds_keyword_search_and_filters_overfetched_subjects(self):
+        def paper(paper_id, year):
+            return SimpleNamespace(id=paper_id, title=paper_id, abstract=None, authors=[], year=year,
+                                   venue=None, subjects=['RAG'], keywords=[], image_id='/images/p.png')
+        knowledge = SimpleNamespace(
+            search=AsyncMock(return_value=SimpleNamespace(results=[paper('keyword:2026', 2026)])),
+            search_by_subject=AsyncMock(return_value=SimpleNamespace(results=[
+                paper('subject:2024', 2024), paper('subject:2026', 2026),
+            ])),
+        )
+        result = await CandidateRecallService(knowledge).recall(
+            profile(explicit_subjects=['RAG'], long_keywords={'retrieval': 1}), year=2026,
+        )
+        self.assertEqual({item.paper['id'] for item in result}, {'keyword:2026', 'subject:2026'})
+        request = knowledge.search.await_args.args[0]
+        self.assertEqual((request.year_from, request.year_to), (2026, 2026))
+        knowledge.search_by_subject.assert_awaited_once_with('RAG', limit=36)
+
     async def test_metadata_failures_never_fail_or_invent_profile_features(self):
         detail = PaperDetail(id='paper:ok', title='OK', subjects=['RAG'], keywords=[],
                              provenance=Provenance(external_id='paper:ok'))
@@ -559,7 +577,7 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
             return Candidate({
                 'id': paper_id, 'title': paper_id, 'abstract': '', 'authors': [],
                 'year': 2026, 'venue': None, 'pdf_url': None, 'thumbnail_url': None,
-                'image_id': f'/images/2026/{paper_id}.webp',
+                'image_id': f'/images/2026/{paper_id.replace(":", "-")}.webp',
             }, [], [keyword], {'keyword'})
         unrelated = candidate('paper:a-unrelated', 'vision')
         matching = candidate('paper:z-matching', 'RAG')
@@ -705,14 +723,20 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
         candidates = [
             recalled(f'{self.paper_id}:with-image', '/images/2026/with-image.webp'),
             recalled(f'{self.paper_id}:no-image', None),
+            # SVG is never served by the web image proxy, so it counts as no image.
+            recalled(f'{self.paper_id}:svg', '/images/ICLR_2026/x.svg'),
             # Recalled by search but also curated: keeps the static thumbnail.
             recalled(shared[3].id, None),
             recalled(liked, '/images/2026/liked.webp'),
         ]
-        page = await self._service_with(shared, interests, candidates).page(self.user_id, limit=48)
+        service = self._service_with(shared, interests, candidates)
+        page = await service.page(self.user_id, limit=48)
+        # Recall is bounded to the year the shared home list shows.
+        self.assertEqual(service.recall.recall.await_args.kwargs, {'year': 2026})
         items = page['items']
         ids = [item['id'] for item in items]
         self.assertNotIn(f'{self.paper_id}:no-image', ids)
+        self.assertNotIn(f'{self.paper_id}:svg', ids)
         self.assertNotIn(liked, ids)
         self.assertEqual(len(ids), len(set(ids)))
         # Two personal picks, then the shared list continues in its daily order.
