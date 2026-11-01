@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "snapshot_id": "seed-4fc2a901e396086f",
+  "snapshot_id": "seed-fdba58ad18d970d4",
   "source_generated_at": "2026-10-16T03:53:41.302560+00:00",
   "items": [
     {
@@ -18,6 +18,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.17730v1",
       "thumbnail_url": "/paper-thumbnails/2604.17730v1.webp",
+      "image_id": "/images/ACL_2026/2604.17730v1.png",
+      "keywords": [
+        "mental health safety",
+        "LLM evaluation",
+        "multi-turn interaction",
+        "adversarial attack",
+        "role-aware taxonomy"
+      ],
+      "subjects": [
+        "role-aware taxonomy",
+        "multi-turn interaction",
+        "mental health safety",
+        "LLM evaluation",
+        "adversarial attack"
+      ],
       "priority": 1
     },
     {
@@ -33,6 +48,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.06633v2",
       "thumbnail_url": "/paper-thumbnails/2601.06633v2.webp",
+      "image_id": "/images/ACL_2026/2601.06633v2.png",
+      "keywords": [
+        "student error simulation",
+        "coding tasks",
+        "large language models",
+        "reinforcement learning",
+        "knowledge alignment"
+      ],
+      "subjects": [
+        "student error simulation",
+        "reinforcement learning",
+        "large language models",
+        "knowledge alignment",
+        "coding tasks"
+      ],
       "priority": 1
     },
     {
@@ -52,6 +82,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.06695v1",
       "thumbnail_url": "/paper-thumbnails/2604.06695v1.webp",
+      "image_id": "/images/ACL_2026/2604.06695v1.png",
+      "keywords": [
+        "large reasoning models",
+        "chain-of-thought",
+        "information flow",
+        "test-time intervention",
+        "saliency analysis"
+      ],
+      "subjects": [
+        "test-time intervention",
+        "saliency analysis",
+        "large reasoning models",
+        "information flow",
+        "chain-of-thought"
+      ],
       "priority": 1
     },
     {
@@ -66,6 +111,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.10772v1",
       "thumbnail_url": "/paper-thumbnails/2604.10772v1.webp",
+      "image_id": "/images/CVPR_2026/2604.10772v1.png",
+      "keywords": [
+        "Hierarchical 3D scene generation",
+        "vision-language models",
+        "Retrieval-augmented generation",
+        "Scene optimization",
+        "Real-time scene editing"
+      ],
+      "subjects": [
+        "vision-language models",
+        "Scene optimization",
+        "retrieval-augmented generation",
+        "Real-time scene editing",
+        "Hierarchical 3D scene generation"
+      ],
       "priority": 1
     },
     {
@@ -83,6 +143,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.09710v1",
       "thumbnail_url": "/paper-thumbnails/2604.09710v1.webp",
+      "image_id": "/images/CVPR_2026/2604.09710v1.png",
+      "keywords": [
+        "fair disease diagnosis",
+        "chest CT",
+        "class imbalance",
+        "demographic fairness",
+        "logit adjustment"
+      ],
+      "subjects": [
+        "logit adjustment",
+        "fair disease diagnosis",
+        "demographic fairness",
+        "class imbalance",
+        "chest CT"
+      ],
       "priority": 1
     },
     {
@@ -111,6 +186,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.09413v2",
       "thumbnail_url": "/paper-thumbnails/2601.09413v2.webp",
+      "image_id": "/images/ACL_2026/2601.09413v2.png",
+      "keywords": [
+        "speech recognition",
+        "audio reasoning",
+        "omni perception",
+        "self-reflection",
+        "voice agentic framework"
+      ],
+      "subjects": [
+        "voice agentic framework",
+        "speech recognition",
+        "self-reflection",
+        "omni perception",
+        "audio reasoning"
+      ],
       "priority": 1
     },
     {
@@ -127,6 +217,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.03101v2",
       "thumbnail_url": "/paper-thumbnails/2603.03101v2.webp",
+      "image_id": "/images/CVPR_2026/2603.03101v2.png",
+      "keywords": [
+        "zero-shot anomaly detection",
+        "CLIP",
+        "Low-Rank Adaptation",
+        "patch-level specialization"
+      ],
+      "subjects": [
+        "zero-shot anomaly detection",
+        "patch-level specialization",
+        "low-rank adaptation",
+        "CLIP"
+      ],
       "priority": 1
     },
     {
@@ -146,6 +249,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.06812v2",
       "thumbnail_url": "/paper-thumbnails/2604.06812v2.webp",
+      "image_id": "/images/ACL_2026/2604.06812v2.png",
+      "keywords": [
+        "uncertainty quantification",
+        "long-text generation",
+        "semantic clustering",
+        "adaptive granularity",
+        "factuality"
+      ],
+      "subjects": [
+        "uncertainty quantification",
+        "semantic clustering",
+        "long-text generation",
+        "factuality",
+        "adaptive granularity"
+      ],
       "priority": 1
     },
     {
@@ -164,6 +282,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.23883v1",
       "thumbnail_url": "/paper-thumbnails/2603.23883v1.webp",
+      "image_id": "/images/CVPR_2026/2603.23883v1.png",
+      "keywords": [
+        "visual-textual-acoustic alignment",
+        "multimodal learning",
+        "bioacoustics",
+        "species retrieval",
+        "ecological traits"
+      ],
+      "subjects": [
+        "visual-textual-acoustic alignment",
+        "species retrieval",
+        "multimodal learning",
+        "ecological traits",
+        "bioacoustics"
+      ],
       "priority": 1
     },
     {
@@ -180,6 +313,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.14176v1",
       "thumbnail_url": "/paper-thumbnails/2603.14176v1.webp",
+      "image_id": "/images/CVPR_2026/2603.14176v1.png",
+      "keywords": [
+        "unsupervised image deblurring",
+        "dense matching",
+        "pseudo-ground truth generation",
+        "unpaired training data",
+        "reference-based restoration"
+      ],
+      "subjects": [
+        "unsupervised image deblurring",
+        "unpaired training data",
+        "reference-based restoration",
+        "pseudo-ground truth generation",
+        "dense matching"
+      ],
       "priority": 1
     },
     {
@@ -198,6 +346,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.24030v1",
       "thumbnail_url": "/paper-thumbnails/2603.24030v1.webp",
+      "image_id": "/images/CVPR_2026/2603.24030v1.png",
+      "keywords": [
+        "Open-Vocabulary Temporal Action Detection",
+        "Phase-wise decomposition",
+        "Chain-of-thought prompting",
+        "Visual-language alignment"
+      ],
+      "subjects": [
+        "Visual-language alignment",
+        "Phase-wise decomposition",
+        "Open-Vocabulary Temporal Action Detection",
+        "chain-of-thought prompting"
+      ],
       "priority": 1
     },
     {
@@ -215,6 +376,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2606.11148v1",
       "thumbnail_url": "/paper-thumbnails/2606.11148v1.webp",
+      "image_id": "/images/CVPR_2026/2606.11148v1.png",
+      "keywords": [
+        "virtual try-on",
+        "fine-grained adaptation",
+        "sketch-guided generation",
+        "diffusion models"
+      ],
+      "subjects": [
+        "virtual try-on",
+        "sketch-guided generation",
+        "fine-grained adaptation",
+        "diffusion models"
+      ],
       "priority": 1
     },
     {
@@ -233,6 +407,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.11676v1",
       "thumbnail_url": "/paper-thumbnails/2603.11676v1.webp",
+      "image_id": "/images/CVPR_2026/2603.11676v1.png",
+      "keywords": [
+        "spiking neural networks",
+        "dual consistency optimization",
+        "bitwise AND operations",
+        "stable spike skeleton",
+        "neuromorphic object recognition"
+      ],
+      "subjects": [
+        "stable spike skeleton",
+        "spiking neural networks",
+        "neuromorphic object recognition",
+        "dual consistency optimization",
+        "bitwise AND operations"
+      ],
       "priority": 1
     },
     {
@@ -250,6 +439,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.07727v1",
       "thumbnail_url": "/paper-thumbnails/2604.07727v1.webp",
+      "image_id": "/images/ACL_2026/2604.07727v1.png",
+      "keywords": [
+        "jailbreak defense",
+        "decoding-time defense",
+        "hidden-state trajectory",
+        "streaming detection",
+        "LLM safety"
+      ],
+      "subjects": [
+        "streaming detection",
+        "LLM safety",
+        "jailbreak defense",
+        "hidden-state trajectory",
+        "decoding-time defense"
+      ],
       "priority": 1
     },
     {
@@ -263,6 +467,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.11538v1",
       "thumbnail_url": "/paper-thumbnails/2605.11538v1.webp",
+      "image_id": "/images/ACL_2026/2605.11538v1.png",
+      "keywords": [
+        "GRPO",
+        "covariance-aware optimization",
+        "Gaussian kernel",
+        "token-level advantages",
+        "exploration-exploitation tradeoff"
+      ],
+      "subjects": [
+        "token-level advantages",
+        "GRPO",
+        "Gaussian kernel",
+        "exploration-exploitation tradeoff",
+        "covariance-aware optimization"
+      ],
       "priority": 1
     },
     {
@@ -278,6 +497,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2607.22553v1",
       "thumbnail_url": "/paper-thumbnails/2607.22553v1.webp",
+      "image_id": "/images/ACL_2026/2607.22553v1.png",
+      "keywords": [
+        "automated peer review",
+        "reviewer guidelines",
+        "LLM evaluation",
+        "RMSE",
+        "ICLR 2024"
+      ],
+      "subjects": [
+        "RMSE",
+        "reviewer guidelines",
+        "LLM evaluation",
+        "ICLR 2024",
+        "automated peer review"
+      ],
       "priority": 1
     },
     {
@@ -298,6 +532,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.25527v2",
       "thumbnail_url": "/paper-thumbnails/2603.25527v2.webp",
+      "image_id": "/images/CVPR_2026/2603.25527v2.png",
+      "keywords": [
+        "timestep selection",
+        "video diffusion models",
+        "data curation",
+        "motion-vision quality dilemma",
+        "timestep-aware quality decoupling"
+      ],
+      "subjects": [
+        "video diffusion models",
+        "timestep selection",
+        "timestep-aware quality decoupling",
+        "motion-vision quality dilemma",
+        "data curation"
+      ],
       "priority": 1
     },
     {
@@ -316,6 +565,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.21943v1",
       "thumbnail_url": "/paper-thumbnails/2603.21943v1.webp",
+      "image_id": "/images/CVPR_2026/2603.21943v1.png",
+      "keywords": [
+        "Fine-Grained Cross-View Geolocalization",
+        "Real-time localization",
+        "Iterative Refinement Sampling",
+        "Probabilistic displacement prediction"
+      ],
+      "subjects": [
+        "Real-time localization",
+        "Probabilistic displacement prediction",
+        "Iterative Refinement Sampling",
+        "Fine-Grained Cross-View Geolocalization"
+      ],
       "priority": 1
     },
     {
@@ -332,6 +594,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2601.16788v1",
       "thumbnail_url": "/paper-thumbnails/2601.16788v1.webp",
+      "image_id": "/images/CVPR_2026/2601.16788v1.png",
+      "keywords": [
+        "Panoramic Semantic Segmentation",
+        "Depth Representation",
+        "Spherical Fusion",
+        "RGB-D Segmentation",
+        "Cylindrical Coordinate"
+      ],
+      "subjects": [
+        "Spherical Fusion",
+        "RGB-D Segmentation",
+        "panoramic semantic segmentation",
+        "Depth Representation",
+        "Cylindrical Coordinate"
+      ],
       "priority": 1
     },
     {
@@ -346,6 +623,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.18596v3",
       "thumbnail_url": "/paper-thumbnails/2603.18596v3.webp",
+      "image_id": "/images/CVPR_2026/2603.18596v3.png",
+      "keywords": [
+        "continual learning",
+        "elastic weight consolidation",
+        "catastrophic forgetting",
+        "importance estimation",
+        "logits reversal"
+      ],
+      "subjects": [
+        "logits reversal",
+        "importance estimation",
+        "elastic weight consolidation",
+        "continual learning",
+        "catastrophic forgetting"
+      ],
       "priority": 1
     },
     {
@@ -366,6 +658,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.08546v1",
       "thumbnail_url": "/paper-thumbnails/2604.08546v1.webp",
+      "image_id": "/images/CVPR_2026/2604.08546v1.png",
+      "keywords": [
+        "text-to-video diffusion",
+        "counting accuracy",
+        "attention heads",
+        "numerical alignment",
+        "training-free"
+      ],
+      "subjects": [
+        "training-free",
+        "text-to-video diffusion",
+        "numerical alignment",
+        "counting accuracy",
+        "attention heads"
+      ],
       "priority": 1
     },
     {
@@ -382,6 +689,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.19945v1",
       "thumbnail_url": "/paper-thumbnails/2602.19945v1.webp",
+      "image_id": "/images/CVPR_2026/2602.19945v1.png",
+      "keywords": [
+        "Differential Privacy",
+        "Federated Learning",
+        "AdamW",
+        "Client Drift",
+        "Convergence"
+      ],
+      "subjects": [
+        "federated learning",
+        "differential privacy",
+        "convergence",
+        "Client Drift",
+        "AdamW"
+      ],
       "priority": 1
     },
     {
@@ -397,6 +719,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.10349v1",
       "thumbnail_url": "/paper-thumbnails/2605.10349v1.webp",
+      "image_id": "/images/CVPR_2026/2605.10349v1.png",
+      "keywords": [
+        "active learning",
+        "object detection",
+        "uncertainty estimation",
+        "diversity sampling",
+        "model-agnostic"
+      ],
+      "subjects": [
+        "uncertainty estimation",
+        "object detection",
+        "model-agnostic",
+        "diversity sampling",
+        "active learning"
+      ],
       "priority": 1
     },
     {
@@ -414,6 +751,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2606.11614v1",
       "thumbnail_url": "/paper-thumbnails/2606.11614v1.webp",
+      "image_id": "/images/CVPR_2026/2606.11614v1.png",
+      "keywords": [
+        "multimodal learning",
+        "information-theoretic decomposition",
+        "sample-specific interaction",
+        "synergy",
+        "variational decomposition"
+      ],
+      "subjects": [
+        "variational decomposition",
+        "synergy",
+        "sample-specific interaction",
+        "multimodal learning",
+        "information-theoretic decomposition"
+      ],
       "priority": 1
     },
     {
@@ -430,6 +782,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.17072v2",
       "thumbnail_url": "/paper-thumbnails/2604.17072v2.webp",
+      "image_id": "/images/ACL_2026/2604.17072v2.png",
+      "keywords": [
+        "deep research report generation",
+        "recursive framework",
+        "multimodal fusion",
+        "cognitive load evaluation",
+        "large language models"
+      ],
+      "subjects": [
+        "recursive framework",
+        "multimodal fusion",
+        "large language models",
+        "deep research report generation",
+        "cognitive load evaluation"
+      ],
       "priority": 1
     },
     {
@@ -449,6 +816,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.22059v1",
       "thumbnail_url": "/paper-thumbnails/2602.22059v1.webp",
+      "image_id": "/images/CVPR_2026/2602.22059v1.png",
+      "keywords": [
+        "neural operators",
+        "PDE pre-training",
+        "large-scale PDE",
+        "transfer learning"
+      ],
+      "subjects": [
+        "transfer learning",
+        "PDE pre-training",
+        "neural operators",
+        "large-scale PDE"
+      ],
       "priority": 1
     },
     {
@@ -471,6 +851,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2606.09157v1",
       "thumbnail_url": "/paper-thumbnails/2606.09157v1.webp",
+      "image_id": "/images/ACL_2026/2606.09157v1.png",
+      "keywords": [
+        "syllogistic reasoning",
+        "logical notation",
+        "small language models",
+        "content bias",
+        "SEF-CLGC"
+      ],
+      "subjects": [
+        "syllogistic reasoning",
+        "small language models",
+        "SEF-CLGC",
+        "logical notation",
+        "content bias"
+      ],
       "priority": 1
     },
     {
@@ -487,6 +882,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.27481v1",
       "thumbnail_url": "/paper-thumbnails/2603.27481v1.webp",
+      "image_id": "/images/CVPR_2026/2603.27481v1.png",
+      "keywords": [
+        "Continual Learning",
+        "Mixture of Experts",
+        "Large Vision-Language Models",
+        "Routing-Drift",
+        "Token Assignment"
+      ],
+      "subjects": [
+        "Token Assignment",
+        "Routing-Drift",
+        "mixture of experts",
+        "large vision-language models",
+        "continual learning"
+      ],
       "priority": 1
     },
     {
@@ -506,6 +916,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2606.01991v1",
       "thumbnail_url": "/paper-thumbnails/2606.01991v1.webp",
+      "image_id": "/images/ACL_2026/2606.01991v1.png",
+      "keywords": [
+        "LLM agent safety",
+        "Model Context Protocol",
+        "look-ahead reasoning",
+        "proactive defense",
+        "reinforcement learning"
+      ],
+      "subjects": [
+        "reinforcement learning",
+        "proactive defense",
+        "Model Context Protocol",
+        "look-ahead reasoning",
+        "LLM agent safety"
+      ],
       "priority": 1
     },
     {
@@ -528,6 +953,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2602.11162v2",
       "thumbnail_url": "/paper-thumbnails/2602.11162v2.webp",
+      "image_id": "/images/ACL_2026/2602.11162v2.png",
+      "keywords": [
+        "retrieval heads",
+        "temporal dynamics",
+        "large language models",
+        "retrieval-augmented generation",
+        "attention mechanisms"
+      ],
+      "subjects": [
+        "temporal dynamics",
+        "retrieval heads",
+        "retrieval-augmented generation",
+        "large language models",
+        "attention mechanisms"
+      ],
       "priority": 1
     },
     {
@@ -543,6 +983,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.07562v2",
       "thumbnail_url": "/paper-thumbnails/2604.07562v2.webp",
+      "image_id": "/images/ACL_2026/2604.07562v2.png",
+      "keywords": [
+        "unsupervised clustering",
+        "large language models",
+        "cluster refinement",
+        "coherence",
+        "social media"
+      ],
+      "subjects": [
+        "unsupervised clustering",
+        "social media",
+        "large language models",
+        "coherence",
+        "cluster refinement"
+      ],
       "priority": 1
     },
     {
@@ -559,6 +1014,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.23956v2",
       "thumbnail_url": "/paper-thumbnails/2602.23956v2.webp",
+      "image_id": "/images/CVPR_2026/2602.23956v2.png",
+      "keywords": [
+        "multi-event video generation",
+        "training-free",
+        "attention control",
+        "diffusion transformers",
+        "text-to-video"
+      ],
+      "subjects": [
+        "training-free",
+        "text-to-video",
+        "multi-event video generation",
+        "diffusion transformers",
+        "attention control"
+      ],
       "priority": 1
     },
     {
@@ -576,6 +1046,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2602.21054v2",
       "thumbnail_url": "/paper-thumbnails/2602.21054v2.webp",
+      "image_id": "/images/ACL_2026/2602.21054v2.png",
+      "keywords": [
+        "vision-language models",
+        "Uncertainty Quantification",
+        "Self-Evaluation",
+        "Hallucination Detection",
+        "Image-Information Score"
+      ],
+      "subjects": [
+        "vision-language models",
+        "uncertainty quantification",
+        "self-evaluation",
+        "Image-Information Score",
+        "hallucination detection"
+      ],
       "priority": 1
     },
     {
@@ -590,6 +1075,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.02986v3",
       "thumbnail_url": "/paper-thumbnails/2601.02986v3.webp",
+      "image_id": "/images/ACL_2026/2601.02986v3.png",
+      "keywords": [
+        "personalized reward modeling",
+        "dynamic checklist generation",
+        "Preference-Contrastive Criterion Weighting",
+        "LLM-as-a-Judge",
+        "personalized alignment"
+      ],
+      "subjects": [
+        "Preference-Contrastive Criterion Weighting",
+        "personalized reward modeling",
+        "personalized alignment",
+        "LLM-as-a-judge",
+        "dynamic checklist generation"
+      ],
       "priority": 1
     },
     {
@@ -613,6 +1113,19 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.06950v2",
       "thumbnail_url": "/paper-thumbnails/2604.06950v2.webp",
+      "image_id": "/images/ACL_2026/2604.06950v2.png",
+      "keywords": [
+        "adversarial smuggling attacks",
+        "MLLM content moderation",
+        "perceptual blindness",
+        "reasoning blockade"
+      ],
+      "subjects": [
+        "reasoning blockade",
+        "perceptual blindness",
+        "MLLM content moderation",
+        "adversarial smuggling attacks"
+      ],
       "priority": 1
     },
     {
@@ -637,6 +1150,19 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.12995v1",
       "thumbnail_url": "/paper-thumbnails/2604.12995v1.webp",
+      "image_id": "/images/ACL_2026/2604.12995v1.png",
+      "keywords": [
+        "policy comprehension",
+        "public policy",
+        "benchmark",
+        "Bloom's taxonomy"
+      ],
+      "subjects": [
+        "public policy",
+        "policy comprehension",
+        "Bloom's taxonomy",
+        "benchmark"
+      ],
       "priority": 1
     },
     {
@@ -660,6 +1186,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.22997v1",
       "thumbnail_url": "/paper-thumbnails/2605.22997v1.webp",
+      "image_id": "/images/CVPR_2026/2605.22997v1.png",
+      "keywords": [
+        "3D object detection",
+        "mapping priors",
+        "autonomous driving",
+        "surfel map",
+        "3D Gaussian Splatting"
+      ],
+      "subjects": [
+        "surfel map",
+        "mapping priors",
+        "autonomous driving",
+        "3D object detection",
+        "3D Gaussian Splatting"
+      ],
       "priority": 1
     },
     {
@@ -678,6 +1219,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.27199v1",
       "thumbnail_url": "/paper-thumbnails/2603.27199v1.webp",
+      "image_id": "/images/CVPR_2026/2603.27199v1.png",
+      "keywords": [
+        "Frequency-Aware Dropout",
+        "Trigger Token Controllability",
+        "Text-to-Image Personalization",
+        "Diffusion Models",
+        "LoRA Fine-Tuning"
+      ],
+      "subjects": [
+        "Trigger Token Controllability",
+        "Text-to-Image Personalization",
+        "LoRA fine-tuning",
+        "Frequency-Aware Dropout",
+        "diffusion models"
+      ],
       "priority": 1
     },
     {
@@ -698,6 +1254,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.09233v2",
       "thumbnail_url": "/paper-thumbnails/2605.09233v2.webp",
+      "image_id": "/images/CVPR_2026/2605.09233v2.png",
+      "keywords": [
+        "complex image editing",
+        "sequential decomposition",
+        "in-context editing",
+        "synthetic data pipeline",
+        "visual generative models"
+      ],
+      "subjects": [
+        "visual generative models",
+        "synthetic data pipeline",
+        "sequential decomposition",
+        "in-context editing",
+        "complex image editing"
+      ],
       "priority": 1
     },
     {
@@ -713,6 +1284,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.11693v1",
       "thumbnail_url": "/paper-thumbnails/2605.11693v1.webp",
+      "image_id": "/images/ACL_2026/2605.11693v1.png",
+      "keywords": [
+        "multimodal summarization",
+        "evaluation framework",
+        "multimodal large language models",
+        "human preference alignment",
+        "text-image alignment"
+      ],
+      "subjects": [
+        "text-image alignment",
+        "multimodal summarization",
+        "multimodal large language models",
+        "human preference alignment",
+        "evaluation framework"
+      ],
       "priority": 1
     },
     {
@@ -731,6 +1317,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.06720v2",
       "thumbnail_url": "/paper-thumbnails/2604.06720v2.webp",
+      "image_id": "/images/CVPR_2026/2604.06720v2.png",
+      "keywords": [
+        "6D object pose estimation",
+        "deformed objects",
+        "dataset",
+        "RGB-D",
+        "pose annotation"
+      ],
+      "subjects": [
+        "RGB-D",
+        "pose annotation",
+        "deformed objects",
+        "dataset",
+        "6D object pose estimation"
+      ],
       "priority": 1
     },
     {
@@ -747,6 +1348,19 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.07375v1",
       "thumbnail_url": "/paper-thumbnails/2601.07375v1.webp",
+      "image_id": "/images/ACL_2026/2601.07375v1.png",
+      "keywords": [
+        "navigation instruction evaluation",
+        "Vision-and-Language Navigation",
+        "graph reasoning",
+        "LLM-based evaluation"
+      ],
+      "subjects": [
+        "Vision-and-Language Navigation",
+        "navigation instruction evaluation",
+        "LLM-based evaluation",
+        "graph reasoning"
+      ],
       "priority": 1
     },
     {
@@ -770,6 +1384,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.07559v1",
       "thumbnail_url": "/paper-thumbnails/2603.07559v1.webp",
+      "image_id": "/images/CVPR_2026/2603.07559v1.png",
+      "keywords": [
+        "micro-gesture recognition",
+        "active inference",
+        "Expected Free Energy",
+        "uncertainty-aware learning",
+        "temporal sampling"
+      ],
+      "subjects": [
+        "uncertainty-aware learning",
+        "temporal sampling",
+        "micro-gesture recognition",
+        "Expected Free Energy",
+        "active inference"
+      ],
       "priority": 1
     },
     {
@@ -784,6 +1413,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.13618v1",
       "thumbnail_url": "/paper-thumbnails/2604.13618v1.webp",
+      "image_id": "/images/ACL_2026/2604.13618v1.png",
+      "keywords": [
+        "reward modeling",
+        "rubric augmentation",
+        "binary preferences",
+        "cooperative communication",
+        "RLHF"
+      ],
+      "subjects": [
+        "rubric augmentation",
+        "RLHF",
+        "reward modeling",
+        "cooperative communication",
+        "binary preferences"
+      ],
       "priority": 1
     },
     {
@@ -805,6 +1449,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.23069v1",
       "thumbnail_url": "/paper-thumbnails/2605.23069v1.webp",
+      "image_id": "/images/ACL_2026/2605.23069v1.png",
+      "keywords": [
+        "Large language models",
+        "DFKI-MLT",
+        "inference-time",
+        "language-specific",
+        "short-answer"
+      ],
+      "subjects": [
+        "short-answer",
+        "large language models",
+        "language-specific",
+        "inference-time",
+        "DFKI-MLT"
+      ],
       "priority": 1
     },
     {
@@ -823,6 +1482,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.02096v1",
       "thumbnail_url": "/paper-thumbnails/2603.02096v1.webp",
+      "image_id": "/images/CVPR_2026/2603.02096v1.png",
+      "keywords": [
+        "streaming video understanding",
+        "hierarchical memory",
+        "token compression",
+        "training-free",
+        "multimodal LLM"
+      ],
+      "subjects": [
+        "training-free",
+        "token compression",
+        "streaming video understanding",
+        "multimodal LLM",
+        "hierarchical memory"
+      ],
       "priority": 1
     },
     {
@@ -836,6 +1510,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.08167v1",
       "thumbnail_url": "/paper-thumbnails/2604.08167v1.webp",
+      "image_id": "/images/CVPR_2026/2604.08167v1.png",
+      "keywords": [
+        "temporal adapter",
+        "vision-language models",
+        "medical image segmentation",
+        "3D volumetric segmentation",
+        "CLIPSeg"
+      ],
+      "subjects": [
+        "vision-language models",
+        "temporal adapter",
+        "medical image segmentation",
+        "CLIPSeg",
+        "3D volumetric segmentation"
+      ],
       "priority": 1
     },
     {
@@ -856,6 +1545,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.16929v1",
       "thumbnail_url": "/paper-thumbnails/2604.16929v1.webp",
+      "image_id": "/images/ACL_2026/2604.16929v1.png",
+      "keywords": [
+        "measurement hallucination",
+        "scientific measurement extraction",
+        "large language models",
+        "reasoning-aware fine-tuning",
+        "reward curriculum"
+      ],
+      "subjects": [
+        "scientific measurement extraction",
+        "reward curriculum",
+        "reasoning-aware fine-tuning",
+        "measurement hallucination",
+        "large language models"
+      ],
       "priority": 1
     },
     {
@@ -869,6 +1573,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.19063v1",
       "thumbnail_url": "/paper-thumbnails/2602.19063v1.webp",
+      "image_id": "/images/CVPR_2026/2602.19063v1.png",
+      "keywords": [
+        "direction-aware 3D LMMs",
+        "ego pose recovery",
+        "point cloud alignment",
+        "spatial reasoning"
+      ],
+      "subjects": [
+        "spatial reasoning",
+        "point cloud alignment",
+        "ego pose recovery",
+        "direction-aware 3D LMMs"
+      ],
       "priority": 1
     },
     {
@@ -886,6 +1603,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2606.26775v1",
       "thumbnail_url": "/paper-thumbnails/2606.26775v1.webp",
+      "image_id": "/images/ACL_2026/2606.26775v1.png",
+      "keywords": [
+        "multimedia event extraction",
+        "evaluation pitfalls",
+        "strict evaluation",
+        "performance variation",
+        "controlled experiments"
+      ],
+      "subjects": [
+        "strict evaluation",
+        "performance variation",
+        "multimedia event extraction",
+        "evaluation pitfalls",
+        "controlled experiments"
+      ],
       "priority": 1
     },
     {
@@ -905,6 +1637,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.02133v2",
       "thumbnail_url": "/paper-thumbnails/2603.02133v2.webp",
+      "image_id": "/images/CVPR_2026/2603.02133v2.png",
+      "keywords": [
+        "compositional scene reconstruction",
+        "simulation-ready",
+        "real-world video",
+        "Active Viewpoint Optimization",
+        "Scene Graph Synthesizer"
+      ],
+      "subjects": [
+        "simulation-ready",
+        "Scene Graph Synthesizer",
+        "real-world video",
+        "compositional scene reconstruction",
+        "Active Viewpoint Optimization"
+      ],
       "priority": 1
     },
     {
@@ -924,6 +1671,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.12015v1",
       "thumbnail_url": "/paper-thumbnails/2604.12015v1.webp",
+      "image_id": "/images/ACL_2026/2604.12015v1.png",
+      "keywords": [
+        "in-context learning",
+        "demonstration selection",
+        "coverage estimation",
+        "Good-Turing estimator",
+        "latent clustering"
+      ],
+      "subjects": [
+        "latent clustering",
+        "in-context learning",
+        "Good-Turing estimator",
+        "demonstration selection",
+        "coverage estimation"
+      ],
       "priority": 1
     },
     {
@@ -941,6 +1703,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.17319v1",
       "thumbnail_url": "/paper-thumbnails/2604.17319v1.webp",
+      "image_id": "/images/ACL_2026/2604.17319v1.png",
+      "keywords": [
+        "grounded multimodal named entity recognition",
+        "end-to-end generative framework",
+        "multimodal large language model",
+        "chain-of-thought reasoning",
+        "Gaussian risk-aware box perturbation"
+      ],
+      "subjects": [
+        "multimodal large language model",
+        "grounded multimodal named entity recognition",
+        "Gaussian risk-aware box perturbation",
+        "end-to-end generative framework",
+        "chain-of-thought reasoning"
+      ],
       "priority": 1
     },
     {
@@ -958,6 +1735,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.16541v1",
       "thumbnail_url": "/paper-thumbnails/2604.16541v1.webp",
+      "image_id": "/images/ACL_2026/2604.16541v1.png",
+      "keywords": [
+        "safety-aware",
+        "multi-agent collaboration",
+        "visual narrative generation",
+        "storybook synthesis",
+        "cross-modal verification"
+      ],
+      "subjects": [
+        "visual narrative generation",
+        "storybook synthesis",
+        "safety-aware",
+        "multi-agent collaboration",
+        "cross-modal verification"
+      ],
       "priority": 1
     },
     {
@@ -979,6 +1771,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2603.06007v2",
       "thumbnail_url": "/paper-thumbnails/2603.06007v2.webp",
+      "image_id": "/images/ACL_2026/2603.06007v2.png",
+      "keywords": [
+        "multi-agent systems",
+        "LLM orchestration",
+        "graph-centric framework",
+        "Vibe Graphing",
+        "workflow generation"
+      ],
+      "subjects": [
+        "workflow generation",
+        "Vibe Graphing",
+        "multi-agent systems",
+        "LLM orchestration",
+        "graph-centric framework"
+      ],
       "priority": 1
     },
     {
@@ -994,6 +1801,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.18257v1",
       "thumbnail_url": "/paper-thumbnails/2605.18257v1.webp",
+      "image_id": "/images/ACL_2026/2605.18257v1.png",
+      "keywords": [
+        "multimodal alignment",
+        "compositional vector quantization",
+        "shared-specific codebook",
+        "representation learning",
+        "modality decoupling"
+      ],
+      "subjects": [
+        "shared-specific codebook",
+        "representation learning",
+        "multimodal alignment",
+        "modality decoupling",
+        "compositional vector quantization"
+      ],
       "priority": 1
     },
     {
@@ -1010,6 +1832,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2607.20450v1",
       "thumbnail_url": "/paper-thumbnails/2607.20450v1.webp",
+      "image_id": "/images/ACL_2026/2607.20450v1.png",
+      "keywords": [
+        "toxic intent classification",
+        "multi-task learning",
+        "rationale distillation",
+        "class imbalance",
+        "data augmentation"
+      ],
+      "subjects": [
+        "toxic intent classification",
+        "rationale distillation",
+        "multi-task learning",
+        "data augmentation",
+        "class imbalance"
+      ],
       "priority": 1
     },
     {
@@ -1030,6 +1867,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.12605v1",
       "thumbnail_url": "/paper-thumbnails/2603.12605v1.webp",
+      "image_id": "/images/CVPR_2026/2603.12605v1.png",
+      "keywords": [
+        "geometric deep learning",
+        "CAD",
+        "boundary representation",
+        "multi-modal annotations",
+        "reverse engineering"
+      ],
+      "subjects": [
+        "reverse engineering",
+        "multi-modal annotations",
+        "geometric deep learning",
+        "CAD",
+        "boundary representation"
+      ],
       "priority": 1
     },
     {
@@ -1050,6 +1902,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.19726v1",
       "thumbnail_url": "/paper-thumbnails/2605.19726v1.webp",
+      "image_id": "/images/CVPR_2026/2605.19726v1.png",
+      "keywords": [
+        "diffusion language models",
+        "block-sparse attention",
+        "long-context modeling",
+        "efficient attention",
+        "approximate sparse attention"
+      ],
+      "subjects": [
+        "long-context modeling",
+        "efficient attention",
+        "diffusion language models",
+        "block-sparse attention",
+        "approximate sparse attention"
+      ],
       "priority": 1
     },
     {
@@ -1069,6 +1936,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.20412v1",
       "thumbnail_url": "/paper-thumbnails/2602.20412v1.webp",
+      "image_id": "/images/CVPR_2026/2602.20412v1.png",
+      "keywords": [
+        "fake image detection",
+        "latent blending regularization",
+        "cross-generator generalization",
+        "AI-generated image detection",
+        "reliability evaluation"
+      ],
+      "subjects": [
+        "reliability evaluation",
+        "latent blending regularization",
+        "fake image detection",
+        "cross-generator generalization",
+        "AI-generated image detection"
+      ],
       "priority": 1
     },
     {
@@ -1086,6 +1968,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.02870v1",
       "thumbnail_url": "/paper-thumbnails/2604.02870v1.webp",
+      "image_id": "/images/CVPR_2026/2604.02870v1.png",
+      "keywords": [
+        "token warping",
+        "multimodal large language models",
+        "viewpoint transformation",
+        "mental imagery",
+        "spatial reasoning"
+      ],
+      "subjects": [
+        "viewpoint transformation",
+        "token warping",
+        "spatial reasoning",
+        "multimodal large language models",
+        "mental imagery"
+      ],
       "priority": 1
     },
     {
@@ -1104,6 +2001,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.04314v2",
       "thumbnail_url": "/paper-thumbnails/2603.04314v2.webp",
+      "image_id": "/images/CVPR_2026/2603.04314v2.png",
+      "keywords": [
+        "Animal re-identification",
+        "Aerial-ground ReID",
+        "Viewpoint analysis",
+        "Synthetic dataset",
+        "Cattle"
+      ],
+      "subjects": [
+        "Viewpoint analysis",
+        "synthetic dataset",
+        "Cattle",
+        "Animal re-identification",
+        "Aerial-ground ReID"
+      ],
       "priority": 1
     },
     {
@@ -1123,6 +2035,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.19124v1",
       "thumbnail_url": "/paper-thumbnails/2604.19124v1.webp",
+      "image_id": "/images/ACL_2026/2604.19124v1.png",
+      "keywords": [
+        "detoxification",
+        "large language models",
+        "dataset-level",
+        "soft contrastive decoding",
+        "semantic preservation"
+      ],
+      "subjects": [
+        "soft contrastive decoding",
+        "semantic preservation",
+        "large language models",
+        "detoxification",
+        "dataset-level"
+      ],
       "priority": 1
     },
     {
@@ -1140,6 +2067,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.20403v1",
       "thumbnail_url": "/paper-thumbnails/2603.20403v1.webp",
+      "image_id": "/images/CVPR_2026/2603.20403v1.png",
+      "keywords": [
+        "multi-task learning",
+        "parameter-efficient fine-tuning",
+        "low-rank adaptation",
+        "frequency-aware",
+        "automatic rank selection"
+      ],
+      "subjects": [
+        "parameter-efficient fine-tuning",
+        "multi-task learning",
+        "low-rank adaptation",
+        "frequency-aware",
+        "automatic rank selection"
+      ],
       "priority": 1
     },
     {
@@ -1163,6 +2105,21 @@
       "venue": "SIGMOD",
       "pdf_url": "https://arxiv.org/pdf/2602.23061v3",
       "thumbnail_url": "/paper-thumbnails/2602.23061v3.webp",
+      "image_id": "/images/SIGMOD_2026/2602.23061v3.png",
+      "keywords": [
+        "semi-structured documents",
+        "document analysis",
+        "question answering",
+        "tree-based representation",
+        "large language models"
+      ],
+      "subjects": [
+        "tree-based representation",
+        "semi-structured documents",
+        "question answering",
+        "large language models",
+        "document analysis"
+      ],
       "priority": 1
     },
     {
@@ -1188,6 +2145,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.18612v1",
       "thumbnail_url": "/paper-thumbnails/2604.18612v1.webp",
+      "image_id": "/images/ACL_2026/2604.18612v1.png",
+      "keywords": [
+        "Large Language Models",
+        "Prompt Optimization",
+        "Grey Wolf Optimizer",
+        "Chain-of-Thought",
+        "Reasoning"
+      ],
+      "subjects": [
+        "reasoning",
+        "prompt optimization",
+        "large language models",
+        "Grey Wolf Optimizer",
+        "chain-of-thought"
+      ],
       "priority": 1
     },
     {
@@ -1202,6 +2174,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.08395v1",
       "thumbnail_url": "/paper-thumbnails/2604.08395v1.webp",
+      "image_id": "/images/CVPR_2026/2604.08395v1.png",
+      "keywords": [
+        "vision-language models",
+        "Backdoor Attacks",
+        "Context-Adaptive Attack",
+        "Multimodal Security",
+        "Adversarial Attack"
+      ],
+      "subjects": [
+        "vision-language models",
+        "Multimodal Security",
+        "Context-Adaptive Attack",
+        "backdoor attacks",
+        "adversarial attack"
+      ],
       "priority": 1
     },
     {
@@ -1221,6 +2208,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.26031v1",
       "thumbnail_url": "/paper-thumbnails/2604.26031v1.webp",
+      "image_id": "/images/CVPR_2026/2604.26031v1.jpg",
+      "keywords": [
+        "Pixel-level video understanding",
+        "Video object segmentation",
+        "Referring video object segmentation",
+        "Audio-guided segmentation",
+        "CVPR challenge"
+      ],
+      "subjects": [
+        "video object segmentation",
+        "referring video object segmentation",
+        "Pixel-level video understanding",
+        "CVPR challenge",
+        "Audio-guided segmentation"
+      ],
       "priority": 1
     },
     {
@@ -1239,6 +2241,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.12309v1",
       "thumbnail_url": "/paper-thumbnails/2604.12309v1.webp",
+      "image_id": "/images/CVPR_2026/2604.12309v1.png",
+      "keywords": [
+        "orbital video generation",
+        "3D foundation priors",
+        "view consistency",
+        "video diffusion model",
+        "shape prior"
+      ],
+      "subjects": [
+        "view consistency",
+        "video diffusion model",
+        "shape prior",
+        "orbital video generation",
+        "3D foundation priors"
+      ],
       "priority": 1
     },
     {
@@ -1255,6 +2272,21 @@
       "venue": "INFOCOM",
       "pdf_url": "https://arxiv.org/pdf/2603.01663v1",
       "thumbnail_url": "/paper-thumbnails/2603.01663v1.webp",
+      "image_id": "/images/INFOCOM_2026/2603.01663v1.png",
+      "keywords": [
+        "intent-based networking",
+        "network slicing",
+        "O-RAN",
+        "contract-based framework",
+        "safety guarantees"
+      ],
+      "subjects": [
+        "safety guarantees",
+        "O-RAN",
+        "network slicing",
+        "intent-based networking",
+        "contract-based framework"
+      ],
       "priority": 1
     },
     {
@@ -1276,6 +2308,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.19024v1",
       "thumbnail_url": "/paper-thumbnails/2602.19024v1.webp",
+      "image_id": "/images/CVPR_2026/2602.19024v1.png",
+      "keywords": [
+        "prompt tuning",
+        "calibration",
+        "vision-language models",
+        "CLIP",
+        "expected calibration error"
+      ],
+      "subjects": [
+        "vision-language models",
+        "prompt tuning",
+        "expected calibration error",
+        "CLIP",
+        "calibration"
+      ],
       "priority": 1
     },
     {
@@ -1294,6 +2341,21 @@
       "venue": "IJCAI",
       "pdf_url": "https://arxiv.org/pdf/2605.04295v2",
       "thumbnail_url": "/paper-thumbnails/2605.04295v2.webp",
+      "image_id": "/images/IJCAI_2026/2605.04295v2.png",
+      "keywords": [
+        "uncertainty quantification",
+        "large language models",
+        "conformal prediction",
+        "semantic entropy",
+        "hallucination detection"
+      ],
+      "subjects": [
+        "uncertainty quantification",
+        "semantic entropy",
+        "large language models",
+        "hallucination detection",
+        "conformal prediction"
+      ],
       "priority": 1
     },
     {
@@ -1314,6 +2376,19 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.05930v2",
       "thumbnail_url": "/paper-thumbnails/2601.05930v2.webp",
+      "image_id": "/images/ACL_2026/2601.05930v2.png",
+      "keywords": [
+        "execution bottleneck",
+        "implicit world models",
+        "pairwise preference",
+        "machine learning agents"
+      ],
+      "subjects": [
+        "pairwise preference",
+        "machine learning agents",
+        "implicit world models",
+        "execution bottleneck"
+      ],
       "priority": 1
     },
     {
@@ -1333,6 +2408,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.27306v3",
       "thumbnail_url": "/paper-thumbnails/2603.27306v3.webp",
+      "image_id": "/images/CVPR_2026/2603.27306v3.png",
+      "keywords": [
+        "LLM agents",
+        "spacecraft operations",
+        "in-context learning",
+        "policy search",
+        "non-parametric policy improvement"
+      ],
+      "subjects": [
+        "spacecraft operations",
+        "policy search",
+        "non-parametric policy improvement",
+        "LLM agents",
+        "in-context learning"
+      ],
       "priority": 1
     },
     {
@@ -1357,6 +2447,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.02210v3",
       "thumbnail_url": "/paper-thumbnails/2603.02210v3.webp",
+      "image_id": "/images/CVPR_2026/2603.02210v3.png",
+      "keywords": [
+        "reference-based inpainting",
+        "human-product images",
+        "detail preservation",
+        "high-fidelity generation",
+        "diffusion models"
+      ],
+      "subjects": [
+        "reference-based inpainting",
+        "human-product images",
+        "high-fidelity generation",
+        "diffusion models",
+        "detail preservation"
+      ],
       "priority": 1
     },
     {
@@ -1422,6 +2527,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.13244v1",
       "thumbnail_url": "/paper-thumbnails/2604.13244v1.webp",
+      "image_id": "/images/CVPR_2026/2604.13244v1.png",
+      "keywords": [
+        "maritime computer vision",
+        "challenge overview",
+        "panoptic segmentation",
+        "thermal object detection",
+        "real-time embedded systems"
+      ],
+      "subjects": [
+        "thermal object detection",
+        "real-time embedded systems",
+        "panoptic segmentation",
+        "maritime computer vision",
+        "challenge overview"
+      ],
       "priority": 1
     },
     {
@@ -1440,6 +2560,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.01082v1",
       "thumbnail_url": "/paper-thumbnails/2604.01082v1.webp",
+      "image_id": "/images/CVPR_2026/2604.01082v1.png",
+      "keywords": [
+        "real-time motion generation",
+        "interaction-to-reaction",
+        "modular learning",
+        "motion prior",
+        "human-scene interaction"
+      ],
+      "subjects": [
+        "real-time motion generation",
+        "motion prior",
+        "modular learning",
+        "interaction-to-reaction",
+        "human-scene interaction"
+      ],
       "priority": 1
     },
     {
@@ -1454,6 +2589,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.16748v1",
       "thumbnail_url": "/paper-thumbnails/2604.16748v1.webp",
+      "image_id": "/images/CVPR_2026/2604.16748v1.png",
+      "keywords": [
+        "time series forecasting",
+        "long-term forecasting",
+        "multimodal",
+        "cross-modal disentanglement"
+      ],
+      "subjects": [
+        "time series forecasting",
+        "multimodal",
+        "long-term forecasting",
+        "cross-modal disentanglement"
+      ],
       "priority": 1
     },
     {
@@ -1475,6 +2623,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.06552v1",
       "thumbnail_url": "/paper-thumbnails/2604.06552v1.webp",
+      "image_id": "/images/ACL_2026/2604.06552v1.png",
+      "keywords": [
+        "misinformation",
+        "LLM safety",
+        "multilingual",
+        "cross-lingual bias",
+        "retrieval-augmented generation"
+      ],
+      "subjects": [
+        "retrieval-augmented generation",
+        "multilingual",
+        "misinformation",
+        "LLM safety",
+        "cross-lingual bias"
+      ],
       "priority": 1
     },
     {
@@ -1491,6 +2654,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.16080v1",
       "thumbnail_url": "/paper-thumbnails/2605.16080v1.webp",
+      "image_id": "/images/CVPR_2026/2605.16080v1.png",
+      "keywords": [
+        "image forgery detection",
+        "AI-generated images",
+        "reasoning text distillation",
+        "contrastive learning",
+        "generalization"
+      ],
+      "subjects": [
+        "reasoning text distillation",
+        "image forgery detection",
+        "generalization",
+        "contrastive learning",
+        "AI-generated images"
+      ],
       "priority": 1
     },
     {
@@ -1506,6 +2684,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2606.21345v1",
       "thumbnail_url": "/paper-thumbnails/2606.21345v1.webp",
+      "image_id": "/images/ACL_2026/2606.21345v1.png",
+      "keywords": [
+        "factual retrieval",
+        "attribute computation path",
+        "iterative patching",
+        "LLM interpretability",
+        "knowledge localization"
+      ],
+      "subjects": [
+        "LLM interpretability",
+        "knowledge localization",
+        "iterative patching",
+        "factual retrieval",
+        "attribute computation path"
+      ],
       "priority": 1
     },
     {
@@ -1523,6 +2716,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.20157v1",
       "thumbnail_url": "/paper-thumbnails/2602.20157v1.webp",
+      "image_id": "/images/CVPR_2026/2602.20157v1.png",
+      "keywords": [
+        "visual geometry learning",
+        "factored flow prediction",
+        "dense 2D correspondences",
+        "unlabeled monocular videos",
+        "dynamic scenes"
+      ],
+      "subjects": [
+        "visual geometry learning",
+        "unlabeled monocular videos",
+        "factored flow prediction",
+        "dynamic scenes",
+        "dense 2D correspondences"
+      ],
       "priority": 1
     },
     {
@@ -1538,6 +2746,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2607.01242v1",
       "thumbnail_url": "/paper-thumbnails/2607.01242v1.webp",
+      "image_id": "/images/ACL_2026/2607.01242v1.png",
+      "keywords": [
+        "personalization",
+        "large language models",
+        "expertise inference",
+        "keystroke dynamics",
+        "query-wise adaptation"
+      ],
+      "subjects": [
+        "personalization",
+        "large language models",
+        "keystroke dynamics",
+        "expertise inference",
+        "query-wise adaptation"
+      ],
       "priority": 1
     },
     {
@@ -1555,6 +2778,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.11520v1",
       "thumbnail_url": "/paper-thumbnails/2605.11520v1.webp",
+      "image_id": "/images/CVPR_2026/2605.11520v1.png",
+      "keywords": [
+        "unsupervised point cloud segmentation",
+        "3D Gaussian Splatting",
+        "semantic consistency",
+        "Segment Anything Model",
+        "2D-3D transfer"
+      ],
+      "subjects": [
+        "unsupervised point cloud segmentation",
+        "semantic consistency",
+        "segment anything model",
+        "3D Gaussian Splatting",
+        "2D-3D transfer"
+      ],
       "priority": 1
     },
     {
@@ -1573,6 +2811,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.29034v1",
       "thumbnail_url": "/paper-thumbnails/2603.29034v1.webp",
+      "image_id": "/images/CVPR_2026/2603.29034v1.png",
+      "keywords": [
+        "implicit neural representations",
+        "noise pretraining",
+        "initialization",
+        "signal fitting",
+        "deep image prior"
+      ],
+      "subjects": [
+        "signal fitting",
+        "noise pretraining",
+        "initialization",
+        "implicit neural representations",
+        "deep image prior"
+      ],
       "priority": 1
     },
     {
@@ -1631,6 +2884,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2607.11560v1",
       "thumbnail_url": "/paper-thumbnails/2607.11560v1.webp",
+      "image_id": "/images/CVPR_2026/2607.11560v1.png",
+      "keywords": [
+        "adversarial attacks",
+        "vision-language agents",
+        "autonomous driving",
+        "multimodal perturbation",
+        "DriveLM"
+      ],
+      "subjects": [
+        "vision-language agents",
+        "multimodal perturbation",
+        "DriveLM",
+        "autonomous driving",
+        "adversarial attacks"
+      ],
       "priority": 1
     },
     {
@@ -1647,6 +2915,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.24176v2",
       "thumbnail_url": "/paper-thumbnails/2603.24176v2.webp",
+      "image_id": "/images/CVPR_2026/2603.24176v2.png",
+      "keywords": [
+        "EEG-conditioned fMRI reconstruction",
+        "diffusion models",
+        "spatiotemporal dynamics",
+        "null-space interpolation",
+        "brain dynamics"
+      ],
+      "subjects": [
+        "spatiotemporal dynamics",
+        "null-space interpolation",
+        "EEG-conditioned fMRI reconstruction",
+        "diffusion models",
+        "brain dynamics"
+      ],
       "priority": 1
     },
     {
@@ -1663,6 +2946,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.10217v3",
       "thumbnail_url": "/paper-thumbnails/2604.10217v3.webp",
+      "image_id": "/images/CVPR_2026/2604.10217v3.png",
+      "keywords": [
+        "optical-SAR registration",
+        "pretrained image matchers",
+        "zero-shot evaluation",
+        "cross-modal matching",
+        "satellite imagery"
+      ],
+      "subjects": [
+        "zero-shot evaluation",
+        "satellite imagery",
+        "pretrained image matchers",
+        "optical-SAR registration",
+        "cross-modal matching"
+      ],
       "priority": 1
     },
     {
@@ -1682,6 +2980,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.17995v1",
       "thumbnail_url": "/paper-thumbnails/2603.17995v1.webp",
+      "image_id": "/images/CVPR_2026/2603.17995v1.png",
+      "keywords": [
+        "3D shape tokenization",
+        "semantic salience",
+        "autoregressive generation",
+        "DINO features",
+        "level-of-detail"
+      ],
+      "subjects": [
+        "semantic salience",
+        "level-of-detail",
+        "DINO features",
+        "autoregressive generation",
+        "3D shape tokenization"
+      ],
       "priority": 1
     },
     {
@@ -1698,6 +3011,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.15395v2",
       "thumbnail_url": "/paper-thumbnails/2601.15395v2.webp",
+      "image_id": "/images/ACL_2026/2601.15395v2.png",
+      "keywords": [
+        "Chameleon dataset",
+        "state vs trait",
+        "psychological profiles",
+        "language models",
+        "reward models"
+      ],
+      "subjects": [
+        "state vs trait",
+        "reward models",
+        "psychological profiles",
+        "language models",
+        "Chameleon dataset"
+      ],
       "priority": 1
     },
     {
@@ -1715,6 +3043,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.09696v2",
       "thumbnail_url": "/paper-thumbnails/2601.09696v2.webp",
+      "image_id": "/images/ACL_2026/2601.09696v2.png",
+      "keywords": [
+        "empathy applicability",
+        "clinical empathy",
+        "patient queries",
+        "LLM annotation",
+        "health NLP"
+      ],
+      "subjects": [
+        "patient queries",
+        "LLM annotation",
+        "health NLP",
+        "empathy applicability",
+        "clinical empathy"
+      ],
       "priority": 1
     },
     {
@@ -1747,6 +3090,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.27604v2",
       "thumbnail_url": "/paper-thumbnails/2604.27604v2.webp",
+      "image_id": "/images/ACL_2026/2604.27604v2.png",
+      "keywords": [
+        "SPUR benchmark",
+        "multimodal large language models",
+        "scientific image understanding",
+        "visual perception",
+        "reasoning"
+      ],
+      "subjects": [
+        "visual perception",
+        "SPUR benchmark",
+        "scientific image understanding",
+        "reasoning",
+        "multimodal large language models"
+      ],
       "priority": 1
     },
     {
@@ -1761,6 +3119,19 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.19395v1",
       "thumbnail_url": "/paper-thumbnails/2604.19395v1.webp",
+      "image_id": "/images/ACL_2026/2604.19395v1.png",
+      "keywords": [
+        "self-consistency",
+        "chain-of-thought prompting",
+        "encyclopedic knowledge",
+        "knowledge recall"
+      ],
+      "subjects": [
+        "self-consistency",
+        "knowledge recall",
+        "encyclopedic knowledge",
+        "chain-of-thought prompting"
+      ],
       "priority": 1
     },
     {
@@ -1783,6 +3154,24 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.00849v1",
       "thumbnail_url": "/paper-thumbnails/2604.00849v1.webp",
+      "image_id": "/images/CVPR_2026/2604.00849v1.png",
+      "keywords": [
+        "subject-driven text-to-image generation",
+        "similarity-controllability paradox",
+        "disentanglement",
+        "reinforcement learning",
+        "GRPO"
+      ],
+      "subjects": [
+        "subject-driven text-to-image generation",
+        "similarity-controllability paradox",
+        "reinforcement learning",
+        "text",
+        "stacked",
+        "photomaker",
+        "personalized",
+        "realistic"
+      ],
       "priority": 1
     },
     {
@@ -1796,6 +3185,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2607.00083v1",
       "thumbnail_url": "/paper-thumbnails/2607.00083v1.webp",
+      "image_id": "/images/ACL_2026/2607.00083v1.png",
+      "keywords": [
+        "latent space",
+        "steering vectors",
+        "model calibration",
+        "trustworthiness",
+        "large language models"
+      ],
+      "subjects": [
+        "trustworthiness",
+        "steering vectors",
+        "model calibration",
+        "latent space",
+        "large language models"
+      ],
       "priority": 1
     },
     {
@@ -1816,6 +3220,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.04913v1",
       "thumbnail_url": "/paper-thumbnails/2604.04913v1.webp",
+      "image_id": "/images/CVPR_2026/2604.04913v1.png",
+      "keywords": [
+        "world models",
+        "generative video prediction",
+        "delta tokens",
+        "vision foundation model",
+        "efficient tokenization"
+      ],
+      "subjects": [
+        "world models",
+        "vision foundation model",
+        "generative video prediction",
+        "efficient tokenization",
+        "delta tokens"
+      ],
       "priority": 1
     },
     {
@@ -1833,6 +3252,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.11579v1",
       "thumbnail_url": "/paper-thumbnails/2604.11579v1.webp",
+      "image_id": "/images/CVPR_2026/2604.11579v1.png",
+      "keywords": [
+        "tactile localization",
+        "visuo-tactile learning",
+        "material segmentation",
+        "cross-modal alignment",
+        "tactile saliency"
+      ],
+      "subjects": [
+        "visuo-tactile learning",
+        "tactile saliency",
+        "tactile localization",
+        "material segmentation",
+        "cross-modal alignment"
+      ],
       "priority": 1
     },
     {
@@ -1852,6 +3286,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2606.11762v1",
       "thumbnail_url": "/paper-thumbnails/2606.11762v1.webp",
+      "image_id": "/images/ACL_2026/2606.11762v1.png",
+      "keywords": [
+        "creativity evaluation",
+        "large language models",
+        "semantic entropy",
+        "multi-agent judge",
+        "open-ended tasks"
+      ],
+      "subjects": [
+        "semantic entropy",
+        "open-ended tasks",
+        "multi-agent judge",
+        "large language models",
+        "creativity evaluation"
+      ],
       "priority": 1
     },
     {
@@ -1871,6 +3320,21 @@
       "venue": "SIGKDD",
       "pdf_url": "https://arxiv.org/pdf/2605.24679v1",
       "thumbnail_url": "/paper-thumbnails/2605.24679v1.webp",
+      "image_id": "/images/SIGKDD_2026/2605.24679v1.png",
+      "keywords": [
+        "brain-to-visual decoding",
+        "few-shot calibration",
+        "parameter-efficient adaptation",
+        "residual adapter",
+        "cross-subject fMRI"
+      ],
+      "subjects": [
+        "residual adapter",
+        "parameter-efficient adaptation",
+        "few-shot calibration",
+        "cross-subject fMRI",
+        "brain-to-visual decoding"
+      ],
       "priority": 1
     },
     {
@@ -1888,6 +3352,21 @@
       "venue": "IJCAI",
       "pdf_url": "https://arxiv.org/pdf/2605.10151v1",
       "thumbnail_url": "/paper-thumbnails/2605.10151v1.webp",
+      "image_id": "/images/IJCAI_2026/2605.10151v1.png",
+      "keywords": [
+        "stochastic linear bandits",
+        "sparsity",
+        "regret minimization",
+        "sparse action selection",
+        "adaptive exploration"
+      ],
+      "subjects": [
+        "stochastic linear bandits",
+        "sparsity",
+        "sparse action selection",
+        "regret minimization",
+        "adaptive exploration"
+      ],
       "priority": 1
     },
     {
@@ -1913,6 +3392,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.27101v1",
       "thumbnail_url": "/paper-thumbnails/2603.27101v1.webp",
+      "image_id": "/images/CVPR_2026/2603.27101v1.jpg",
+      "keywords": [
+        "field boundary segmentation",
+        "geospatial foundation models",
+        "semantic segmentation",
+        "agricultural monitoring"
+      ],
+      "subjects": [
+        "semantic segmentation",
+        "geospatial foundation models",
+        "field boundary segmentation",
+        "agricultural monitoring"
+      ],
       "priority": 1
     },
     {
@@ -1928,6 +3420,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.24082v1",
       "thumbnail_url": "/paper-thumbnails/2604.24082v1.webp",
+      "image_id": "/images/CVPR_2026/2604.24082v1.png",
+      "keywords": [
+        "jailbreaking",
+        "multi-turn attack",
+        "intention deception",
+        "safe completion",
+        "LVLMs"
+      ],
+      "subjects": [
+        "safe completion",
+        "multi-turn attack",
+        "LVLMs",
+        "jailbreaking",
+        "intention deception"
+      ],
       "priority": 1
     },
     {
@@ -1949,6 +3456,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.20715v1",
       "thumbnail_url": "/paper-thumbnails/2604.20715v1.webp",
+      "image_id": "/images/CVPR_2026/2604.20715v1.png",
+      "keywords": [
+        "relighting",
+        "3D reconstruction",
+        "diffusion transformer",
+        "multi-modal generation",
+        "inverse rendering"
+      ],
+      "subjects": [
+        "relighting",
+        "multi-modal generation",
+        "Inverse rendering",
+        "diffusion transformer",
+        "3D reconstruction"
+      ],
       "priority": 1
     },
     {
@@ -1966,6 +3488,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2607.20455v1",
       "thumbnail_url": "/paper-thumbnails/2607.20455v1.webp",
+      "image_id": "/images/ACL_2026/2607.20455v1.png",
+      "keywords": [
+        "real-time requirement adherence",
+        "data labeling",
+        "LLM-as-judge",
+        "constraint atomization",
+        "tiered validation"
+      ],
+      "subjects": [
+        "tiered validation",
+        "real-time requirement adherence",
+        "LLM-as-judge",
+        "data labeling",
+        "constraint atomization"
+      ],
       "priority": 1
     },
     {
@@ -1988,6 +3525,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.03481v2",
       "thumbnail_url": "/paper-thumbnails/2601.03481v2.webp",
+      "image_id": "/images/ACL_2026/2601.03481v2.png",
+      "keywords": [
+        "hate speech detection",
+        "moral rationales",
+        "attention alignment",
+        "explainability",
+        "Moral Foundations Theory"
+      ],
+      "subjects": [
+        "moral rationales",
+        "Moral Foundations Theory",
+        "hate speech detection",
+        "explainability",
+        "attention alignment"
+      ],
       "priority": 1
     },
     {
@@ -2005,6 +3557,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.23203v1",
       "thumbnail_url": "/paper-thumbnails/2605.23203v1.webp",
+      "image_id": "/images/CVPR_2026/2605.23203v1.png",
+      "keywords": [
+        "formal verification",
+        "Lipschitz optimization",
+        "homographies",
+        "camera motion robustness",
+        "neural network verification"
+      ],
+      "subjects": [
+        "neural network verification",
+        "Lipschitz optimization",
+        "homographies",
+        "formal verification",
+        "camera motion robustness"
+      ],
       "priority": 1
     },
     {
@@ -2019,6 +3586,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.12247v1",
       "thumbnail_url": "/paper-thumbnails/2604.12247v1.webp",
+      "image_id": "/images/ACL_2026/2604.12247v1.png",
+      "keywords": [
+        "speculative decoding",
+        "self-draft",
+        "early exit",
+        "layer-wise confidence",
+        "adaptive speculation"
+      ],
+      "subjects": [
+        "speculative decoding",
+        "self-draft",
+        "layer-wise confidence",
+        "early exit",
+        "adaptive speculation"
+      ],
       "priority": 1
     },
     {
@@ -2040,6 +3622,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.22175v1",
       "thumbnail_url": "/paper-thumbnails/2605.22175v1.webp",
+      "image_id": "/images/ACL_2026/2605.22175v1.png",
+      "keywords": [
+        "mutation testing",
+        "test suite generation",
+        "large language models",
+        "software engineering",
+        "benchmark"
+      ],
+      "subjects": [
+        "test suite generation",
+        "software engineering",
+        "mutation testing",
+        "large language models",
+        "benchmark"
+      ],
       "priority": 1
     },
     {
@@ -2062,6 +3659,19 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2603.16120v2",
       "thumbnail_url": "/paper-thumbnails/2603.16120v2.webp",
+      "image_id": "/images/ACL_2026/2603.16120v2.png",
+      "keywords": [
+        "personalization",
+        "deep research",
+        "LLM evaluation",
+        "user study"
+      ],
+      "subjects": [
+        "user study",
+        "personalization",
+        "LLM evaluation",
+        "deep research"
+      ],
       "priority": 1
     },
     {
@@ -2080,6 +3690,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.14762v1",
       "thumbnail_url": "/paper-thumbnails/2604.14762v1.webp",
+      "image_id": "/images/CVPR_2026/2604.14762v1.png",
+      "keywords": [
+        "Generalized Category Discovery",
+        "modality-agnostic",
+        "zero-shot learning",
+        "synthetic training",
+        "representation clustering"
+      ],
+      "subjects": [
+        "zero-shot learning",
+        "synthetic training",
+        "representation clustering",
+        "modality-agnostic",
+        "Generalized Category Discovery"
+      ],
       "priority": 1
     },
     {
@@ -2098,6 +3723,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.20409v2",
       "thumbnail_url": "/paper-thumbnails/2602.20409v2.webp",
+      "image_id": "/images/CVPR_2026/2602.20409v2.png",
+      "keywords": [
+        "few-shot unsupervised domain adaptation",
+        "3D point cloud",
+        "CLIP",
+        "prompt tuning",
+        "optimal transport"
+      ],
+      "subjects": [
+        "prompt tuning",
+        "optimal transport",
+        "few-shot unsupervised domain adaptation",
+        "CLIP",
+        "3D point cloud"
+      ],
       "priority": 1
     },
     {
@@ -2115,6 +3755,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2608.03411v1",
       "thumbnail_url": "/paper-thumbnails/2608.03411v1.webp",
+      "image_id": "/images/ACL_2026/2608.03411v1.png",
+      "keywords": [
+        "uncertainty quantification",
+        "large language models",
+        "causal intervention",
+        "decoupled update dynamics",
+        "mechanistic interpretability"
+      ],
+      "subjects": [
+        "uncertainty quantification",
+        "mechanistic interpretability",
+        "large language models",
+        "decoupled update dynamics",
+        "causal intervention"
+      ],
       "priority": 1
     },
     {
@@ -2133,6 +3788,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.14808v1",
       "thumbnail_url": "/paper-thumbnails/2605.14808v1.webp",
+      "image_id": "/images/CVPR_2026/2605.14808v1.png",
+      "keywords": [
+        "anomaly segmentation",
+        "class-agnostic",
+        "distribution shift",
+        "industrial inspection"
+      ],
+      "subjects": [
+        "industrial inspection",
+        "distribution shift",
+        "class-agnostic",
+        "anomaly segmentation"
+      ],
       "priority": 1
     },
     {
@@ -2151,6 +3819,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.07064v1",
       "thumbnail_url": "/paper-thumbnails/2605.07064v1.webp",
+      "image_id": "/images/CVPR_2026/2605.07064v1.png",
+      "keywords": [
+        "vision-language tracking",
+        "self-supervised tracking",
+        "dynamic token aggregation",
+        "large vision-language models",
+        "natural language descriptions"
+      ],
+      "subjects": [
+        "vision-language tracking",
+        "self-supervised tracking",
+        "natural language descriptions",
+        "large vision-language models",
+        "dynamic token aggregation"
+      ],
       "priority": 1
     },
     {
@@ -2169,6 +3852,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.22969v2",
       "thumbnail_url": "/paper-thumbnails/2603.22969v2.webp",
+      "image_id": "/images/CVPR_2026/2603.22969v2.png",
+      "keywords": [
+        "weakly supervised camouflaged object detection",
+        "frequency-aware learning",
+        "contrastive learning",
+        "Segment Anything Model",
+        "pseudo-labeling"
+      ],
+      "subjects": [
+        "weakly supervised camouflaged object detection",
+        "segment anything model",
+        "pseudo-labeling",
+        "frequency-aware learning",
+        "contrastive learning"
+      ],
       "priority": 1
     },
     {
@@ -2185,6 +3883,21 @@
       "venue": "INFOCOM",
       "pdf_url": "https://arxiv.org/pdf/2604.11983v1",
       "thumbnail_url": "/paper-thumbnails/2604.11983v1.webp",
+      "image_id": "/images/INFOCOM_2026/2604.11983v1.png",
+      "keywords": [
+        "Geometric algebra",
+        "Neural radiance fields",
+        "Wireless channel prediction",
+        "Ray tracing",
+        "Attention mechanism"
+      ],
+      "subjects": [
+        "wireless channel prediction",
+        "ray tracing",
+        "Neural radiance fields",
+        "geometric algebra",
+        "attention mechanism"
+      ],
       "priority": 1
     },
     {
@@ -2203,6 +3916,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.20423v1",
       "thumbnail_url": "/paper-thumbnails/2602.20423v1.webp",
+      "image_id": "/images/CVPR_2026/2602.20423v1.png",
+      "keywords": [
+        "medical image segmentation",
+        "vision-language models",
+        "probabilistic cross-modal attention",
+        "data efficiency",
+        "domain generalization"
+      ],
+      "subjects": [
+        "vision-language models",
+        "probabilistic cross-modal attention",
+        "medical image segmentation",
+        "domain generalization",
+        "data efficiency"
+      ],
       "priority": 1
     },
     {
@@ -2220,6 +3948,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2606.07280v1",
       "thumbnail_url": "/paper-thumbnails/2606.07280v1.webp",
+      "image_id": "/images/CVPR_2026/2606.07280v1.png",
+      "keywords": [
+        "Novel Class Discovery",
+        "Point Cloud Segmentation",
+        "Hypergraph Reasoning",
+        "Geometric-Aware Prototypes",
+        "High-order Associations"
+      ],
+      "subjects": [
+        "point cloud segmentation",
+        "Novel Class Discovery",
+        "Hypergraph Reasoning",
+        "high-order associations",
+        "Geometric-Aware Prototypes"
+      ],
       "priority": 1
     },
     {
@@ -2237,6 +3980,9 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.26488v1",
       "thumbnail_url": "/paper-thumbnails/2604.26488v1.webp",
+      "image_id": null,
+      "keywords": [],
+      "subjects": [],
       "priority": 1
     },
     {
@@ -2263,6 +4009,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2606.08016v1",
       "thumbnail_url": "/paper-thumbnails/2606.08016v1.webp",
+      "image_id": "/images/CVPR_2026/2606.08016v1.png",
+      "keywords": [
+        "vision-language models",
+        "Amateur-Friendly",
+        "three-stage",
+        "large-scale",
+        "fine-tuning"
+      ],
+      "subjects": [
+        "vision-language models",
+        "three-stage",
+        "large-scale",
+        "fine-tuning",
+        "Amateur-Friendly"
+      ],
       "priority": 1
     },
     {
@@ -2287,6 +4048,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.20570v1",
       "thumbnail_url": "/paper-thumbnails/2604.20570v1.webp",
+      "image_id": "/images/CVPR_2026/2604.20570v1.png",
+      "keywords": [
+        "generative spatial intelligence",
+        "multimodal large language models",
+        "spatially grounded image editing",
+        "benchmark",
+        "evaluation protocol"
+      ],
+      "subjects": [
+        "spatially grounded image editing",
+        "multimodal large language models",
+        "generative spatial intelligence",
+        "evaluation protocol",
+        "benchmark"
+      ],
       "priority": 1
     },
     {
@@ -2308,6 +4084,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.27758v2",
       "thumbnail_url": "/paper-thumbnails/2603.27758v2.webp",
+      "image_id": "/images/CVPR_2026/2603.27758v2.png",
+      "keywords": [
+        "Cross-View Geo-Localization",
+        "OpenStreetMap",
+        "Panoramic Images",
+        "Robust Localization",
+        "Metric Pose Estimation"
+      ],
+      "subjects": [
+        "Robust Localization",
+        "Panoramic Images",
+        "OpenStreetMap",
+        "Metric Pose Estimation",
+        "Cross-View Geo-Localization"
+      ],
       "priority": 1
     },
     {
@@ -2325,6 +4116,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.11521v1",
       "thumbnail_url": "/paper-thumbnails/2603.11521v1.webp",
+      "image_id": "/images/CVPR_2026/2603.11521v1.png",
+      "keywords": [
+        "Unsupervised Camouflaged Object Detection",
+        "Pseudo-label refinement",
+        "Multi-cue perception",
+        "Teacher-student learning",
+        "Spectral Tensor Attention Fusion"
+      ],
+      "subjects": [
+        "Unsupervised Camouflaged Object Detection",
+        "Teacher-Student Learning",
+        "Spectral Tensor Attention Fusion",
+        "Pseudo-label refinement",
+        "Multi-cue perception"
+      ],
       "priority": 1
     },
     {
@@ -2340,6 +4146,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.24295v2",
       "thumbnail_url": "/paper-thumbnails/2603.24295v2.webp",
+      "image_id": "/images/CVPR_2026/2603.24295v2.png",
+      "keywords": [
+        "video semantic segmentation",
+        "state space model",
+        "forgetting gate",
+        "spatiotemporal modeling",
+        "specificity refinement"
+      ],
+      "subjects": [
+        "video semantic segmentation",
+        "State Space Model",
+        "specificity refinement",
+        "spatiotemporal modeling",
+        "forgetting gate"
+      ],
       "priority": 1
     },
     {
@@ -2354,6 +4175,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.08942v2",
       "thumbnail_url": "/paper-thumbnails/2603.08942v2.webp",
+      "image_id": "/images/CVPR_2026/2603.08942v2.png",
+      "keywords": [
+        "few-shot classification",
+        "vision-language models",
+        "domain canonicalization",
+        "geometric transformation",
+        "parameter-efficient fine-tuning"
+      ],
+      "subjects": [
+        "vision-language models",
+        "parameter-efficient fine-tuning",
+        "geometric transformation",
+        "few-shot classification",
+        "domain canonicalization"
+      ],
       "priority": 1
     },
     {
@@ -2371,6 +4207,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.23381v1",
       "thumbnail_url": "/paper-thumbnails/2603.23381v1.webp",
+      "image_id": "/images/CVPR_2026/2603.23381v1.png",
+      "keywords": [
+        "3D flow",
+        "portrait animation",
+        "diffusion model",
+        "motion transfer",
+        "facial editing"
+      ],
+      "subjects": [
+        "portrait animation",
+        "motion transfer",
+        "facial editing",
+        "diffusion model",
+        "3D flow"
+      ],
       "priority": 1
     },
     {
@@ -2390,6 +4241,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.26008v1",
       "thumbnail_url": "/paper-thumbnails/2603.26008v1.webp",
+      "image_id": "/images/CVPR_2026/2603.26008v1.png",
+      "keywords": [
+        "fairness",
+        "multimodal large language models",
+        "parameter-efficient fine-tuning",
+        "mutual information minimization",
+        "medical imaging"
+      ],
+      "subjects": [
+        "parameter-efficient fine-tuning",
+        "mutual information minimization",
+        "multimodal large language models",
+        "medical imaging",
+        "fairness"
+      ],
       "priority": 1
     },
     {
@@ -2408,6 +4274,9 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.08896v1",
       "thumbnail_url": "/paper-thumbnails/2604.08896v1.webp",
+      "image_id": null,
+      "keywords": [],
+      "subjects": [],
       "priority": 1
     },
     {
@@ -2427,6 +4296,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.28980v2",
       "thumbnail_url": "/paper-thumbnails/2603.28980v2.webp",
+      "image_id": "/images/CVPR_2026/2603.28980v2.png",
+      "keywords": [
+        "immersive 3D scene generation",
+        "multi-view panoramas",
+        "diffusion models",
+        "geometry reconstruction",
+        "text-driven synthesis"
+      ],
+      "subjects": [
+        "text-driven synthesis",
+        "multi-view panoramas",
+        "immersive 3D scene generation",
+        "geometry reconstruction",
+        "diffusion models"
+      ],
       "priority": 1
     },
     {
@@ -2444,6 +4328,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.09771v2",
       "thumbnail_url": "/paper-thumbnails/2603.09771v2.webp",
+      "image_id": "/images/CVPR_2026/2603.09771v2.png",
+      "keywords": [
+        "which include generic terms (e.g",
+        "pronouns",
+        "Large Language Models",
+        "vision-language models",
+        "Embedding-Guided"
+      ],
+      "subjects": [
+        "which include generic terms (e.g",
+        "vision-language models",
+        "pronouns",
+        "large language models",
+        "Embedding-Guided"
+      ],
       "priority": 1
     },
     {
@@ -2459,6 +4358,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.02860v1",
       "thumbnail_url": "/paper-thumbnails/2604.02860v1.webp",
+      "image_id": "/images/CVPR_2026/2604.02860v1.png",
+      "keywords": [
+        "temporal sentence grounding",
+        "end-to-end training",
+        "sentence conditioned adapter",
+        "video backbone",
+        "localization"
+      ],
+      "subjects": [
+        "video backbone",
+        "temporal sentence grounding",
+        "sentence conditioned adapter",
+        "localization",
+        "end-to-end training"
+      ],
       "priority": 1
     },
     {
@@ -2473,6 +4387,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.13432v1",
       "thumbnail_url": "/paper-thumbnails/2604.13432v1.webp",
+      "image_id": "/images/CVPR_2026/2604.13432v1.JPEG",
+      "keywords": [
+        "token merging",
+        "token restoration",
+        "Vision Transformer",
+        "efficient inference",
+        "image synthesis"
+      ],
+      "subjects": [
+        "vision transformer",
+        "token restoration",
+        "token merging",
+        "image synthesis",
+        "efficient inference"
+      ],
       "priority": 1
     },
     {
@@ -2490,6 +4419,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.02363v1",
       "thumbnail_url": "/paper-thumbnails/2603.02363v1.webp",
+      "image_id": "/images/CVPR_2026/2603.02363v1.png",
+      "keywords": [
+        "video moment retrieval",
+        "caption-based queries",
+        "search queries",
+        "decoder-query collapse",
+        "benchmarks"
+      ],
+      "subjects": [
+        "video moment retrieval",
+        "search queries",
+        "decoder-query collapse",
+        "caption-based queries",
+        "benchmarks"
+      ],
       "priority": 1
     },
     {
@@ -2509,6 +4453,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.09662v1",
       "thumbnail_url": "/paper-thumbnails/2605.09662v1.webp",
+      "image_id": "/images/CVPR_2026/2605.09662v1.jpg",
+      "keywords": [
+        "3D Gaussian Splatting",
+        "object extraction",
+        "semantic boundaries",
+        "boundary loss",
+        "occupancy loss"
+      ],
+      "subjects": [
+        "semantic boundaries",
+        "occupancy loss",
+        "object extraction",
+        "boundary loss",
+        "3D Gaussian Splatting"
+      ],
       "priority": 1
     },
     {
@@ -2522,6 +4481,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.09414v1",
       "thumbnail_url": "/paper-thumbnails/2605.09414v1.webp",
+      "image_id": "/images/ACL_2026/2605.09414v1.png",
+      "keywords": [
+        "emoji",
+        "sentiment transfer",
+        "financial social media",
+        "zero-shot transfer",
+        "cross-community"
+      ],
+      "subjects": [
+        "zero-shot transfer",
+        "sentiment transfer",
+        "financial social media",
+        "emoji",
+        "cross-community"
+      ],
       "priority": 1
     },
     {
@@ -2539,6 +4513,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.06803v2",
       "thumbnail_url": "/paper-thumbnails/2601.06803v2.webp",
+      "image_id": "/images/ACL_2026/2601.06803v2.png",
+      "keywords": [
+        "latent reasoning",
+        "visual reasoning",
+        "large vision-language models",
+        "dynamic windowed alignment",
+        "chain-of-thought"
+      ],
+      "subjects": [
+        "visual reasoning",
+        "latent reasoning",
+        "large vision-language models",
+        "dynamic windowed alignment",
+        "chain-of-thought"
+      ],
       "priority": 1
     },
     {
@@ -2564,6 +4553,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.25449v3",
       "thumbnail_url": "/paper-thumbnails/2605.25449v3.webp",
+      "image_id": "/images/CVPR_2026/2605.25449v3.png",
+      "keywords": [
+        "3D-aware video diffusion",
+        "360° video generation",
+        "digital twin",
+        "3D cache",
+        "camera trajectory control"
+      ],
+      "subjects": [
+        "digital twin",
+        "camera trajectory control",
+        "3D cache",
+        "3D-aware video diffusion",
+        "360° video generation"
+      ],
       "priority": 1
     },
     {
@@ -2582,6 +4586,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.17828v1",
       "thumbnail_url": "/paper-thumbnails/2603.17828v1.webp",
+      "image_id": "/images/CVPR_2026/2603.17828v1.png",
+      "keywords": [
+        "text-free inversion attack",
+        "diffusion model unlearning",
+        "concept erasure",
+        "DDIM inversion"
+      ],
+      "subjects": [
+        "text-free inversion attack",
+        "diffusion model unlearning",
+        "DDIM inversion",
+        "concept erasure"
+      ],
       "priority": 1
     },
     {
@@ -2603,6 +4620,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.21251v5",
       "thumbnail_url": "/paper-thumbnails/2604.21251v5.webp",
+      "image_id": "/images/ACL_2026/2604.21251v5.png",
+      "keywords": [
+        "LLM unlearning",
+        "prompt-driven unlearning",
+        "reinforcement learning",
+        "knowledge forgetting",
+        "controllable alignment"
+      ],
+      "subjects": [
+        "reinforcement learning",
+        "prompt-driven unlearning",
+        "LLM unlearning",
+        "knowledge forgetting",
+        "controllable alignment"
+      ],
       "priority": 1
     },
     {
@@ -2618,6 +4650,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.09739v1",
       "thumbnail_url": "/paper-thumbnails/2605.09739v1.webp",
+      "image_id": "/images/ACL_2026/2605.09739v1.png",
+      "keywords": [
+        "Renormalization Bias",
+        "Semantic Softmax",
+        "zero-shot classification",
+        "calibration",
+        "LLM reliability"
+      ],
+      "subjects": [
+        "zero-shot classification",
+        "Semantic Softmax",
+        "Renormalization Bias",
+        "LLM reliability",
+        "calibration"
+      ],
       "priority": 1
     },
     {
@@ -2632,6 +4679,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.23165v1",
       "thumbnail_url": "/paper-thumbnails/2605.23165v1.webp",
+      "image_id": "/images/CVPR_2026/2605.23165v1.png",
+      "keywords": [
+        "autonomous exploration",
+        "vision-language models",
+        "frontier-based exploration",
+        "next-best-view planning",
+        "robotic navigation"
+      ],
+      "subjects": [
+        "vision-language models",
+        "robotic navigation",
+        "next-best-view planning",
+        "frontier-based exploration",
+        "autonomous exploration"
+      ],
       "priority": 1
     },
     {
@@ -2646,6 +4708,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.15951v1",
       "thumbnail_url": "/paper-thumbnails/2605.15951v1.webp",
+      "image_id": "/images/CVPR_2026/2605.15951v1.png",
+      "keywords": [
+        "object-level grounding",
+        "reinforcement learning",
+        "group revision",
+        "reward shaping",
+        "large vision-language models"
+      ],
+      "subjects": [
+        "reward shaping",
+        "reinforcement learning",
+        "object-level grounding",
+        "large vision-language models",
+        "group revision"
+      ],
       "priority": 1
     },
     {
@@ -2661,6 +4738,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2606.11201v1",
       "thumbnail_url": "/paper-thumbnails/2606.11201v1.webp",
+      "image_id": "/images/ACL_2026/2606.11201v1.png",
+      "keywords": [
+        "inference-time alignment",
+        "model blending",
+        "quality-aware alignment",
+        "intervention paradox",
+        "LLM alignment"
+      ],
+      "subjects": [
+        "quality-aware alignment",
+        "model blending",
+        "LLM alignment",
+        "intervention paradox",
+        "inference-time alignment"
+      ],
       "priority": 1
     },
     {
@@ -2676,6 +4768,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.04265v1",
       "thumbnail_url": "/paper-thumbnails/2603.04265v1.webp",
+      "image_id": "/images/CVPR_2026/2603.04265v1.png",
+      "keywords": [
+        "procedural planning",
+        "instructional videos",
+        "differentiable Viterbi",
+        "procedural knowledge graph",
+        "sample efficiency"
+      ],
+      "subjects": [
+        "sample efficiency",
+        "procedural planning",
+        "procedural knowledge graph",
+        "instructional videos",
+        "differentiable Viterbi"
+      ],
       "priority": 1
     },
     {
@@ -2694,6 +4801,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.05818v2",
       "thumbnail_url": "/paper-thumbnails/2604.05818v2.webp",
+      "image_id": "/images/ACL_2026/2604.05818v2.png",
+      "keywords": [
+        "Knowledge-Based Visual Question Answering",
+        "Multi-modal Retrieval-Augmented Generation",
+        "vision-language models",
+        "Dense Retrieval",
+        "Query Refinement"
+      ],
+      "subjects": [
+        "vision-language models",
+        "Query Refinement",
+        "multi-modal retrieval-augmented generation",
+        "Knowledge-Based Visual Question Answering",
+        "dense retrieval"
+      ],
       "priority": 1
     },
     {
@@ -2709,6 +4831,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.16915v1",
       "thumbnail_url": "/paper-thumbnails/2604.16915v1.webp",
+      "image_id": "/images/CVPR_2026/2604.16915v1.png",
+      "keywords": [
+        "visual RAG",
+        "knowledge-intensive image retrieval",
+        "multi-hop reasoning",
+        "grounded generation",
+        "DomainVQA-R"
+      ],
+      "subjects": [
+        "visual RAG",
+        "multi-hop reasoning",
+        "knowledge-intensive image retrieval",
+        "grounded generation",
+        "DomainVQA-R"
+      ],
       "priority": 1
     },
     {
@@ -2724,6 +4861,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.12769v2",
       "thumbnail_url": "/paper-thumbnails/2602.12769v2.webp",
+      "image_id": "/images/CVPR_2026/2602.12769v2.png",
+      "keywords": [
+        "high-resolution image generation",
+        "training-free diffusion",
+        "few-step denoising",
+        "patch-based inference",
+        "text-to-image generation"
+      ],
+      "subjects": [
+        "training-free diffusion",
+        "text-to-image generation",
+        "patch-based inference",
+        "high-resolution image generation",
+        "few-step denoising"
+      ],
       "priority": 1
     },
     {
@@ -2746,6 +4898,19 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.18296v2",
       "thumbnail_url": "/paper-thumbnails/2601.18296v2.webp",
+      "image_id": "/images/ACL_2026/2601.18296v2.png",
+      "keywords": [
+        "Temporal Knowledge Graph Question Answering",
+        "Reinforcement Learning",
+        "Reverse Curriculum Learning",
+        "Autonomous Agent"
+      ],
+      "subjects": [
+        "Temporal Knowledge Graph Question Answering",
+        "Reverse Curriculum Learning",
+        "reinforcement learning",
+        "autonomous agent"
+      ],
       "priority": 1
     },
     {
@@ -2764,6 +4929,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2606.00033v1",
       "thumbnail_url": "/paper-thumbnails/2606.00033v1.webp",
+      "image_id": "/images/ACL_2026/2606.00033v1.png",
+      "keywords": [
+        "mechanistic interpretability",
+        "auditing",
+        "collaborative reviewing",
+        "meta-results",
+        "AI safety"
+      ],
+      "subjects": [
+        "mechanistic interpretability",
+        "collaborative reviewing",
+        "auditing",
+        "AI safety",
+        "meta-results"
+      ],
       "priority": 1
     },
     {
@@ -2777,6 +4957,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.31400v1",
       "thumbnail_url": "/paper-thumbnails/2605.31400v1.webp",
+      "image_id": "/images/CVPR_2026/2605.31400v1.png",
+      "keywords": [
+        "image deblurring",
+        "frequency attention",
+        "efficient network",
+        "real-world deblurring",
+        "NTIRE 2026"
+      ],
+      "subjects": [
+        "real-world deblurring",
+        "NTIRE 2026",
+        "image deblurring",
+        "frequency attention",
+        "efficient network"
+      ],
       "priority": 1
     },
     {
@@ -2793,6 +4988,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.09853v2",
       "thumbnail_url": "/paper-thumbnails/2604.09853v2.webp",
+      "image_id": "/images/CVPR_2026/2604.09853v2.png",
+      "keywords": [
+        "optical flow",
+        "visual motion illusion",
+        "Rotating Snakes",
+        "human perception",
+        "deep neural networks"
+      ],
+      "subjects": [
+        "visual motion illusion",
+        "Rotating Snakes",
+        "optical flow",
+        "human perception",
+        "deep neural networks"
+      ],
       "priority": 1
     },
     {
@@ -2806,6 +5016,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.22942v1",
       "thumbnail_url": "/paper-thumbnails/2605.22942v1.webp",
+      "image_id": "/images/CVPR_2026/2605.22942v1.png",
+      "keywords": [
+        "Vision-to-chart buoy association",
+        "DETR",
+        "IMU orientation",
+        "World-to-image projection"
+      ],
+      "subjects": [
+        "World-to-image projection",
+        "Vision-to-chart buoy association",
+        "IMU orientation",
+        "DETR"
+      ],
       "priority": 1
     },
     {
@@ -2825,6 +5048,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.03669v1",
       "thumbnail_url": "/paper-thumbnails/2601.03669v1.webp",
+      "image_id": "/images/ACL_2026/2601.03669v1.png",
+      "keywords": [
+        "claim-level grounding",
+        "traceable text generation",
+        "verification",
+        "biomedical domain",
+        "entailment"
+      ],
+      "subjects": [
+        "verification",
+        "traceable text generation",
+        "entailment",
+        "claim-level grounding",
+        "biomedical domain"
+      ],
       "priority": 1
     },
     {
@@ -2852,6 +5090,21 @@
       "venue": "IJCAI",
       "pdf_url": "https://arxiv.org/pdf/2605.08897v1",
       "thumbnail_url": "/paper-thumbnails/2605.08897v1.webp",
+      "image_id": "/images/IJCAI_2026/2605.08897v1.png",
+      "keywords": [
+        "Shapley Regression",
+        "rare disease diagnosis",
+        "APDS",
+        "electronic health records",
+        "interpretable machine learning"
+      ],
+      "subjects": [
+        "Shapley Regression",
+        "rare disease diagnosis",
+        "interpretable machine learning",
+        "Electronic Health Records",
+        "APDS"
+      ],
       "priority": 1
     },
     {
@@ -2868,6 +5121,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.25778v1",
       "thumbnail_url": "/paper-thumbnails/2605.25778v1.webp",
+      "image_id": "/images/CVPR_2026/2605.25778v1.png",
+      "keywords": [
+        "facial texture reconstruction",
+        "diffusion models",
+        "UV texture",
+        "geometry-free",
+        "semantic editing"
+      ],
+      "subjects": [
+        "UV texture",
+        "semantic editing",
+        "geometry-free",
+        "facial texture reconstruction",
+        "diffusion models"
+      ],
       "priority": 1
     },
     {
@@ -2881,6 +5149,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2606.02548v1",
       "thumbnail_url": "/paper-thumbnails/2606.02548v1.webp",
+      "image_id": "/images/ACL_2026/2606.02548v1.png",
+      "keywords": [
+        "Script-Normalized WER",
+        "ASR evaluation",
+        "Multi-script Indic languages",
+        "Transliteration",
+        "Word Error Rate"
+      ],
+      "subjects": [
+        "Word Error Rate",
+        "transliteration",
+        "Script-Normalized WER",
+        "Multi-script Indic languages",
+        "ASR evaluation"
+      ],
       "priority": 1
     },
     {
@@ -2897,6 +5180,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.23058v2",
       "thumbnail_url": "/paper-thumbnails/2602.23058v2.webp",
+      "image_id": "/images/CVPR_2026/2602.23058v2.png",
+      "keywords": [
+        "world models",
+        "hyperbolic geometry",
+        "energy-based models",
+        "visual planning",
+        "reinforcement learning"
+      ],
+      "subjects": [
+        "world models",
+        "visual planning",
+        "reinforcement learning",
+        "hyperbolic geometry",
+        "energy-based models"
+      ],
       "priority": 1
     },
     {
@@ -2911,6 +5209,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.19934v2",
       "thumbnail_url": "/paper-thumbnails/2604.19934v2.webp",
+      "image_id": "/images/ACL_2026/2604.19934v2.jpg",
+      "keywords": [
+        "relational knowledge recall",
+        "linear probes",
+        "attention heads",
+        "feature attribution",
+        "large language models"
+      ],
+      "subjects": [
+        "relational knowledge recall",
+        "linear probes",
+        "large language models",
+        "feature attribution",
+        "attention heads"
+      ],
       "priority": 1
     },
     {
@@ -2929,6 +5242,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.12518v2",
       "thumbnail_url": "/paper-thumbnails/2604.12518v2.webp",
+      "image_id": "/images/CVPR_2026/2604.12518v2.png",
+      "keywords": [
+        "multimodal sentiment analysis",
+        "modality competition",
+        "robustness",
+        "semantic disentanglement",
+        "trust distillation"
+      ],
+      "subjects": [
+        "trust distillation",
+        "semantic disentanglement",
+        "robustness",
+        "multimodal sentiment analysis",
+        "modality competition"
+      ],
       "priority": 1
     },
     {
@@ -2944,6 +5272,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.19731v1",
       "thumbnail_url": "/paper-thumbnails/2603.19731v1.webp",
+      "image_id": "/images/CVPR_2026/2603.19731v1.png",
+      "keywords": [
+        "portrait video editing",
+        "expression editing",
+        "head pose disentanglement",
+        "3D morphable model",
+        "warping-based animation"
+      ],
+      "subjects": [
+        "warping-based animation",
+        "portrait video editing",
+        "head pose disentanglement",
+        "expression editing",
+        "3D morphable model"
+      ],
       "priority": 1
     },
     {
@@ -2960,6 +5303,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.11439v1",
       "thumbnail_url": "/paper-thumbnails/2603.11439v1.webp",
+      "image_id": "/images/CVPR_2026/2603.11439v1.png",
+      "keywords": [
+        "dense video captioning",
+        "role-specific queries",
+        "overlap suppression loss",
+        "contrastive alignment",
+        "concept guider"
+      ],
+      "subjects": [
+        "role-specific queries",
+        "overlap suppression loss",
+        "dense video captioning",
+        "contrastive alignment",
+        "concept guider"
+      ],
       "priority": 1
     },
     {
@@ -2977,6 +5335,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.07723v1",
       "thumbnail_url": "/paper-thumbnails/2604.07723v1.webp",
+      "image_id": "/images/CVPR_2026/2604.07723v1.png",
+      "keywords": [
+        "open-vocabulary semantic segmentation",
+        "training-free",
+        "logits optimization",
+        "distribution discrepancy",
+        "CLIP"
+      ],
+      "subjects": [
+        "training-free",
+        "open-vocabulary semantic segmentation",
+        "logits optimization",
+        "distribution discrepancy",
+        "CLIP"
+      ],
       "priority": 1
     },
     {
@@ -2993,6 +5366,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.10056v1",
       "thumbnail_url": "/paper-thumbnails/2604.10056v1.webp",
+      "image_id": "/images/CVPR_2026/2604.10056v1.png",
+      "keywords": [
+        "unsupervised optical flow",
+        "uncertainty estimation",
+        "recurrent network",
+        "augmentation consistency",
+        "adaptive refinement"
+      ],
+      "subjects": [
+        "unsupervised optical flow",
+        "uncertainty estimation",
+        "recurrent network",
+        "augmentation consistency",
+        "adaptive refinement"
+      ],
       "priority": 1
     },
     {
@@ -3014,6 +5402,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.08865v1",
       "thumbnail_url": "/paper-thumbnails/2604.08865v1.webp",
+      "image_id": "/images/ACL_2026/2604.08865v1.png",
+      "keywords": [
+        "sequence-level PPO",
+        "long-horizon reasoning",
+        "reinforcement learning",
+        "LLM alignment",
+        "contextual bandit"
+      ],
+      "subjects": [
+        "sequence-level PPO",
+        "reinforcement learning",
+        "long-horizon reasoning",
+        "LLM alignment",
+        "contextual bandit"
+      ],
       "priority": 1
     },
     {
@@ -3027,6 +5430,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.15678v1",
       "thumbnail_url": "/paper-thumbnails/2604.15678v1.webp",
+      "image_id": "/images/CVPR_2026/2604.15678v1.png",
+      "keywords": [
+        "Few-Shot Class-Incremental Learning",
+        "vision-language models",
+        "Prototype Calibration",
+        "Domain Gravity",
+        "Cross-Discipline Learning"
+      ],
+      "subjects": [
+        "vision-language models",
+        "prototype calibration",
+        "few-shot class-incremental learning",
+        "Domain Gravity",
+        "Cross-Discipline Learning"
+      ],
       "priority": 1
     },
     {
@@ -3040,6 +5458,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.02329v1",
       "thumbnail_url": "/paper-thumbnails/2603.02329v1.webp",
+      "image_id": "/images/CVPR_2026/2603.02329v1.png",
+      "keywords": [
+        "3D affordance grounding",
+        "multimodal large language model",
+        "interaction intention",
+        "cross-modal integration"
+      ],
+      "subjects": [
+        "multimodal large language model",
+        "interaction intention",
+        "cross-modal integration",
+        "3D affordance grounding"
+      ],
       "priority": 1
     },
     {
@@ -3054,6 +5485,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.10780v1",
       "thumbnail_url": "/paper-thumbnails/2603.10780v1.webp",
+      "image_id": "/images/CVPR_2026/2603.10780v1.png",
+      "keywords": [
+        "Classifier-Free Guidance",
+        "Condition-Degradation Guidance",
+        "Text-to-image generation",
+        "Semantic degradation",
+        "Diffusion models"
+      ],
+      "subjects": [
+        "text-to-image generation",
+        "Semantic degradation",
+        "diffusion models",
+        "Condition-Degradation Guidance",
+        "classifier-free guidance"
+      ],
       "priority": 1
     },
     {
@@ -3072,6 +5518,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2606.05004v1",
       "thumbnail_url": "/paper-thumbnails/2606.05004v1.webp",
+      "image_id": "/images/ACL_2026/2606.05004v1.png",
+      "keywords": [
+        "privacy-preserving inference",
+        "large language models",
+        "prompt privacy",
+        "model-agnostic",
+        "differential privacy"
+      ],
+      "subjects": [
+        "prompt privacy",
+        "privacy-preserving inference",
+        "model-agnostic",
+        "large language models",
+        "differential privacy"
+      ],
       "priority": 1
     },
     {
@@ -3087,6 +5548,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.04848v2",
       "thumbnail_url": "/paper-thumbnails/2603.04848v2.webp",
+      "image_id": "/images/CVPR_2026/2603.04848v2.png",
+      "keywords": [
+        "hyperbolic space",
+        "multiview pretraining",
+        "robotic manipulation",
+        "masked autoencoder",
+        "3D point cloud"
+      ],
+      "subjects": [
+        "robotic manipulation",
+        "multiview pretraining",
+        "masked autoencoder",
+        "hyperbolic space",
+        "3D point cloud"
+      ],
       "priority": 1
     },
     {
@@ -3103,6 +5579,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.06631v1",
       "thumbnail_url": "/paper-thumbnails/2604.06631v1.webp",
+      "image_id": "/images/CVPR_2026/2604.06631v1.png",
+      "keywords": [
+        "Federated Learning",
+        "Network Pruning",
+        "Personalization",
+        "Optimal Transport",
+        "Heterogeneity"
+      ],
+      "subjects": [
+        "personalization",
+        "optimal transport",
+        "network pruning",
+        "heterogeneity",
+        "federated learning"
+      ],
       "priority": 1
     },
     {
@@ -3120,6 +5611,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.09624v2",
       "thumbnail_url": "/paper-thumbnails/2601.09624v2.webp",
+      "image_id": "/images/ACL_2026/2601.09624v2.png",
+      "keywords": [
+        "machine unlearning",
+        "model circuits",
+        "unlearning difficulty",
+        "interpretability",
+        "language models"
+      ],
+      "subjects": [
+        "unlearning difficulty",
+        "model circuits",
+        "machine unlearning",
+        "language models",
+        "interpretability"
+      ],
       "priority": 1
     },
     {
@@ -3133,6 +5639,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.11514v1",
       "thumbnail_url": "/paper-thumbnails/2604.11514v1.webp",
+      "image_id": "/images/ACL_2026/2604.11514v1.png",
+      "keywords": [
+        "test output prediction",
+        "pseudocode execution",
+        "dual execution",
+        "functional majority voting",
+        "code generation"
+      ],
+      "subjects": [
+        "test output prediction",
+        "pseudocode execution",
+        "functional majority voting",
+        "dual execution",
+        "code generation"
+      ],
       "priority": 1
     },
     {
@@ -3151,6 +5672,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.08922v1",
       "thumbnail_url": "/paper-thumbnails/2604.08922v1.webp",
+      "image_id": "/images/CVPR_2026/2604.08922v1.png",
+      "keywords": [
+        "degradation-aware diffusion",
+        "multimodal image fusion",
+        "arbitrary degradation",
+        "implicit denoising",
+        "image restoration"
+      ],
+      "subjects": [
+        "multimodal image fusion",
+        "implicit denoising",
+        "image restoration",
+        "degradation-aware diffusion",
+        "arbitrary degradation"
+      ],
       "priority": 1
     },
     {
@@ -3172,6 +5708,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2601.07603v3",
       "thumbnail_url": "/paper-thumbnails/2601.07603v3.webp",
+      "image_id": "/images/CVPR_2026/2601.07603v3.png",
+      "keywords": [
+        "animatable head avatar",
+        "Gaussian splatting",
+        "pose-free reconstruction",
+        "UV-space modeling",
+        "feed-forward network"
+      ],
+      "subjects": [
+        "UV-space modeling",
+        "pose-free reconstruction",
+        "Gaussian Splatting",
+        "feed-forward network",
+        "animatable head avatar"
+      ],
       "priority": 1
     },
     {
@@ -3194,6 +5745,19 @@
       "venue": "SIGKDD",
       "pdf_url": "https://arxiv.org/pdf/2606.04579v2",
       "thumbnail_url": "/paper-thumbnails/2606.04579v2.webp",
+      "image_id": "/images/SIGKDD_2026/2606.04579v2.png",
+      "keywords": [
+        "process reward model",
+        "scientific reasoning",
+        "tool utilization",
+        "verification"
+      ],
+      "subjects": [
+        "verification",
+        "tool utilization",
+        "scientific reasoning",
+        "process reward model"
+      ],
       "priority": 1
     },
     {
@@ -3209,6 +5773,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.08238v1",
       "thumbnail_url": "/paper-thumbnails/2604.08238v1.webp",
+      "image_id": "/images/CVPR_2026/2604.08238v1.png",
+      "keywords": [
+        "domain adaptation",
+        "machine unlearning",
+        "source-free domain adaptation",
+        "privacy",
+        "adversarial optimization"
+      ],
+      "subjects": [
+        "source-free domain adaptation",
+        "privacy",
+        "machine unlearning",
+        "domain adaptation",
+        "adversarial optimization"
+      ],
       "priority": 1
     },
     {
@@ -3229,6 +5808,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.23040v2",
       "thumbnail_url": "/paper-thumbnails/2602.23040v2.webp",
+      "image_id": "/images/CVPR_2026/2602.23040v2.jpg",
+      "keywords": [
+        "volumetric video",
+        "Gaussian splatting",
+        "UV atlas",
+        "temporal consistency",
+        "video coding"
+      ],
+      "subjects": [
+        "volumetric video",
+        "video coding",
+        "UV atlas",
+        "temporal consistency",
+        "Gaussian Splatting"
+      ],
       "priority": 1
     },
     {
@@ -3251,6 +5845,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.10923v1",
       "thumbnail_url": "/paper-thumbnails/2604.10923v1.webp",
+      "image_id": "/images/ACL_2026/2604.10923v1.png",
+      "keywords": [
+        "self-evolving agents",
+        "co-evolution",
+        "experience distillation",
+        "asset creation",
+        "large language models"
+      ],
+      "subjects": [
+        "self-evolving agents",
+        "large language models",
+        "experience distillation",
+        "co-evolution",
+        "asset creation"
+      ],
       "priority": 1
     },
     {
@@ -3272,6 +5881,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.13592v2",
       "thumbnail_url": "/paper-thumbnails/2604.13592v2.webp",
+      "image_id": "/images/ACL_2026/2604.13592v2.png",
+      "keywords": [
+        "foresight optimization",
+        "strategic reasoning",
+        "large language models",
+        "policy optimization",
+        "self-play reinforcement learning"
+      ],
+      "subjects": [
+        "strategic reasoning",
+        "self-play reinforcement learning",
+        "policy optimization",
+        "large language models",
+        "foresight optimization"
+      ],
       "priority": 1
     },
     {
@@ -3291,6 +5915,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2602.20610v3",
       "thumbnail_url": "/paper-thumbnails/2602.20610v3.webp",
+      "image_id": "/images/ACL_2026/2602.20610v3.png",
+      "keywords": [
+        "postcondition inference",
+        "large language models",
+        "multi-turn prompting",
+        "feedback-driven refinement",
+        "program specifications"
+      ],
+      "subjects": [
+        "program specifications",
+        "postcondition inference",
+        "multi-turn prompting",
+        "large language models",
+        "feedback-driven refinement"
+      ],
       "priority": 1
     },
     {
@@ -3311,6 +5950,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.23359v1",
       "thumbnail_url": "/paper-thumbnails/2602.23359v1.webp",
+      "image_id": "/images/CVPR_2026/2602.23359v1.png",
+      "keywords": [
+        "occlusion-aware 3D scene representation",
+        "3D layout conditioning",
+        "text-to-image generation",
+        "flow-based model",
+        "masked self-attention"
+      ],
+      "subjects": [
+        "text-to-image generation",
+        "occlusion-aware 3D scene representation",
+        "masked self-attention",
+        "flow-based model",
+        "3D layout conditioning"
+      ],
       "priority": 1
     },
     {
@@ -3332,6 +5986,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.15312v1",
       "thumbnail_url": "/paper-thumbnails/2604.15312v1.webp",
+      "image_id": "/images/CVPR_2026/2604.15312v1.png",
+      "keywords": [
+        "event-frame stereo",
+        "cross-modal prompting",
+        "stereo matching",
+        "event cameras",
+        "disparity estimation"
+      ],
+      "subjects": [
+        "stereo matching",
+        "event cameras",
+        "event-frame stereo",
+        "disparity estimation",
+        "cross-modal prompting"
+      ],
       "priority": 1
     },
     {
@@ -3354,6 +6023,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2602.06221v2",
       "thumbnail_url": "/paper-thumbnails/2602.06221v2.webp",
+      "image_id": "/images/ACL_2026/2602.06221v2.png",
+      "keywords": [
+        "multiple-choice question answering",
+        "benchmark evaluation",
+        "LLM judges",
+        "flaw detection",
+        "education rubric"
+      ],
+      "subjects": [
+        "multiple-choice question answering",
+        "LLM judges",
+        "flaw detection",
+        "education rubric",
+        "benchmark evaluation"
+      ],
       "priority": 1
     },
     {
@@ -3372,6 +6056,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.17052v1",
       "thumbnail_url": "/paper-thumbnails/2604.17052v1.webp",
+      "image_id": "/images/CVPR_2026/2604.17052v1.png",
+      "keywords": [
+        "streaming video reasoning",
+        "hierarchical event memory",
+        "on-demand retrieval",
+        "training-free",
+        "multi-modal large language models"
+      ],
+      "subjects": [
+        "training-free",
+        "streaming video reasoning",
+        "on-demand retrieval",
+        "multi-modal large language models",
+        "hierarchical event memory"
+      ],
       "priority": 1
     },
     {
@@ -3392,6 +6091,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.08075v1",
       "thumbnail_url": "/paper-thumbnails/2603.08075v1.webp",
+      "image_id": "/images/CVPR_2026/2603.08075v1.png",
+      "keywords": [
+        "on-the-fly category discovery",
+        "test-time adaptation",
+        "prototype update",
+        "category discovery",
+        "online learning"
+      ],
+      "subjects": [
+        "test-time adaptation",
+        "prototype update",
+        "online learning",
+        "on-the-fly category discovery",
+        "category discovery"
+      ],
       "priority": 1
     },
     {
@@ -3413,6 +6127,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.20981v3",
       "thumbnail_url": "/paper-thumbnails/2602.20981v3.webp",
+      "image_id": "/images/CVPR_2026/2602.20981v3.png",
+      "keywords": [
+        "video-to-audio generation",
+        "length generalization",
+        "Mamba",
+        "flow matching",
+        "multimodal alignment"
+      ],
+      "subjects": [
+        "video-to-audio generation",
+        "multimodal alignment",
+        "Mamba",
+        "length generalization",
+        "flow matching"
+      ],
       "priority": 1
     },
     {
@@ -3431,6 +6160,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.24984v2",
       "thumbnail_url": "/paper-thumbnails/2603.24984v2.webp",
+      "image_id": "/images/CVPR_2026/2603.24984v2.png",
+      "keywords": [
+        "Mixture-of-Experts",
+        "vision-language models",
+        "Reinforcement Learning",
+        "GRPO",
+        "Expert Routing"
+      ],
+      "subjects": [
+        "vision-language models",
+        "reinforcement learning",
+        "Mixture-of-Experts",
+        "GRPO",
+        "expert routing"
+      ],
       "priority": 1
     },
     {
@@ -3444,6 +6188,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.14726v1",
       "thumbnail_url": "/paper-thumbnails/2603.14726v1.webp",
+      "image_id": "/images/CVPR_2026/2603.14726v1.png",
+      "keywords": [
+        "3D whole-body pose estimation",
+        "hand pose estimation",
+        "conditional modulation",
+        "hand-body coordination",
+        "parametric models"
+      ],
+      "subjects": [
+        "parametric models",
+        "hand pose estimation",
+        "hand-body coordination",
+        "conditional modulation",
+        "3D whole-body pose estimation"
+      ],
       "priority": 1
     },
     {
@@ -3459,6 +6218,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2603.12021v2",
       "thumbnail_url": "/paper-thumbnails/2603.12021v2.webp",
+      "image_id": "/images/ACL_2026/2603.12021v2.png",
+      "keywords": [
+        "label projection",
+        "cross-lingual transfer",
+        "machine translation",
+        "XML tagging",
+        "multilingual NLP"
+      ],
+      "subjects": [
+        "XML tagging",
+        "multilingual NLP",
+        "machine translation",
+        "label projection",
+        "cross-lingual transfer"
+      ],
       "priority": 1
     },
     {
@@ -3478,6 +6252,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.10598v2",
       "thumbnail_url": "/paper-thumbnails/2603.10598v2.webp",
+      "image_id": "/images/CVPR_2026/2603.10598v2.png",
+      "keywords": [
+        "synthetic image detection",
+        "latent transition discrepancy",
+        "generalization",
+        "CLIP",
+        "ViT"
+      ],
+      "subjects": [
+        "ViT",
+        "synthetic image detection",
+        "latent transition discrepancy",
+        "generalization",
+        "CLIP"
+      ],
       "priority": 1
     },
     {
@@ -3493,6 +6282,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2601.00759v2",
       "thumbnail_url": "/paper-thumbnails/2601.00759v2.webp",
+      "image_id": "/images/CVPR_2026/2601.00759v2.png",
+      "keywords": [
+        "structured shape completion",
+        "primitive proxies",
+        "unified representation",
+        "point cloud",
+        "assembly-ready reconstruction"
+      ],
+      "subjects": [
+        "unified representation",
+        "structured shape completion",
+        "primitive proxies",
+        "point cloud",
+        "assembly-ready reconstruction"
+      ],
       "priority": 1
     },
     {
@@ -3518,6 +6322,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.13741v1",
       "thumbnail_url": "/paper-thumbnails/2603.13741v1.webp",
+      "image_id": "/images/CVPR_2026/2603.13741v1.jpg",
+      "keywords": [
+        "egocentric vision",
+        "multiview video",
+        "3D video synthesis",
+        "dynamic scene reconstruction",
+        "dataset"
+      ],
+      "subjects": [
+        "multiview video",
+        "egocentric vision",
+        "dynamic scene reconstruction",
+        "dataset",
+        "3D video synthesis"
+      ],
       "priority": 1
     },
     {
@@ -3535,6 +6354,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.19340v1",
       "thumbnail_url": "/paper-thumbnails/2605.19340v1.webp",
+      "image_id": "/images/CVPR_2026/2605.19340v1.png",
+      "keywords": [
+        "cross-domain few-shot segmentation",
+        "vision foundation models",
+        "test-time adaptation",
+        "hierarchical layer selection",
+        "regularization"
+      ],
+      "subjects": [
+        "vision foundation models",
+        "test-time adaptation",
+        "regularization",
+        "hierarchical layer selection",
+        "cross-domain few-shot segmentation"
+      ],
       "priority": 1
     },
     {
@@ -3552,6 +6386,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.22212v2",
       "thumbnail_url": "/paper-thumbnails/2602.22212v2.webp",
+      "image_id": "/images/CVPR_2026/2602.22212v2.jpg",
+      "keywords": [
+        "dynamic surface reconstruction",
+        "preconditioned latent grid",
+        "Sobolev preconditioning",
+        "point cloud sequences",
+        "deformation optimization"
+      ],
+      "subjects": [
+        "Sobolev preconditioning",
+        "preconditioned latent grid",
+        "point cloud sequences",
+        "dynamic surface reconstruction",
+        "deformation optimization"
+      ],
       "priority": 1
     },
     {
@@ -3574,6 +6423,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.19232v1",
       "thumbnail_url": "/paper-thumbnails/2603.19232v1.webp",
+      "image_id": "/images/CVPR_2026/2603.19232v1.png",
+      "keywords": [
+        "discrete diffusion",
+        "high-dimensional visual tokens",
+        "mask modeling",
+        "visual generation",
+        "ImageNet generation"
+      ],
+      "subjects": [
+        "visual generation",
+        "mask modeling",
+        "ImageNet generation",
+        "high-dimensional visual tokens",
+        "discrete diffusion"
+      ],
       "priority": 1
     },
     {
@@ -3595,6 +6459,21 @@
       "venue": "IJCAI",
       "pdf_url": "https://arxiv.org/pdf/2606.08484v1",
       "thumbnail_url": "/paper-thumbnails/2606.08484v1.webp",
+      "image_id": "/images/IJCAI_2026/2606.08484v1.png",
+      "keywords": [
+        "spatio-temporal modeling",
+        "species distribution modeling",
+        "long-tail imbalance",
+        "graph neural networks",
+        "latent alignment"
+      ],
+      "subjects": [
+        "species distribution modeling",
+        "spatio-temporal modeling",
+        "long-tail imbalance",
+        "latent alignment",
+        "graph neural networks"
+      ],
       "priority": 1
     },
     {
@@ -3612,6 +6491,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.18260v1",
       "thumbnail_url": "/paper-thumbnails/2604.18260v1.webp",
+      "image_id": "/images/CVPR_2026/2604.18260v1.png",
+      "keywords": [
+        "geometry-guided pruning",
+        "visual token pruning",
+        "video-language models",
+        "3D scene understanding",
+        "spatial videos"
+      ],
+      "subjects": [
+        "visual token pruning",
+        "video-language models",
+        "spatial videos",
+        "geometry-guided pruning",
+        "3D scene understanding"
+      ],
       "priority": 1
     },
     {
@@ -3632,6 +6526,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.21071v2",
       "thumbnail_url": "/paper-thumbnails/2603.21071v2.webp",
+      "image_id": "/images/CVPR_2026/2603.21071v2.png",
+      "keywords": [
+        "semi-supervised semantic segmentation",
+        "forward-looking sonar",
+        "teacher-student framework",
+        "pseudo-label reliability",
+        "limited labels"
+      ],
+      "subjects": [
+        "teacher-student framework",
+        "semi-supervised semantic segmentation",
+        "pseudo-label reliability",
+        "limited labels",
+        "forward-looking sonar"
+      ],
       "priority": 1
     },
     {
@@ -3651,6 +6560,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.04348v1",
       "thumbnail_url": "/paper-thumbnails/2604.04348v1.webp",
+      "image_id": "/images/CVPR_2026/2604.04348v1.png",
+      "keywords": [
+        "audio generation",
+        "video-to-audio",
+        "text-to-audio",
+        "flow matching",
+        "diffusion model"
+      ],
+      "subjects": [
+        "video-to-audio",
+        "Text-to-Audio",
+        "flow matching",
+        "diffusion model",
+        "audio generation"
+      ],
       "priority": 1
     },
     {
@@ -3665,6 +6589,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.23126v1",
       "thumbnail_url": "/paper-thumbnails/2603.23126v1.webp",
+      "image_id": "/images/CVPR_2026/2603.23126v1.png",
+      "keywords": [
+        "Audio-based Referring Video Object Segmentation",
+        "ASR",
+        "Existence-aware gating",
+        "Video Object Segmentation",
+        "vision-language"
+      ],
+      "subjects": [
+        "Vision-Language",
+        "video object segmentation",
+        "Existence-aware gating",
+        "Audio-based Referring Video Object Segmentation",
+        "ASR"
+      ],
       "priority": 1
     },
     {
@@ -3679,6 +6618,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.20878v1",
       "thumbnail_url": "/paper-thumbnails/2604.20878v1.webp",
+      "image_id": "/images/CVPR_2026/2604.20878v1.png",
+      "keywords": [
+        "Traffic Accident Responsibility Allocation",
+        "Multimodal Large Language Models",
+        "Multimodal Chain-of-Thought",
+        "Retrieval-Augmented Generation",
+        "Traffic Accident Understanding"
+      ],
+      "subjects": [
+        "Traffic Accident Understanding",
+        "Traffic Accident Responsibility Allocation",
+        "retrieval-augmented generation",
+        "multimodal large language models",
+        "multimodal chain-of-thought"
+      ],
       "priority": 1
     },
     {
@@ -3696,6 +6650,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.26820v1",
       "thumbnail_url": "/paper-thumbnails/2604.26820v1.webp",
+      "image_id": "/images/CVPR_2026/2604.26820v1.png",
+      "keywords": [
+        "domain generalization",
+        "causal inference",
+        "vision foundation models",
+        "object detection",
+        "spurious correlations"
+      ],
+      "subjects": [
+        "vision foundation models",
+        "spurious correlations",
+        "object detection",
+        "domain generalization",
+        "causal inference"
+      ],
       "priority": 1
     },
     {
@@ -3715,6 +6684,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.16045v1",
       "thumbnail_url": "/paper-thumbnails/2605.16045v1.webp",
+      "image_id": "/images/ACL_2026/2605.16045v1.png",
+      "keywords": [
+        "memory consolidation",
+        "LLM agents",
+        "recurrence-based retrieval",
+        "token efficiency",
+        "long-running dialogue"
+      ],
+      "subjects": [
+        "token efficiency",
+        "recurrence-based retrieval",
+        "memory consolidation",
+        "long-running dialogue",
+        "LLM agents"
+      ],
       "priority": 1
     },
     {
@@ -3730,6 +6714,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.03615v2",
       "thumbnail_url": "/paper-thumbnails/2601.03615v2.webp",
+      "image_id": "/images/ACL_2026/2601.03615v2.png",
+      "keywords": [
+        "audio deepfake detection",
+        "audio language models",
+        "reasoning evaluation",
+        "adversarial attacks",
+        "reasoning-verdict coherence"
+      ],
+      "subjects": [
+        "reasoning evaluation",
+        "reasoning-verdict coherence",
+        "audio language models",
+        "audio deepfake detection",
+        "adversarial attacks"
+      ],
       "priority": 1
     },
     {
@@ -3750,6 +6749,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.19033v1",
       "thumbnail_url": "/paper-thumbnails/2605.19033v1.webp",
+      "image_id": "/images/CVPR_2026/2605.19033v1.png",
+      "keywords": [
+        "traffic simulation",
+        "reinforcement learning fine-tuning",
+        "multi-agent interaction",
+        "realism alignment",
+        "goal-conditioned controllability"
+      ],
+      "subjects": [
+        "traffic simulation",
+        "reinforcement learning fine-tuning",
+        "realism alignment",
+        "multi-agent interaction",
+        "goal-conditioned controllability"
+      ],
       "priority": 1
     },
     {
@@ -3772,6 +6786,21 @@
       "venue": "INFOCOM",
       "pdf_url": "https://arxiv.org/pdf/2601.22044v1",
       "thumbnail_url": "/paper-thumbnails/2601.22044v1.webp",
+      "image_id": "/images/INFOCOM_2026/2601.22044v1.png",
+      "keywords": [
+        "interpretable reinforcement learning",
+        "forecast-augmented DRL",
+        "network control",
+        "knowledge graphs",
+        "explainable artificial intelligence"
+      ],
+      "subjects": [
+        "network control",
+        "knowledge graphs",
+        "interpretable reinforcement learning",
+        "forecast-augmented DRL",
+        "explainable artificial intelligence"
+      ],
       "priority": 1
     },
     {
@@ -3786,6 +6815,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.03448v2",
       "thumbnail_url": "/paper-thumbnails/2601.03448v2.webp",
+      "image_id": "/images/ACL_2026/2601.03448v2.png",
+      "keywords": [
+        "pre-training",
+        "language learning tasks",
+        "linguistic competence",
+        "language models",
+        "next-token prediction"
+      ],
+      "subjects": [
+        "pre-training",
+        "next-token prediction",
+        "linguistic competence",
+        "language models",
+        "language learning tasks"
+      ],
       "priority": 1
     },
     {
@@ -3802,6 +6846,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.22832v1",
       "thumbnail_url": "/paper-thumbnails/2604.22832v1.webp",
+      "image_id": "/images/CVPR_2026/2604.22832v1.png",
+      "keywords": [
+        "intervention-aware distillation",
+        "transcriptomics-guided representation learning",
+        "cell painting",
+        "drug discovery",
+        "multimodal learning"
+      ],
+      "subjects": [
+        "transcriptomics-guided representation learning",
+        "multimodal learning",
+        "intervention-aware distillation",
+        "drug discovery",
+        "cell painting"
+      ],
       "priority": 1
     },
     {
@@ -3822,6 +6881,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.25411v1",
       "thumbnail_url": "/paper-thumbnails/2603.25411v1.webp",
+      "image_id": "/images/CVPR_2026/2603.25411v1.png",
+      "keywords": [
+        "3D spatial understanding",
+        "vision-language models",
+        "hierarchical framework",
+        "spatial reasoning",
+        "metric-scale point maps"
+      ],
+      "subjects": [
+        "vision-language models",
+        "spatial reasoning",
+        "metric-scale point maps",
+        "hierarchical framework",
+        "3D spatial understanding"
+      ],
       "priority": 1
     },
     {
@@ -3844,6 +6918,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2606.00294v1",
       "thumbnail_url": "/paper-thumbnails/2606.00294v1.webp",
+      "image_id": "/images/ACL_2026/2606.00294v1.png",
+      "keywords": [
+        "temporal framing",
+        "news discourse",
+        "multilingual corpus",
+        "frame detection",
+        "taxonomy"
+      ],
+      "subjects": [
+        "temporal framing",
+        "taxonomy",
+        "news discourse",
+        "multilingual corpus",
+        "frame detection"
+      ],
       "priority": 1
     },
     {
@@ -3862,6 +6951,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.16873v1",
       "thumbnail_url": "/paper-thumbnails/2605.16873v1.webp",
+      "image_id": "/images/CVPR_2026/2605.16873v1.png",
+      "keywords": [
+        "3D reconstruction",
+        "diffusion priors",
+        "hallucination",
+        "novel view synthesis",
+        "3D Gaussian Splatting"
+      ],
+      "subjects": [
+        "novel view synthesis",
+        "hallucination",
+        "diffusion priors",
+        "3D reconstruction",
+        "3D Gaussian Splatting"
+      ],
       "priority": 1
     },
     {
@@ -3875,6 +6979,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.25767v1",
       "thumbnail_url": "/paper-thumbnails/2603.25767v1.webp",
+      "image_id": "/images/CVPR_2026/2603.25767v1.png",
+      "keywords": [
+        "audio pre-training",
+        "strong supervision",
+        "unified tag system",
+        "data-centric pipeline",
+        "captioning"
+      ],
+      "subjects": [
+        "unified tag system",
+        "strong supervision",
+        "data-centric pipeline",
+        "captioning",
+        "audio pre-training"
+      ],
       "priority": 1
     },
     {
@@ -3890,6 +7009,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2607.26191v1",
       "thumbnail_url": "/paper-thumbnails/2607.26191v1.webp",
+      "image_id": "/images/ACL_2026/2607.26191v1.png",
+      "keywords": [
+        "trust inflation",
+        "evaluation score metadata",
+        "weakest-link aggregation",
+        "formality tiers",
+        "validity windows"
+      ],
+      "subjects": [
+        "weakest-link aggregation",
+        "validity windows",
+        "trust inflation",
+        "formality tiers",
+        "evaluation score metadata"
+      ],
       "priority": 1
     },
     {
@@ -3912,6 +7046,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.06932v1",
       "thumbnail_url": "/paper-thumbnails/2603.06932v1.webp",
+      "image_id": "/images/CVPR_2026/2603.06932v1.png",
+      "keywords": [
+        "dataset distillation",
+        "hierarchical semantics",
+        "visual autoregressive model",
+        "coarse-to-fine amplification",
+        "generative model"
+      ],
+      "subjects": [
+        "visual autoregressive model",
+        "hierarchical semantics",
+        "generative model",
+        "dataset distillation",
+        "coarse-to-fine amplification"
+      ],
       "priority": 1
     },
     {
@@ -3925,6 +7074,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.01848v1",
       "thumbnail_url": "/paper-thumbnails/2605.01848v1.webp",
+      "image_id": "/images/CVPR_2026/2605.01848v1.png",
+      "keywords": [
+        "ulcerative colitis",
+        "latent diffusion",
+        "disease progression synthesis",
+        "disentangled representation",
+        "Mayo Endoscopic Score"
+      ],
+      "subjects": [
+        "ulcerative colitis",
+        "Mayo Endoscopic Score",
+        "latent diffusion",
+        "disentangled representation",
+        "disease progression synthesis"
+      ],
       "priority": 1
     },
     {
@@ -3941,6 +7105,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.24078v1",
       "thumbnail_url": "/paper-thumbnails/2603.24078v1.webp",
+      "image_id": "/images/CVPR_2026/2603.24078v1.png",
+      "keywords": [
+        "poster understanding",
+        "poster generation",
+        "design benchmark",
+        "multimodal LLMs",
+        "diffusion models"
+      ],
+      "subjects": [
+        "poster understanding",
+        "poster generation",
+        "multimodal LLMs",
+        "diffusion models",
+        "design benchmark"
+      ],
       "priority": 1
     },
     {
@@ -3960,6 +7139,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.19945v1",
       "thumbnail_url": "/paper-thumbnails/2604.19945v1.webp",
+      "image_id": "/images/CVPR_2026/2604.19945v1.png",
+      "keywords": [
+        "tool-supervised reinforcement learning",
+        "visual reasoning",
+        "multimodal large language models",
+        "tool use",
+        "curriculum learning"
+      ],
+      "subjects": [
+        "visual reasoning",
+        "tool use",
+        "tool-supervised reinforcement learning",
+        "multimodal large language models",
+        "curriculum learning"
+      ],
       "priority": 1
     },
     {
@@ -3975,6 +7169,21 @@
       "venue": "IJCAI",
       "pdf_url": "https://arxiv.org/pdf/2605.15916v1",
       "thumbnail_url": "/paper-thumbnails/2605.15916v1.webp",
+      "image_id": "/images/IJCAI_2026/2605.15916v1.png",
+      "keywords": [
+        "parameter-efficient fine-tuning",
+        "orthogonal transformations",
+        "low-rank skew-symmetric matrices",
+        "compositional rotations",
+        "foundation models"
+      ],
+      "subjects": [
+        "parameter-efficient fine-tuning",
+        "orthogonal transformations",
+        "low-rank skew-symmetric matrices",
+        "foundation models",
+        "compositional rotations"
+      ],
       "priority": 1
     },
     {
@@ -3991,6 +7200,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2606.19901v1",
       "thumbnail_url": "/paper-thumbnails/2606.19901v1.webp",
+      "image_id": "/images/CVPR_2026/2606.19901v1.png",
+      "keywords": [
+        "single-image super-resolution",
+        "linear recurrent unit",
+        "semantic modulation",
+        "state-space models",
+        "efficient image restoration"
+      ],
+      "subjects": [
+        "state-space models",
+        "single-image super-resolution",
+        "semantic modulation",
+        "linear recurrent unit",
+        "efficient image restoration"
+      ],
       "priority": 1
     },
     {
@@ -4011,6 +7235,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.02989v2",
       "thumbnail_url": "/paper-thumbnails/2601.02989v2.webp",
+      "image_id": "/images/ACL_2026/2601.02989v2.png",
+      "keywords": [
+        "mechanistic interpretability",
+        "counting",
+        "System-2",
+        "test-time strategy",
+        "large language models"
+      ],
+      "subjects": [
+        "test-time strategy",
+        "System-2",
+        "mechanistic interpretability",
+        "large language models",
+        "counting"
+      ],
       "priority": 1
     },
     {
@@ -4027,6 +7266,17 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.27445v1",
       "thumbnail_url": "/paper-thumbnails/2604.27445v1.webp",
+      "image_id": "/images/CVPR_2026/2604.27445v1.png",
+      "keywords": [
+        "intent inference",
+        "multimodal fusion",
+        "context prior"
+      ],
+      "subjects": [
+        "multimodal fusion",
+        "intent inference",
+        "context prior"
+      ],
       "priority": 1
     },
     {
@@ -4041,6 +7291,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.06647v2",
       "thumbnail_url": "/paper-thumbnails/2604.06647v2.webp",
+      "image_id": "/images/ACL_2026/2604.06647v2.png",
+      "keywords": [
+        "feedback adaptation",
+        "retrieval-augmented generation",
+        "correction lag",
+        "post-feedback performance",
+        "inference-time adaptation"
+      ],
+      "subjects": [
+        "retrieval-augmented generation",
+        "post-feedback performance",
+        "inference-time adaptation",
+        "feedback adaptation",
+        "correction lag"
+      ],
       "priority": 1
     },
     {
@@ -4059,6 +7324,19 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.13938v1",
       "thumbnail_url": "/paper-thumbnails/2601.13938v1.webp",
+      "image_id": "/images/ACL_2026/2601.13938v1.png",
+      "keywords": [
+        "Generative Engine Optimization",
+        "multi-query optimization",
+        "conflict-aware instruction fusion",
+        "risk-aware stability metrics"
+      ],
+      "subjects": [
+        "risk-aware stability metrics",
+        "multi-query optimization",
+        "Generative Engine Optimization",
+        "conflict-aware instruction fusion"
+      ],
       "priority": 1
     },
     {
@@ -4081,6 +7359,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.01194v1",
       "thumbnail_url": "/paper-thumbnails/2603.01194v1.webp",
+      "image_id": "/images/CVPR_2026/2603.01194v1.png",
+      "keywords": [
+        "3D reconstruction",
+        "novel view synthesis",
+        "feed-forward Transformer",
+        "implicit 3D representation",
+        "partial observations"
+      ],
+      "subjects": [
+        "partial observations",
+        "novel view synthesis",
+        "implicit 3D representation",
+        "feed-forward transformer",
+        "3D reconstruction"
+      ],
       "priority": 1
     },
     {
@@ -4099,6 +7392,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.09922v1",
       "thumbnail_url": "/paper-thumbnails/2605.09922v1.webp",
+      "image_id": "/images/ACL_2026/2605.09922v1.png",
+      "keywords": [
+        "self-play",
+        "LLM alignment",
+        "adaptive weighting",
+        "team-based training",
+        "self-supervised fine-tuning"
+      ],
+      "subjects": [
+        "team-based training",
+        "self-supervised fine-tuning",
+        "self-play",
+        "LLM alignment",
+        "adaptive weighting"
+      ],
       "priority": 1
     },
     {
@@ -4118,6 +7426,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.20618v1",
       "thumbnail_url": "/paper-thumbnails/2602.20618v1.webp",
+      "image_id": "/images/CVPR_2026/2602.20618v1.png",
+      "keywords": [
+        "watermarking",
+        "face manipulation localization",
+        "content recovery",
+        "ownership verification",
+        "robustness"
+      ],
+      "subjects": [
+        "watermarking",
+        "robustness",
+        "ownership verification",
+        "face manipulation localization",
+        "content recovery"
+      ],
       "priority": 1
     },
     {
@@ -4134,6 +7457,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.17020v1",
       "thumbnail_url": "/paper-thumbnails/2604.17020v1.webp",
+      "image_id": "/images/ACL_2026/2604.17020v1.png",
+      "keywords": [
+        "large language model",
+        "Persona-based",
+        "web-scale",
+        "pre-training",
+        "persona-guided"
+      ],
+      "subjects": [
+        "web-scale",
+        "pre-training",
+        "persona-guided",
+        "Persona-based",
+        "large language model"
+      ],
       "priority": 1
     },
     {
@@ -4151,6 +7489,21 @@
       "venue": "IJCAI",
       "pdf_url": "https://arxiv.org/pdf/2605.07859v1",
       "thumbnail_url": "/paper-thumbnails/2605.07859v1.webp",
+      "image_id": "/images/IJCAI_2026/2605.07859v1.png",
+      "keywords": [
+        "cognitive distraction detection",
+        "egocentric video understanding",
+        "eye gaze",
+        "driver monitoring",
+        "CogDrive dataset"
+      ],
+      "subjects": [
+        "eye gaze",
+        "egocentric video understanding",
+        "driver monitoring",
+        "cognitive distraction detection",
+        "CogDrive dataset"
+      ],
       "priority": 1
     },
     {
@@ -4177,6 +7530,24 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.00589v2",
       "thumbnail_url": "/paper-thumbnails/2603.00589v2.webp",
+      "image_id": "/images/CVPR_2026/2603.00589v2.png",
+      "keywords": [
+        "visual autoregression",
+        "image super-resolution",
+        "global consistency",
+        "spatial consistency",
+        "hierarchical consistency"
+      ],
+      "subjects": [
+        "visual autoregression",
+        "spatial consistency",
+        "gan",
+        "images",
+        "pixel",
+        "super",
+        "loss",
+        "textural"
+      ],
       "priority": 1
     },
     {
@@ -4196,6 +7567,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.15923v1",
       "thumbnail_url": "/paper-thumbnails/2604.15923v1.webp",
+      "image_id": "/images/CVPR_2026/2604.15923v1.png",
+      "keywords": [
+        "Video-to-Speech",
+        "Hierarchical Diffusion",
+        "Residual Vector Quantization",
+        "Audio-Visual Alignment",
+        "Speech Token Generation"
+      ],
+      "subjects": [
+        "Video-to-Speech",
+        "Speech Token Generation",
+        "residual vector quantization",
+        "Hierarchical Diffusion",
+        "Audio-Visual Alignment"
+      ],
       "priority": 1
     },
     {
@@ -4211,6 +7597,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.09313v2",
       "thumbnail_url": "/paper-thumbnails/2601.09313v2.webp",
+      "image_id": "/images/ACL_2026/2601.09313v2.png",
+      "keywords": [
+        "German definite articles",
+        "grammatical gender",
+        "case syncretism",
+        "memorization vs generalization",
+        "gradient-based interpretability"
+      ],
+      "subjects": [
+        "memorization vs generalization",
+        "grammatical gender",
+        "gradient-based interpretability",
+        "German definite articles",
+        "case syncretism"
+      ],
       "priority": 1
     },
     {
@@ -4228,6 +7629,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.11566v2",
       "thumbnail_url": "/paper-thumbnails/2603.11566v2.webp",
+      "image_id": "/images/CVPR_2026/2603.11566v2.png",
+      "keywords": [
+        "4D radar",
+        "camera fusion",
+        "3D object detection",
+        "autonomous driving",
+        "temporal fusion"
+      ],
+      "subjects": [
+        "temporal fusion",
+        "camera fusion",
+        "autonomous driving",
+        "4D radar",
+        "3D object detection"
+      ],
       "priority": 1
     },
     {
@@ -4241,6 +7657,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.04239v2",
       "thumbnail_url": "/paper-thumbnails/2603.04239v2.webp",
+      "image_id": "/images/CVPR_2026/2603.04239v2.png",
+      "keywords": [
+        "Diffusion Transformers",
+        "representation diversity",
+        "long residual connections",
+        "visual synthesis",
+        "representation learning"
+      ],
+      "subjects": [
+        "visual synthesis",
+        "representation learning",
+        "representation diversity",
+        "long residual connections",
+        "diffusion transformers"
+      ],
       "priority": 1
     },
     {
@@ -4259,6 +7690,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.21528v1",
       "thumbnail_url": "/paper-thumbnails/2603.21528v1.webp",
+      "image_id": "/images/CVPR_2026/2603.21528v1.png",
+      "keywords": [
+        "training-free open-vocabulary semantic segmentation",
+        "Procrustes alignment",
+        "text-aware Laplacian propagation",
+        "cross-modal geometry",
+        "CLIP"
+      ],
+      "subjects": [
+        "training-free open-vocabulary semantic segmentation",
+        "text-aware Laplacian propagation",
+        "Procrustes alignment",
+        "cross-modal geometry",
+        "CLIP"
+      ],
       "priority": 1
     },
     {
@@ -4277,6 +7723,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2601.21164v3",
       "thumbnail_url": "/paper-thumbnails/2601.21164v3.webp",
+      "image_id": "/images/CVPR_2026/2601.21164v3.png",
+      "keywords": [
+        "Plane Geometry Problem Solving",
+        "Multimodal LLM",
+        "Conditional Declaration Language",
+        "GRPO",
+        "Chain-of-Thought"
+      ],
+      "subjects": [
+        "Plane Geometry Problem Solving",
+        "multimodal LLM",
+        "GRPO",
+        "Conditional Declaration Language",
+        "chain-of-thought"
+      ],
       "priority": 1
     },
     {
@@ -4291,6 +7752,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2606.12628v1",
       "thumbnail_url": "/paper-thumbnails/2606.12628v1.webp",
+      "image_id": "/images/CVPR_2026/2606.12628v1.png",
+      "keywords": [
+        "context-aware feature fusion",
+        "co-occurring object detection",
+        "autonomous driving",
+        "attention mechanism",
+        "global context attention"
+      ],
+      "subjects": [
+        "global context attention",
+        "context-aware feature fusion",
+        "co-occurring object detection",
+        "autonomous driving",
+        "attention mechanism"
+      ],
       "priority": 1
     },
     {
@@ -4311,6 +7787,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.13684v2",
       "thumbnail_url": "/paper-thumbnails/2601.13684v2.webp",
+      "image_id": "/images/ACL_2026/2601.13684v2.png",
+      "keywords": [
+        "KV cache compression",
+        "long-context LLM inference",
+        "dynamic retrieval",
+        "attention head heterogeneity",
+        "training-free framework"
+      ],
+      "subjects": [
+        "training-free framework",
+        "long-context LLM inference",
+        "KV cache compression",
+        "dynamic retrieval",
+        "attention head heterogeneity"
+      ],
       "priority": 1
     },
     {
@@ -4330,6 +7821,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2606.04925v1",
       "thumbnail_url": "/paper-thumbnails/2606.04925v1.webp",
+      "image_id": "/images/CVPR_2026/2606.04925v1.jpg",
+      "keywords": [
+        "unsupervised video panoptic segmentation",
+        "pseudo-labeling",
+        "self-supervised learning",
+        "video segmentation"
+      ],
+      "subjects": [
+        "video segmentation",
+        "unsupervised video panoptic segmentation",
+        "self-supervised learning",
+        "pseudo-labeling"
+      ],
       "priority": 1
     },
     {
@@ -4348,6 +7852,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.23264v1",
       "thumbnail_url": "/paper-thumbnails/2604.23264v1.webp",
+      "image_id": "/images/CVPR_2026/2604.23264v1.png",
+      "keywords": [
+        "text-to-motion generation",
+        "hierarchical flow matching",
+        "flow matching",
+        "human motion generation",
+        "temporal scales"
+      ],
+      "subjects": [
+        "text-to-motion generation",
+        "temporal scales",
+        "human motion generation",
+        "hierarchical flow matching",
+        "flow matching"
+      ],
       "priority": 1
     },
     {
@@ -4364,6 +7883,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.17257v2",
       "thumbnail_url": "/paper-thumbnails/2604.17257v2.webp",
+      "image_id": "/images/ACL_2026/2604.17257v2.png",
+      "keywords": [
+        "text embedding",
+        "pre-finetuning",
+        "representation regularization",
+        "domain adaptation",
+        "task-induced bias"
+      ],
+      "subjects": [
+        "text embedding",
+        "task-induced bias",
+        "representation regularization",
+        "pre-finetuning",
+        "domain adaptation"
+      ],
       "priority": 1
     },
     {
@@ -4381,6 +7915,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2601.00204v3",
       "thumbnail_url": "/paper-thumbnails/2601.00204v3.webp",
+      "image_id": "/images/CVPR_2026/2601.00204v3.png",
+      "keywords": [
+        "3D morphing",
+        "Structured Latent",
+        "Temporal consistency",
+        "Training-free"
+      ],
+      "subjects": [
+        "training-free",
+        "temporal consistency",
+        "Structured Latent",
+        "3D morphing"
+      ],
       "priority": 1
     },
     {
@@ -4401,6 +7948,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.21625v1",
       "thumbnail_url": "/paper-thumbnails/2605.21625v1.webp",
+      "image_id": "/images/CVPR_2026/2605.21625v1.png",
+      "keywords": [
+        "spatio-temporal understanding",
+        "furniture assembly",
+        "large vision-language models",
+        "video benchmark",
+        "fine-grained video understanding"
+      ],
+      "subjects": [
+        "video benchmark",
+        "spatio-temporal understanding",
+        "large vision-language models",
+        "furniture assembly",
+        "fine-grained video understanding"
+      ],
       "priority": 1
     },
     {
@@ -4417,6 +7979,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2601.09111v2",
       "thumbnail_url": "/paper-thumbnails/2601.09111v2.webp",
+      "image_id": "/images/CVPR_2026/2601.09111v2.png",
+      "keywords": [
+        "Vision-Language Navigation",
+        "General Scene Adaptation",
+        "Fast-Slow Reasoning",
+        "Open World",
+        "Instruction Style Conversion"
+      ],
+      "subjects": [
+        "vision-language navigation",
+        "Open World",
+        "Instruction Style Conversion",
+        "General Scene Adaptation",
+        "Fast-Slow Reasoning"
+      ],
       "priority": 1
     },
     {
@@ -4433,6 +8010,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2602.07930v2",
       "thumbnail_url": "/paper-thumbnails/2602.07930v2.webp",
+      "image_id": "/images/ACL_2026/2602.07930v2.png",
+      "keywords": [
+        "mechanistic interpretability",
+        "instruction vectors",
+        "causal mediation",
+        "activation patching",
+        "large language models"
+      ],
+      "subjects": [
+        "mechanistic interpretability",
+        "large language models",
+        "instruction vectors",
+        "causal mediation",
+        "activation patching"
+      ],
       "priority": 1
     },
     {
@@ -4453,6 +8045,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.19112v3",
       "thumbnail_url": "/paper-thumbnails/2602.19112v3.webp",
+      "image_id": "/images/CVPR_2026/2602.19112v3.png",
+      "keywords": [
+        "shape matching",
+        "semantic correspondence",
+        "cross-category",
+        "coarse-to-fine",
+        "language guidance"
+      ],
+      "subjects": [
+        "shape matching",
+        "semantic correspondence",
+        "language guidance",
+        "cross-category",
+        "coarse-to-fine"
+      ],
       "priority": 1
     },
     {
@@ -4472,6 +8079,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.13969v2",
       "thumbnail_url": "/paper-thumbnails/2601.13969v2.webp",
+      "image_id": "/images/ACL_2026/2601.13969v2.png",
+      "keywords": [
+        "knowledge graph retrieval",
+        "adaptive retrieval",
+        "breadth-depth tradeoff",
+        "tool-using retriever",
+        "retrieval-augmented generation"
+      ],
+      "subjects": [
+        "tool-using retriever",
+        "retrieval-augmented generation",
+        "knowledge graph retrieval",
+        "breadth-depth tradeoff",
+        "adaptive retrieval"
+      ],
       "priority": 1
     },
     {
@@ -4491,6 +8113,19 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.05540v1",
       "thumbnail_url": "/paper-thumbnails/2604.05540v1.webp",
+      "image_id": "/images/ACL_2026/2604.05540v1.png",
+      "keywords": [
+        "knowledge editing",
+        "instruction tuning",
+        "retrieval-augmented generation",
+        "large language models"
+      ],
+      "subjects": [
+        "retrieval-augmented generation",
+        "large language models",
+        "knowledge editing",
+        "instruction tuning"
+      ],
       "priority": 1
     },
     {
@@ -4505,6 +8140,21 @@
       "venue": "IJCAI",
       "pdf_url": "https://arxiv.org/pdf/2605.08333v1",
       "thumbnail_url": "/paper-thumbnails/2605.08333v1.webp",
+      "image_id": "/images/IJCAI_2026/2605.08333v1.png",
+      "keywords": [
+        "Retrieval-Augmented Generation",
+        "Hyperparameter Optimization",
+        "Cyclic Dual-Sequential Optimization",
+        "RAG",
+        "Bayesian Optimization"
+      ],
+      "subjects": [
+        "retrieval-augmented generation",
+        "RAG",
+        "hyperparameter optimization",
+        "Cyclic Dual-Sequential Optimization",
+        "Bayesian optimization"
+      ],
       "priority": 1
     },
     {
@@ -4518,6 +8168,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.29475v2",
       "thumbnail_url": "/paper-thumbnails/2605.29475v2.webp",
+      "image_id": "/images/ACL_2026/2605.29475v2.png",
+      "keywords": [
+        "scientific hypothesis discovery",
+        "human-AI interaction",
+        "large language models",
+        "exploratory search",
+        "fine-grained refinement"
+      ],
+      "subjects": [
+        "scientific hypothesis discovery",
+        "large language models",
+        "human-AI interaction",
+        "fine-grained refinement",
+        "exploratory search"
+      ],
       "priority": 1
     },
     {
@@ -4536,6 +8201,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.08133v1",
       "thumbnail_url": "/paper-thumbnails/2604.08133v1.webp",
+      "image_id": "/images/ACL_2026/2604.08133v1.png",
+      "keywords": [
+        "Mixture-of-Experts",
+        "activation budget",
+        "efficient inference",
+        "budget allocation",
+        "sparse activation"
+      ],
+      "subjects": [
+        "sparse activation",
+        "Mixture-of-Experts",
+        "efficient inference",
+        "budget allocation",
+        "activation budget"
+      ],
       "priority": 1
     },
     {
@@ -4554,6 +8234,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.17187v1",
       "thumbnail_url": "/paper-thumbnails/2605.17187v1.webp",
+      "image_id": "/images/ACL_2026/2605.17187v1.jpg",
+      "keywords": [
+        "pluralistic moderation",
+        "social media",
+        "rule violation detection",
+        "multimodal benchmark",
+        "Reddit"
+      ],
+      "subjects": [
+        "social media",
+        "rule violation detection",
+        "Reddit",
+        "pluralistic moderation",
+        "multimodal benchmark"
+      ],
       "priority": 1
     },
     {
@@ -4572,6 +8267,19 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.19149v1",
       "thumbnail_url": "/paper-thumbnails/2604.19149v1.webp",
+      "image_id": "/images/ACL_2026/2604.19149v1.png",
+      "keywords": [
+        "Reasoning traces",
+        "Thinking LLMs",
+        "Quantitative reasoning",
+        "Activation steering"
+      ],
+      "subjects": [
+        "Thinking LLMs",
+        "Reasoning Traces",
+        "Quantitative reasoning",
+        "activation steering"
+      ],
       "priority": 1
     },
     {
@@ -4594,6 +8302,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.13690v2",
       "thumbnail_url": "/paper-thumbnails/2601.13690v2.webp",
+      "image_id": "/images/ACL_2026/2601.13690v2.png",
+      "keywords": [
+        "clinical diagnostic reasoning",
+        "reinforcement learning",
+        "large language models",
+        "clinical decision support",
+        "diagnostic inquiry"
+      ],
+      "subjects": [
+        "reinforcement learning",
+        "large language models",
+        "diagnostic inquiry",
+        "clinical diagnostic reasoning",
+        "clinical decision support"
+      ],
       "priority": 1
     },
     {
@@ -4611,6 +8334,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2607.07318v1",
       "thumbnail_url": "/paper-thumbnails/2607.07318v1.webp",
+      "image_id": "/images/ACL_2026/2607.07318v1.png",
+      "keywords": [
+        "advertisement compliance",
+        "video text rectification",
+        "curriculum reinforcement learning",
+        "group-relative experience extractor",
+        "semantic intent preservation"
+      ],
+      "subjects": [
+        "video text rectification",
+        "semantic intent preservation",
+        "group-relative experience extractor",
+        "curriculum reinforcement learning",
+        "advertisement compliance"
+      ],
       "priority": 1
     },
     {
@@ -4634,6 +8372,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.03065v3",
       "thumbnail_url": "/paper-thumbnails/2601.03065v3.webp",
+      "image_id": "/images/ACL_2026/2601.03065v3.png",
+      "keywords": [
+        "language-speech pre-training",
+        "contrastive learning",
+        "fine-grained style description",
+        "multi-granular representation",
+        "speech-text retrieval"
+      ],
+      "subjects": [
+        "speech-text retrieval",
+        "multi-granular representation",
+        "language-speech pre-training",
+        "fine-grained style description",
+        "contrastive learning"
+      ],
       "priority": 1
     },
     {
@@ -4647,6 +8400,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.21977v4",
       "thumbnail_url": "/paper-thumbnails/2602.21977v4.webp",
+      "image_id": "/images/CVPR_2026/2602.21977v4.png",
+      "keywords": [
+        "Backdoor attacks",
+        "Text-to-image diffusion models",
+        "Parameter-efficient fine-tuning",
+        "Model sharing security"
+      ],
+      "subjects": [
+        "text-to-image diffusion models",
+        "parameter-efficient fine-tuning",
+        "Model sharing security",
+        "backdoor attacks"
+      ],
       "priority": 1
     },
     {
@@ -4663,6 +8429,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.11156v1",
       "thumbnail_url": "/paper-thumbnails/2604.11156v1.webp",
+      "image_id": "/images/CVPR_2026/2604.11156v1.png",
+      "keywords": [
+        "remote photoplethysmography (rPPG)",
+        "video quality assessment",
+        "unsupervised training",
+        "dataset curation",
+        "multimodal large language model"
+      ],
+      "subjects": [
+        "video quality assessment",
+        "unsupervised training",
+        "remote photoplethysmography (rPPG)",
+        "multimodal large language model",
+        "dataset curation"
+      ],
       "priority": 1
     },
     {
@@ -4679,6 +8460,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.14749v1",
       "thumbnail_url": "/paper-thumbnails/2604.14749v1.webp",
+      "image_id": "/images/ACL_2026/2604.14749v1.png",
+      "keywords": [
+        "negative constraints",
+        "knowledge graph question answering",
+        "semantic parsing",
+        "logical form",
+        "schema-guided semantic matching"
+      ],
+      "subjects": [
+        "semantic parsing",
+        "schema-guided semantic matching",
+        "negative constraints",
+        "logical form",
+        "knowledge graph question answering"
+      ],
       "priority": 1
     },
     {
@@ -4698,6 +8494,21 @@
       "venue": "INFOCOM",
       "pdf_url": "https://arxiv.org/pdf/2602.12309v1",
       "thumbnail_url": "/paper-thumbnails/2602.12309v1.webp",
+      "image_id": "/images/INFOCOM_2026/2602.12309v1.png",
+      "keywords": [
+        "quantum teleportation",
+        "entanglement purification",
+        "punctured quantum error correction",
+        "logical error probability",
+        "CSS codes"
+      ],
+      "subjects": [
+        "quantum teleportation",
+        "punctured quantum error correction",
+        "logical error probability",
+        "entanglement purification",
+        "CSS codes"
+      ],
       "priority": 1
     },
     {
@@ -4716,6 +8527,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.20989v3",
       "thumbnail_url": "/paper-thumbnails/2602.20989v3.webp",
+      "image_id": "/images/CVPR_2026/2602.20989v3.png",
+      "keywords": [
+        "layered image decomposition",
+        "cycle-consistent tuning",
+        "diffusion models",
+        "LoRA adaptation",
+        "logo-object decomposition"
+      ],
+      "subjects": [
+        "LoRA adaptation",
+        "logo-object decomposition",
+        "layered image decomposition",
+        "diffusion models",
+        "cycle-consistent tuning"
+      ],
       "priority": 1
     },
     {
@@ -4733,6 +8559,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.09265v1",
       "thumbnail_url": "/paper-thumbnails/2604.09265v1.webp",
+      "image_id": "/images/ACL_2026/2604.09265v1.png",
+      "keywords": [
+        "ethical-emotional alignment",
+        "multi-turn dialogue",
+        "risk-aware framework",
+        "inference-time alignment",
+        "prosocial dialogue"
+      ],
+      "subjects": [
+        "risk-aware framework",
+        "prosocial dialogue",
+        "multi-turn dialogue",
+        "inference-time alignment",
+        "ethical-emotional alignment"
+      ],
       "priority": 1
     },
     {
@@ -4749,6 +8590,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.14031v1",
       "thumbnail_url": "/paper-thumbnails/2605.14031v1.webp",
+      "image_id": "/images/CVPR_2026/2605.14031v1.png",
+      "keywords": [
+        "masked autoencoders",
+        "bioacoustics",
+        "self-supervised learning",
+        "audio classification",
+        "iNatSounds"
+      ],
+      "subjects": [
+        "self-supervised learning",
+        "masked autoencoders",
+        "iNatSounds",
+        "bioacoustics",
+        "audio classification"
+      ],
       "priority": 1
     },
     {
@@ -4766,6 +8622,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.01760v2",
       "thumbnail_url": "/paper-thumbnails/2602.01760v2.webp",
+      "image_id": "/images/CVPR_2026/2602.01760v2.png",
+      "keywords": [
+        "single-image fusion",
+        "cross-spectral representation",
+        "diffusion models",
+        "knowledge fusion",
+        "image restoration"
+      ],
+      "subjects": [
+        "single-image fusion",
+        "knowledge fusion",
+        "image restoration",
+        "diffusion models",
+        "cross-spectral representation"
+      ],
       "priority": 1
     },
     {
@@ -4781,6 +8652,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2607.20473v1",
       "thumbnail_url": "/paper-thumbnails/2607.20473v1.webp",
+      "image_id": "/images/ACL_2026/2607.20473v1.png",
+      "keywords": [
+        "incomplete prompt jailbreak",
+        "LLM safety",
+        "sentence completion",
+        "refusal delay",
+        "neuron-level intervention"
+      ],
+      "subjects": [
+        "sentence completion",
+        "refusal delay",
+        "neuron-level intervention",
+        "LLM safety",
+        "incomplete prompt jailbreak"
+      ],
       "priority": 1
     },
     {
@@ -4796,6 +8682,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.00609v1",
       "thumbnail_url": "/paper-thumbnails/2603.00609v1.webp",
+      "image_id": "/images/CVPR_2026/2603.00609v1.png",
+      "keywords": [
+        "collaborative perception",
+        "heterogeneous agents",
+        "modality isolation",
+        "cross-modal alignment",
+        "feature-code-feature translation"
+      ],
+      "subjects": [
+        "modality isolation",
+        "heterogeneous agents",
+        "feature-code-feature translation",
+        "cross-modal alignment",
+        "collaborative perception"
+      ],
       "priority": 1
     },
     {
@@ -4815,6 +8716,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.03136v2",
       "thumbnail_url": "/paper-thumbnails/2601.03136v2.webp",
+      "image_id": "/images/ACL_2026/2601.03136v2.png",
+      "keywords": [
+        "vision-language-action models",
+        "dataset audit",
+        "linguistic diversity",
+        "instruction language",
+        "embodied AI"
+      ],
+      "subjects": [
+        "vision-language-action models",
+        "linguistic diversity",
+        "instruction language",
+        "Embodied AI",
+        "dataset audit"
+      ],
       "priority": 1
     },
     {
@@ -4831,6 +8747,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.07786v2",
       "thumbnail_url": "/paper-thumbnails/2604.07786v2.webp",
+      "image_id": "/images/CVPR_2026/2604.07786v2.png",
+      "keywords": [
+        "cross-modal emotion transfer",
+        "talking face generation",
+        "emotion editing",
+        "contrastive learning",
+        "pretrained encoders"
+      ],
+      "subjects": [
+        "talking face generation",
+        "pretrained encoders",
+        "emotion editing",
+        "cross-modal emotion transfer",
+        "contrastive learning"
+      ],
       "priority": 1
     },
     {
@@ -4848,6 +8779,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.13213v1",
       "thumbnail_url": "/paper-thumbnails/2605.13213v1.webp",
+      "image_id": "/images/CVPR_2026/2605.13213v1.png",
+      "keywords": [
+        "multi-modal multi-agent systems",
+        "adversarial attacks",
+        "hierarchical attack framework",
+        "perception",
+        "reasoning"
+      ],
+      "subjects": [
+        "reasoning",
+        "perception",
+        "multi-modal multi-agent systems",
+        "hierarchical attack framework",
+        "adversarial attacks"
+      ],
       "priority": 1
     },
     {
@@ -4871,6 +8817,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.10198v4",
       "thumbnail_url": "/paper-thumbnails/2601.10198v4.webp",
+      "image_id": "/images/ACL_2026/2601.10198v4.png",
+      "keywords": [
+        "LLM anthropomorphism",
+        "psychological patterns",
+        "role-playing language agents",
+        "normative confounding",
+        "dual-level checklists"
+      ],
+      "subjects": [
+        "role-playing language agents",
+        "psychological patterns",
+        "normative confounding",
+        "LLM anthropomorphism",
+        "dual-level checklists"
+      ],
       "priority": 1
     },
     {
@@ -4889,6 +8850,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.04018v1",
       "thumbnail_url": "/paper-thumbnails/2605.04018v1.webp",
+      "image_id": "/images/ACL_2026/2605.04018v1.png",
+      "keywords": [
+        "large language models",
+        "Reasoning-Intensive",
+        "multi-aspect",
+        "fine-tuning",
+        "single-passage"
+      ],
+      "subjects": [
+        "single-passage",
+        "reasoning-intensive",
+        "multi-aspect",
+        "large language models",
+        "fine-tuning"
+      ],
       "priority": 1
     },
     {
@@ -4912,6 +8888,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.24419v1",
       "thumbnail_url": "/paper-thumbnails/2604.24419v1.webp",
+      "image_id": "/images/CVPR_2026/2604.24419v1.png",
+      "keywords": [
+        "vehicle detection",
+        "CCTV",
+        "domain gap",
+        "urban traffic",
+        "dataset"
+      ],
+      "subjects": [
+        "vehicle detection",
+        "urban traffic",
+        "domain gap",
+        "dataset",
+        "CCTV"
+      ],
       "priority": 1
     },
     {
@@ -4933,6 +8924,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2601.19568v2",
       "thumbnail_url": "/paper-thumbnails/2601.19568v2.webp",
+      "image_id": "/images/ACL_2026/2601.19568v2.png",
+      "keywords": [
+        "code localization",
+        "parallel execution",
+        "adaptive search strategy",
+        "reinforcement learning",
+        "efficiency optimization"
+      ],
+      "subjects": [
+        "reinforcement learning",
+        "parallel execution",
+        "efficiency optimization",
+        "code localization",
+        "adaptive search strategy"
+      ],
       "priority": 1
     },
     {
@@ -4948,6 +8954,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.31596v1",
       "thumbnail_url": "/paper-thumbnails/2605.31596v1.webp",
+      "image_id": "/images/CVPR_2026/2605.31596v1.png",
+      "keywords": [
+        "out-of-distribution detection",
+        "inverse problems",
+        "diffusion models",
+        "KL divergence",
+        "CT reconstruction"
+      ],
+      "subjects": [
+        "out-of-distribution detection",
+        "KL divergence",
+        "inverse problems",
+        "diffusion models",
+        "CT reconstruction"
+      ],
       "priority": 1
     },
     {
@@ -4966,6 +8987,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.11106v1",
       "thumbnail_url": "/paper-thumbnails/2603.11106v1.webp",
+      "image_id": "/images/CVPR_2026/2603.11106v1.png",
+      "keywords": [
+        "Robot-Conditioned Normalizing Flow",
+        "Anomaly Detection",
+        "Robotic Manipulation",
+        "Out-of-Distribution Detection",
+        "Real-Time Monitoring"
+      ],
+      "subjects": [
+        "robotic manipulation",
+        "Robot-Conditioned Normalizing Flow",
+        "Real-Time Monitoring",
+        "out-of-distribution detection",
+        "anomaly detection"
+      ],
       "priority": 1
     },
     {
@@ -4983,6 +9019,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.04598v1",
       "thumbnail_url": "/paper-thumbnails/2603.04598v1.webp",
+      "image_id": "/images/CVPR_2026/2603.04598v1.png",
+      "keywords": [
+        "composed image retrieval",
+        "benchmark",
+        "explicit negatives",
+        "multi-image queries",
+        "paraphrase robustness"
+      ],
+      "subjects": [
+        "paraphrase robustness",
+        "multi-image queries",
+        "explicit negatives",
+        "composed image retrieval",
+        "benchmark"
+      ],
       "priority": 1
     },
     {
@@ -4998,6 +9049,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.07172v1",
       "thumbnail_url": "/paper-thumbnails/2605.07172v1.webp",
+      "image_id": "/images/ACL_2026/2605.07172v1.png",
+      "keywords": [
+        "topology-enhanced alignment",
+        "persistent homology",
+        "trajectory topology loss",
+        "preference optimization",
+        "large language models"
+      ],
+      "subjects": [
+        "trajectory topology loss",
+        "topology-enhanced alignment",
+        "preference optimization",
+        "persistent homology",
+        "large language models"
+      ],
       "priority": 1
     },
     {
@@ -5015,6 +9081,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.11605v1",
       "thumbnail_url": "/paper-thumbnails/2603.11605v1.webp",
+      "image_id": "/images/CVPR_2026/2603.11605v1.png",
+      "keywords": [
+        "text-to-motion generation",
+        "Labanotation",
+        "symbolic reasoning",
+        "large language models",
+        "motion representation"
+      ],
+      "subjects": [
+        "text-to-motion generation",
+        "symbolic reasoning",
+        "motion representation",
+        "large language models",
+        "Labanotation"
+      ],
       "priority": 1
     },
     {
@@ -5035,6 +9116,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.05721v1",
       "thumbnail_url": "/paper-thumbnails/2604.05721v1.webp",
+      "image_id": "/images/CVPR_2026/2604.05721v1.png",
+      "keywords": [
+        "3D Gaussian Splatting",
+        "point cloud",
+        "text-guided generation",
+        "multi-view diffusion",
+        "inpainting"
+      ],
+      "subjects": [
+        "text-guided generation",
+        "point cloud",
+        "multi-view diffusion",
+        "inpainting",
+        "3D Gaussian Splatting"
+      ],
       "priority": 1
     },
     {
@@ -5053,6 +9149,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.12988v1",
       "thumbnail_url": "/paper-thumbnails/2604.12988v1.webp",
+      "image_id": "/images/ACL_2026/2604.12988v1.png",
+      "keywords": [
+        "NL2SQL",
+        "evaluation metric",
+        "intent-centered",
+        "execution accuracy",
+        "LLM-based evaluation"
+      ],
+      "subjects": [
+        "NL2SQL",
+        "LLM-based evaluation",
+        "intent-centered",
+        "execution accuracy",
+        "evaluation metric"
+      ],
       "priority": 1
     },
     {
@@ -5068,6 +9179,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2605.13292v1",
       "thumbnail_url": "/paper-thumbnails/2605.13292v1.webp",
+      "image_id": "/images/ACL_2026/2605.13292v1.png",
+      "keywords": [
+        "multi-turn medical dialogue",
+        "Indic languages",
+        "dataset construction",
+        "parameter-efficient fine-tuning",
+        "large language models"
+      ],
+      "subjects": [
+        "parameter-efficient fine-tuning",
+        "multi-turn medical dialogue",
+        "large language models",
+        "Indic languages",
+        "dataset construction"
+      ],
       "priority": 1
     },
     {
@@ -5085,6 +9211,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2606.14740v1",
       "thumbnail_url": "/paper-thumbnails/2606.14740v1.webp",
+      "image_id": "/images/CVPR_2026/2606.14740v1.png",
+      "keywords": [
+        "vision-language models",
+        "explainable artificial intelligence",
+        "Vision-Language",
+        "cross-modal",
+        "Bag-of-Words"
+      ],
+      "subjects": [
+        "vision-language models",
+        "Vision-Language",
+        "explainable artificial intelligence",
+        "cross-modal",
+        "bag-of-words"
+      ],
       "priority": 1
     },
     {
@@ -5104,6 +9245,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.21655v2",
       "thumbnail_url": "/paper-thumbnails/2602.21655v2.webp",
+      "image_id": "/images/CVPR_2026/2602.21655v2.png",
+      "keywords": [
+        "image captioning",
+        "reinforcement learning",
+        "completeness",
+        "correctness",
+        "hallucination"
+      ],
+      "subjects": [
+        "reinforcement learning",
+        "image captioning",
+        "hallucination",
+        "correctness",
+        "completeness"
+      ],
       "priority": 1
     },
     {
@@ -5127,6 +9283,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.21929v1",
       "thumbnail_url": "/paper-thumbnails/2602.21929v1.webp",
+      "image_id": "/images/CVPR_2026/2602.21929v1.png",
+      "keywords": [
+        "scene-consistent video generation",
+        "camera-controlled generation",
+        "depth maps",
+        "autoregressive generation"
+      ],
+      "subjects": [
+        "scene-consistent video generation",
+        "depth maps",
+        "camera-controlled generation",
+        "autoregressive generation"
+      ],
       "priority": 1
     },
     {
@@ -5144,6 +9313,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.05514v1",
       "thumbnail_url": "/paper-thumbnails/2604.05514v1.webp",
+      "image_id": "/images/ACL_2026/2604.05514v1.png",
+      "keywords": [
+        "diagram code generation",
+        "reinforcement learning",
+        "visual interrogation",
+        "unified framework",
+        "LaTeX/Mermaid/PlantUML"
+      ],
+      "subjects": [
+        "visual interrogation",
+        "unified framework",
+        "reinforcement learning",
+        "LaTeX/Mermaid/PlantUML",
+        "diagram code generation"
+      ],
       "priority": 1
     },
     {
@@ -5159,6 +9343,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2605.31284v1",
       "thumbnail_url": "/paper-thumbnails/2605.31284v1.webp",
+      "image_id": "/images/CVPR_2026/2605.31284v1.png",
+      "keywords": [
+        "mitochondria instance segmentation",
+        "fluorescence microscopy",
+        "Segment Anything Model",
+        "synthetic data generation",
+        "domain adaptation"
+      ],
+      "subjects": [
+        "synthetic data generation",
+        "segment anything model",
+        "mitochondria instance segmentation",
+        "fluorescence microscopy",
+        "domain adaptation"
+      ],
       "priority": 1
     },
     {
@@ -5177,6 +9376,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.06665v2",
       "thumbnail_url": "/paper-thumbnails/2604.06665v2.webp",
+      "image_id": "/images/CVPR_2026/2604.06665v2.png",
+      "keywords": [
+        "video depth estimation",
+        "post-processing",
+        "geometric refinement",
+        "low-resolution",
+        "temporal consistency"
+      ],
+      "subjects": [
+        "video depth estimation",
+        "temporal consistency",
+        "post-processing",
+        "low-resolution",
+        "geometric refinement"
+      ],
       "priority": 1
     },
     {
@@ -5196,6 +9410,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2606.07526v1",
       "thumbnail_url": "/paper-thumbnails/2606.07526v1.webp",
+      "image_id": "/images/ACL_2026/2606.07526v1.png",
+      "keywords": [
+        "structure-aware low-rank adaptation",
+        "graph message passing",
+        "LLM recommendation",
+        "collaborative filtering",
+        "parameter-space injection"
+      ],
+      "subjects": [
+        "structure-aware low-rank adaptation",
+        "parameter-space injection",
+        "LLM recommendation",
+        "graph message passing",
+        "collaborative filtering"
+      ],
       "priority": 1
     },
     {
@@ -5209,6 +9438,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.25159v1",
       "thumbnail_url": "/paper-thumbnails/2603.25159v1.webp",
+      "image_id": "/images/CVPR_2026/2603.25159v1.png",
+      "keywords": [
+        "3D anomaly detection",
+        "semantic disentanglement",
+        "unified model",
+        "point cloud",
+        "contrastive learning"
+      ],
+      "subjects": [
+        "unified model",
+        "semantic disentanglement",
+        "point cloud",
+        "contrastive learning",
+        "3D anomaly detection"
+      ],
       "priority": 1
     },
     {
@@ -5232,6 +9476,19 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.01047v3",
       "thumbnail_url": "/paper-thumbnails/2602.01047v3.webp",
+      "image_id": "/images/CVPR_2026/2602.01047v3.png",
+      "keywords": [
+        "Hallucination Mitigation",
+        "Large Vision-Language Models",
+        "Language Priors",
+        "Visual Grounding"
+      ],
+      "subjects": [
+        "visual grounding",
+        "large vision-language models",
+        "language priors",
+        "hallucination mitigation"
+      ],
       "priority": 1
     },
     {
@@ -5247,6 +9504,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.15616v1",
       "thumbnail_url": "/paper-thumbnails/2603.15616v1.webp",
+      "image_id": "/images/CVPR_2026/2603.15616v1.png",
+      "keywords": [
+        "visual text rendering",
+        "glyph accuracy",
+        "direct preference optimization",
+        "region-level preference",
+        "text-to-image generation"
+      ],
+      "subjects": [
+        "visual text rendering",
+        "text-to-image generation",
+        "region-level preference",
+        "glyph accuracy",
+        "direct preference optimization"
+      ],
       "priority": 1
     },
     {
@@ -5267,6 +9539,21 @@
       "venue": "ACL",
       "pdf_url": "https://arxiv.org/pdf/2604.09349v2",
       "thumbnail_url": "/paper-thumbnails/2604.09349v2.webp",
+      "image_id": "/images/ACL_2026/2604.09349v2.png",
+      "keywords": [
+        "visually-guided policy optimization",
+        "multimodal reasoning",
+        "visual attention compensation",
+        "advantage re-weighting",
+        "visual faithfulness"
+      ],
+      "subjects": [
+        "visually-guided policy optimization",
+        "visual faithfulness",
+        "visual attention compensation",
+        "multimodal reasoning",
+        "advantage re-weighting"
+      ],
       "priority": 1
     },
     {
@@ -5284,6 +9571,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2604.16044v1",
       "thumbnail_url": "/paper-thumbnails/2604.16044v1.webp",
+      "image_id": "/images/CVPR_2026/2604.16044v1.png",
+      "keywords": [
+        "diffusion probabilistic models",
+        "SNR-t bias",
+        "exposure bias",
+        "differential correction",
+        "wavelet domain"
+      ],
+      "subjects": [
+        "wavelet domain",
+        "SNR-t bias",
+        "exposure bias",
+        "diffusion probabilistic models",
+        "differential correction"
+      ],
       "priority": 1
     },
     {
@@ -5301,6 +9603,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2606.04123v1",
       "thumbnail_url": "/paper-thumbnails/2606.04123v1.webp",
+      "image_id": "/images/CVPR_2026/2606.04123v1.png",
+      "keywords": [
+        "Large Language Models",
+        "high-level",
+        "natural-language",
+        "text-based",
+        "safety-compliant"
+      ],
+      "subjects": [
+        "text-based",
+        "safety-compliant",
+        "natural-language",
+        "large language models",
+        "high-level"
+      ],
       "priority": 1
     },
     {
@@ -5320,6 +9637,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.05921v1",
       "thumbnail_url": "/paper-thumbnails/2603.05921v1.webp",
+      "image_id": "/images/CVPR_2026/2603.05921v1.png",
+      "keywords": [
+        "backdoor detection",
+        "text-to-image models",
+        "black-box detection",
+        "semantic deviation",
+        "instruction-response"
+      ],
+      "subjects": [
+        "text-to-image models",
+        "semantic deviation",
+        "instruction-response",
+        "black-box detection",
+        "backdoor detection"
+      ],
       "priority": 1
     },
     {
@@ -5337,6 +9669,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.24484v1",
       "thumbnail_url": "/paper-thumbnails/2603.24484v1.webp",
+      "image_id": "/images/CVPR_2026/2603.24484v1.png",
+      "keywords": [
+        "Theory of Mind",
+        "Multimodal LLM",
+        "Video understanding",
+        "Interpretability",
+        "Intervention"
+      ],
+      "subjects": [
+        "video understanding",
+        "theory of mind",
+        "multimodal LLM",
+        "intervention",
+        "interpretability"
+      ],
       "priority": 1
     },
     {
@@ -5356,6 +9703,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.01650v2",
       "thumbnail_url": "/paper-thumbnails/2603.01650v2.webp",
+      "image_id": "/images/CVPR_2026/2603.01650v2.png",
+      "keywords": [
+        "zero-shot stereo matching",
+        "monocular depth foundation models",
+        "iterative refinement",
+        "prompt recurrent unit",
+        "structure and motion prompts"
+      ],
+      "subjects": [
+        "zero-shot stereo matching",
+        "structure and motion prompts",
+        "prompt recurrent unit",
+        "monocular depth foundation models",
+        "iterative refinement"
+      ],
       "priority": 1
     },
     {
@@ -5375,6 +9737,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.11795v2",
       "thumbnail_url": "/paper-thumbnails/2603.11795v2.webp",
+      "image_id": "/images/CVPR_2026/2603.11795v2.png",
+      "keywords": [
+        "Concept extraction",
+        "Interpretability",
+        "Compositionality",
+        "Diffusion models",
+        "Hyperbolic space"
+      ],
+      "subjects": [
+        "interpretability",
+        "hyperbolic space",
+        "diffusion models",
+        "Concept extraction",
+        "compositionality"
+      ],
       "priority": 1
     },
     {
@@ -5396,6 +9773,21 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.15271v1",
       "thumbnail_url": "/paper-thumbnails/2603.15271v1.webp",
+      "image_id": "/images/CVPR_2026/2603.15271v1.png",
+      "keywords": [
+        "training-free acceleration",
+        "task-aware framework",
+        "unified multimodal models",
+        "network pruning",
+        "layer skipping"
+      ],
+      "subjects": [
+        "unified multimodal models",
+        "training-free acceleration",
+        "task-aware framework",
+        "network pruning",
+        "layer skipping"
+      ],
       "priority": 1
     },
     {
@@ -5420,6 +9812,24 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2602.04268v2",
       "thumbnail_url": "/paper-thumbnails/2602.04268v2.webp",
+      "image_id": "/images/CVPR_2026/2602.04268v2.png",
+      "keywords": [
+        "Multi-modal Large Language Models",
+        "Hallucination mitigation",
+        "KV-Cache smoothing",
+        "Attention entropy",
+        "Training-free decoding"
+      ],
+      "subjects": [
+        "training-free decoding",
+        "multi-modal large language models",
+        "hallucinations",
+        "m3id",
+        "vlms",
+        "reliance",
+        "language",
+        "prompt"
+      ],
       "priority": 1
     },
     {
@@ -5443,6 +9853,24 @@
       "venue": "CVPR",
       "pdf_url": "https://arxiv.org/pdf/2603.23276v1",
       "thumbnail_url": "/paper-thumbnails/2603.23276v1.webp",
+      "image_id": "/images/CVPR_2026/2603.23276v1.png",
+      "keywords": [
+        "domain generalization",
+        "multi-modal 3D object detection",
+        "modality imbalance",
+        "LiDAR-camera fusion",
+        "cross-domain robustness"
+      ],
+      "subjects": [
+        "multi-modal 3D object detection",
+        "modality imbalance",
+        "LiDAR-camera fusion",
+        "LiDAR",
+        "association",
+        "robust",
+        "image",
+        "camera"
+      ],
       "priority": 1
     }
   ]
