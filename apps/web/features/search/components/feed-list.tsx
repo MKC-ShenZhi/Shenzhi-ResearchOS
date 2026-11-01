@@ -25,7 +25,7 @@ function FeedLoading() {
 }
 
 /**
- * Snapshot-backed home feed with cursor-based infinite loading.
+ * Home feed with cursor-based infinite loading over one fixed list.
  *
  * Signed-in users page through one recommendation snapshot; anonymous users
  * (and a failed first recommendation page) use global discovery. Loaded pages

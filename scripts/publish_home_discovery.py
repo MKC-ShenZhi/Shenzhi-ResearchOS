@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish the curated home-discovery seed and its selected thumbnails.
+"""Publish the packaged home fallback snapshot and its selected thumbnails.
 
 The source seed remains untouched. This command creates the deployment-ready
 FastAPI snapshot and exactly one optimized WebP thumbnail per selected paper.

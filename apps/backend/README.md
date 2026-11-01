@@ -105,7 +105,7 @@ uv add --dev <package>
 
 | 数据源 | 来源 | 上限 | 何时读取 |
 | --- | --- | --- | --- |
-| `daily` | 当天的每日候选（`daily_recommendations`，由候选池离线生成）；当天没有时取 7 天内最新的一期，一条查询 | 300 | 每次组装 |
+| `daily` | 当天的每日候选（`home_daily_editions`，由候选池离线生成）；当天没有时取 7 天内最新的一期，一条查询 | 300 | 每次组装 |
 | `trending` | 候选池中平台点赞数 + 收藏数最高的论文，按列表日期之前（不含当天）最新完成的统计快照计算，当天快照重算不会让列表在白天变化 | 30 | 每次组装（缓存 60 秒） |
 | `personal` | 登录用户的个人推荐（召回与排序见 [推荐实现](../../docs/engineering/search-recommendation-implementation.md)） | 100 | 登录用户首次请求 |
 | `fallback` | 随包快照 `app/data/home_discovery_snapshot.json`（298 篇，自带 `public/paper-thumbnails` 静态图，即使底座图片服务不可用也能显示） | — | **只在**实时数据源合计不足 36 篇时追加一次 |
@@ -116,7 +116,7 @@ uv add --dev <package>
 
 ### 候选池与每日候选
 
-`discovery_pool_papers`（迁移 `018_discovery_pool`）保存候选池年份内能在首页展示的知识底座论文，包括 `primary_subject`。候选池年份默认 2026（底座图片几乎只覆盖这一年），可以用 `HOME_FEED_POOL_YEAR` 覆盖。
+`discovery_pool_papers`（迁移 `018_discovery_pool`）保存候选池年份内能在首页展示的知识底座论文，包括 `primary_subject`。候选池年份默认 2026（底座图片几乎只覆盖这一年），可以用 `HOME_FEED_POOL_YEAR` 覆盖。每日候选存于 `home_daily_editions`（迁移 `019_home_daily_editions` 由已退役功能的 `daily_recommendations` 表改名而来，旧数据不会被当作每日候选使用，超过 120 天后由调度器清理）。
 
 - `sync`：按会议遍历 `/api/papers` 该年份的全部分页，经规则 B 过滤后，在一个事务内整体替换该年份的候选池。任一分页重试后仍失败则整次中止；如果新结果少于原有的一半，视为上游异常，拒绝写入。2026-11-01 实测：24 个会议、抓取 18,863 篇、收录 15,803 篇，耗时约 2 分 20 秒。
 - `publish`（规则 A）：每天生成 300 篇。"最久未展示的优先、同一天内按哈希打散"，整个候选池轮完一遍才会重复（约 52 天一个周期）。展示时间相同的候选中，同一会议不超过 25%、同一 `primary_subject` 不超过 5%。同一天重复执行结果一致；只回溯最近 120 天的展示历史。

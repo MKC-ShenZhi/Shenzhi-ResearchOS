@@ -1,4 +1,4 @@
-"""Public contract for the versioned home paper-discovery snapshot."""
+"""Public contract for home-feed papers and the anonymous discovery page."""
 
 from pydantic import Field
 
@@ -27,5 +27,6 @@ class DiscoveryPaperPage(KnowledgeModel):
     items: list[DiscoveryPaper] = Field(default_factory=list)
     next_cursor: str | None = None
     has_more: bool = False
-    snapshot_id: str
+    # Identifies the composed list the cursors belong to (``home:<date>:<hash>``).
+    list_id: str
     total: int = Field(ge=0)

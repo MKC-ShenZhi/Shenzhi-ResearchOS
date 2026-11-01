@@ -25,7 +25,7 @@ from sqlalchemy import exists, func, select
 
 from app.core.database import session_scope
 from app.core.time import utc_now
-from app.models.daily_recommendation import DailyRecommendationRow
+from app.models.home_daily_edition import HomeDailyEditionRow
 from app.models.discovery_pool import DiscoveryPoolPaperRow
 from app.services.discovery import SHANGHAI_TIMEZONE
 from app.services.discovery_pool.edition import DailyEditionBuilder
@@ -79,7 +79,7 @@ class HomeFeedScheduler:
                     self._sync_failed_at = now
                     logger.exception('Home pool sync failed; the existing pool is kept')
             published = await session.scalar(select(exists().where(
-                DailyRecommendationRow.recommendation_date == local.date(),
+                HomeDailyEditionRow.edition_date == local.date(),
             )))
             if not published and local.time() >= PUBLISH_AFTER:
                 try:

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 from sqlalchemy import delete
 
 from app.core.database import session_scope
-from app.models.daily_recommendation import DailyRecommendationRow
+from app.models.home_daily_edition import HomeDailyEditionRow
 from app.models.discovery_pool import DiscoveryPoolPaperRow
 from app.services import discovery
 from app.services.discovery import load_latest_edition
@@ -118,8 +118,8 @@ class EditionPersistenceTests(unittest.IsolatedAsyncioTestCase):
     async def _clear(self):
         async with session_scope() as session:
             await session.execute(delete(DiscoveryPoolPaperRow).where(DiscoveryPoolPaperRow.year == self.YEAR))
-            await session.execute(delete(DailyRecommendationRow).where(
-                DailyRecommendationRow.recommendation_date.between(self.START, self.START + timedelta(days=30)),
+            await session.execute(delete(HomeDailyEditionRow).where(
+                HomeDailyEditionRow.edition_date.between(self.START, self.START + timedelta(days=30)),
             ))
 
     async def test_published_editions_are_served_and_never_repeat_while_the_pool_lasts(self):
@@ -129,7 +129,7 @@ class EditionPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 row.synced_at = discovery.utc_now()
                 session.add(row)
             # A legacy payload from the retired feature must neither break history nor be served.
-            session.add(DailyRecommendationRow(recommendation_date=self.START, payload=[{'legacy': True}]))
+            session.add(HomeDailyEditionRow(edition_date=self.START, payload=[{'legacy': True}]))
         self.assertEqual(await load_latest_edition(self.START), ())
 
         builder = DailyEditionBuilder()
@@ -166,9 +166,9 @@ class EditionPersistenceTests(unittest.IsolatedAsyncioTestCase):
     async def test_purge_keeps_only_editions_inside_the_history_window(self):
         async with session_scope() as session:
             for offset in (0, 1):
-                session.add(DailyRecommendationRow(recommendation_date=self.START + timedelta(days=offset), payload=[]))
+                session.add(HomeDailyEditionRow(edition_date=self.START + timedelta(days=offset), payload=[]))
         deleted = await DailyEditionBuilder.purge(self.START + timedelta(days=HISTORY_DAYS + 1))
         self.assertEqual(deleted, 1)
         async with session_scope() as session:
-            kept = await session.get(DailyRecommendationRow, self.START + timedelta(days=1))
+            kept = await session.get(HomeDailyEditionRow, self.START + timedelta(days=1))
         self.assertIsNotNone(kept)

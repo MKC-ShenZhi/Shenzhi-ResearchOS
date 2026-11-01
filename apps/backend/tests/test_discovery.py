@@ -90,11 +90,11 @@ class FallbackListTests(unittest.IsolatedAsyncioTestCase):
         service = HomeDiscoveryService(today_provider=lambda: date(2026, 10, 16))
         expected = {item.paper.id for item in load_discovery_snapshot().items}
         actual: list[str] = []
-        cursor, snapshot_id = None, None
+        cursor, list_id = None, None
         while True:
             page = await service.page(limit=12, cursor=cursor)
-            snapshot_id = snapshot_id or page.snapshot_id
-            self.assertEqual(page.snapshot_id, snapshot_id)
+            list_id = list_id or page.list_id
+            self.assertEqual(page.list_id, list_id)
             actual.extend(item.id for item in page.items)
             self.assertEqual({item.source for item in page.items}, {'fallback'})
             if not page.has_more:
@@ -134,9 +134,9 @@ class FallbackListTests(unittest.IsolatedAsyncioTestCase):
         current_day[0] = date(2026, 10, 17)
         second = await service.page(limit=12, cursor=first.next_cursor)
         full_day_one = await HomeDiscoveryService(lambda: snapshot, today_provider=lambda: date(2026, 10, 16)).page(limit=30)
-        self.assertEqual(second.snapshot_id, first.snapshot_id)
+        self.assertEqual(second.list_id, first.list_id)
         self.assertEqual([item.id for item in second.items], [item.id for item in full_day_one.items[12:24]])
-        self.assertNotEqual((await service.page(limit=12)).snapshot_id, first.snapshot_id)
+        self.assertNotEqual((await service.page(limit=12)).list_id, first.list_id)
 
     def test_shanghai_day_rolls_over_at_1600_utc(self):
         with patch('app.services.discovery.utc_now', return_value=datetime(2026, 10, 16, 15, 59, 59, tzinfo=timezone.utc)):
@@ -171,7 +171,7 @@ class FallbackListTests(unittest.IsolatedAsyncioTestCase):
         later = HomeDiscoveryService(lambda: snapshot, today_provider=lambda: day,
                                      edition_loader=by_date({day: pool_papers(range(50, 100))}))
         page = await later.page(limit=12, cursor=_encode_cursor('seed-legacy:2026-11-02', day, 12))
-        self.assertEqual(page.snapshot_id, 'seed-legacy:2026-11-02')
+        self.assertEqual(page.list_id, 'seed-legacy:2026-11-02')
         self.assertEqual(len(page.items), 12)
 
 
@@ -197,7 +197,7 @@ class ComposedListTests(unittest.IsolatedAsyncioTestCase):
         page = await service.page(limit=12)
         sources = [item.source for item in page.items]
         self.assertEqual((sources.count('daily'), sources.count('trending')), (10, 2))
-        self.assertTrue(page.snapshot_id.startswith('home:2026-11-02:'))
+        self.assertTrue(page.list_id.startswith('home:2026-11-02:'))
         self.assertEqual(page.total, 130)
         # Enough live papers: the packaged snapshot is never read.
         self.assertEqual(loaded, [])
@@ -274,7 +274,7 @@ class HomeDiscoveryApiTests(unittest.TestCase):
         self.assertEqual(body['total'], len(load_discovery_snapshot().items))
         self.assertTrue(body['has_more'])
         self.assertIsNotNone(body['next_cursor'])
-        self.assertTrue(body['snapshot_id'].startswith('home:'))
+        self.assertTrue(body['list_id'].startswith('home:'))
         self.assertEqual(body['items'][0]['source'], 'fallback')
         self.assertNotIn('doi', body['items'][0])
 
@@ -283,7 +283,7 @@ class HomeDiscoveryApiTests(unittest.TestCase):
         second = self.client.get(
             '/api/v1/discovery/papers', params={'limit': 12, 'cursor': first['next_cursor']}, headers=self.headers,
         ).json()['data']
-        self.assertEqual(first['snapshot_id'], second['snapshot_id'])
+        self.assertEqual(first['list_id'], second['list_id'])
         self.assertTrue({item['id'] for item in first['items']}.isdisjoint({item['id'] for item in second['items']}))
 
     def test_invalid_parameters_and_cursor_return_client_errors(self):

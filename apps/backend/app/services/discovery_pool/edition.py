@@ -1,7 +1,7 @@
 """Build the shared daily edition (the ``daily`` home source) from the paper pool.
 
 Rule A. Each Shanghai day gets one fixed list of EDITION_SIZE pool papers,
-stored in ``daily_recommendations``: the least recently shown papers first,
+stored in ``home_daily_editions``: the least recently shown papers first,
 ties broken by a per-day hash, so the whole pool is cycled through before any
 paper repeats and a re-run on the same day yields the same edition. Within
 papers last shown on the same day no venue exceeds MAX_VENUE_SHARE and no
@@ -25,7 +25,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.core.database import session_scope
 from app.core.time import utc_now
-from app.models.daily_recommendation import DailyRecommendationRow
+from app.models.home_daily_edition import HomeDailyEditionRow
 from app.models.discovery_pool import DiscoveryPoolPaperRow
 from app.schemas.discovery import DiscoveryPaper
 from app.services.discovery import edition_id
@@ -76,13 +76,13 @@ class DailyEditionBuilder:
                 DiscoveryPoolPaperRow.year == pool_year,
             )))
             history = list(await session.execute(select(
-                DailyRecommendationRow.recommendation_date,
+                HomeDailyEditionRow.edition_date,
                 func.jsonb_path_query_array(
-                    DailyRecommendationRow.payload, literal_column("'$[*].id'::jsonpath"), type_=JSONB,
+                    HomeDailyEditionRow.payload, literal_column("'$[*].id'::jsonpath"), type_=JSONB,
                 ),
             ).where(
-                DailyRecommendationRow.recommendation_date >= edition_date - timedelta(days=HISTORY_DAYS),
-                DailyRecommendationRow.recommendation_date < edition_date,
+                HomeDailyEditionRow.edition_date >= edition_date - timedelta(days=HISTORY_DAYS),
+                HomeDailyEditionRow.edition_date < edition_date,
             )))
         last_shown: dict[str, date] = {}
         for shown_on, ids in history:
@@ -146,11 +146,11 @@ class DailyEditionBuilder:
         result = await self.build(edition_date, size=size, year=year)
         payload = [paper.model_dump(mode='json') for paper in result.papers]
         async with session_scope() as session:
-            statement = insert(DailyRecommendationRow).values(
-                recommendation_date=edition_date, payload=payload, created_at=utc_now(),
+            statement = insert(HomeDailyEditionRow).values(
+                edition_date=edition_date, payload=payload, created_at=utc_now(),
             )
             await session.execute(statement.on_conflict_do_update(
-                index_elements=[DailyRecommendationRow.recommendation_date],
+                index_elements=[HomeDailyEditionRow.edition_date],
                 set_={'payload': statement.excluded.payload, 'created_at': statement.excluded.created_at},
             ))
         return result
@@ -159,7 +159,7 @@ class DailyEditionBuilder:
     async def purge(today: date) -> int:
         """Delete editions older than the history window; nothing reads them any more."""
         async with session_scope() as session:
-            result = await session.execute(delete(DailyRecommendationRow).where(
-                DailyRecommendationRow.recommendation_date < today - timedelta(days=HISTORY_DAYS),
+            result = await session.execute(delete(HomeDailyEditionRow).where(
+                HomeDailyEditionRow.edition_date < today - timedelta(days=HISTORY_DAYS),
             ))
             return int(result.rowcount or 0)

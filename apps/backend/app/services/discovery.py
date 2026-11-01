@@ -29,7 +29,7 @@ from sqlalchemy import select
 
 from app.core.database import session_scope
 from app.core.time import utc_now
-from app.models.daily_recommendation import DailyRecommendationRow
+from app.models.home_daily_edition import HomeDailyEditionRow
 from app.schemas.discovery import DiscoveryPaper, DiscoveryPaperPage
 from app.services.home_feed import config
 from app.services.home_feed.composer import compose
@@ -68,8 +68,8 @@ class DiscoverySnapshot:
 
 
 @dataclass(frozen=True)
-class DailyList:
-    """One fixed, ordered list for a Shanghai day; cursors are bound to its id."""
+class HomeList:
+    """One fixed, ordered anonymous home list for a Shanghai day; cursors are bound to its id."""
     list_id: str
     ordering_date: date
     papers: tuple[DiscoveryPaper, ...]
@@ -114,11 +114,11 @@ async def load_latest_edition(ordering_date: date) -> tuple[DiscoveryPaper, ...]
     try:
         async with session_scope() as session:
             payloads = await session.scalars(
-                select(DailyRecommendationRow.payload)
-                .where(DailyRecommendationRow.recommendation_date.between(
+                select(HomeDailyEditionRow.payload)
+                .where(HomeDailyEditionRow.edition_date.between(
                     ordering_date - timedelta(days=config.DAILY_MAX_AGE_DAYS), ordering_date,
                 ))
-                .order_by(DailyRecommendationRow.recommendation_date.desc()),
+                .order_by(HomeDailyEditionRow.edition_date.desc()),
             )
             for payload in payloads:
                 if (parsed := parse_edition(payload)) is not None:
@@ -173,12 +173,12 @@ def _shanghai_today() -> date:
     return utc_now().astimezone(SHANGHAI_TIMEZONE).date()
 
 
-def _daily_snapshot_id(source_snapshot_id: str, ordering_date: date) -> str:
+def _fallback_list_id(source_snapshot_id: str, ordering_date: date) -> str:
     return f'{source_snapshot_id}:{ordering_date.isoformat()}'
 
 
-def _daily_items(snapshot: DiscoverySnapshot, ordering_date: date) -> tuple[DiscoveryPaper, ...]:
-    """Keep priority buckets while deterministically shuffling each bucket per Shanghai day."""
+def _fallback_order(snapshot: DiscoverySnapshot, ordering_date: date) -> tuple[DiscoveryPaper, ...]:
+    """Order the packaged papers: priority buckets kept, each shuffled deterministically per Shanghai day."""
     seed = f'{snapshot.snapshot_id}:{ordering_date.isoformat()}'
 
     def sort_key(candidate: DiscoveryCandidate) -> tuple[int, bytes, str]:
@@ -188,9 +188,9 @@ def _daily_items(snapshot: DiscoverySnapshot, ordering_date: date) -> tuple[Disc
     return tuple(candidate.paper for candidate in sorted(snapshot.items, key=sort_key))
 
 
-def _encode_cursor(snapshot_id: str, ordering_date: date, offset: int) -> str:
+def _encode_cursor(list_id: str, ordering_date: date, offset: int) -> str:
     raw = json.dumps(
-        {'s': snapshot_id, 'd': ordering_date.isoformat(), 'o': offset},
+        {'s': list_id, 'd': ordering_date.isoformat(), 'o': offset},
         separators=(',', ':'),
     ).encode('utf-8')
     return base64.urlsafe_b64encode(raw).decode('ascii').rstrip('=')
@@ -201,14 +201,14 @@ def _decode_cursor(cursor: str) -> tuple[str, date, int]:
         padding = '=' * (-len(cursor) % 4)
         raw = base64.b64decode(cursor + padding, altchars=b'-_', validate=True)
         value: Any = json.loads(raw)
-        snapshot_id = value['s']
+        list_id = value['s']
         ordering_date_value = value['d']
         offset = value['o']
     except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as error:
         raise DiscoveryCursorError('分页游标无效，请重新加载论文发现列表') from error
 
     if (
-        not isinstance(snapshot_id, str)
+        not isinstance(list_id, str)
         or not isinstance(ordering_date_value, str)
         or not isinstance(offset, int)
         or isinstance(offset, bool)
@@ -222,7 +222,7 @@ def _decode_cursor(cursor: str) -> tuple[str, date, int]:
         raise DiscoveryCursorError('分页游标无效，请重新加载论文发现列表') from error
     if ordering_date.isoformat() != ordering_date_value:
         raise DiscoveryCursorError('分页游标无效，请重新加载论文发现列表')
-    return snapshot_id, ordering_date, offset
+    return list_id, ordering_date, offset
 
 
 class HomeDiscoveryService:
@@ -237,16 +237,16 @@ class HomeDiscoveryService:
         self._today_provider = today_provider
         self._edition_loader = edition_loader
         self._trending_loader = trending_loader
-        self._lists: dict[date, tuple[float, DailyList]] = {}
+        self._lists: dict[date, tuple[float, HomeList]] = {}
 
     def today(self) -> date:
         return self._today_provider()
 
-    def _curated_list(self, ordering_date: date) -> DailyList:
+    def _fallback_list(self, ordering_date: date) -> HomeList:
         snapshot = self._snapshot_loader()
-        return DailyList(
-            _daily_snapshot_id(snapshot.snapshot_id, ordering_date), ordering_date,
-            _daily_items(snapshot, ordering_date),
+        return HomeList(
+            _fallback_list_id(snapshot.snapshot_id, ordering_date), ordering_date,
+            _fallback_order(snapshot, ordering_date),
         )
 
     async def shared_sources(self, ordering_date: date) -> dict[str, list[DiscoveryPaper]]:
@@ -261,7 +261,7 @@ class HomeDiscoveryService:
         if len(papers) >= config.FALLBACK_MIN_ITEMS:
             return papers
         try:
-            fallback = self._curated_list(ordering_date).papers
+            fallback = self._fallback_list(ordering_date).papers
         except DiscoverySnapshotError:
             if papers:
                 return papers
@@ -270,44 +270,44 @@ class HomeDiscoveryService:
         extra = [paper.model_copy(update={'source': 'fallback'}) for paper in fallback if paper.id not in seen]
         return (papers + extra)[:config.FEED_LIMIT]
 
-    async def list_for(self, ordering_date: date) -> DailyList:
+    async def list_for(self, ordering_date: date) -> HomeList:
         """The composed anonymous list for a day, cached briefly per instance."""
         cached = self._lists.get(ordering_date)
         if cached and cached[0] > time.monotonic():
             return cached[1]
         composed = compose(await self.shared_sources(ordering_date), config.ANONYMOUS_QUOTAS)
         papers = tuple(self.with_fallback(composed, ordering_date))
-        daily = DailyList(home_list_id(ordering_date, papers), ordering_date, papers)
-        self._lists[ordering_date] = (time.monotonic() + config.SOURCE_CACHE_SECONDS, daily)
-        return daily
+        home = HomeList(home_list_id(ordering_date, papers), ordering_date, papers)
+        self._lists[ordering_date] = (time.monotonic() + config.SOURCE_CACHE_SECONDS, home)
+        return home
 
-    async def daily_list(self) -> DailyList:
+    async def today_list(self) -> HomeList:
         return await self.list_for(self.today())
 
-    async def _list_for_cursor(self, list_id: str, ordering_date: date) -> DailyList:
-        daily = await self.list_for(ordering_date)
-        if daily.list_id == list_id:
-            return daily
+    async def _list_for_cursor(self, list_id: str, ordering_date: date) -> HomeList:
+        home = await self.list_for(ordering_date)
+        if home.list_id == list_id:
+            return home
         snapshot = self._snapshot_loader()
         # Cursors issued before composed lists carried the bare snapshot id.
-        if list_id in (snapshot.snapshot_id, _daily_snapshot_id(snapshot.snapshot_id, ordering_date)):
-            return self._curated_list(ordering_date)
+        if list_id in (snapshot.snapshot_id, _fallback_list_id(snapshot.snapshot_id, ordering_date)):
+            return self._fallback_list(ordering_date)
         raise DiscoveryListChangedError('论文发现列表已更新，请重新加载后继续浏览')
 
     async def page(self, *, limit: int, cursor: str | None = None) -> DiscoveryPaperPage:
         if cursor is None:
-            daily, offset = await self.daily_list(), 0
+            home, offset = await self.today_list(), 0
         else:
             list_id, ordering_date, offset = _decode_cursor(cursor)
-            daily = await self._list_for_cursor(list_id, ordering_date)
-            if offset > len(daily.papers):
+            home = await self._list_for_cursor(list_id, ordering_date)
+            if offset > len(home.papers):
                 raise DiscoveryCursorError('分页游标超出当前论文列表范围')
-        end = min(offset + limit, len(daily.papers))
-        has_more = end < len(daily.papers)
+        end = min(offset + limit, len(home.papers))
+        has_more = end < len(home.papers)
         return DiscoveryPaperPage(
-            items=list(daily.papers[offset:end]),
-            next_cursor=_encode_cursor(daily.list_id, daily.ordering_date, end) if has_more else None,
+            items=list(home.papers[offset:end]),
+            next_cursor=_encode_cursor(home.list_id, home.ordering_date, end) if has_more else None,
             has_more=has_more,
-            snapshot_id=daily.list_id,
-            total=len(daily.papers),
+            list_id=home.list_id,
+            total=len(home.papers),
         )

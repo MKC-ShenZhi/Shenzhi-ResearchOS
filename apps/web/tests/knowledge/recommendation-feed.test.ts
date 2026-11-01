@@ -87,7 +87,7 @@ test("recommendation failure falls back to the existing discovery cursor", async
     requested.push(url);
     if (url.includes("/recommendations/")) return json(null, 503);
     return json({ items: [paper], next_cursor: "daily-1", has_more: true,
-      snapshot_id: "global-snapshot", total: 300 });
+      list_id: "home:global", total: 300 });
   };
   try {
     const first = await fetchHomeFeedPage(null, "user-a");
@@ -107,7 +107,7 @@ test("anonymous home feed only requests discovery", async () => {
   globalThis.fetch = async (input) => {
     requested.push(String(input));
     return json({ items: [paper], next_cursor: null, has_more: false,
-      snapshot_id: "global-snapshot", total: 1 });
+      list_id: "home:global", total: 1 });
   };
   try {
     const page = await fetchHomeFeedPage(null, null);
@@ -241,7 +241,7 @@ function fakeBackend(total: number, failures: Map<string, Response[]> = new Map(
     requested.push({ url, expectedUser: new Headers(init?.headers).get("x-shenzhi-expected-user-id") });
     if (url.includes("/discovery/")) {
       return json({ items: [{ ...paper, id: "global:1" }], next_cursor: "daily-1", has_more: true,
-        snapshot_id: "global-snapshot", total: 300 });
+        list_id: "home:global", total: 300 });
     }
     const cursor = new URL(url, "http://local").searchParams.get("cursor") ?? "";
     const injected = failures.get(cursor)?.shift();
@@ -289,7 +289,7 @@ test("a replaced anonymous discovery list asks for a restart instead of retrying
   globalThis.fetch = async (input) => {
     const cursor = new URL(String(input), "http://local").searchParams.get("cursor");
     if (cursor) return failure(409, 20001);
-    return json({ items: [paper], next_cursor: "daily-1", has_more: true, snapshot_id: "home:1", total: 300 });
+    return json({ items: [paper], next_cursor: "daily-1", has_more: true, list_id: "home:1", total: 300 });
   };
   try {
     const first = await fetchHomeFeedPage(null, null);

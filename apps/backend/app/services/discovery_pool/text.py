@@ -1,6 +1,6 @@
 """Display cleanup for upstream paper metadata shown on home cards.
 
-Shared by the offline curated-seed publisher and the knowledge pool sync, so
+Shared by the fallback-snapshot publisher and the knowledge pool sync, so
 both produce the same card text. Dependency-free on purpose: the publisher
 script imports it without the backend runtime.
 """

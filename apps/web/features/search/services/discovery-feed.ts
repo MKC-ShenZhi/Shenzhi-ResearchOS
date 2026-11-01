@@ -28,7 +28,7 @@ export function mapDiscoveryPaper(item: Omit<DiscoveryPaperDto, "year"> & { year
     title: item.title,
     abstract: item.abstract,
     tags: pickPaperTopics(item.keywords, item.subjects),
-    // Curated papers keep their static thumbnail; pool and recalled papers use the knowledge image.
+    // Packaged fallback papers keep their static thumbnail; every other source uses the knowledge image.
     thumbnailUrl: item.thumbnail_url ?? getPaperThumbnailUrl(item.image_id),
   };
 }
@@ -37,7 +37,8 @@ export interface DiscoveryFeedPage {
   items: FeedPaper[];
   nextCursor: string | null;
   hasMore: boolean;
-  snapshotId: string;
+  /** Discovery list id, or the recommendation request id. */
+  listId: string;
   total: number;
   /** Which feed produced this page; a recommendation feed never continues as discovery. */
   source?: "recommendation" | "discovery";
@@ -49,7 +50,7 @@ export async function fetchDiscoveryFeedPage(cursor: string | null): Promise<Dis
     items: response.items.map(mapDiscoveryPaper),
     nextCursor: response.next_cursor,
     hasMore: response.has_more,
-    snapshotId: response.snapshot_id,
+    listId: response.list_id,
     total: response.total,
   };
 }
@@ -97,7 +98,7 @@ async function recommendationPage(cursor: string | null, userId: string): Promis
     })),
     nextCursor: page.next_cursor,
     hasMore: page.has_more,
-    snapshotId: page.request_id,
+    listId: page.request_id,
     total: page.total,
     source: "recommendation",
   };

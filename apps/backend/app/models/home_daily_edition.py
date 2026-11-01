@@ -1,4 +1,4 @@
-"""One ShenZhi-owned recommendation candidate pool per UTC day."""
+"""One stored daily edition (the ``daily`` home source) per Shanghai day."""
 
 from datetime import date, datetime
 from typing import Any
@@ -10,10 +10,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.chat import Base
 
 
-class DailyRecommendationRow(Base):
-    __tablename__ = 'daily_recommendations'
+class HomeDailyEditionRow(Base):
+    __tablename__ = 'home_daily_editions'
 
-    recommendation_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    edition_date: Mapped[date] = mapped_column(Date, primary_key=True)
     payload: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text('now()'),
