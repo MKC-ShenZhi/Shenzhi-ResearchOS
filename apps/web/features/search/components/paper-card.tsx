@@ -142,13 +142,19 @@ export function PaperCard({
 
         {/* 底部操作行 */}
         <div className="col-span-full flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 flex flex-wrap gap-x-4 gap-y-1">
-            {paper.tags.map((tag) => (
-              <span key={tag} className="text-[13px] text-muted">
-                #{tag}
-              </span>
-            ))}
-          </div>
+          {/* Topic 固定一行：放不下的整枚隐藏，不撑高卡片 */}
+          {paper.tags.length > 0 && (
+            <div
+              className="flex h-5 min-w-0 flex-1 basis-48 flex-wrap gap-x-4 overflow-hidden"
+              title={paper.tags.map((tag) => `#${tag}`).join("  ")}
+            >
+              {paper.tags.map((tag) => (
+                <span key={tag} className="max-w-full truncate text-[13px] leading-5 text-muted">
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
             <PaperLikeButton paperId={paper.id} />
             <PaperCollectorCount paperId={paper.id} />
