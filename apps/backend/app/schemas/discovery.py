@@ -14,6 +14,8 @@ class DiscoveryPaper(KnowledgeModel):
     venue: str | None = None
     pdf_url: str | None = None
     thumbnail_url: str | None = None
+    # Knowledge image path for pool papers; the web layer resolves it to its image proxy.
+    image_id: str | None = None
 
 
 class DiscoveryPaperPage(KnowledgeModel):

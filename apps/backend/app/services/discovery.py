@@ -1,4 +1,11 @@
-"""Read and paginate the packaged ShenZhi home-discovery snapshot."""
+"""Read and paginate the shared home-discovery list.
+
+Each Shanghai day serves the stored daily edition (built offline by
+``python -m app.services.discovery_pool publish``). Without one, yesterday's
+edition is reused, and without that the packaged curated snapshot is shuffled
+for the day, so the home feed never depends on the knowledge base or the
+publish job at request time.
+"""
 
 from __future__ import annotations
 
@@ -6,15 +13,23 @@ import base64
 import binascii
 import hashlib
 import json
+import logging
+import time
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
+from pydantic import ValidationError
+
+from app.core.database import session_scope
 from app.core.time import utc_now
+from app.models.daily_recommendation import DailyRecommendationRow
 from app.schemas.discovery import DiscoveryPaper, DiscoveryPaperPage
+
+logger = logging.getLogger(__name__)
 
 
 SNAPSHOT_PATH = Path(__file__).resolve().parents[1] / 'data' / 'home_discovery_snapshot.json'
@@ -39,6 +54,53 @@ class DiscoveryCandidate:
 class DiscoverySnapshot:
     snapshot_id: str
     items: tuple[DiscoveryCandidate, ...]
+
+
+@dataclass(frozen=True)
+class DailyList:
+    """One fixed, ordered list for a Shanghai day; cursors are bound to its id."""
+    list_id: str
+    ordering_date: date
+    papers: tuple[DiscoveryPaper, ...]
+
+
+EDITION_CACHE_SECONDS = 60.0
+_edition_cache: dict[date, tuple[float, DailyList | None]] = {}
+
+
+def edition_id(ordering_date: date, papers: list[DiscoveryPaper] | tuple[DiscoveryPaper, ...]) -> str:
+    digest = hashlib.sha256('\n'.join(paper.id for paper in papers).encode('utf-8')).hexdigest()[:16]
+    return f'daily:{ordering_date.isoformat()}:{digest}'
+
+
+def parse_edition(ordering_date: date, payload: Any) -> DailyList | None:
+    """Validate a stored edition; legacy or damaged rows are treated as missing."""
+    try:
+        if not isinstance(payload, list) or not payload:
+            return None
+        papers = tuple(DiscoveryPaper.model_validate(item) for item in payload)
+    except (ValidationError, TypeError):
+        return None
+    ids = [paper.id for paper in papers]
+    if len(set(ids)) != len(ids) or any(not (paper.thumbnail_url or paper.image_id) for paper in papers):
+        return None
+    return DailyList(edition_id(ordering_date, papers), ordering_date, papers)
+
+
+async def load_stored_edition(ordering_date: date) -> DailyList | None:
+    cached = _edition_cache.get(ordering_date)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+    try:
+        async with session_scope() as session:
+            row = await session.get(DailyRecommendationRow, ordering_date)
+        edition = parse_edition(ordering_date, row.payload) if row is not None else None
+    except Exception as error:  # noqa: BLE001 - the packaged snapshot keeps the feed available
+        logger.warning('Daily discovery edition unavailable (%s)', type(error).__name__)
+        edition = None
+    # Editions are written once a day offline; a short cache keeps paging off the database.
+    _edition_cache[ordering_date] = (time.monotonic() + EDITION_CACHE_SECONDS, edition)
+    return edition
 
 
 def _read_snapshot(path: Path) -> DiscoverySnapshot:
@@ -110,7 +172,7 @@ def _encode_cursor(snapshot_id: str, ordering_date: date, offset: int) -> str:
     return base64.urlsafe_b64encode(raw).decode('ascii').rstrip('=')
 
 
-def _decode_cursor(cursor: str, snapshot: DiscoverySnapshot) -> tuple[date, int]:
+def _decode_cursor(cursor: str) -> tuple[str, date, int]:
     try:
         padding = '=' * (-len(cursor) % 4)
         raw = base64.b64decode(cursor + padding, altchars=b'-_', validate=True)
@@ -128,9 +190,7 @@ def _decode_cursor(cursor: str, snapshot: DiscoverySnapshot) -> tuple[date, int]
         or isinstance(offset, bool)
     ):
         raise DiscoveryCursorError('分页游标无效，请重新加载论文发现列表')
-    if snapshot_id != snapshot.snapshot_id:
-        raise DiscoveryCursorError('论文发现列表已更新，请重新加载后继续浏览')
-    if offset < 0 or offset > len(snapshot.items):
+    if offset < 0:
         raise DiscoveryCursorError('分页游标超出当前论文列表范围')
     try:
         ordering_date = date.fromisoformat(ordering_date_value)
@@ -138,7 +198,7 @@ def _decode_cursor(cursor: str, snapshot: DiscoverySnapshot) -> tuple[date, int]
         raise DiscoveryCursorError('分页游标无效，请重新加载论文发现列表') from error
     if ordering_date.isoformat() != ordering_date_value:
         raise DiscoveryCursorError('分页游标无效，请重新加载论文发现列表')
-    return ordering_date, offset
+    return snapshot_id, ordering_date, offset
 
 
 class HomeDiscoveryService:
@@ -146,32 +206,56 @@ class HomeDiscoveryService:
         self,
         snapshot_loader=load_discovery_snapshot,
         today_provider: Callable[[], date] = _shanghai_today,
+        edition_loader: Callable[[date], Awaitable[DailyList | None]] = load_stored_edition,
     ):
         self._snapshot_loader = snapshot_loader
         self._today_provider = today_provider
+        self._edition_loader = edition_loader
 
-    def daily_papers(self) -> list[DiscoveryPaper]:
-        """Today's complete shared order, which every personal feed continues with."""
-        return list(_daily_items(self._snapshot_loader(), self._today_provider()))
-
-    def page(self, *, limit: int, cursor: str | None = None) -> DiscoveryPaperPage:
+    def _curated_list(self, ordering_date: date) -> DailyList:
         snapshot = self._snapshot_loader()
-        ordering_date, offset = (
-            (self._today_provider(), 0)
-            if cursor is None
-            else _decode_cursor(cursor, snapshot)
+        return DailyList(
+            _daily_snapshot_id(snapshot.snapshot_id, ordering_date), ordering_date,
+            _daily_items(snapshot, ordering_date),
         )
-        daily_items = _daily_items(snapshot, ordering_date)
-        end = min(offset + limit, len(daily_items))
-        has_more = end < len(daily_items)
+
+    async def daily_list(self) -> DailyList:
+        """Today's edition, else yesterday's, else today's shuffle of the curated snapshot."""
+        today = self._today_provider()
+        for ordering_date in (today, today - timedelta(days=1)):
+            edition = await self._edition_loader(ordering_date)
+            if edition is not None:
+                return edition
+        return self._curated_list(today)
+
+    async def daily_papers(self) -> list[DiscoveryPaper]:
+        """Today's complete shared order, which every personal feed continues with."""
+        return list((await self.daily_list()).papers)
+
+    async def _list_for_cursor(self, list_id: str, ordering_date: date) -> DailyList:
+        edition = await self._edition_loader(ordering_date)
+        if edition is not None and edition.list_id == list_id:
+            return edition
+        snapshot = self._snapshot_loader()
+        # Cursors issued before daily editions carried the bare snapshot id.
+        if list_id in (snapshot.snapshot_id, _daily_snapshot_id(snapshot.snapshot_id, ordering_date)):
+            return self._curated_list(ordering_date)
+        raise DiscoveryCursorError('论文发现列表已更新，请重新加载后继续浏览')
+
+    async def page(self, *, limit: int, cursor: str | None = None) -> DiscoveryPaperPage:
+        if cursor is None:
+            daily, offset = await self.daily_list(), 0
+        else:
+            list_id, ordering_date, offset = _decode_cursor(cursor)
+            daily = await self._list_for_cursor(list_id, ordering_date)
+            if offset > len(daily.papers):
+                raise DiscoveryCursorError('分页游标超出当前论文列表范围')
+        end = min(offset + limit, len(daily.papers))
+        has_more = end < len(daily.papers)
         return DiscoveryPaperPage(
-            items=list(daily_items[offset:end]),
-            next_cursor=(
-                _encode_cursor(snapshot.snapshot_id, ordering_date, end)
-                if has_more
-                else None
-            ),
+            items=list(daily.papers[offset:end]),
+            next_cursor=_encode_cursor(daily.list_id, daily.ordering_date, end) if has_more else None,
             has_more=has_more,
-            snapshot_id=_daily_snapshot_id(snapshot.snapshot_id, ordering_date),
-            total=len(daily_items),
+            snapshot_id=daily.list_id,
+            total=len(daily.papers),
         )

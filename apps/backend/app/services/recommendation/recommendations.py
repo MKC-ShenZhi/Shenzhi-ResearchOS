@@ -226,7 +226,7 @@ class RecommendationService:
             offset = 0
             profile = await self.profiles.get(user_id)
             candidates = await self.recall.recall(profile)
-            shared = self._shared_papers()
+            shared = await self._shared_papers()
             excluded, popularity = await self._account_and_popularity(
                 user_id, [item.paper['id'] for item in candidates] + [paper['id'] for paper in shared],
             )
@@ -277,9 +277,9 @@ class RecommendationService:
             'total': len(items), 'algorithm_version': version,
         }
 
-    def _shared_papers(self) -> list[dict]:
+    async def _shared_papers(self) -> list[dict]:
         try:
-            return [paper.model_dump(mode='json') for paper in self.discovery.daily_papers()]
+            return [paper.model_dump(mode='json') for paper in await self.discovery.daily_papers()]
         except Exception as error:  # noqa: BLE001 - personal picks stay usable
             logger.warning('Shared daily papers unavailable for recommendations (%s)', type(error).__name__)
             return []

@@ -63,7 +63,9 @@ def profile(**changes):
 
 
 def shared_list(*papers):
-    return SimpleNamespace(daily_papers=lambda: list(papers))
+    async def daily_papers():
+        return list(papers)
+    return SimpleNamespace(daily_papers=daily_papers)
 
 
 def curated(paper_id, title='Curated'):

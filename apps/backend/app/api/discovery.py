@@ -23,7 +23,7 @@ async def papers(
     _identity: RequestIdentity = Depends(request_identity),
 ):
     try:
-        response = service.page(limit=limit, cursor=cursor)
+        response = await service.page(limit=limit, cursor=cursor)
     except DiscoveryCursorError as error:
         raise BusinessError(20001, str(error), 400) from error
     except DiscoverySnapshotError as error:
