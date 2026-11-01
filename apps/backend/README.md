@@ -124,6 +124,18 @@ uv run --locked --env-file .env alembic upgrade head
 
 当前没有把候选内容刷新绑定到自动调度；每日变化只重新计算现有候选的稳定顺序，不重新抓取知识底座。需要换批时显式更新 seed 并重新执行发布命令。已有 `daily_recommendations` 表保留为历史迁移兼容，不再承载首页请求。
 
+### 首页论文候选池
+
+`discovery_pool_papers`（迁移 `018_discovery_pool`）保存可在首页卡片展示的知识底座论文，由离线命令同步，首页请求只读不调底座：
+
+```bash
+cd apps/backend
+uv run --locked --env-file .env python -m app.services.discovery_pool sync --dry-run   # 只统计覆盖率
+uv run --locked --env-file .env python -m app.services.discovery_pool sync             # 写入，默认上海时区当年
+```
+
+同步按会议遍历 `browse_papers` 指定年份的全部分页，只收录能展示的论文：`image_id` 为 Web 图片代理接受的 png/jpg/webp 路径（SVG 不收录），清洗后的标题、至少 200 字摘要和作者齐全。标题、摘要、作者清洗规则与精选 seed 发布脚本共用 `app/services/discovery_pool/text.py`。任一分页重试后仍失败则整次中止；同一年份在一个事务内整体替换（更新元数据、删除本次未见论文），若新结果少于原有一半视为上游异常并拒绝写入，原候选池保持不变。2026-11-01 只读同步：24 个会议、18,863 篇，收录 15,804 篇（SVG 图 2,027、无图 791、摘要/作者不合格约 240）；精选 300 篇中 299 篇在池内。调度同样由部署方在外部配置。
+
 `agent_uploads` 临时文本表及匿名 Chat 会话仍按原维护策略清理。
 
 维护说明：[Chat 架构、协议与配置](../../docs/chat/README.md)。
