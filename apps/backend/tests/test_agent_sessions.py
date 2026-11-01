@@ -42,6 +42,8 @@ class AgentSessionApiTests(unittest.IsolatedAsyncioTestCase):
         self.env = patch.dict(os.environ, {
             'DEEPSEEK_API_KEY': 'test', 'DEEPSEEK_MODEL': 'deepseek-chat',
             'BACKEND_BFF_SECRET': '', 'BACKEND_ALLOW_INSECURE_LOCAL_BFF': 'true',
+            # 会话仓库已换成内存实现，上传存储也须同样脱离本地 .env 中的数据库
+            'CHAT_DATABASE_URL': '',
         })
         self.env.start()
         self.registry = patch.object(live_runs, '_live', {})

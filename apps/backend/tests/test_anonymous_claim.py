@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+import os
 from unittest.mock import patch
 
 from app.services.agent import workspace as agent_workspace
@@ -74,6 +75,9 @@ class FakeAgentRepository:
 
 class AnonymousClaimTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        # 仓库均为 Fake，上传存储也走内存，避免连到本地 .env 中的数据库
+        self.env = patch.dict(os.environ, {'CHAT_DATABASE_URL': ''})
+        self.env.start()
         self.temp_dir = tempfile.TemporaryDirectory()
         self.workspace_patch = patch.object(
             agent_workspace, 'WORKSPACE_ROOT', Path(self.temp_dir.name)
@@ -93,6 +97,7 @@ class AnonymousClaimTests(unittest.IsolatedAsyncioTestCase):
         self.chat_patch.stop()
         self.workspace_patch.stop()
         self.temp_dir.cleanup()
+        self.env.stop()
 
     def use_agent_repository(self, session_ids: list[str]) -> FakeAgentRepository:
         repository = FakeAgentRepository(session_ids)
