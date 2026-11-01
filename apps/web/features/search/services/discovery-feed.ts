@@ -8,34 +8,26 @@ import {
 import type { FeedPaper } from "../../../types";
 import { ApiError } from "../../../clients/backend/http";
 import { getPaperThumbnailUrl } from "../../../lib/paper-thumbnail";
+import {
+  formatPaperAuthors,
+  formatPaperYear,
+  paperVenueTone,
+  pickPaperTopics,
+} from "../../knowledge/papers/paper-card-model";
 import { fetchRecommendationPapers } from "../../../clients/backend/recommendations";
 
 export const DISCOVERY_PAGE_SIZE = 12;
-const VENUE_TONES: FeedPaper["venueTone"][] = ["violet", "amber", "green"];
-
-function stableVenueTone(id: string): FeedPaper["venueTone"] {
-  let hash = 0;
-  for (const character of id) hash = (hash + character.charCodeAt(0)) % VENUE_TONES.length;
-  return VENUE_TONES[hash];
-}
-
-function formatAuthors(authors: string[]): string {
-  if (authors.length === 0) return "作者未知";
-  const visible = authors.slice(0, 5).join(" · ");
-  return authors.length > 5 ? `${visible} 等` : visible;
-}
 
 export function mapDiscoveryPaper(item: Omit<DiscoveryPaperDto, "year"> & { year: number | null }): FeedPaper {
   return {
     id: item.id,
-    date: item.year === null ? "年份未知" : String(item.year),
+    date: formatPaperYear(item.year),
     venue: item.venue?.trim() || "预印本",
-    venueTone: stableVenueTone(item.id),
-    authors: formatAuthors(item.authors),
+    venueTone: paperVenueTone(item.id),
+    authors: formatPaperAuthors(item.authors),
     title: item.title,
     abstract: item.abstract,
-    // Same topics as knowledge search cards: upstream keywords, else subjects.
-    tags: (item.keywords?.length ? item.keywords : item.subjects ?? []).slice(0, 5),
+    tags: pickPaperTopics(item.keywords, item.subjects),
     // Curated papers keep their static thumbnail; pool and recalled papers use the knowledge image.
     thumbnailUrl: item.thumbnail_url ?? getPaperThumbnailUrl(item.image_id),
   };

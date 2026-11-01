@@ -10,6 +10,7 @@ import {
 
 const FEED_LIST_SOURCE = readFileSync("features/search/components/feed-list.tsx", "utf8");
 const PAPER_CARD_SOURCE = readFileSync("features/search/components/paper-card.tsx", "utf8");
+const CARD_LAYOUT_SOURCE = readFileSync("features/knowledge/papers/components/paper-card-layout.tsx", "utf8");
 const HOME_SOURCE = readFileSync("features/home/HomePage.tsx", "utf8");
 const BACKEND_CLIENT_SOURCE = readFileSync("clients/backend/discovery.ts", "utf8");
 
@@ -79,9 +80,13 @@ test("paper cards keep the existing detail navigation and load thumbnails on mob
     PAPER_CARD_SOURCE,
     /const detailHref = paperHref\(paper\.id, \{ mode: "create", source: returnTo \}\)/,
   );
-  // Title and 立即阅读; the card body itself navigates via usePaperCardNavigation.
-  assert.equal(PAPER_CARD_SOURCE.match(/href=\{detailHref\}/g)?.length, 2);
-  assert.doesNotMatch(PAPER_CARD_SOURCE, /hidden w-full max-w-\[320px\]/);
+  // 立即阅读 here; the shared layout links the title and navigates from the card body.
+  assert.equal(PAPER_CARD_SOURCE.match(/href=\{detailHref\}/g)?.length, 1);
+  assert.match(PAPER_CARD_SOURCE, /<PaperCardLayout[\s\S]*detailHref=\{detailHref\}/);
+  assert.match(CARD_LAYOUT_SOURCE, /<Link href=\{detailHref\} onClick=\{onNavigate\}/);
+  assert.match(CARD_LAYOUT_SOURCE, /usePaperCardNavigation\(detailHref, paper\.title, onNavigate\)/);
+  // Real images always show on mobile; only the placeholder collapses in a single column.
+  assert.match(CARD_LAYOUT_SOURCE, /paper\.thumbnailUrl \? "" : "hidden @min-\[600px\]:block"/);
 });
 
 test("daily-edition pool papers resolve their knowledge image through the proxy flag", () => {
@@ -114,8 +119,10 @@ test("home static thumbnails bypass the knowledge image flag", () => {
       process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = flag;
       assert.equal(mapDiscoveryPaper(discoveryPaper()).thumbnailUrl, "/paper-thumbnails/2604.17730v1.webp");
     }
-    assert.match(PAPER_CARD_SOURCE, /<PaperThumbnail src=\{paper\.thumbnailUrl\}/);
-    assert.doesNotMatch(PAPER_CARD_SOURCE, /getPaperThumbnailUrl|imageId|PAPER_THUMBNAIL_ENABLED/);
+    assert.match(CARD_LAYOUT_SOURCE, /<PaperThumbnail src=\{paper\.thumbnailUrl\}/);
+    for (const source of [PAPER_CARD_SOURCE, CARD_LAYOUT_SOURCE]) {
+      assert.doesNotMatch(source, /getPaperThumbnailUrl|imageId|PAPER_THUMBNAIL_ENABLED/);
+    }
   } finally {
     if (originalValue === undefined) delete process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
     else process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = originalValue;

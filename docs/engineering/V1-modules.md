@@ -11,5 +11,6 @@
 - Auth 保持 `apps/web/lib/auth` + Better Auth + PostgreSQL，不迁入 B 的账号实现。
 - 投稿 · 会议截稿 `/submit` 由 `features/submit` 经 `clients/backend/conferences` 调用 FastAPI `conferences` API；时区换算、当届选择、排序与筛选在 `app/services/conferences.py`，数据为 `scripts/publish_conference_deadlines.py` 生成的打包快照，详见 [会议截稿](../conferences/README.md)。
 - 首页论文发现由 `features/search` 的单一无限流经 `clients/backend/discovery` 调用 FastAPI `discovery` API；FastAPI 以内容快照版本和 `Asia/Shanghai` 日期生成每日稳定顺序，并将二者绑定到 cursor，跨午夜继续翻页也不会重复或遗漏。每天优先返回离线生成的每日精选（`python -m app.services.discovery_pool publish`，取自 `discovery_pool_papers` 候选池与随包精选快照，存于 `daily_recommendations`），缺失时依次回退到前一天精选和随包精选快照的当日排序；首页运行时不访问知识底座。精选缩略图作为 `apps/web/public/paper-thumbnails` 静态资源随 Web 部署，源数据仍保留在仓库根目录 `data/`；候选池论文经知识库 `image_id` 走同源图片代理。登录用户的推荐 Feed 在个人推荐之后继续同一份全站列表。
+- 论文卡片：首页 `PaperCard`（`features/search`）与检索类列表的 `KnowledgeResultCard`（检索、会议、基金、Topic、相关论文、阅读历史）共用 `features/knowledge/papers/components/paper-card-layout.tsx` 版式，年份、作者、会议配色与 Topic 选取规则集中在 `features/knowledge/papers/paper-card-model.ts`；数据转换、埋点与底部操作由各自卡片提供。新增论文卡片列表优先复用该版式，不另写一套。
 
 具体 Chat 协议、临时存储边界、配置与迁移取舍见 [Chat 维护指南](../chat/README.md) 和 [迁移记录](../chat/MIGRATION.md)。

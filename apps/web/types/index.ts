@@ -1,18 +1,24 @@
-/** 论文 Feed 卡片 */
-export interface FeedPaper {
+/** 论文卡片展示数据：首页与检索各自的数据适配层转换为此结构后共用同一版式。 */
+export interface PaperCardModel {
   id: string;
   date: string;
-  venue: string;
+  /** 为空时不展示会议标签。 */
+  venue: string | null;
   venueTone: "violet" | "amber" | "green";
   authors: string;
   title: string;
   abstract: string;
   tags: string[];
+  /** 由数据适配层提供；为空时由展示组件使用统一 fallback。 */
+  thumbnailUrl?: string | null;
+}
+
+/** 论文 Feed 卡片 */
+export interface FeedPaper extends PaperCardModel {
+  venue: string;
   /** 仅在真实数据源提供时展示；发现页 Knowledge 搜索结果不伪造指标。 */
   likes?: number;
   citations?: number;
-  /** 由数据适配层提供；为空时由展示组件使用统一 fallback。 */
-  thumbnailUrl?: string | null;
   recommendationRequestId?: string;
   recommendationRank?: number;
 }
