@@ -46,7 +46,13 @@ def _affinity(features: list[str], interests: dict[str, float]) -> float | None:
     return max((interests.get(_token(feature), 0.0) for feature in features), default=0.0)
 
 
-def _rank(candidate: Candidate, profile: dict, popularity: float | None, year: int) -> tuple[float, str]:
+def _popularity_reason(popularity: float | None) -> str | None:
+    return '近期受到平台用户关注' if popularity is not None and popularity > 0 else None
+
+
+def _rank(
+    candidate: Candidate, profile: dict, popularity: float | None, year: int,
+) -> tuple[float, str | None]:
     topics = {
         key: 0.6 * profile['long_topics'].get(key, 0) + 0.4 * profile['short_topics'].get(key, 0)
         for key in profile['long_topics'].keys() | profile['short_topics'].keys()
@@ -85,19 +91,40 @@ def _rank(candidate: Candidate, profile: dict, popularity: float | None, year: i
         reason = '与你近期搜索的方向相关'
     elif features['keyword_match'] and features['keyword_match'] > 0:
         reason = '与你关注的论文关键词相关'
-    elif popularity is not None and popularity > 0:
-        reason = '近期受到平台用户关注'
-    elif 'global_discovery' in candidate.sources:
-        reason = '来自论文发现'
     else:
-        reason = '来自相关论文检索'
+        # Without a real signal the card shows no reason instead of a generic label.
+        reason = _popularity_reason(popularity)
     return round(score, 6), reason
 
 
+def _blend(personal: list[dict], shared: list[dict]) -> list[dict]:
+    """Interleave personal picks with the shared daily list, never repeating a paper."""
+    blended: list[dict] = []
+    seen: set[str] = set()
+    personal_items, shared_items = iter(personal), iter(shared)
+
+    def take(items, count: int) -> int:
+        taken = 0
+        while taken < count:
+            item = next(items, None)
+            if item is None:
+                break
+            if item['id'] not in seen:
+                seen.add(item['id'])
+                blended.append(item)
+                taken += 1
+        return taken
+
+    while take(personal_items, config.PERSONAL_PER_SHARED) + take(shared_items, 1):
+        pass
+    return blended
+
+
 class CandidateRecallService:
-    def __init__(self, knowledge: KnowledgeService | None = None, discovery: HomeDiscoveryService | None = None):
+    """Personal candidates only; the shared daily list is blended in by RecommendationService."""
+
+    def __init__(self, knowledge: KnowledgeService | None = None):
         self.knowledge = knowledge or KnowledgeService()
-        self.discovery = discovery or HomeDiscoveryService()
 
     async def recall(self, profile: dict) -> list[Candidate]:
         candidates: dict[str, Candidate] = {}
@@ -166,23 +193,6 @@ class CandidateRecallService:
                     entry.keyword_recall_match = max(
                         entry.keyword_recall_match, interest / (1 + position * 0.1),
                     )
-
-        try:
-            global_page = self.discovery.page(limit=config.GLOBAL_DISCOVERY_RECALL_LIMIT)
-            for paper in global_page.items:
-                entry = candidates.get(paper.id)
-                if entry is None:
-                    entry = Candidate(paper=paper.model_dump(mode='json'), subjects=[], keywords=[], sources=set())
-                    candidates[paper.id] = entry
-                elif not entry.paper.get('thumbnail_url'):
-                    # A curated paper recalled by search first keeps its static thumbnail.
-                    entry.paper['thumbnail_url'] = paper.thumbnail_url
-                entry.sources.add('global_discovery')
-        except Exception as error:  # noqa: BLE001 - personal recall stays usable
-            logger.warning(
-                'Global discovery snapshot unavailable during recommendation recall (%s)',
-                type(error).__name__,
-            )
         return list(candidates.values())
 
 
@@ -190,9 +200,11 @@ class RecommendationService:
     def __init__(
         self, profiles: UserProfileService | None = None,
         recall: CandidateRecallService | None = None,
+        discovery: HomeDiscoveryService | None = None,
     ):
         self.profiles = profiles or UserProfileService()
         self.recall = recall or CandidateRecallService()
+        self.discovery = discovery or HomeDiscoveryService()
 
     async def page(self, user_id: str, *, limit: int, cursor: str | None = None) -> dict:
         if cursor:
@@ -214,26 +226,35 @@ class RecommendationService:
             offset = 0
             profile = await self.profiles.get(user_id)
             candidates = await self.recall.recall(profile)
-            excluded, popularity = await self._account_and_popularity(user_id, [item.paper['id'] for item in candidates])
+            shared = self._shared_papers()
+            excluded, popularity = await self._account_and_popularity(
+                user_id, [item.paper['id'] for item in candidates] + [paper['id'] for paper in shared],
+            )
+            static_thumbnails = {paper['id']: paper['thumbnail_url'] for paper in shared if paper.get('thumbnail_url')}
             current_year = utc_now().year
             scored = []
             for candidate in candidates:
-                if candidate.paper['id'] in excluded:
+                paper_id = candidate.paper['id']
+                if paper_id in excluded:
                     continue
-                score, reason = _rank(candidate, profile, popularity.get(candidate.paper['id']), current_year)
+                # A curated paper recalled by search keeps its static thumbnail.
+                candidate.paper['thumbnail_url'] = candidate.paper.get('thumbnail_url') or static_thumbnails.get(paper_id)
+                if not (candidate.paper['thumbnail_url'] or candidate.paper.get('image_id')):
+                    continue  # The home feed only shows papers with an image.
+                score, reason = _rank(candidate, profile, popularity.get(paper_id), current_year)
                 scored.append((score, candidate, reason))
-            if profile['has_history']:
-                scored.sort(key=lambda item: (-item[0], item[1].paper['id']))
-                ordered = self._diversify(scored)
-            else:
-                # Preserve the established daily discovery order for cold start.
-                ordered = scored
+            scored.sort(key=lambda item: (-item[0], item[1].paper['id']))
+            personal = [{
+                **candidate.paper, 'reason': reason, 'sources': sorted(candidate.sources),
+            } for _score, candidate, reason in self._diversify(scored)[:config.PERSONAL_RECOMMENDATION_LIMIT]]
+            shared_items = [{
+                **paper, 'reason': _popularity_reason(popularity.get(paper['id'])),
+                'sources': ['global_discovery'],
+            } for paper in shared if paper['id'] not in excluded]
             request_id = uuid4()
             items = [{
-                **candidate.paper, 'reason': reason,
-                'sources': sorted(candidate.sources), 'request_id': str(request_id),
-                'rank': rank,
-            } for rank, (_score, candidate, reason) in enumerate(ordered, 1)]
+                **item, 'request_id': str(request_id), 'rank': rank,
+            } for rank, item in enumerate(_blend(personal, shared_items), 1)]
             version = ALGORITHM_VERSION
             now = utc_now()
             async with session_scope() as session:
@@ -255,6 +276,13 @@ class RecommendationService:
             'has_more': end < len(items), 'request_id': str(request_id),
             'total': len(items), 'algorithm_version': version,
         }
+
+    def _shared_papers(self) -> list[dict]:
+        try:
+            return [paper.model_dump(mode='json') for paper in self.discovery.daily_papers()]
+        except Exception as error:  # noqa: BLE001 - personal picks stay usable
+            logger.warning('Shared daily papers unavailable for recommendations (%s)', type(error).__name__)
+            return []
 
     @staticmethod
     def _diversify(scored: list[tuple[float, Candidate, str]]) -> list[tuple[float, Candidate, str]]:

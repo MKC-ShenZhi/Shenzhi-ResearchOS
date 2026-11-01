@@ -96,6 +96,10 @@ class HomeDiscoveryServiceTests(unittest.TestCase):
         self.assertEqual(set(day_one_ids), {item.id for item in day_two.items})
         self.assertEqual(day_one.snapshot_id, 'seed-test:2026-10-16')
         self.assertEqual(day_two.snapshot_id, 'seed-test:2026-10-17')
+        # Personal feeds continue with exactly the same complete daily order.
+        self.assertEqual([item.id for item in HomeDiscoveryService(
+            lambda: snapshot, today_provider=lambda: date(2026, 10, 16),
+        ).daily_papers()], day_one_ids)
 
     def test_daily_shuffle_never_crosses_priority_boundaries(self):
         snapshot = DiscoverySnapshot(

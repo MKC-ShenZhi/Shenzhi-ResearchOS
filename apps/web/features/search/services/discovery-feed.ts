@@ -87,7 +87,7 @@ async function recommendationPage(cursor: string | null, userId: string): Promis
       ...mapDiscoveryPaper(item),
       // Curated papers keep their static thumbnail; recalled papers use the knowledge image.
       thumbnailUrl: item.thumbnail_url ?? getPaperThumbnailUrl(item.image_id),
-      recommendationReason: item.reason,
+      recommendationReason: item.reason ?? undefined,
       recommendationRequestId: item.request_id,
       recommendationRank: item.rank,
     })),

@@ -57,7 +57,7 @@ test("recalled recommendations use knowledge images while curated papers keep st
     items: [
       { ...paper, id: "recalled", image_id: "/images/2026/recalled.webp", rank: 1, ...item },
       { ...paper, id: "curated", thumbnail_url: "/paper-thumbnails/curated.webp", image_id: null, rank: 2, ...item },
-      { ...paper, id: "legacy", rank: 3, ...item },
+      { ...paper, id: "legacy", rank: 3, ...item, reason: null },
     ],
     next_cursor: null, has_more: false, request_id: "request-1", total: 3, algorithm_version: "content-v1",
   });
@@ -66,6 +66,10 @@ test("recalled recommendations use knowledge images while curated papers keep st
     const enabled = await fetchHomeFeedPage(null, "user-a");
     assert.deepEqual(enabled.items.map((entry) => entry.thumbnailUrl), [
       "/api/paper-images/2026/recalled.webp", "/paper-thumbnails/curated.webp", null,
+    ]);
+    // Shared daily papers without a real signal show no reason at all.
+    assert.deepEqual(enabled.items.map((entry) => entry.recommendationReason), [
+      "与你近期搜索的方向相关", "与你近期搜索的方向相关", undefined,
     ]);
     // The knowledge image flag still gates recalled images; static thumbnails are unaffected.
     process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = "false";

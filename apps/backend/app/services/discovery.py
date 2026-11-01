@@ -150,6 +150,10 @@ class HomeDiscoveryService:
         self._snapshot_loader = snapshot_loader
         self._today_provider = today_provider
 
+    def daily_papers(self) -> list[DiscoveryPaper]:
+        """Today's complete shared order, which every personal feed continues with."""
+        return list(_daily_items(self._snapshot_loader(), self._today_provider()))
+
     def page(self, *, limit: int, cursor: str | None = None) -> DiscoveryPaperPage:
         snapshot = self._snapshot_loader()
         ordering_date, offset = (

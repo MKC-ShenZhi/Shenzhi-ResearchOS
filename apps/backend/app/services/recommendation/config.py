@@ -44,7 +44,10 @@ RECALL_PER_SOURCE = 12
 # Each recall query and each metadata lookup is bounded independently, so one
 # slow upstream path degrades to fewer candidates instead of a failed page.
 RECALL_TIMEOUT_SECONDS = 5.0
-GLOBAL_DISCOVERY_RECALL_LIMIT = 48
+# A personal feed is two bounded lists: at most this many personal picks,
+# interleaved PERSONAL_PER_SHARED : 1 with the complete shared daily list.
+PERSONAL_RECOMMENDATION_LIMIT = 100
+PERSONAL_PER_SHARED = 2
 METADATA_TIMEOUT_SECONDS = 4.0
 METADATA_BATCH_TIMEOUT_SECONDS = 6.0
 METADATA_CONCURRENCY = 4

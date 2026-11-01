@@ -5,7 +5,8 @@ export interface RecommendationPaperDto extends Omit<DiscoveryPaperDto, "year"> 
   year: number | null;
   /** Knowledge image id of a recalled paper; absent in snapshots created before it was stored. */
   image_id?: string | null;
-  reason: string;
+  /** Only real signals carry a reason; shared daily papers usually have none. */
+  reason: string | null;
   sources: string[];
   request_id: string;
   rank: number;

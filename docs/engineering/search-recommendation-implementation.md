@@ -30,9 +30,11 @@ Backend 中 `BehaviorEventService` 负责事件校验后的幂等写入；`Paper
 
 ## 召回、排序与分页
 
-每次推荐最多调用四个知识底座查询，每路最多 12 篇：显式关注主题、推断主题和高分关键词；并合并现有全局发现快照中的 48 篇。知识底座某路失败仍用其他来源，全部失败时保留全局候选。论文 ID 作为不透明字符串去重。已点赞或收藏的论文默认过滤。
+个人召回每次最多调用四个知识底座查询，每路最多 12 篇：显式关注主题、推断主题和高分关键词。知识底座某路失败仍用其他来源。论文 ID 作为不透明字符串去重。已点赞或收藏的论文默认过滤。首页只展示有图的论文：召回论文需带知识库 `image_id`，或本身属于首页精选（沿用静态缩略图），否则不进入列表。
 
-排序有效特征权重：主题 0.40、关键词 0.25、显式关注 0.20、已发布平台热度 0.10、论文年份时效 0.05；缺失特征不参与分母。关键词检索命中可作为该次兴趣查询的证据，即使知识底座没有返回完全相同的关键词标签；该信号按上游结果位置有界衰减，并使用“与你近期搜索的方向相关”理由。没有个人匹配的候选分数封顶为 0.15，避免仅凭时效超过相关论文。冷启动直接保留现有每日发现顺序。主题多样性只在替代候选分数至少达到当前候选的 80% 时调整，避免引入明显不相关论文。推荐理由由实际匹配特征决定，不暴露行为明细。分数是排序信号，不是喜欢概率。
+登录 Feed 由两份各自有上限的列表组成：个人推荐（排序与多样性处理后最多 100 篇）与当天完整的全站列表（`HomeDiscoveryService.daily_papers()`，与匿名首页同一顺序）。两者按 2 篇个人、1 篇全站交替混排并去重；个人推荐用完后继续全站列表，因此登录用户可浏览数量不少于匿名用户。全站列表不可用时只返回个人推荐，两者都为空时前端第一页退回全局发现。
+
+排序有效特征权重：主题 0.40、关键词 0.25、显式关注 0.20、已发布平台热度 0.10、论文年份时效 0.05；缺失特征不参与分母。关键词检索命中可作为该次兴趣查询的证据，即使知识底座没有返回完全相同的关键词标签；该信号按上游结果位置有界衰减，并使用“与你近期搜索的方向相关”理由。没有个人匹配的候选分数封顶为 0.15，避免仅凭时效超过相关论文。冷启动没有个人召回时，Feed 即为当天全站列表。主题多样性只在替代候选分数至少达到当前候选的 80% 时调整，避免引入明显不相关论文。推荐理由由实际匹配特征决定，不暴露行为明细；没有个人匹配或平台热度时 `reason` 为 `null`，卡片不显示理由。分数是排序信号，不是喜欢概率。
 
 `GET /api/v1/recommendations/papers?limit=12&cursor=...` 返回论文基础信息、理由、来源、位置、请求 ID、下一页游标、总数和算法版本。首次请求保存一小时用户私有快照；游标请求验证拥有者与过期时间：格式错误返回 400，快照不存在、已过期或属于他人统一返回 `20001/409`（与统计快照游标一致，表示不可重试、需从第一页重新开始）。`POST /api/v1/behavior-events/batch` 只接受登录用户受控事件；推荐曝光和点击携带推荐请求 ID 与位置。前端 Feed 的查询缓存按当前用户 ID 隔离，匿名用户继续使用全局发现列表。
 
@@ -40,7 +42,7 @@ Backend 中 `BehaviorEventService` 负责事件校验后的幂等写入；`Paper
 
 | 接口 | 输入 | `data` 核心字段 |
 | --- | --- | --- |
-| `GET /api/v1/recommendations/papers` | `limit` 1–48，`cursor` 可选 | `items`（每篇含 `id/title/abstract/authors/year/venue/reason/sources/request_id/rank`）、`next_cursor`、`has_more`、`request_id`、`total`、`algorithm_version` |
+| `GET /api/v1/recommendations/papers` | `limit` 1–48，`cursor` 可选 | `items`（每篇含 `id/title/abstract/authors/year/venue/thumbnail_url/image_id/reason/sources/request_id/rank`；`reason` 可为 `null`，`image_id` 仅召回论文携带）、`next_cursor`、`has_more`、`request_id`、`total`、`algorithm_version` |
 | `GET /api/v1/recommendations/me/profile` | 无 | `long_topics`、`short_topics`、`long_keywords`、`short_keywords`、`explicit_subjects`、`has_history`、`computed_at`、`algorithm_version` |
 | `POST /api/v1/behavior-events/batch` | `{events:[...]}`，每批 1–20 条；事件含 UUID `event_id`、类型、来源和对象，推荐事件另含 `request_id/rank`，搜索事件可含 UUID `query_id` | `inserted`（幂等后实际新增条数） |
 
