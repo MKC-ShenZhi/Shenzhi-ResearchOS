@@ -1,7 +1,9 @@
 """Trending source: pool papers ranked by platform likes plus collections.
 
-Reads the latest completed stats snapshot on or before the list date, so a
-given day always yields the same list. Without platform activity it is empty
+Reads the latest completed stats snapshot from before the list date. Today's
+snapshot can still be (re)built during the day, which would change the list
+under readers mid-scroll; the previous day's is final, so a given day always
+yields the same list. Without platform activity it is empty
 and the composer hands its slots to the other sources.
 """
 
@@ -32,7 +34,7 @@ async def load_trending(ordering_date: date) -> list[DiscoveryPaper]:
     try:
         async with session_scope() as session:
             snapshot_date = await session.scalar(select(func.max(StatsSnapshotRunRow.snapshot_date)).where(
-                StatsSnapshotRunRow.status == 'completed', StatsSnapshotRunRow.snapshot_date <= ordering_date,
+                StatsSnapshotRunRow.status == 'completed', StatsSnapshotRunRow.snapshot_date < ordering_date,
             ))
             pool_year = await session.scalar(select(func.max(DiscoveryPoolPaperRow.year)))
             rows = [] if snapshot_date is None or pool_year is None else list(await session.execute(

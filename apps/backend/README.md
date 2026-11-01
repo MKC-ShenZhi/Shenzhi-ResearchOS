@@ -106,7 +106,7 @@ uv add --dev <package>
 | 数据源 | 来源 | 上限 | 何时读取 |
 | --- | --- | --- | --- |
 | `daily` | 当天的每日候选（`daily_recommendations`，由候选池离线生成）；当天没有时取 7 天内最新的一期，一条查询 | 300 | 每次组装 |
-| `trending` | 候选池中平台点赞数 + 收藏数最高的论文，按列表日期当天或之前最新完成的统计快照计算 | 30 | 每次组装（缓存 60 秒） |
+| `trending` | 候选池中平台点赞数 + 收藏数最高的论文，按列表日期之前（不含当天）最新完成的统计快照计算，当天快照重算不会让列表在白天变化 | 30 | 每次组装（缓存 60 秒） |
 | `personal` | 登录用户的个人推荐（召回与排序见 [推荐实现](../../docs/engineering/search-recommendation-implementation.md)） | 100 | 登录用户首次请求 |
 | `fallback` | 随包快照 `app/data/home_discovery_snapshot.json`（298 篇，自带 `public/paper-thumbnails` 静态图，即使底座图片服务不可用也能显示） | — | **只在**实时数据源合计不足 36 篇时追加一次 |
 

@@ -7,6 +7,7 @@ from app.core.identity import RequestIdentity, request_identity
 from app.core.responses import ok
 from app.services.discovery import (
     DiscoveryCursorError,
+    DiscoveryListChangedError,
     DiscoverySnapshotError,
     HomeDiscoveryService,
 )
@@ -24,6 +25,10 @@ async def papers(
 ):
     try:
         response = await service.page(limit=limit, cursor=cursor)
+    except DiscoveryListChangedError as error:
+        # Same stale-cursor contract as recommendations and platform stats:
+        # 409 cannot be retried with this cursor; the client restarts at page one.
+        raise BusinessError(20001, str(error), 409) from error
     except DiscoveryCursorError as error:
         raise BusinessError(20001, str(error), 400) from error
     except DiscoverySnapshotError as error:

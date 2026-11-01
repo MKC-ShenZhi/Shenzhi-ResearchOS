@@ -4,7 +4,7 @@ import test from "node:test";
 import { InfiniteQueryObserver, QueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
   fetchHomeFeedPage,
-  RecommendationFeedExpiredError,
+  HomeFeedExpiredError,
   type DiscoveryFeedPage,
 } from "../../features/search/services/discovery-feed.js";
 import { recordPaperBehavior, recordSearchSubmit } from "../../clients/backend/behavior.js";
@@ -276,8 +276,29 @@ test("an expired recommendation snapshot asks for a restart instead of falling b
   globalThis.fetch = backend.fetchImpl;
   try {
     const first = await fetchHomeFeedPage(null, "user-a");
-    await assert.rejects(fetchHomeFeedPage(first.nextCursor, "user-a"), RecommendationFeedExpiredError);
+    await assert.rejects(fetchHomeFeedPage(first.nextCursor, "user-a"), (error: unknown) =>
+      error instanceof HomeFeedExpiredError && error.feed === "recommendation");
     assert.equal(backend.requested.some(({ url }) => url.includes("/discovery/")), false);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("a replaced anonymous discovery list asks for a restart instead of retrying the stale cursor", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const cursor = new URL(String(input), "http://local").searchParams.get("cursor");
+    if (cursor) return failure(409, 20001);
+    return json({ items: [paper], next_cursor: "daily-1", has_more: true, snapshot_id: "home:1", total: 300 });
+  };
+  try {
+    const first = await fetchHomeFeedPage(null, null);
+    await assert.rejects(fetchHomeFeedPage(first.nextCursor, null), (error: unknown) =>
+      error instanceof HomeFeedExpiredError && error.feed === "discovery");
+    // A malformed cursor (400) stays an ordinary, retryable failure.
+    globalThis.fetch = async () => failure(400, 20001);
+    await assert.rejects(fetchHomeFeedPage(first.nextCursor, null), (error: unknown) =>
+      !(error instanceof HomeFeedExpiredError));
   } finally {
     globalThis.fetch = original;
   }
@@ -290,7 +311,7 @@ test("an account-switch precondition failure on a later page is not treated as e
   try {
     const first = await fetchHomeFeedPage(null, "user-a");
     await assert.rejects(fetchHomeFeedPage(first.nextCursor, "user-a"), (error: unknown) =>
-      !(error instanceof RecommendationFeedExpiredError));
+      !(error instanceof HomeFeedExpiredError));
     assert.equal(backend.requested.some(({ url }) => url.includes("/discovery/")), false);
   } finally {
     globalThis.fetch = original;
@@ -364,7 +385,7 @@ test("infinite feed restarts from a new first page only after an explicit reset"
   try {
     await observer.refetch();
     const failed = await observer.fetchNextPage();
-    assert.ok(failed.error instanceof RecommendationFeedExpiredError);
+    assert.ok(failed.error instanceof HomeFeedExpiredError);
     assert.equal(loadedIds(observer).length, 12);
     await cache.resetQueries({ queryKey: ["home-feed", "user-a"] });
     assert.equal(observer.getCurrentResult().data?.pages.length, 1);

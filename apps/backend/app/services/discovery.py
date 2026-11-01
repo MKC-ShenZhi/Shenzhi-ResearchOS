@@ -48,7 +48,11 @@ class DiscoverySnapshotError(RuntimeError):
 
 
 class DiscoveryCursorError(ValueError):
-    """The cursor cannot address the currently published snapshot."""
+    """The cursor is malformed or points past the end of its list."""
+
+
+class DiscoveryListChangedError(DiscoveryCursorError):
+    """The cursor is well-formed but its list was replaced; only page one can recover."""
 
 
 @dataclass(frozen=True)
@@ -288,7 +292,7 @@ class HomeDiscoveryService:
         # Cursors issued before composed lists carried the bare snapshot id.
         if list_id in (snapshot.snapshot_id, _daily_snapshot_id(snapshot.snapshot_id, ordering_date)):
             return self._curated_list(ordering_date)
-        raise DiscoveryCursorError('论文发现列表已更新，请重新加载后继续浏览')
+        raise DiscoveryListChangedError('论文发现列表已更新，请重新加载后继续浏览')
 
     async def page(self, *, limit: int, cursor: str | None = None) -> DiscoveryPaperPage:
         if cursor is None:

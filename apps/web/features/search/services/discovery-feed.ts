@@ -56,16 +56,30 @@ export async function fetchDiscoveryFeedPage(cursor: string | null): Promise<Dis
 
 const DISCOVERY_CURSOR_PREFIX = "discovery:";
 
-/** The recommendation snapshot behind a cursor is gone; only a restart from page one can recover. */
-export class RecommendationFeedExpiredError extends Error {
-  constructor() {
-    super("推荐列表已过期，请刷新后重新浏览");
-    this.name = "RecommendationFeedExpiredError";
+/**
+ * The list behind a cursor is gone (recommendation snapshot expired, or the
+ * day's discovery list was replaced); only a restart from page one can recover.
+ */
+export class HomeFeedExpiredError extends Error {
+  constructor(readonly feed: "recommendation" | "discovery") {
+    super(feed === "recommendation" ? "推荐列表已过期，请刷新后重新浏览" : "论文列表已更新，请刷新后重新浏览");
+    this.name = "HomeFeedExpiredError";
   }
 }
 
+/** Both feeds answer a stale cursor with 409 / 20001. */
+function isStaleCursor(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && error.code === 20001;
+}
+
 async function homeDiscoveryPage(cursor: string | null): Promise<DiscoveryFeedPage> {
-  const page = await fetchDiscoveryFeedPage(cursor);
+  let page: DiscoveryFeedPage;
+  try {
+    page = await fetchDiscoveryFeedPage(cursor);
+  } catch (error) {
+    if (isStaleCursor(error)) throw new HomeFeedExpiredError("discovery");
+    throw error;
+  }
   return {
     ...page,
     nextCursor: page.nextCursor ? `${DISCOVERY_CURSOR_PREFIX}${page.nextCursor}` : null,
@@ -115,9 +129,7 @@ export async function fetchHomeFeedPage(cursor: string | null, userId: string | 
   try {
     return await recommendationPage(cursor, userId);
   } catch (error) {
-    if (error instanceof ApiError && error.status === 409 && error.code === 20001) {
-      throw new RecommendationFeedExpiredError();
-    }
+    if (isStaleCursor(error)) throw new HomeFeedExpiredError("recommendation");
     throw error;
   }
 }

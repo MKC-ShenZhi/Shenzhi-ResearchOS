@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { discoveryQueryRetry } from "@/clients/backend/discovery";
 import {
   fetchHomeFeedPage,
-  RecommendationFeedExpiredError,
+  HomeFeedExpiredError,
 } from "../services/discovery-feed";
 import { PaperCard } from "./paper-card";
 
@@ -59,9 +59,9 @@ export function FeedList() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, failure) =>
-      !(failure instanceof RecommendationFeedExpiredError) && discoveryQueryRetry(failureCount, failure),
+      !(failure instanceof HomeFeedExpiredError) && discoveryQueryRetry(failureCount, failure),
   });
-  const snapshotExpired = isFetchNextPageError && error instanceof RecommendationFeedExpiredError;
+  const expired = isFetchNextPageError && error instanceof HomeFeedExpiredError ? error.feed : null;
 
   const papers = useMemo(() => {
     const unique = new Map<string, NonNullable<typeof data>["pages"][number]["items"][number]>();
@@ -118,19 +118,21 @@ export function FeedList() {
         {isFetchNextPageError && (
           <div className="text-center" role="alert">
             <p className="text-sm text-muted">
-              {snapshotExpired
+              {expired === "recommendation"
                 ? "推荐列表已过期，刷新后将重新生成推荐。"
-                : "后续论文加载失败，已加载内容不受影响。"}
+                : expired === "discovery"
+                  ? "论文列表已更新，刷新后从第一篇开始浏览。"
+                  : "后续论文加载失败，已加载内容不受影响。"}
             </p>
             <Button
               variant="outline"
               size="sm"
               className="mt-3"
-              onClick={() => void (snapshotExpired
+              onClick={() => void (expired
                 ? queryClient.resetQueries({ queryKey })
                 : fetchNextPage())}
             >
-              {snapshotExpired ? "刷新推荐" : "重试加载"}
+              {expired === "recommendation" ? "刷新推荐" : expired ? "刷新列表" : "重试加载"}
             </Button>
           </div>
         )}

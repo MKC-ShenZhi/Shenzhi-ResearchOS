@@ -11,6 +11,7 @@ from app.main import app
 from app.schemas.discovery import DiscoveryPaper
 from app.services.discovery import (
     DiscoveryCandidate,
+    DiscoveryListChangedError,
     DiscoverySnapshot,
     DiscoverySnapshotError,
     HomeDiscoveryService as _HomeDiscoveryService,
@@ -232,7 +233,7 @@ class ComposedListTests(unittest.IsolatedAsyncioTestCase):
         second = await service.page(limit=12, cursor=first.next_cursor)
         self.assertTrue({item.id for item in first.items}.isdisjoint({item.id for item in second.items}))
         republished, _ = self.service(pool_papers(range(100, 140)))
-        with self.assertRaisesRegex(ValueError, '已更新'):
+        with self.assertRaisesRegex(DiscoveryListChangedError, '已更新'):
             await republished.page(limit=12, cursor=first.next_cursor)
 
     def test_stored_payloads_are_validated(self):
@@ -291,6 +292,15 @@ class HomeDiscoveryApiTests(unittest.TestCase):
         self.assertEqual(invalid_limit.status_code, 422)
         self.assertEqual(invalid_cursor.status_code, 400)
         self.assertEqual(invalid_cursor.json()['code'], 20001)
+
+    def test_replaced_list_returns_conflict_so_the_client_restarts(self):
+        first = self.client.get('/api/v1/discovery/papers', headers=self.headers).json()['data']
+        with patch('app.api.discovery.service.page', side_effect=DiscoveryListChangedError('论文发现列表已更新')):
+            stale = self.client.get(
+                '/api/v1/discovery/papers', params={'cursor': first['next_cursor']}, headers=self.headers,
+            )
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()['code'], 20001)
 
     def test_snapshot_failure_returns_recoverable_service_error(self):
         with patch('app.api.discovery.service.page', side_effect=DiscoverySnapshotError('missing')):

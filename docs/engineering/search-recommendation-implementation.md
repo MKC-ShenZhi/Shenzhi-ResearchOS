@@ -6,7 +6,7 @@
 
 论文主动搜索仍走原有 Knowledge API、Service 和 Adapter。推荐由独立的 `/api/v1/recommendations` 路由提供，不向主动搜索注入画像，也不改变其查询、过滤、原始排序和分页。身份沿用 Better Auth → Web BFF → `require_user`，请求体不接受用户 ID。
 
-Backend 中 `BehaviorEventService` 负责事件校验后的幂等写入；`PaperFeatureService` 通过现有 Knowledge Service 有界获取论文详情；`UserProfileService` 从当前关系状态和近 90 天隐式事件重建画像；`CandidateRecallService` 调用现有主题检索、增强检索及发现快照；`RecommendationService` 排序、过滤并保存一小时的分页快照。Web 的首页 Feed 对登录用户请求推荐；只有第一页失败或为空时整份列表降级为现有全局发现，推荐分页开始后的失败保留已加载内容并重试同一游标，快照过期（409）时提示刷新并从第一页重建。
+Backend 中 `BehaviorEventService` 负责事件校验后的幂等写入；`PaperFeatureService` 通过现有 Knowledge Service 有界获取论文详情；`UserProfileService` 从当前关系状态和近 90 天隐式事件重建画像；`CandidateRecallService` 调用现有主题检索、增强检索及发现快照；`RecommendationService` 排序、过滤并保存一小时的分页快照。Web 的首页 Feed 对登录用户请求推荐；只有第一页失败或为空时整份列表降级为现有全局发现，推荐分页开始后的失败保留已加载内容并重试同一游标，快照过期（409）时提示刷新并从第一页重建。匿名发现列表在浏览中途被替换（例如当天候选在 0:05 生成）时同样返回 `20001/409`，前端统一抛 `HomeFeedExpiredError`，提示“论文列表已更新”并从第一页重建；游标格式错误仍为 400。
 
 ## 事件与数据库
 
