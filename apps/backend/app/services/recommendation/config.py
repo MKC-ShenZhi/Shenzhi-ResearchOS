@@ -46,10 +46,9 @@ RECALL_PER_SOURCE = 12
 RECALL_TIMEOUT_SECONDS = 5.0
 # Subject search cannot filter by year; fetch this many times more and keep the home year.
 SUBJECT_YEAR_OVERFETCH = 3
-# A personal feed is two bounded lists: at most this many personal picks,
-# interleaved PERSONAL_PER_SHARED : 1 with the complete shared daily list.
+# At most this many personal picks enter the home feed as the `personal` source;
+# app.services.home_feed composes them with the shared sources.
 PERSONAL_RECOMMENDATION_LIMIT = 100
-PERSONAL_PER_SHARED = 2
 METADATA_TIMEOUT_SECONDS = 4.0
 METADATA_BATCH_TIMEOUT_SECONDS = 6.0
 METADATA_CONCURRENCY = 4

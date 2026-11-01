@@ -23,6 +23,7 @@ def upgrade() -> None:
         sa.Column('image_id', sa.Text(), nullable=False),
         sa.Column('subjects', postgresql.JSONB(), nullable=False),
         sa.Column('keywords', postgresql.JSONB(), nullable=False),
+        sa.Column('primary_subject', sa.Text(), nullable=True),
         sa.Column('synced_at', sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint('paper_id', name='pk_discovery_pool_papers'),
     )

@@ -1,14 +1,16 @@
 """Read and paginate the shared home-discovery list.
 
-Each Shanghai day serves the stored daily edition (built offline by
-``python -m app.services.discovery_pool publish``). Without one, yesterday's
-edition is reused, and without that the packaged curated snapshot is shuffled
-for the day, so the home feed never depends on the knowledge base or the
-publish job at request time.
+The anonymous home list is composed per Shanghai day from bounded sources:
+``daily`` (the newest stored daily edition at most DAILY_MAX_AGE_DAYS old,
+built offline by ``python -m app.services.discovery_pool publish``) and
+``trending`` (platform activity). Only when they yield fewer than
+FALLBACK_MIN_ITEMS papers is the packaged snapshot appended, once, as the
+``fallback`` source; requests never call the knowledge base.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import hashlib
@@ -23,11 +25,16 @@ from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
+from sqlalchemy import select
 
 from app.core.database import session_scope
 from app.core.time import utc_now
 from app.models.daily_recommendation import DailyRecommendationRow
 from app.schemas.discovery import DiscoveryPaper, DiscoveryPaperPage
+from app.services.home_feed import config
+from app.services.home_feed.composer import compose
+from app.services.home_feed.rules import admit
+from app.services.home_feed.trending import load_trending
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +71,7 @@ class DailyList:
     papers: tuple[DiscoveryPaper, ...]
 
 
-EDITION_CACHE_SECONDS = 60.0
-_edition_cache: dict[date, tuple[float, DailyList | None]] = {}
+_edition_cache: dict[date, tuple[float, tuple[DiscoveryPaper, ...]]] = {}
 
 
 def edition_id(ordering_date: date, papers: list[DiscoveryPaper] | tuple[DiscoveryPaper, ...]) -> str:
@@ -73,7 +79,15 @@ def edition_id(ordering_date: date, papers: list[DiscoveryPaper] | tuple[Discove
     return f'daily:{ordering_date.isoformat()}:{digest}'
 
 
-def parse_edition(ordering_date: date, payload: Any) -> DailyList | None:
+def home_list_id(ordering_date: date, papers: list[DiscoveryPaper] | tuple[DiscoveryPaper, ...]) -> str:
+    """Bind cursors to the exact composed order, sources included."""
+    digest = hashlib.sha256(
+        '\n'.join(f'{paper.source}:{paper.id}' for paper in papers).encode('utf-8'),
+    ).hexdigest()[:16]
+    return f'home:{ordering_date.isoformat()}:{digest}'
+
+
+def parse_edition(payload: Any) -> tuple[DiscoveryPaper, ...] | None:
     """Validate a stored edition; legacy or damaged rows are treated as missing."""
     try:
         if not isinstance(payload, list) or not payload:
@@ -84,23 +98,33 @@ def parse_edition(ordering_date: date, payload: Any) -> DailyList | None:
     ids = [paper.id for paper in papers]
     if len(set(ids)) != len(ids) or any(not (paper.thumbnail_url or paper.image_id) for paper in papers):
         return None
-    return DailyList(edition_id(ordering_date, papers), ordering_date, papers)
+    return papers
 
 
-async def load_stored_edition(ordering_date: date) -> DailyList | None:
+async def load_latest_edition(ordering_date: date) -> tuple[DiscoveryPaper, ...]:
+    """The newest valid edition on or before the date, within DAILY_MAX_AGE_DAYS; one query."""
     cached = _edition_cache.get(ordering_date)
     if cached and cached[0] > time.monotonic():
         return cached[1]
+    papers: tuple[DiscoveryPaper, ...] = ()
     try:
         async with session_scope() as session:
-            row = await session.get(DailyRecommendationRow, ordering_date)
-        edition = parse_edition(ordering_date, row.payload) if row is not None else None
-    except Exception as error:  # noqa: BLE001 - the packaged snapshot keeps the feed available
+            payloads = await session.scalars(
+                select(DailyRecommendationRow.payload)
+                .where(DailyRecommendationRow.recommendation_date.between(
+                    ordering_date - timedelta(days=config.DAILY_MAX_AGE_DAYS), ordering_date,
+                ))
+                .order_by(DailyRecommendationRow.recommendation_date.desc()),
+            )
+            for payload in payloads:
+                if (parsed := parse_edition(payload)) is not None:
+                    papers = parsed
+                    break
+    except Exception as error:  # noqa: BLE001 - the other sources and the fallback keep the feed available
         logger.warning('Daily discovery edition unavailable (%s)', type(error).__name__)
-        edition = None
     # Editions are written once a day offline; a short cache keeps paging off the database.
-    _edition_cache[ordering_date] = (time.monotonic() + EDITION_CACHE_SECONDS, edition)
-    return edition
+    _edition_cache[ordering_date] = (time.monotonic() + config.SOURCE_CACHE_SECONDS, papers)
+    return papers
 
 
 def _read_snapshot(path: Path) -> DiscoverySnapshot:
@@ -122,14 +146,10 @@ def _read_snapshot(path: Path) -> DiscoverySnapshot:
             priority = item.get('priority')
             if not isinstance(priority, int) or isinstance(priority, bool) or not 1 <= priority <= 4:
                 raise ValueError('paper priority must be between 1 and 4')
-            candidates.append(
-                DiscoveryCandidate(
-                    paper=DiscoveryPaper.model_validate({
-                        key: value for key, value in item.items() if key != 'priority'
-                    }),
-                    priority=priority,
-                ),
-            )
+            DiscoveryPaper.model_validate({key: value for key, value in item.items() if key != 'priority'})
+            paper, _reason = admit(item)
+            if paper is not None:
+                candidates.append(DiscoveryCandidate(paper=paper, priority=priority))
         items = tuple(candidates)
     except Exception as error:
         raise DiscoverySnapshotError('Discovery snapshot contains invalid paper metadata') from error
@@ -206,11 +226,17 @@ class HomeDiscoveryService:
         self,
         snapshot_loader=load_discovery_snapshot,
         today_provider: Callable[[], date] = _shanghai_today,
-        edition_loader: Callable[[date], Awaitable[DailyList | None]] = load_stored_edition,
+        edition_loader: Callable[[date], Awaitable[tuple[DiscoveryPaper, ...]]] = load_latest_edition,
+        trending_loader: Callable[[date], Awaitable[list[DiscoveryPaper]]] = load_trending,
     ):
         self._snapshot_loader = snapshot_loader
         self._today_provider = today_provider
         self._edition_loader = edition_loader
+        self._trending_loader = trending_loader
+        self._lists: dict[date, tuple[float, DailyList]] = {}
+
+    def today(self) -> date:
+        return self._today_provider()
 
     def _curated_list(self, ordering_date: date) -> DailyList:
         snapshot = self._snapshot_loader()
@@ -219,25 +245,47 @@ class HomeDiscoveryService:
             _daily_items(snapshot, ordering_date),
         )
 
-    async def daily_list(self) -> DailyList:
-        """Today's edition, else yesterday's, else today's shuffle of the curated snapshot."""
-        today = self._today_provider()
-        for ordering_date in (today, today - timedelta(days=1)):
-            edition = await self._edition_loader(ordering_date)
-            if edition is not None:
-                return edition
-        return self._curated_list(today)
+    async def shared_sources(self, ordering_date: date) -> dict[str, list[DiscoveryPaper]]:
+        """The live sources every visitor shares for the day; a failed source is empty."""
+        daily, trending = await asyncio.gather(
+            self._edition_loader(ordering_date), self._trending_loader(ordering_date),
+        )
+        return {'daily': list(daily)[:config.DAILY_LIMIT], 'trending': list(trending)[:config.TRENDING_LIMIT]}
 
-    async def daily_papers(self) -> list[DiscoveryPaper]:
-        """Today's complete shared order, which every personal feed continues with."""
-        return list((await self.daily_list()).papers)
+    def with_fallback(self, papers: list[DiscoveryPaper], ordering_date: date) -> list[DiscoveryPaper]:
+        """Append the packaged list once when the live sources fall short; never retried."""
+        if len(papers) >= config.FALLBACK_MIN_ITEMS:
+            return papers
+        try:
+            fallback = self._curated_list(ordering_date).papers
+        except DiscoverySnapshotError:
+            if papers:
+                return papers
+            raise
+        seen = {paper.id for paper in papers}
+        extra = [paper.model_copy(update={'source': 'fallback'}) for paper in fallback if paper.id not in seen]
+        return (papers + extra)[:config.FEED_LIMIT]
+
+    async def list_for(self, ordering_date: date) -> DailyList:
+        """The composed anonymous list for a day, cached briefly per instance."""
+        cached = self._lists.get(ordering_date)
+        if cached and cached[0] > time.monotonic():
+            return cached[1]
+        composed = compose(await self.shared_sources(ordering_date), config.ANONYMOUS_QUOTAS)
+        papers = tuple(self.with_fallback(composed, ordering_date))
+        daily = DailyList(home_list_id(ordering_date, papers), ordering_date, papers)
+        self._lists[ordering_date] = (time.monotonic() + config.SOURCE_CACHE_SECONDS, daily)
+        return daily
+
+    async def daily_list(self) -> DailyList:
+        return await self.list_for(self.today())
 
     async def _list_for_cursor(self, list_id: str, ordering_date: date) -> DailyList:
-        edition = await self._edition_loader(ordering_date)
-        if edition is not None and edition.list_id == list_id:
-            return edition
+        daily = await self.list_for(ordering_date)
+        if daily.list_id == list_id:
+            return daily
         snapshot = self._snapshot_loader()
-        # Cursors issued before daily editions carried the bare snapshot id.
+        # Cursors issued before composed lists carried the bare snapshot id.
         if list_id in (snapshot.snapshot_id, _daily_snapshot_id(snapshot.snapshot_id, ordering_date)):
             return self._curated_list(ordering_date)
         raise DiscoveryCursorError('论文发现列表已更新，请重新加载后继续浏览')

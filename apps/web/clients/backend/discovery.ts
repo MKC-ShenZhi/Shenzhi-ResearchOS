@@ -13,6 +13,8 @@ export interface DiscoveryPaperDto {
   image_id?: string | null;
   keywords?: string[];
   subjects?: string[];
+  /** Home-feed source that placed the paper: daily / trending / personal / fallback. */
+  source?: string | null;
 }
 
 export interface DiscoveryPaperPageDto {

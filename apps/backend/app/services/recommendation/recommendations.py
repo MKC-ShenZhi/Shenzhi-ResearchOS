@@ -17,8 +17,11 @@ from app.models.interactions import PaperLikeRow
 from app.models.recommendation import RecommendationSnapshotRow
 from app.models.stats import PaperStatDailyRow, StatsSnapshotRunRow
 from app.schemas.knowledge import KnowledgeSearchRequest, PaperSearchResult
+from app.schemas.discovery import DiscoveryPaper
 from app.services.discovery import HomeDiscoveryService
-from app.services.discovery_pool.sync import displayable_image_id
+from app.services.home_feed import config as feed_config
+from app.services.home_feed.composer import compose
+from app.services.home_feed.rules import admit
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 from app.services.recommendation import config
 from app.services.recommendation.config import (
@@ -98,31 +101,8 @@ def _rank(
     return round(score, 6), reason
 
 
-def _blend(personal: list[dict], shared: list[dict]) -> list[dict]:
-    """Interleave personal picks with the shared daily list, never repeating a paper."""
-    blended: list[dict] = []
-    seen: set[str] = set()
-    personal_items, shared_items = iter(personal), iter(shared)
-
-    def take(items, count: int) -> int:
-        taken = 0
-        while taken < count:
-            item = next(items, None)
-            if item is None:
-                break
-            if item['id'] not in seen:
-                seen.add(item['id'])
-                blended.append(item)
-                taken += 1
-        return taken
-
-    while take(personal_items, config.PERSONAL_PER_SHARED) + take(shared_items, 1):
-        pass
-    return blended
-
-
 class CandidateRecallService:
-    """Personal candidates only; the shared daily list is blended in by RecommendationService."""
+    """Personal candidates only; RecommendationService composes them with the shared sources."""
 
     def __init__(self, knowledge: KnowledgeService | None = None):
         self.knowledge = knowledge or KnowledgeService()
@@ -233,38 +213,52 @@ class RecommendationService:
                 version = snapshot.algorithm_version
         else:
             offset = 0
+            today = self.discovery.today()
             profile = await self.profiles.get(user_id)
-            shared = await self._shared_papers()
-            years = Counter(paper['year'] for paper in shared if paper.get('year'))
-            candidates = await self.recall.recall(profile, year=years.most_common(1)[0][0] if years else None)
+            shared = await self._shared_sources(today)
+            years = Counter(paper.year for papers in shared.values() for paper in papers)
+            candidates = await self.recall.recall(profile, year=years.most_common(1)[0][0] if years else today.year)
             excluded, popularity = await self._account_and_popularity(
-                user_id, [item.paper['id'] for item in candidates] + [paper['id'] for paper in shared],
+                user_id,
+                [item.paper['id'] for item in candidates] + [paper.id for papers in shared.values() for paper in papers],
             )
-            static_thumbnails = {paper['id']: paper['thumbnail_url'] for paper in shared if paper.get('thumbnail_url')}
             current_year = utc_now().year
             scored = []
+            admitted: dict[str, DiscoveryPaper] = {}
             for candidate in candidates:
                 paper_id = candidate.paper['id']
                 if paper_id in excluded:
                     continue
-                # A curated paper recalled by search keeps its static thumbnail.
-                candidate.paper['thumbnail_url'] = candidate.paper.get('thumbnail_url') or static_thumbnails.get(paper_id)
-                if not (candidate.paper['thumbnail_url'] or displayable_image_id(candidate.paper.get('image_id'))):
-                    continue  # The home feed only shows papers with an image the web proxy serves.
+                # Rule B: the same admission every home source passes (displayable image included).
+                paper, _reason = admit(candidate.paper)
+                if paper is None:
+                    continue
+                admitted[paper_id] = paper
                 score, reason = _rank(candidate, profile, popularity.get(paper_id), current_year)
                 scored.append((score, candidate, reason))
             scored.sort(key=lambda item: (-item[0], item[1].paper['id']))
-            personal = [{
-                **candidate.paper, 'reason': reason, 'sources': sorted(candidate.sources),
-            } for _score, candidate, reason in self._diversify(scored)[:config.PERSONAL_RECOMMENDATION_LIMIT]]
-            shared_items = [{
-                **paper, 'reason': _popularity_reason(popularity.get(paper['id'])),
-                'sources': ['global_discovery'],
-            } for paper in shared if paper['id'] not in excluded]
+            top = self._diversify(scored)[:config.PERSONAL_RECOMMENDATION_LIMIT]
+            attribution = {
+                candidate.paper['id']: (reason, sorted(candidate.sources)) for _score, candidate, reason in top
+            }
+            composed = compose({
+                'personal': [admitted[candidate.paper['id']] for _score, candidate, _reason in top],
+                **{name: [paper for paper in papers if paper.id not in excluded] for name, papers in shared.items()},
+            }, feed_config.SIGNED_IN_QUOTAS)
+            try:
+                composed = self.discovery.with_fallback(composed, today)
+            except Exception as error:  # noqa: BLE001 - an empty feed sends the client to anonymous discovery
+                logger.warning('Home fallback unavailable for recommendations (%s)', type(error).__name__)
+            feed = [{
+                **paper.model_dump(mode='json'),
+                'reason': attribution[paper.id][0] if paper.source == 'personal'
+                else _popularity_reason(popularity.get(paper.id)),
+                'sources': attribution[paper.id][1] if paper.source == 'personal' else [paper.source],
+            } for paper in composed]
             request_id = uuid4()
             items = [{
                 **item, 'request_id': str(request_id), 'rank': rank,
-            } for rank, item in enumerate(_blend(personal, shared_items), 1)]
+            } for rank, item in enumerate(feed, 1)]
             version = ALGORITHM_VERSION
             now = utc_now()
             async with session_scope() as session:
@@ -287,12 +281,12 @@ class RecommendationService:
             'total': len(items), 'algorithm_version': version,
         }
 
-    async def _shared_papers(self) -> list[dict]:
+    async def _shared_sources(self, today) -> dict[str, list[DiscoveryPaper]]:
         try:
-            return [paper.model_dump(mode='json') for paper in await self.discovery.daily_papers()]
+            return await self.discovery.shared_sources(today)
         except Exception as error:  # noqa: BLE001 - personal picks stay usable
-            logger.warning('Shared daily papers unavailable for recommendations (%s)', type(error).__name__)
-            return []
+            logger.warning('Shared home sources unavailable for recommendations (%s)', type(error).__name__)
+            return {}
 
     @staticmethod
     def _diversify(scored: list[tuple[float, Candidate, str]]) -> list[tuple[float, Candidate, str]]:

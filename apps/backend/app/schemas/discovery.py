@@ -19,6 +19,8 @@ class DiscoveryPaper(KnowledgeModel):
     # Card topics, shown like knowledge search cards: keywords first, else subjects.
     keywords: list[str] = Field(default_factory=list)
     subjects: list[str] = Field(default_factory=list)
+    # Which home-feed source placed the paper (daily / trending / personal / fallback).
+    source: str | None = None
 
 
 class DiscoveryPaperPage(KnowledgeModel):

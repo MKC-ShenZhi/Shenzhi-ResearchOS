@@ -45,7 +45,6 @@ from app.services.recommendation.recommendations import (
     Candidate,
     CandidateRecallService,
     RecommendationService,
-    _blend,
     _rank,
 )
 from app.services.user.account_deletion import AccountDeletionService
@@ -62,15 +61,30 @@ def profile(**changes):
     return result
 
 
-def shared_list(*papers):
-    async def daily_papers():
-        return list(papers)
-    return SimpleNamespace(daily_papers=daily_papers)
+def shared_list(*papers, trending=()):
+    """Stands in for HomeDiscoveryService: fixed shared sources, no fallback."""
+    async def shared_sources(_today):
+        return {'daily': list(papers), 'trending': list(trending)}
+    return SimpleNamespace(
+        today=lambda: datetime(2026, 11, 2).date(), shared_sources=shared_sources,
+        with_fallback=lambda composed, _today: composed,
+    )
 
 
 def curated(paper_id, title='Curated'):
     return DiscoveryPaper(id=paper_id, title=title, abstract='', year=2026,
-                          thumbnail_url=f'/paper-thumbnails/{paper_id}.webp')
+                          image_id=f'/images/2026/{paper_id.replace(":", "-")}.png')
+
+
+ABSTRACT = 'A displayable abstract for the home card. ' * 6
+
+
+def recalled_paper(paper_id, image_id, **changes):
+    """A recall candidate that passes rule B unless `changes` break it."""
+    return {
+        'id': paper_id, 'title': f'Recalled paper {paper_id}', 'abstract': ABSTRACT, 'authors': ['Ada Lovelace'],
+        'year': 2026, 'venue': None, 'pdf_url': None, 'thumbnail_url': None, 'image_id': image_id, **changes,
+    }
 
 
 class BehaviorContractTests(unittest.TestCase):
@@ -238,14 +252,6 @@ class ProfileMathTests(unittest.TestCase):
         # No real signal: the card shows no reason rather than a generic label.
         self.assertIsNone(reason)
         self.assertEqual(_rank(unrelated, p, 0.5, 2026)[1], '近期受到平台用户关注')
-
-    def test_blend_interleaves_two_personal_picks_per_shared_paper_without_repeats(self):
-        personal = [{'id': f'p{index}'} for index in range(5)] + [{'id': 's1'}]
-        shared = [{'id': 's0'}, {'id': 's1'}, {'id': 'p0'}, {'id': 's2'}, {'id': 's3'}]
-        self.assertEqual([item['id'] for item in _blend(personal, shared)],
-                         ['p0', 'p1', 's0', 'p2', 'p3', 's1', 'p4', 's2', 's3'])
-        self.assertEqual([item['id'] for item in _blend([], shared[:2])], ['s0', 's1'])
-        self.assertEqual(_blend([], []), [])
 
 
 class RecallTests(unittest.IsolatedAsyncioTestCase):
@@ -575,11 +581,8 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(built['short_keywords'], {'rag': 1.0})
         self.assertEqual(built['long_keywords'], {})
         def candidate(paper_id: str, keyword: str) -> Candidate:
-            return Candidate({
-                'id': paper_id, 'title': paper_id, 'abstract': '', 'authors': [],
-                'year': 2026, 'venue': None, 'pdf_url': None, 'thumbnail_url': None,
-                'image_id': f'/images/2026/{paper_id.replace(":", "-")}.webp',
-            }, [], [keyword], {'keyword'})
+            return Candidate(recalled_paper(paper_id, f'/images/2026/{paper_id.replace(":", "-")}.webp'),
+                             [], [keyword], {'keyword'})
         unrelated = candidate('paper:a-unrelated', 'vision')
         matching = candidate('paper:z-matching', 'RAG')
         service = self._service_with([], interests=built, candidates=[unrelated, matching])
@@ -711,12 +714,9 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
     def _candidates(self, count):
         return [curated(f'{self.paper_id}:{index}', f'Paper {index}') for index in range(count)]
 
-    async def test_personal_picks_blend_with_the_complete_shared_list(self):
-        def recalled(paper_id, image_id):
-            return Candidate({
-                'id': paper_id, 'title': paper_id, 'abstract': '', 'authors': [], 'year': 2026,
-                'venue': None, 'pdf_url': None, 'thumbnail_url': None, 'image_id': image_id,
-            }, ['RAG'], [], {'followed_topic'})
+    async def test_personal_picks_are_composed_with_the_shared_sources(self):
+        def recalled(paper_id, image_id, **changes):
+            return Candidate(recalled_paper(paper_id, image_id, **changes), ['RAG'], [], {'followed_topic'})
         interests = profile(explicit_subjects=['RAG'], long_topics={'rag': 1}, has_history=True)
         liked = f'{self.paper_id}:liked'
         await PaperLikeService().like(self.user_id, liked)
@@ -726,8 +726,8 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
             recalled(f'{self.paper_id}:no-image', None),
             # SVG is never served by the web image proxy, so it counts as no image.
             recalled(f'{self.paper_id}:svg', '/images/ICLR_2026/x.svg'),
-            # Recalled by search but also curated: keeps the static thumbnail.
-            recalled(shared[3].id, None),
+            # Rule B also rejects what a card cannot show, e.g. a section heading as title.
+            recalled(f'{self.paper_id}:heading', '/images/2026/h.webp', title='1 Introduction'),
             recalled(liked, '/images/2026/liked.webp'),
         ]
         service = self._service_with(shared, interests, candidates)
@@ -736,41 +736,49 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.recall.recall.await_args.kwargs, {'year': 2026})
         items = page['items']
         ids = [item['id'] for item in items]
-        self.assertNotIn(f'{self.paper_id}:no-image', ids)
-        self.assertNotIn(f'{self.paper_id}:svg', ids)
+        for rejected in ('no-image', 'svg', 'heading'):
+            self.assertNotIn(f'{self.paper_id}:{rejected}', ids)
         self.assertNotIn(liked, ids)
-        self.assertEqual(len(ids), len(set(ids)))
-        # Two personal picks, then the shared list continues in its daily order.
-        self.assertEqual(sorted(ids[:2]), sorted([f'{self.paper_id}:with-image', shared[3].id]))
-        self.assertEqual(ids[2:], [paper.id for paper in shared[:3]])
+        # One personal pick leads (6 of 12 slots), then the daily list in its order.
+        self.assertEqual(ids, [f'{self.paper_id}:with-image'] + [paper.id for paper in shared[:4]])
         by_id = {item['id']: item for item in items}
-        self.assertEqual(by_id[shared[3].id]['thumbnail_url'], shared[3].thumbnail_url)
         self.assertEqual(by_id[f'{self.paper_id}:with-image']['reason'], '与你关注的主题相匹配')
+        self.assertEqual(by_id[f'{self.paper_id}:with-image']['sources'], ['followed_topic'])
+        self.assertEqual(by_id[f'{self.paper_id}:with-image']['source'], 'personal')
         self.assertIsNone(by_id[shared[0].id]['reason'])
-        self.assertEqual(by_id[shared[0].id]['sources'], ['global_discovery'])
+        self.assertEqual((by_id[shared[0].id]['sources'], by_id[shared[0].id]['source']), (['daily'], 'daily'))
         self.assertEqual([item['rank'] for item in items], list(range(1, len(items) + 1)))
 
-    async def test_personal_picks_are_capped_and_the_shared_list_is_never_truncated(self):
-        candidates = [Candidate({
-            'id': f'{self.paper_id}:personal:{index:03d}', 'title': 'P', 'abstract': '', 'authors': [],
-            'year': 2026, 'venue': None, 'pdf_url': None, 'thumbnail_url': None,
-            'image_id': f'/images/2026/{index}.webp',
-        }, ['RAG'], [], {'followed_topic'}) for index in range(130)]
+    async def test_each_screen_follows_the_signed_in_quotas(self):
+        candidates = [Candidate(recalled_paper(f'{self.paper_id}:p{index:02d}', f'/images/2026/p{index}.webp'),
+                                ['RAG'], [], {'followed_topic'}) for index in range(30)]
+        daily = self._candidates(30)
+        trending = [curated(f'{self.paper_id}:t{index}') for index in range(10)]
+        service = RecommendationService(
+            profiles=SimpleNamespace(get=AsyncMock(return_value=profile(explicit_subjects=['RAG']))),
+            recall=SimpleNamespace(recall=AsyncMock(return_value=candidates)),
+            discovery=shared_list(*daily, trending=trending),
+        )
+        page = await service.page(self.user_id, limit=12)
+        sources = [item['source'] for item in page['items']]
+        self.assertEqual({name: sources.count(name) for name in set(sources)}, {'personal': 6, 'daily': 4, 'trending': 2})
+
+    async def test_personal_picks_are_capped_and_the_shared_list_fills_the_feed(self):
+        candidates = [Candidate(recalled_paper(f'{self.paper_id}:personal:{index:03d}', f'/images/2026/{index}.webp'),
+                                ['RAG'], [], {'followed_topic'}) for index in range(130)]
         shared = self._candidates(300)
         page = await self._service_with(
             shared, profile(explicit_subjects=['RAG'], has_history=True), candidates,
         ).page(self.user_id, limit=1)
         self.assertEqual(page['total'], 100 + 300)
 
-    async def test_shared_list_failure_keeps_personal_picks(self):
-        def broken():
+    async def test_shared_source_failure_keeps_personal_picks(self):
+        async def broken(_today):
             raise ValueError('snapshot schema drift')
-        candidate = Candidate({
-            'id': f'{self.paper_id}:personal', 'title': 'P', 'abstract': '', 'authors': [], 'year': 2026,
-            'venue': None, 'pdf_url': None, 'thumbnail_url': None, 'image_id': '/images/2026/p.webp',
-        }, ['RAG'], [], {'followed_topic'})
+        candidate = Candidate(recalled_paper(f'{self.paper_id}:personal', '/images/2026/p.webp'),
+                              ['RAG'], [], {'followed_topic'})
         service = self._service_with([], profile(explicit_subjects=['RAG']), [candidate])
-        service.discovery = SimpleNamespace(daily_papers=broken)
+        service.discovery.shared_sources = broken
         with self.assertLogs('app.services.recommendation.recommendations', 'WARNING'):
             page = await service.page(self.user_id, limit=12)
         self.assertEqual([item['id'] for item in page['items']], [candidate.paper['id']])

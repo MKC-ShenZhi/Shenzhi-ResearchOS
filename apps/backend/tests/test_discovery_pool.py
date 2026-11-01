@@ -67,9 +67,13 @@ class PoolRuleTests(unittest.TestCase):
         self.assertEqual(pool_row(paper('p', year=YEAR + 1), 'V', YEAR), (None, 'year'))
         self.assertEqual(pool_row(paper('p', abstract='short'), 'V', YEAR), (None, 'abstract'))
         self.assertEqual(pool_row(paper('p', authors=['MIT University']), 'V', YEAR), (None, 'authors'))
-        row, reason = pool_row(paper('p', title='  A   spaced   title  '), 'Venue', YEAR)
+        self.assertEqual(pool_row(paper('p', title='1 Introduction'), 'V', YEAR), (None, 'title'))
+        row, reason = pool_row(paper('p', title='  A   spaced   title  ', primary_subject=' model pruning ',
+                                     subjects=['RAG', 'CVPR.2024 - Accept', 'RAG']), 'Venue', YEAR)
         self.assertIsNone(reason)
         self.assertEqual((row['title'], row['venue'], row['year']), ('A spaced title', 'Venue', YEAR))
+        # Venue labels and duplicates are not topics; the main subject is kept for edition balance.
+        self.assertEqual((row['subjects'], row['primary_subject']), (['RAG'], 'model pruning'))
 
 
 class PoolCollectTests(unittest.IsolatedAsyncioTestCase):
