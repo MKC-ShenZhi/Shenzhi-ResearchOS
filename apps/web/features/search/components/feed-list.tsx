@@ -136,7 +136,7 @@ export function FeedList() {
         )}
         {!hasNextPage && !isFetchNextPageError && (
           <span className="text-sm text-faint">
-            已浏览完全部 {data?.pages[0]?.total ?? papers.length} 篇论文
+            今天的 {data?.pages[0]?.total ?? papers.length} 篇论文已全部浏览，明天会更新一批
           </span>
         )}
       </div>

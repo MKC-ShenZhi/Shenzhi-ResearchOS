@@ -82,6 +82,22 @@ test("paper cards keep the existing detail navigation and load thumbnails on mob
   assert.doesNotMatch(PAPER_CARD_SOURCE, /hidden w-full max-w-\[320px\]/);
 });
 
+test("daily-edition pool papers resolve their knowledge image through the proxy flag", () => {
+  const originalValue = process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
+  const pool = discoveryPaper({ thumbnail_url: null, image_id: "/images/CVPR_2026/2605.10204v1.png" });
+  try {
+    process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = "true";
+    assert.equal(mapDiscoveryPaper(pool).thumbnailUrl, "/api/paper-images/CVPR_2026/2605.10204v1.png");
+    // Unsafe or unsupported identifiers never become image URLs.
+    assert.equal(mapDiscoveryPaper({ ...pool, image_id: "/images/ICLR_2026/x.svg" }).thumbnailUrl, null);
+    process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = "false";
+    assert.equal(mapDiscoveryPaper(pool).thumbnailUrl, null);
+  } finally {
+    if (originalValue === undefined) delete process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
+    else process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = originalValue;
+  }
+});
+
 test("home static thumbnails bypass the knowledge image flag", () => {
   const originalValue = process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
   try {

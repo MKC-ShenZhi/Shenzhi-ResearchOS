@@ -9,6 +9,8 @@ export interface DiscoveryPaperDto {
   venue: string | null;
   pdf_url: string | null;
   thumbnail_url: string | null;
+  /** Knowledge image of a pool paper; curated papers carry `thumbnail_url` instead. */
+  image_id?: string | null;
 }
 
 export interface DiscoveryPaperPageDto {

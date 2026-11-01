@@ -8,13 +8,15 @@
 
 搜索字段缺失或 `null`、开关关闭、非法路径均使用原有兜底；加载失败继续由
 `PaperThumbnail.onError` 处理，放大预览不变。浏览历史转换为搜索卡片时明确使用
-`imageId: null`，不从详情推断图片。首页 300 篇快照继续使用 `thumbnail_url` 和
-`public/paper-thumbnails/`，不受此开关影响。
+`imageId: null`，不从详情推断图片。
 
-登录用户首页推荐：召回自知识检索的论文在推荐快照中保留 `image_id`，Web 仅在条目没有
-`thumbnail_url` 时用 `getPaperThumbnailUrl(image_id)` 解析，因此同样受此开关控制；
-300 篇入选论文即使先被检索召回，也保留静态缩略图。补丁上线前生成的快照没有 `image_id`，
-最长 1 小时后随快照过期自然恢复。
+首页（匿名每日精选与登录推荐）：精选快照中的论文使用 `thumbnail_url` 与
+`public/paper-thumbnails/` 静态图，不受此开关影响；每日精选中的候选池论文和推荐召回论文
+携带 `image_id`，`mapDiscoveryPaper` 仅在没有 `thumbnail_url` 时用
+`getPaperThumbnailUrl(image_id)` 解析，因此受此开关控制。候选池同步时已只收录本代理
+接受的 png/jpg/webp 路径（底座 SVG 图不收录）。底座原图中位数约 180 KB、约两成超过
+500 KB；`PaperThumbnail` 经 `next/image` 按卡片宽度输出压缩后的 webp，原图只在
+「查看原图」时加载。补丁上线前生成的推荐快照没有 `image_id`，最长 1 小时后随快照过期自然恢复。
 
 2026-10-23 对任务指定上游进行只读抽样：检索 `FlowDIS` 返回
 `paper:2605.05077v2` 和 `/images/CVPR_2026/2605.05077v2.png`；
