@@ -19,7 +19,7 @@ from itertools import groupby
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import func, literal_column, select
+from sqlalchemy import delete, func, literal_column, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert
 
@@ -154,3 +154,12 @@ class DailyEditionBuilder:
                 set_={'payload': statement.excluded.payload, 'created_at': statement.excluded.created_at},
             ))
         return result
+
+    @staticmethod
+    async def purge(today: date) -> int:
+        """Delete editions older than the history window; nothing reads them any more."""
+        async with session_scope() as session:
+            result = await session.execute(delete(DailyRecommendationRow).where(
+                DailyRecommendationRow.recommendation_date < today - timedelta(days=HISTORY_DAYS),
+            ))
+            return int(result.rowcount or 0)

@@ -11,7 +11,7 @@ from app.models.daily_recommendation import DailyRecommendationRow
 from app.models.discovery_pool import DiscoveryPoolPaperRow
 from app.services import discovery
 from app.services.discovery import load_latest_edition
-from app.services.discovery_pool.edition import DailyEditionBuilder, EditionError
+from app.services.discovery_pool.edition import HISTORY_DAYS, DailyEditionBuilder, EditionError
 from app.services.home_feed.config import SCREEN_SIZE, VENUE_PER_SCREEN
 
 DAY = date(2026, 11, 2)
@@ -162,3 +162,13 @@ class EditionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         ids = [paper.id for paper in published.papers]
         self.assertEqual([paper.id for paper in await load_latest_edition(self.START + timedelta(days=7))], ids)
         self.assertEqual(await load_latest_edition(self.START + timedelta(days=8)), ())
+
+    async def test_purge_keeps_only_editions_inside_the_history_window(self):
+        async with session_scope() as session:
+            for offset in (0, 1):
+                session.add(DailyRecommendationRow(recommendation_date=self.START + timedelta(days=offset), payload=[]))
+        deleted = await DailyEditionBuilder.purge(self.START + timedelta(days=HISTORY_DAYS + 1))
+        self.assertEqual(deleted, 1)
+        async with session_scope() as session:
+            kept = await session.get(DailyRecommendationRow, self.START + timedelta(days=1))
+        self.assertIsNotNone(kept)

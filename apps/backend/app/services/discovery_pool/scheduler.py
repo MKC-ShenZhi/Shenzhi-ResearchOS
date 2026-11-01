@@ -1,14 +1,17 @@
-"""In-process scheduling for the home pool sync and the daily edition.
+"""In-process scheduling for the home feed's periodic jobs.
 
 Opt-in with ``HOME_FEED_SCHEDULER_ENABLED=true``. Every CHECK_INTERVAL the
 process tries a Postgres advisory lock; only the holder runs what is due, so
 several workers or instances never duplicate a job:
 
 - ``sync`` when the pool year has no papers or was synced SYNC_INTERVAL ago;
-- ``publish`` when today's edition (Shanghai) is missing and it is past PUBLISH_AFTER.
+- ``publish`` when today's edition (Shanghai) is missing and it is past PUBLISH_AFTER;
+- ``purge`` every PURGE_INTERVAL: expired recommendation snapshots, behavior
+  events past retention, and daily editions no longer read as history.
 
-Due-ness is read from the database, so a restart or a missed tick simply
-catches up on the next one. A failed sync is not retried for SYNC_RETRY_DELAY.
+Sync and publish due-ness is read from the database, so a restart or a missed
+tick simply catches up on the next one. A failed sync is not retried for
+SYNC_RETRY_DELAY. Purging is idempotent; after a restart it just runs again.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from app.services.discovery import SHANGHAI_TIMEZONE
 from app.services.discovery_pool.edition import DailyEditionBuilder
 from app.services.discovery_pool.sync import DiscoveryPoolSync
 from app.services.home_feed.config import pool_year
+from app.services.recommendation.maintenance import purge_expired
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,8 @@ CHECK_INTERVAL_SECONDS = 600
 SYNC_INTERVAL = timedelta(days=7)
 SYNC_RETRY_DELAY = timedelta(hours=1)
 PUBLISH_AFTER = time(0, 5)
+# Recommendation snapshots live an hour; purging hourly keeps the table near one hour of first pages.
+PURGE_INTERVAL = timedelta(hours=1)
 # Arbitrary constant shared by every instance of this deployment.
 LOCK_KEY = 7_402_118_031
 
@@ -48,6 +54,7 @@ class HomeFeedScheduler:
         self.sync = sync or DiscoveryPoolSync()
         self.builder = builder or DailyEditionBuilder()
         self._sync_failed_at: datetime | None = None
+        self._purged_at: datetime | None = None
 
     async def run_due(self, now: datetime | None = None) -> list[str]:
         """Run every job that is due now; returns the jobs that ran."""
@@ -81,6 +88,15 @@ class HomeFeedScheduler:
                     logger.info('Home daily edition published: %s', result.summary())
                 except Exception:  # noqa: BLE001 - the feed falls back to an older edition
                     logger.exception('Home daily edition publish failed')
+            if self._purged_at is None or now - self._purged_at >= PURGE_INTERVAL:
+                try:
+                    events, snapshots = await purge_expired(now)
+                    editions = await self.builder.purge(local.date())
+                    self._purged_at = now
+                    ran.append('purge')
+                    logger.info('Home feed purge: events=%d snapshots=%d editions=%d', events, snapshots, editions)
+                except Exception:  # noqa: BLE001 - retried on the next tick
+                    logger.exception('Home feed purge failed')
         return ran
 
     async def run_forever(self) -> None:
