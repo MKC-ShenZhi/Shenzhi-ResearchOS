@@ -5,8 +5,8 @@ import { useFollowedConferences } from "@/features/submit/hooks/use-conference-f
 import { useNow } from "@/features/submit/hooks/use-now";
 
 /**
- * 侧边栏「投稿」上的截稿提醒：关注的会议中 7 天内截止的数量。
- * 用户在站内任意页面都能看到，点进投稿页查看倒计时。
+ * 侧边栏「会议DDL」上的截稿提醒：关注的会议中 7 天内截止的数量。
+ * 用户在站内任意页面都能看到，点进会议DDL 页查看倒计时。
  */
 export function FollowedDeadlineBadge({ compact = false }: { compact?: boolean }) {
   const { items } = useFollowedConferences();

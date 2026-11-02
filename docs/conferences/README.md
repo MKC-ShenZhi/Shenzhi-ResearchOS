@@ -1,4 +1,4 @@
-# 会议截稿（投稿 · 会议 `/submit`）
+# 会议截稿（会议DDL `/submit`）
 
 `/submit` 展示 CCF / CORE / TH-CPL 分级会议的投稿截止时间与实时倒计时。需求参考 ccfddl 的 DDL 页面，数据来自
 [ccf-deadlines](https://github.com/ccfddl/ccf-deadlines) 的导出快照；实现按 ShenZhi 分层重写，不沿用原 Vue 代码。
@@ -53,7 +53,7 @@ app/data/conference_deadlines_snapshot.json（随后端打包的版本化快照�
   `GET /api/v1/conferences?followed=true` 在原有筛选之上只返回本人关注的会议。关注时校验 ID 存在于快照，取消关注不校验，
   快照下架的会议也能释放。数据表 `conference_follows`（迁移 `017_conference_follows`），注销账号时一并删除。
 - 投稿页顶部「我关注的会议」显示剩余时间，点击定位到卡片；工具栏「只看关注」切换列表。
-- 侧边栏「投稿」显示关注会议中 7 天内截止的数量，用户在站内任意页面都能看到。
+- 侧边栏一级入口「会议DDL」显示关注会议中 7 天内截止的数量，用户在站内任意页面都能看到。
 - 「导出日历」是次要入口：Google / Outlook 网页日历通过预填链接新建下一个截稿节点的事件；`.ics` 面向 Apple 日历、飞书等本地日历
   （每个未来里程碑一个事件，提前 1 天提醒）。所有导出事件都带 `/submit?focus=<id>` 链接，打开后自动定位并高亮该会议。
 - 尚无通知投递渠道（邮件 / 站内信），提醒只在用户访问站点时可见。

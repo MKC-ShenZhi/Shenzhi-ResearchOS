@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/common/layout/app-shell";
 import { ConferenceBrowser } from "@/features/submit/components/conference-browser";
 
-/** 投稿 · 会议 `/submit` —— 会议截稿倒计时,点击侧边栏「投稿」默认打开 */
+/** 会议DDL `/submit` —— 会议截稿倒计时,侧边栏一级入口「会议DDL」 */
 export function SubmitPage() {
   return (
     <AppShell>
