@@ -9,13 +9,20 @@ export interface DiscoveryPaperDto {
   venue: string | null;
   pdf_url: string | null;
   thumbnail_url: string | null;
+  /** Knowledge image; packaged fallback papers carry a static `thumbnail_url` instead. */
+  image_id?: string | null;
+  keywords?: string[];
+  subjects?: string[];
+  /** Home-feed source that placed the paper: daily / trending / personal / fallback. */
+  source?: string | null;
 }
 
 export interface DiscoveryPaperPageDto {
   items: DiscoveryPaperDto[];
   next_cursor: string | null;
   has_more: boolean;
-  snapshot_id: string;
+  /** The composed list the cursors belong to. */
+  list_id: string;
   total: number;
 }
 

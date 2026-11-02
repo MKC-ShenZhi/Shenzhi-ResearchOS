@@ -3,7 +3,8 @@ import type { DiscoveryPaperDto } from "./discovery";
 
 export interface RecommendationPaperDto extends Omit<DiscoveryPaperDto, "year"> {
   year: number | null;
-  reason: string;
+  /** Kept for attribution analysis only; the home card does not display it. */
+  reason: string | null;
   sources: string[];
   request_id: string;
   rank: number;

@@ -260,6 +260,7 @@ def map_search_result(
         authors=_string_list(item.get('authors')),
         year=_optional_int(item.get('year')),
         venue=_first_optional_string(item, 'conference', 'venue'),
+        primary_subject=_optional_string(item.get('primary_subject')),
         keywords=_string_list(item.get('keywords')),
         subjects=_string_list(item.get('subjects')),
         score=_optional_number(item.get('score')),

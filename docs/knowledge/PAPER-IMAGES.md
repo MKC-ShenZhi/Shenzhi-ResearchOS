@@ -8,8 +8,15 @@
 
 搜索字段缺失或 `null`、开关关闭、非法路径均使用原有兜底；加载失败继续由
 `PaperThumbnail.onError` 处理，放大预览不变。浏览历史转换为搜索卡片时明确使用
-`imageId: null`，不从详情推断图片。首页 300 篇快照继续使用 `thumbnail_url` 和
-`public/paper-thumbnails/`，不受此开关影响。
+`imageId: null`，不从详情推断图片。
+
+首页（匿名与登录 Feed）：`daily`、`trending`、`personal` 数据源的论文都只携带 `image_id`，
+`mapDiscoveryPaper` 用 `getPaperThumbnailUrl(image_id)` 解析，因此受此开关控制；只有兜底快照
+（`fallback`）中的论文带 `thumbnail_url`，使用 `public/paper-thumbnails/` 静态图，不受开关和底座
+图片服务影响。所有首页数据源的论文都要通过统一准入检查，只接受本代理能处理的 png/jpg/webp 路径（底座的 SVG 图不收录）。底座原图中位数约 180 KB、约两成超过
+500 KB；`PaperThumbnail` 经 `next/image` 按卡片宽度输出压缩后的 webp，原图只在
+「查看原图」时加载。底座的 `/images/...` 图片接口目前不在其接口手册中，是按实际返回的
+`image_id`（形如 `/images/CVPR_2026/2604.26488v1.png`）验证可用的。
 
 2026-10-23 对任务指定上游进行只读抽样：检索 `FlowDIS` 返回
 `paper:2605.05077v2` 和 `/images/CVPR_2026/2605.05077v2.png`；

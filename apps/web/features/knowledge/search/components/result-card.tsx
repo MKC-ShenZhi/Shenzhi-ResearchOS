@@ -1,31 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { ArrowRight, Network, Users } from "lucide-react";
+import { ArrowRight, Network } from "lucide-react";
 import type { KnowledgePaperHit } from "@/clients/knowledge";
 import { useAuth } from "@/components/auth/auth-provider";
 import { recordPaperBehavior } from "@/clients/backend/behavior";
-import { ExpandableAbstract } from "@/components/common/expandable-abstract";
-import { PaperThumbnail } from "@/components/common/paper-thumbnail";
-import { PAPER_CARD_INTERACTION_CLASS, usePaperCardNavigation } from "@/components/common/use-paper-card-navigation";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { paperHref } from "@/lib/navigation/paper";
 import { getPaperThumbnailUrl } from "@/lib/paper-thumbnail";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
+import { PaperCardLayout } from "@/features/knowledge/papers/components/paper-card-layout";
+import {
+  formatPaperAuthors,
+  formatPaperYear,
+  paperVenueTone,
+  pickPaperTopics,
+} from "@/features/knowledge/papers/paper-card-model";
 import { PaperCollectorCount } from "@/features/knowledge/interactions/components/paper-collector-count";
 import { PaperLikeButton } from "@/features/knowledge/interactions/components/paper-like-button";
-import { PaperReadBadge } from "@/features/knowledge/papers/components/paper-read-badge";
-import { usePaperReadStatus } from "@/features/knowledge/papers/use-paper-read-status";
+import type { PaperCardModel } from "@/types";
 
-const VENUE_VARIANT = ["violet", "amber", "green"] as const;
-
-function venueTone(index: number) {
-  return VENUE_VARIANT[index % VENUE_VARIANT.length];
+function toPaperCardModel(hit: KnowledgePaperHit): PaperCardModel {
+  return {
+    id: hit.id,
+    date: formatPaperYear(hit.year),
+    venue: hit.venue,
+    venueTone: paperVenueTone(hit.id),
+    authors: formatPaperAuthors(hit.authors),
+    title: hit.title,
+    abstract: hit.abstract ?? "",
+    tags: pickPaperTopics(hit.keywords, hit.subjects),
+    thumbnailUrl: getPaperThumbnailUrl(hit.imageId),
+  };
 }
 
-/** 论文搜索结果卡片 */
+/** 论文搜索结果卡片：检索点击埋点与详情 / 图谱入口，版式见 PaperCardLayout。 */
 export function KnowledgeResultCard({
   hit,
   index,
@@ -43,7 +52,6 @@ export function KnowledgeResultCard({
   lastViewedAt?: string;
   onNavigate?: () => void;
 }) {
-  const authors = hit.authors.length ? hit.authors.join(" · ") : "未知作者";
   const { session } = useAuth();
   const userId = session?.user.id ?? "";
   const trackSearchClick = () => {
@@ -52,110 +60,45 @@ export function KnowledgeResultCard({
     }
     onNavigate?.();
   };
-  const status = usePaperReadStatus(hit.id);
   const detailHref = paperHref(hit.id, { mode: "create", source: returnTo });
-  const cardNavigation = usePaperCardNavigation(detailHref, hit.title, trackSearchClick);
 
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.06 }}
-      className={`@container relative rounded-2xl bg-card p-6 shadow-card has-[[data-collection-picker-open]]:z-40 ${PAPER_CARD_INTERACTION_CLASS}`}
-      {...cardNavigation}
-    >
-      <div className="grid grid-cols-1 gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(240px,34cqw,320px)]">
-        <div className="col-span-full min-w-0">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-              <span className="text-faint">{hit.year ?? "—"}</span>
-              {hit.venue ? (
-                <Badge variant={venueTone(index)}>{hit.venue}</Badge>
-              ) : (
-                <span className="text-[11px] text-faint">暂无会议</span>
-              )}
-              {status && <PaperReadBadge status={status} />}
-            </div>
-            {!historyMode && (
-              <CollectionPicker className="shrink-0" paperId={hit.id} />
-            )}
-          </div>
-
-          <div className="mt-1.5 flex min-w-0 items-start gap-1.5 text-[13px] text-muted">
-            <Users className="mt-0.5 size-3.5 shrink-0 text-faint" />
-            <span className="min-w-0 break-words leading-relaxed">{authors}</span>
-          </div>
-
-          {/* 标题 */}
+    <PaperCardLayout
+      paper={toPaperCardModel(hit)}
+      index={index}
+      detailHref={detailHref}
+      onNavigate={trackSearchClick}
+      behaviorSource="search"
+      actions={historyMode ? (
+        <time dateTime={lastViewedAt} className="text-xs text-faint">
+          上次浏览：{lastViewedAt ? formatLastViewedAt(lastViewedAt) : "未知"}
+        </time>
+      ) : (
+        <>
+          <PaperLikeButton paperId={hit.id} />
+          <PaperCollectorCount paperId={hit.id} />
+          <CollectionPicker paperId={hit.id} />
           <Link
-            href={detailHref}
+            href={paperHref(hit.id, { mode: "create", source: returnTo, graph: true })}
             onClick={trackSearchClick}
-            className="group mt-2 block"
+            aria-label="关系图谱"
+            title="关系图谱"
+            // 窄卡片放不下一行操作；详情页顶栏同样提供图谱入口。
+            className="hidden @min-[400px]:inline-flex"
           >
-            <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
-              {hit.title}
-            </h3>
+            <Button size="sm" variant="outline" className="size-9 rounded-lg p-0">
+              <Network className="size-4" />
+            </Button>
           </Link>
-        </div>
-
-        <div className="min-w-0">
-          {/* 摘要 */}
-          <ExpandableAbstract
-            abstract={hit.abstract ?? ""}
-            paperId={hit.id}
-            source="search"
-            userId={userId}
-            className="text-sm leading-relaxed text-muted"
-            collapsedClassName="line-clamp-4 @min-[600px]:line-clamp-6"
-          />
-        </div>
-
-        <div className="hidden w-full max-w-[320px] justify-self-center self-start @min-[400px]:block @min-[600px]:max-w-none">
-          <PaperThumbnail
-            src={getPaperThumbnailUrl(hit.imageId)}
-            title={hit.title}
-          />
-        </div>
-
-        {/* 底部：关键词 + 操作 */}
-        <div className="col-span-full flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0 flex-1 basis-40">
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
-              {(hit.keywords.length ? hit.keywords : hit.subjects).slice(0, 5).map((tag) => (
-                <span key={tag} className="text-[13px] text-muted">
-                  #{tag}
-                </span>
-              ))}
-              {!hit.keywords.length && !hit.subjects.length && (
-                <span className="text-[11px] text-faint">暂无关键词</span>
-              )}
-            </div>
-          </div>
-          {historyMode ? (
-            <time dateTime={lastViewedAt} className="ml-auto shrink-0 text-xs text-faint">
-              上次浏览：{lastViewedAt ? formatLastViewedAt(lastViewedAt) : "未知"}
-            </time>
-          ) : (
-            <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
-              <PaperLikeButton paperId={hit.id} />
-              <PaperCollectorCount paperId={hit.id} />
-              <Link href={detailHref} onClick={trackSearchClick}>
-                <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-xs">
-                  论文详情
-                  <ArrowRight className="size-3.5" />
-                </Button>
-              </Link>
-              <Link href={paperHref(hit.id, { mode: "create", source: returnTo, graph: true })} onClick={trackSearchClick}>
-                <Button size="sm" className="h-8 rounded-lg px-3 text-xs">
-                  <Network className="size-3.5" />
-                  关系图谱
-                </Button>
-              </Link>
-            </div>
-          )}
-        </div>
-      </div>
-    </motion.article>
+          <Link href={detailHref} onClick={trackSearchClick}>
+            <Button size="sm" className="h-9 rounded-lg px-4 text-[13px]">
+              论文详情
+              <ArrowRight className="size-3.5" />
+            </Button>
+          </Link>
+        </>
+      )}
+    />
   );
 }
 

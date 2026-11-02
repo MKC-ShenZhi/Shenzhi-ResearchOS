@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { discoveryQueryRetry } from "@/clients/backend/discovery";
 import {
   fetchHomeFeedPage,
-  RecommendationFeedExpiredError,
+  HomeFeedExpiredError,
 } from "../services/discovery-feed";
 import { PaperCard } from "./paper-card";
 
@@ -25,11 +25,15 @@ function FeedLoading() {
 }
 
 /**
- * Snapshot-backed home feed with cursor-based infinite loading.
+ * Home feed with cursor-based infinite loading over one fixed list.
  *
  * Signed-in users page through one recommendation snapshot; anonymous users
  * (and a failed first recommendation page) use global discovery. Loaded pages
  * are never replaced by a failing next page.
+ *
+ * A recommendation snapshot starts with the shared list; its second page is
+ * where the personal feed is built, so it is requested as soon as the first
+ * page is shown instead of waiting for the reader to scroll.
  */
 export function FeedList() {
   const { session, isPending: authPending } = useAuth();
@@ -59,9 +63,9 @@ export function FeedList() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, failure) =>
-      !(failure instanceof RecommendationFeedExpiredError) && discoveryQueryRetry(failureCount, failure),
+      !(failure instanceof HomeFeedExpiredError) && discoveryQueryRetry(failureCount, failure),
   });
-  const snapshotExpired = isFetchNextPageError && error instanceof RecommendationFeedExpiredError;
+  const expired = isFetchNextPageError && error instanceof HomeFeedExpiredError ? error.feed : null;
 
   const papers = useMemo(() => {
     const unique = new Map<string, NonNullable<typeof data>["pages"][number]["items"][number]>();
@@ -70,6 +74,11 @@ export function FeedList() {
     }
     return [...unique.values()];
   }, [data]);
+
+  const firstPageOnly = data?.pages.length === 1 && data.pages[0].source === "recommendation";
+  useEffect(() => {
+    if (firstPageOnly && hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
+  }, [fetchNextPage, firstPageOnly, hasNextPage, isFetchNextPageError, isFetchingNextPage]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -118,25 +127,27 @@ export function FeedList() {
         {isFetchNextPageError && (
           <div className="text-center" role="alert">
             <p className="text-sm text-muted">
-              {snapshotExpired
+              {expired === "recommendation"
                 ? "推荐列表已过期，刷新后将重新生成推荐。"
-                : "后续论文加载失败，已加载内容不受影响。"}
+                : expired === "discovery"
+                  ? "论文列表已更新，刷新后从第一篇开始浏览。"
+                  : "后续论文加载失败，已加载内容不受影响。"}
             </p>
             <Button
               variant="outline"
               size="sm"
               className="mt-3"
-              onClick={() => void (snapshotExpired
+              onClick={() => void (expired
                 ? queryClient.resetQueries({ queryKey })
                 : fetchNextPage())}
             >
-              {snapshotExpired ? "刷新推荐" : "重试加载"}
+              {expired === "recommendation" ? "刷新推荐" : expired ? "刷新列表" : "重试加载"}
             </Button>
           </div>
         )}
         {!hasNextPage && !isFetchNextPageError && (
           <span className="text-sm text-faint">
-            已浏览完全部 {data?.pages[0]?.total ?? papers.length} 篇论文
+            今天的 {data?.pages.at(-1)?.total ?? papers.length} 篇论文已全部浏览，明天会更新一批
           </span>
         )}
       </div>

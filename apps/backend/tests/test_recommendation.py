@@ -10,17 +10,21 @@ from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 
 from app.api import maintenance
 from app.core.database import session_scope
 from app.core.errors import BusinessError
 from app.main import app
+from app.models.discovery_pool import DiscoveryPoolPaperRow
 from app.models.interactions import PaperLikeRow
 from app.models.reading_history import ReadingHistoryRow
 from app.models.recommendation import BehaviorEventRow, RecommendationSnapshotRow, UserInterestProfileRow
 from app.schemas.behavior import BehaviorBatchRequest, BehaviorEventInput
+from app.schemas.discovery import DiscoveryPaper
 from app.schemas.knowledge import PaperDetail, Provenance
+from app.services.home_feed.composer import compose
+from app.services.home_feed.config import ANONYMOUS_QUOTAS
 from app.services.knowledge.service import KnowledgeServiceError
 from app.services.library.collections import CollectionService
 from app.services.library.paper_likes import PaperLikeService
@@ -58,6 +62,37 @@ def profile(**changes):
     }
     result.update(changes)
     return result
+
+
+def shared_list(*papers, trending=()):
+    """Stands in for HomeDiscoveryService: fixed shared sources, no fallback."""
+    async def shared_sources(_today):
+        return {'daily': list(papers), 'trending': list(trending)}
+
+    async def list_for(today):
+        # Looked up at call time, so a test can swap in a failing shared_sources.
+        return SimpleNamespace(papers=compose(await service.shared_sources(today), ANONYMOUS_QUOTAS))
+    service = SimpleNamespace(
+        today=lambda: datetime(2026, 11, 2).date(), shared_sources=shared_sources, list_for=list_for,
+        with_fallback=lambda composed, _today: composed,
+    )
+    return service
+
+
+def curated(paper_id, title='Curated'):
+    return DiscoveryPaper(id=paper_id, title=title, abstract='', year=2026,
+                          image_id=f'/images/2026/{paper_id.replace(":", "-")}.png')
+
+
+ABSTRACT = 'A displayable abstract for the home card. ' * 6
+
+
+def recalled_paper(paper_id, image_id, **changes):
+    """A recall candidate that passes rule B unless `changes` break it."""
+    return {
+        'id': paper_id, 'title': f'Recalled paper {paper_id}', 'abstract': ABSTRACT, 'authors': ['Ada Lovelace'],
+        'year': 2026, 'venue': None, 'pdf_url': None, 'thumbnail_url': None, 'image_id': image_id, **changes,
+    }
 
 
 class BehaviorContractTests(unittest.TestCase):
@@ -219,10 +254,12 @@ class ProfileMathTests(unittest.TestCase):
         score, reason = _rank(matching, p, None, 2026)
         self.assertGreater(score, 0.5)
         self.assertIn('关注的主题', reason)
-        unrelated = Candidate(paper, [], [], {'global_discovery'})
+        unrelated = Candidate(paper, [], [], {'keyword'})
         low, reason = _rank(unrelated, p, None, 2026)
         self.assertLessEqual(low, 0.15)
-        self.assertEqual(reason, '来自论文发现')
+        # No real signal: the card shows no reason rather than a generic label.
+        self.assertIsNone(reason)
+        self.assertEqual(_rank(unrelated, p, 0.5, 2026)[1], '近期受到平台用户关注')
 
 
 class RecallTests(unittest.IsolatedAsyncioTestCase):
@@ -234,47 +271,42 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_deduplicates_sources_and_survives_partial_failure(self):
         paper = SimpleNamespace(id='paper:1', title='One', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=['RAG'], keywords=['retrieval'])
+                                subjects=['RAG'], keywords=['retrieval'],
+                                image_id='/images/2026/paper-1.webp')
         knowledge = SimpleNamespace(
             search_by_subject=AsyncMock(side_effect=[
                 SimpleNamespace(results=[paper]), KnowledgeServiceError('unavailable'),
             ]),
             search=AsyncMock(return_value=SimpleNamespace(results=[paper])),
         )
-        discovery = SimpleNamespace(page=lambda **_: SimpleNamespace(items=[]))
-        result = await CandidateRecallService(knowledge, discovery).recall(profile(
+        result = await CandidateRecallService(knowledge).recall(profile(
             explicit_subjects=['RAG', 'vision'], long_keywords={'retrieval': 1},
         ))
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].paper['id'], 'paper:1')
+        self.assertEqual(result[0].paper['image_id'], '/images/2026/paper-1.webp')
+        self.assertEqual((result[0].paper['keywords'], result[0].paper['subjects']), (['retrieval'], ['RAG']))
         self.assertEqual(result[0].sources, {'followed_topic', 'keyword'})
 
-    async def test_all_knowledge_failures_use_global_discovery(self):
+    async def test_all_knowledge_failures_leave_no_personal_candidates(self):
         knowledge = SimpleNamespace(search_by_subject=AsyncMock(side_effect=KnowledgeServiceError('down')),
                                     search=AsyncMock(side_effect=KnowledgeServiceError('down')))
-        paper = SimpleNamespace(id='global:1', model_dump=lambda **_: {
-            'id': 'global:1', 'title': 'Global paper', 'abstract': '',
-            'authors': [], 'year': 2026, 'venue': None,
-            'pdf_url': None, 'thumbnail_url': None,
-        })
-        discovery = SimpleNamespace(page=lambda **_: SimpleNamespace(items=[paper]))
-        result = await CandidateRecallService(knowledge, discovery).recall(profile(
+        result = await CandidateRecallService(knowledge).recall(profile(
             long_topics={'rag': 1}, long_keywords={'retrieval': 1},
         ))
-        self.assertEqual([item.paper['id'] for item in result], ['global:1'])
-        self.assertEqual(result[0].sources, {'global_discovery'})
+        # The shared daily list is blended in by RecommendationService, not recall.
+        self.assertEqual(result, [])
 
     async def test_keyword_retrieval_is_a_scored_search_interest_signal(self):
         paper = SimpleNamespace(id='paper:graph', title='Graph paper', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=[], keywords=['networks'])
+                                subjects=[], keywords=['networks'], image_id=None)
         knowledge = SimpleNamespace(
             search=AsyncMock(return_value=SimpleNamespace(results=[paper])),
             search_by_subject=AsyncMock(),
         )
-        discovery = SimpleNamespace(page=lambda **_: SimpleNamespace(items=[]))
         interests = profile(short_keywords={'graph neural network': 1}, has_history=True)
-        candidates = await CandidateRecallService(knowledge, discovery).recall(interests)
+        candidates = await CandidateRecallService(knowledge).recall(interests)
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].keyword_recall_match, 0.4)
         score, reason = _rank(candidates[0], interests, None, 2026)
@@ -284,7 +316,7 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_unexpected_source_errors_and_timeouts_are_isolated(self):
         paper = SimpleNamespace(id='paper:ok', title='Survivor', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=['RAG'], keywords=[])
+                                subjects=['RAG'], keywords=[], image_id=None)
 
         async def never_returns(*_args, **_kwargs):
             await asyncio.sleep(60)
@@ -296,12 +328,9 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
             search=never_returns,
         )
 
-        def broken_page(**_):
-            raise ValueError('snapshot schema drift')
-
         with patch('app.services.recommendation.config.RECALL_TIMEOUT_SECONDS', 0.05), \
                 self.assertLogs('app.services.recommendation.recommendations', 'WARNING') as logs:
-            result = await CandidateRecallService(knowledge, SimpleNamespace(page=broken_page)).recall(profile(
+            result = await CandidateRecallService(knowledge).recall(profile(
                 explicit_subjects=['private subject a', 'RAG'], long_keywords={'secret query': 1},
             ))
         self.assertEqual([item.paper['id'] for item in result], ['paper:ok'])
@@ -311,20 +340,36 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_recall_limits_queries_and_merges_duplicate_ids_across_sources(self):
         paper = SimpleNamespace(id='shared', title='Shared', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=['RAG'], keywords=['retrieval'])
+                                subjects=['RAG'], keywords=['retrieval'], image_id=None)
         knowledge = SimpleNamespace(
             search_by_subject=AsyncMock(return_value=SimpleNamespace(results=[paper, paper])),
             search=AsyncMock(return_value=SimpleNamespace(results=[paper])),
         )
-        global_paper = SimpleNamespace(id='shared', model_dump=lambda **_: {'id': 'shared'})
-        discovery = SimpleNamespace(page=lambda **_: SimpleNamespace(items=[global_paper]))
-        result = await CandidateRecallService(knowledge, discovery).recall(profile(
+        result = await CandidateRecallService(knowledge).recall(profile(
             explicit_subjects=['a', 'b', 'c', 'd', 'e'], long_topics={'f': 1}, long_keywords={'g': 1},
         ))
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].sources, {'followed_topic', 'inferred_topic', 'keyword', 'global_discovery'})
+        self.assertEqual(result[0].sources, {'followed_topic', 'inferred_topic', 'keyword'})
         calls = knowledge.search_by_subject.await_count + knowledge.search.await_count
         self.assertEqual(calls, 4)
+
+    async def test_home_year_bounds_keyword_search_and_filters_overfetched_subjects(self):
+        def paper(paper_id, year):
+            return SimpleNamespace(id=paper_id, title=paper_id, abstract=None, authors=[], year=year,
+                                   venue=None, subjects=['RAG'], keywords=[], image_id='/images/p.png')
+        knowledge = SimpleNamespace(
+            search=AsyncMock(return_value=SimpleNamespace(results=[paper('keyword:2026', 2026)])),
+            search_by_subject=AsyncMock(return_value=SimpleNamespace(results=[
+                paper('subject:2024', 2024), paper('subject:2026', 2026),
+            ])),
+        )
+        result = await CandidateRecallService(knowledge).recall(
+            profile(explicit_subjects=['RAG'], long_keywords={'retrieval': 1}), year=2026,
+        )
+        self.assertEqual({item.paper['id'] for item in result}, {'keyword:2026', 'subject:2026'})
+        request = knowledge.search.await_args.args[0]
+        self.assertEqual((request.year_from, request.year_to), (2026, 2026))
+        knowledge.search_by_subject.assert_awaited_once_with('RAG', limit=36)
 
     async def test_metadata_failures_never_fail_or_invent_profile_features(self):
         detail = PaperDetail(id='paper:ok', title='OK', subjects=['RAG'], keywords=[],
@@ -480,15 +525,7 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
         cleared = await profiles.rebuild(self.user_id)
         self.assertEqual(cleared['long_topics'], {})
 
-        candidates = [Candidate({
-            'id': f'{self.paper_id}:{index}', 'title': f'Paper {index}',
-            'abstract': '', 'authors': [], 'year': 2026, 'venue': None,
-            'pdf_url': None, 'thumbnail_url': None,
-        }, [], [], {'global_discovery'}) for index in (1, 2)]
-        service = RecommendationService(
-            profiles=SimpleNamespace(get=AsyncMock(return_value=profile())),
-            recall=SimpleNamespace(recall=AsyncMock(return_value=candidates)),
-        )
+        service = self._service_with([curated(f'{self.paper_id}:{index}') for index in (1, 2)])
         first = await service.page(self.user_id, limit=1)
         self.assertEqual(len(first['items']), 1)
         second = await service.page(self.user_id, limit=1, cursor=first['next_cursor'])
@@ -552,16 +589,11 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(built['short_keywords'], {'rag': 1.0})
         self.assertEqual(built['long_keywords'], {})
         def candidate(paper_id: str, keyword: str) -> Candidate:
-            return Candidate({
-                'id': paper_id, 'title': paper_id, 'abstract': '', 'authors': [],
-                'year': 2026, 'venue': None, 'pdf_url': None, 'thumbnail_url': None,
-            }, [], [keyword], {'global_discovery'})
+            return Candidate(recalled_paper(paper_id, f'/images/2026/{paper_id.replace(":", "-")}.webp'),
+                             [], [keyword], {'keyword'})
         unrelated = candidate('paper:a-unrelated', 'vision')
         matching = candidate('paper:z-matching', 'RAG')
-        service = RecommendationService(
-            profiles=SimpleNamespace(get=AsyncMock(return_value=built)),
-            recall=SimpleNamespace(recall=AsyncMock(return_value=[unrelated, matching])),
-        )
+        service = self._service_with([], interests=built, candidates=[unrelated, matching])
         page = await service.page(self.user_id, limit=2)
         self.assertEqual([item['id'] for item in page['items']], ['paper:z-matching', 'paper:a-unrelated'])
         self.assertEqual(page['items'][0]['reason'], '与你关注的论文关键词相关')
@@ -680,18 +712,97 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
             ))
         self.assertEqual(remaining, 1)
 
-    def _service_with(self, candidates, interests=None):
+    def _service_with(self, shared, interests=None, candidates=()):
         return RecommendationService(
             profiles=SimpleNamespace(get=AsyncMock(return_value=interests or profile())),
-            recall=SimpleNamespace(recall=AsyncMock(return_value=candidates)),
+            recall=SimpleNamespace(recall=AsyncMock(return_value=list(candidates))),
+            discovery=shared_list(*shared),
         )
 
     def _candidates(self, count):
-        return [Candidate({
-            'id': f'{self.paper_id}:{index}', 'title': f'Paper {index}',
-            'abstract': '', 'authors': [], 'year': 2026, 'venue': None,
-            'pdf_url': None, 'thumbnail_url': None,
-        }, [], [], {'global_discovery'}) for index in range(count)]
+        return [curated(f'{self.paper_id}:{index}', f'Paper {index}') for index in range(count)]
+
+    async def test_personal_picks_are_composed_with_the_shared_sources(self):
+        def recalled(paper_id, image_id, **changes):
+            return Candidate(recalled_paper(paper_id, image_id, **changes), ['RAG'], [], {'followed_topic'})
+        interests = profile(explicit_subjects=['RAG'], long_topics={'rag': 1}, has_history=True)
+        liked = f'{self.paper_id}:liked'
+        await PaperLikeService().like(self.user_id, liked)
+        shared = [curated(f'{self.paper_id}:shared:{index}') for index in range(4)] + [curated(liked)]
+        candidates = [
+            recalled(f'{self.paper_id}:with-image', '/images/2026/with-image.webp'),
+            recalled(f'{self.paper_id}:no-image', None),
+            # SVG is never served by the web image proxy, so it counts as no image.
+            recalled(f'{self.paper_id}:svg', '/images/ICLR_2026/x.svg'),
+            # Rule B also rejects what a card cannot show, e.g. a section heading as title.
+            recalled(f'{self.paper_id}:heading', '/images/2026/h.webp', title='1 Introduction'),
+            recalled(liked, '/images/2026/liked.webp'),
+        ]
+        service = self._service_with(shared, interests, candidates)
+        first = await service.page(self.user_id, limit=12)
+        # The first page is the shared list without the user's likes, and never waits for recall.
+        service.recall.recall.assert_not_awaited()
+        self.assertEqual([item['id'] for item in first['items']], [paper.id for paper in shared[:4]])
+        self.assertTrue(first['has_more'])
+        second = await service.page(self.user_id, limit=12, cursor=first['next_cursor'])
+        # Recall is bounded to the year the shared home list shows.
+        self.assertEqual(service.recall.recall.await_args.kwargs, {'year': 2026})
+        self.assertFalse(second['has_more'])
+        items = first['items'] + second['items']
+        ids = [item['id'] for item in items]
+        for rejected in ('no-image', 'svg', 'heading'):
+            self.assertNotIn(f'{self.paper_id}:{rejected}', ids)
+        self.assertNotIn(liked, ids)
+        # The personal pick follows; shared papers already shown are not repeated.
+        self.assertEqual([item['id'] for item in second['items']], [f'{self.paper_id}:with-image'])
+        by_id = {item['id']: item for item in items}
+        self.assertEqual(by_id[f'{self.paper_id}:with-image']['reason'], '与你关注的主题相匹配')
+        self.assertEqual(by_id[f'{self.paper_id}:with-image']['sources'], ['followed_topic'])
+        self.assertEqual(by_id[f'{self.paper_id}:with-image']['source'], 'personal')
+        self.assertIsNone(by_id[shared[0].id]['reason'])
+        self.assertEqual((by_id[shared[0].id]['sources'], by_id[shared[0].id]['source']), (['daily'], 'daily'))
+        self.assertEqual([item['rank'] for item in items], list(range(1, len(items) + 1)))
+
+    async def test_each_screen_follows_the_signed_in_quotas(self):
+        candidates = [Candidate(recalled_paper(f'{self.paper_id}:p{index:02d}', f'/images/2026/p{index}.webp'),
+                                ['RAG'], [], {'followed_topic'}) for index in range(30)]
+        daily = self._candidates(30)
+        trending = [curated(f'{self.paper_id}:t{index}') for index in range(10)]
+        service = RecommendationService(
+            profiles=SimpleNamespace(get=AsyncMock(return_value=profile(explicit_subjects=['RAG']))),
+            recall=SimpleNamespace(recall=AsyncMock(return_value=candidates)),
+            discovery=shared_list(*daily, trending=trending),
+        )
+        first = await service.page(self.user_id, limit=12)
+        second = await service.page(self.user_id, limit=12, cursor=first['next_cursor'])
+
+        def counts(page):
+            sources = [item['source'] for item in page['items']]
+            return {name: sources.count(name) for name in set(sources)}
+        self.assertEqual(counts(first), {'daily': 10, 'trending': 2})
+        self.assertEqual(counts(second), {'personal': 6, 'daily': 4, 'trending': 2})
+
+    async def test_personal_picks_are_capped_and_the_shared_list_fills_the_feed(self):
+        candidates = [Candidate(recalled_paper(f'{self.paper_id}:personal:{index:03d}', f'/images/2026/{index}.webp'),
+                                ['RAG'], [], {'followed_topic'}) for index in range(130)]
+        shared = self._candidates(300)
+        service = self._service_with(shared, profile(explicit_subjects=['RAG'], has_history=True), candidates)
+        first = await service.page(self.user_id, limit=1)
+        page = await service.page(self.user_id, limit=400, cursor=first['next_cursor'])
+        # One shared paper on page one, then 100 personal picks and the rest of the shared list.
+        self.assertEqual(page['total'], 1 + 100 + 299)
+        self.assertEqual(sum(item['source'] == 'personal' for item in page['items']), 100)
+
+    async def test_shared_source_failure_keeps_personal_picks(self):
+        async def broken(_today):
+            raise ValueError('snapshot schema drift')
+        candidate = Candidate(recalled_paper(f'{self.paper_id}:personal', '/images/2026/p.webp'),
+                              ['RAG'], [], {'followed_topic'})
+        service = self._service_with([], profile(explicit_subjects=['RAG']), [candidate])
+        service.discovery.shared_sources = broken
+        with self.assertLogs('app.services.recommendation.recommendations', 'WARNING'):
+            page = await service.page(self.user_id, limit=12)
+        self.assertEqual([item['id'] for item in page['items']], [candidate.paper['id']])
 
     async def test_snapshot_cursor_traverses_without_duplicates_or_loss(self):
         service = self._service_with(self._candidates(29))
@@ -712,6 +823,44 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(pages[-1]['has_more'])
         # Recall ran once: later pages never re-rank or mix another snapshot.
         service.recall.recall.assert_awaited_once()
+
+    async def test_snapshot_stores_ids_and_resolves_pool_papers_per_page(self):
+        pooled = recalled_paper(f'{self.paper_id}:pooled', '/images/2026/pooled.webp', venue='ACL')
+        async with session_scope() as session:
+            session.add(DiscoveryPoolPaperRow(
+                paper_id=pooled['id'], title=pooled['title'], abstract=pooled['abstract'],
+                authors=pooled['authors'], year=2026, venue='ACL', image_id=pooled['image_id'],
+                subjects=['RAG'], keywords=['retrieval'], synced_at=datetime.now(UTC),
+            ))
+        try:
+            pool_paper = DiscoveryPaper.model_validate({**pooled, 'subjects': ['RAG'], 'keywords': ['retrieval']})
+            outside = curated(f'{self.paper_id}:outside')
+            service = self._service_with([pool_paper, outside])
+            first = await service.page(self.user_id, limit=2)
+            async with session_scope() as session:
+                stored = (await session.get(RecommendationSnapshotRow, UUID(first['request_id']))).items
+            # Only the paper the pool cannot resolve keeps a copy.
+            self.assertEqual(['paper' in item for item in stored], [False, True])
+            self.assertEqual(set(stored[0]), {'id', 'rank', 'source', 'reason', 'sources'})
+            card = first['items'][0]
+            self.assertEqual((card['id'], card['title'], card['venue'], card['keywords'], card['source'], card['rank']),
+                             (pooled['id'], pooled['title'], 'ACL', ['retrieval'], 'daily', 1))
+            self.assertEqual(first['items'][1]['id'], outside.id)
+        finally:
+            async with session_scope() as session:
+                await session.execute(delete(DiscoveryPoolPaperRow).where(DiscoveryPoolPaperRow.paper_id == pooled['id']))
+        # A paper resynced out of the pool is skipped; the page and its ranks stay consistent.
+        again = await RecommendationService._hydrate(stored, UUID(first['request_id']))
+        self.assertEqual([(item['id'], item['rank']) for item in again], [(outside.id, 2)])
+
+    async def test_concurrent_next_page_requests_complete_the_snapshot_once(self):
+        service = self._service_with(self._candidates(30))
+        first = await service.page(self.user_id, limit=12)
+        a, b = await asyncio.gather(*(
+            service.page(self.user_id, limit=12, cursor=first['next_cursor']) for _ in range(2)
+        ))
+        self.assertEqual(a, b)
+        self.assertEqual(a['total'], 30)
 
     async def test_stale_foreign_and_malformed_cursors(self):
         service = self._service_with(self._candidates(3))

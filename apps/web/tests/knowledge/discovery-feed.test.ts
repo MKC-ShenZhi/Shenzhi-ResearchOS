@@ -10,6 +10,7 @@ import {
 
 const FEED_LIST_SOURCE = readFileSync("features/search/components/feed-list.tsx", "utf8");
 const PAPER_CARD_SOURCE = readFileSync("features/search/components/paper-card.tsx", "utf8");
+const CARD_LAYOUT_SOURCE = readFileSync("features/knowledge/papers/components/paper-card-layout.tsx", "utf8");
 const HOME_SOURCE = readFileSync("features/home/HomePage.tsx", "utf8");
 const BACKEND_CLIENT_SOURCE = readFileSync("clients/backend/discovery.ts", "utf8");
 
@@ -37,6 +38,7 @@ test("discovery mapper preserves display metadata without inventing engagement o
   assert.equal(mapped.date, "2026");
   assert.equal(mapped.venue, "预印本");
   assert.equal(mapped.authors, "A One · B Two · C Three · D Four · E Five 等");
+  // Without upstream topics there are no tags; none are invented.
   assert.deepEqual(mapped.tags, []);
   assert.equal(mapped.thumbnailUrl, "/paper-thumbnails/2604.17730v1.webp");
   assert.equal("likes" in mapped, false);
@@ -78,8 +80,36 @@ test("paper cards keep the existing detail navigation and load thumbnails on mob
     PAPER_CARD_SOURCE,
     /const detailHref = paperHref\(paper\.id, \{ mode: "create", source: returnTo \}\)/,
   );
-  assert.equal(PAPER_CARD_SOURCE.match(/href=\{detailHref\}/g)?.length, 3);
-  assert.doesNotMatch(PAPER_CARD_SOURCE, /hidden w-full max-w-\[320px\]/);
+  // 立即阅读 here; the shared layout links the title and navigates from the card body.
+  assert.equal(PAPER_CARD_SOURCE.match(/href=\{detailHref\}/g)?.length, 1);
+  assert.match(PAPER_CARD_SOURCE, /<PaperCardLayout[\s\S]*detailHref=\{detailHref\}/);
+  assert.match(CARD_LAYOUT_SOURCE, /<Link href=\{detailHref\} onClick=\{onNavigate\}/);
+  assert.match(CARD_LAYOUT_SOURCE, /usePaperCardNavigation\(detailHref, paper\.title, onNavigate\)/);
+  // Real images always show on mobile; only the placeholder collapses in a single column.
+  assert.match(CARD_LAYOUT_SOURCE, /paper\.thumbnailUrl \? "" : "hidden @min-\[600px\]:block"/);
+});
+
+test("daily-edition pool papers resolve their knowledge image through the proxy flag", () => {
+  const originalValue = process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
+  const pool = discoveryPaper({ thumbnail_url: null, image_id: "/images/CVPR_2026/2605.10204v1.png" });
+  try {
+    process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = "true";
+    assert.equal(mapDiscoveryPaper(pool).thumbnailUrl, "/api/paper-images/CVPR_2026/2605.10204v1.png");
+    // Unsafe or unsupported identifiers never become image URLs.
+    assert.equal(mapDiscoveryPaper({ ...pool, image_id: "/images/ICLR_2026/x.svg" }).thumbnailUrl, null);
+    process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = "false";
+    assert.equal(mapDiscoveryPaper(pool).thumbnailUrl, null);
+  } finally {
+    if (originalValue === undefined) delete process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
+    else process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = originalValue;
+  }
+});
+
+test("home cards show knowledge topics like search cards: keywords first, else subjects, at most five", () => {
+  assert.deepEqual(mapDiscoveryPaper(discoveryPaper({
+    keywords: ["k1", "k2", "k3", "k4", "k5", "k6"], subjects: ["s1"],
+  })).tags, ["k1", "k2", "k3", "k4", "k5"]);
+  assert.deepEqual(mapDiscoveryPaper(discoveryPaper({ keywords: [], subjects: ["RAG", "Agents"] })).tags, ["RAG", "Agents"]);
 });
 
 test("home static thumbnails bypass the knowledge image flag", () => {
@@ -89,8 +119,10 @@ test("home static thumbnails bypass the knowledge image flag", () => {
       process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = flag;
       assert.equal(mapDiscoveryPaper(discoveryPaper()).thumbnailUrl, "/paper-thumbnails/2604.17730v1.webp");
     }
-    assert.match(PAPER_CARD_SOURCE, /<PaperThumbnail src=\{paper\.thumbnailUrl\}/);
-    assert.doesNotMatch(PAPER_CARD_SOURCE, /getPaperThumbnailUrl|imageId|PAPER_THUMBNAIL_ENABLED/);
+    assert.match(CARD_LAYOUT_SOURCE, /<PaperThumbnail src=\{paper\.thumbnailUrl\}/);
+    for (const source of [PAPER_CARD_SOURCE, CARD_LAYOUT_SOURCE]) {
+      assert.doesNotMatch(source, /getPaperThumbnailUrl|imageId|PAPER_THUMBNAIL_ENABLED/);
+    }
   } finally {
     if (originalValue === undefined) delete process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
     else process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = originalValue;

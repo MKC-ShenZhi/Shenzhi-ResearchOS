@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish the curated home-discovery seed and its selected thumbnails.
+"""Publish the packaged home fallback snapshot and its selected thumbnails.
 
 The source seed remains untouched. This command creates the deployment-ready
 FastAPI snapshot and exactly one optimized WebP thumbnail per selected paper.
@@ -23,22 +23,19 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = ROOT / 'data' / 'discovery' / 'home-seed-300.json'
 DEFAULT_SNAPSHOT = ROOT / 'apps' / 'backend' / 'app' / 'data' / 'home_discovery_snapshot.json'
 DEFAULT_ASSET_DIR = ROOT / 'apps' / 'web' / 'public' / 'paper-thumbnails'
+sys.path.insert(0, str(ROOT / 'apps' / 'backend'))
+from app.services.discovery_pool.text import (  # noqa: E402 - dependency-free shared cleanup
+    compact_text,
+    display_abstract,
+    display_authors,
+    display_title,
+)
+
 ARXIV_ID = re.compile(r'^\d{4}\.\d{4,5}(?:v[1-9]\d*)?$')
-TITLE_SUFFIX = re.compile(
-    r'\s+(?:Thanks?|Acknowledg(?:e)?ments?|Conference|Journal|CCS|ISBN|DOI|Volume):\s*',
-    re.IGNORECASE,
-)
-AUTHOR_NOISE = re.compile(
-    r'(?:[{}\\]|https?://|@|\b(?:university|institute|laboratory|department|section|'
-    r'equal contribution|corresponding author|work was done|code and data|project leader)\b)',
-    re.IGNORECASE,
-)
-REPEATED_FOOTNOTE_NUMBER = re.compile(r'\s+([1-9])(?:\s+\1){2}(?=\s)')
-TRAILING_AUTHOR_FOOTNOTE = re.compile(
-    r'\s+[†‡](?:\s*[†‡])*\s+(?:footnotetext:\s*)?[†‡]?\s*'
-    r'(?:corresponding author(?:s)?|project leader).*$',
-    re.IGNORECASE,
-)
+
+
+def string_list(value: Any) -> list[str]:
+    return [text for item in value if (text := compact_text(item))] if isinstance(value, list) else []
 
 
 def parse_args() -> argparse.Namespace:
@@ -50,46 +47,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--quality', type=int, default=82)
     parser.add_argument('--check', action='store_true', help='Validate already-published output without rewriting it')
     return parser.parse_args()
-
-
-def compact_text(value: Any) -> str:
-    if not isinstance(value, str):
-        return ''
-    return ' '.join(value.replace('\x00', ' ').split()).strip()
-
-
-def display_title(value: Any) -> str:
-    title = compact_text(value)
-    marker = TITLE_SUFFIX.search(title)
-    if marker and marker.start() >= 12:
-        title = title[:marker.start()].rstrip(' -;,.:')
-    return re.sub(r'\s+([,:;])', r'\1', title)
-
-
-def display_abstract(value: Any) -> str:
-    abstract = compact_text(value)
-    abstract = REPEATED_FOOTNOTE_NUMBER.sub('', abstract)
-    abstract = TRAILING_AUTHOR_FOOTNOTE.sub('', abstract)
-    return re.sub(r'\s+([,.;:!?])', r'\1', abstract).strip()
-
-
-def display_authors(value: Any) -> list[str]:
-    if isinstance(value, str):
-        value = [value]
-    if not isinstance(value, list):
-        return []
-    authors: list[str] = []
-    for candidate in value:
-        author = compact_text(candidate).strip(' ,;.')
-        if not (2 <= len(author) <= 85) or AUTHOR_NOISE.search(author):
-            continue
-        if re.fullmatch(r'[a-z][a-z0-9_.-]{3,}', author):
-            continue
-        if not any(character.isalpha() for character in author):
-            continue
-        if author not in authors:
-            authors.append(author)
-    return authors
 
 
 def build_snapshot(source: Path) -> tuple[dict[str, Any], list[tuple[Path, str]]]:
@@ -142,6 +99,10 @@ def build_snapshot(source: Path) -> tuple[dict[str, Any], list[tuple[Path, str]]
             'venue': compact_text(raw.get('venue')) or None,
             'pdf_url': compact_text(raw.get('pdf_url')) or None,
             'thumbnail_url': f'/paper-thumbnails/{asset_name}',
+            # Optional knowledge metadata (card topics, image path), copied from the seed when present.
+            'image_id': compact_text(raw.get('image_id')) or None,
+            'keywords': string_list(raw.get('keywords')),
+            'subjects': string_list(raw.get('subjects')),
             'priority': priority,
         })
 

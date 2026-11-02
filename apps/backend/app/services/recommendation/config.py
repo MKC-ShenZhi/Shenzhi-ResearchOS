@@ -44,7 +44,11 @@ RECALL_PER_SOURCE = 12
 # Each recall query and each metadata lookup is bounded independently, so one
 # slow upstream path degrades to fewer candidates instead of a failed page.
 RECALL_TIMEOUT_SECONDS = 5.0
-GLOBAL_DISCOVERY_RECALL_LIMIT = 48
+# Subject search cannot filter by year; fetch this many times more and keep the home year.
+SUBJECT_YEAR_OVERFETCH = 3
+# At most this many personal picks enter the home feed as the `personal` source;
+# app.services.home_feed composes them with the shared sources.
+PERSONAL_RECOMMENDATION_LIMIT = 100
 METADATA_TIMEOUT_SECONDS = 4.0
 METADATA_BATCH_TIMEOUT_SECONDS = 6.0
 METADATA_CONCURRENCY = 4

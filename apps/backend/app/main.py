@@ -17,10 +17,13 @@ from app.services.agent_sessions.repository import agent_session_repository
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     from app.integrations.llm.resolver import load_registry
+    from app.services.discovery_pool.scheduler import start_home_feed_scheduler, stop_home_feed_scheduler
     load_registry()
     await repository.recover()
     await agent_session_repository.recover()
+    home_feed_scheduler = start_home_feed_scheduler()
     yield
+    await stop_home_feed_scheduler(home_feed_scheduler)
     await agent_session_repository.close()
     await repository.close()
 

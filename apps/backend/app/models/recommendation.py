@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, Index, Integer, Text, text
+from sqlalchemy import Boolean, DateTime, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -54,7 +54,10 @@ class RecommendationSnapshotRow(Base):
     algorithm_version: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Ids and attribution per rank; paper content is resolved per page (see recommendations.py).
     items: Mapped[list] = mapped_column(JSONB, nullable=False)
+    # False while only the shared first page is stored; the next page appends the personal feed.
+    complete: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('true'))
 
     __table_args__ = (
         Index('idx_recommendation_snapshots_user_expiry', 'user_id', 'expires_at'),

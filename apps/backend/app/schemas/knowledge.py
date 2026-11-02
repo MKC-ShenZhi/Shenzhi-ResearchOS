@@ -127,6 +127,8 @@ class PaperSearchResult(KnowledgeModel):
     venue: str | None = None
     keywords: list[str] = Field(default_factory=list)
     subjects: list[str] = Field(default_factory=list)
+    # Browse-only main subject; kept internal (home-pool diversity), not part of the public contract.
+    primary_subject: str | None = Field(default=None, exclude=True)
     score: float | None = None
     rank: int | None = None
     provenance: Provenance

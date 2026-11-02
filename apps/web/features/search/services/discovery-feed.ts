@@ -7,35 +7,29 @@ import {
 } from "../../../clients/backend/discovery";
 import type { FeedPaper } from "../../../types";
 import { ApiError } from "../../../clients/backend/http";
+import { getPaperThumbnailUrl } from "../../../lib/paper-thumbnail";
+import {
+  formatPaperAuthors,
+  formatPaperYear,
+  paperVenueTone,
+  pickPaperTopics,
+} from "../../knowledge/papers/paper-card-model";
 import { fetchRecommendationPapers } from "../../../clients/backend/recommendations";
 
 export const DISCOVERY_PAGE_SIZE = 12;
-const VENUE_TONES: FeedPaper["venueTone"][] = ["violet", "amber", "green"];
-
-function stableVenueTone(id: string): FeedPaper["venueTone"] {
-  let hash = 0;
-  for (const character of id) hash = (hash + character.charCodeAt(0)) % VENUE_TONES.length;
-  return VENUE_TONES[hash];
-}
-
-function formatAuthors(authors: string[]): string {
-  if (authors.length === 0) return "作者未知";
-  const visible = authors.slice(0, 5).join(" · ");
-  return authors.length > 5 ? `${visible} 等` : visible;
-}
 
 export function mapDiscoveryPaper(item: Omit<DiscoveryPaperDto, "year"> & { year: number | null }): FeedPaper {
   return {
     id: item.id,
-    date: item.year === null ? "年份未知" : String(item.year),
+    date: formatPaperYear(item.year),
     venue: item.venue?.trim() || "预印本",
-    venueTone: stableVenueTone(item.id),
-    authors: formatAuthors(item.authors),
+    venueTone: paperVenueTone(item.id),
+    authors: formatPaperAuthors(item.authors),
     title: item.title,
     abstract: item.abstract,
-    aiLink: "AI 深度解读",
-    tags: [],
-    thumbnailUrl: item.thumbnail_url,
+    tags: pickPaperTopics(item.keywords, item.subjects),
+    // Packaged fallback papers keep their static thumbnail; every other source uses the knowledge image.
+    thumbnailUrl: item.thumbnail_url ?? getPaperThumbnailUrl(item.image_id),
   };
 }
 
@@ -43,7 +37,8 @@ export interface DiscoveryFeedPage {
   items: FeedPaper[];
   nextCursor: string | null;
   hasMore: boolean;
-  snapshotId: string;
+  /** Discovery list id, or the recommendation request id. */
+  listId: string;
   total: number;
   /** Which feed produced this page; a recommendation feed never continues as discovery. */
   source?: "recommendation" | "discovery";
@@ -55,23 +50,37 @@ export async function fetchDiscoveryFeedPage(cursor: string | null): Promise<Dis
     items: response.items.map(mapDiscoveryPaper),
     nextCursor: response.next_cursor,
     hasMore: response.has_more,
-    snapshotId: response.snapshot_id,
+    listId: response.list_id,
     total: response.total,
   };
 }
 
 const DISCOVERY_CURSOR_PREFIX = "discovery:";
 
-/** The recommendation snapshot behind a cursor is gone; only a restart from page one can recover. */
-export class RecommendationFeedExpiredError extends Error {
-  constructor() {
-    super("推荐列表已过期，请刷新后重新浏览");
-    this.name = "RecommendationFeedExpiredError";
+/**
+ * The list behind a cursor is gone (recommendation snapshot expired, or the
+ * day's discovery list was replaced); only a restart from page one can recover.
+ */
+export class HomeFeedExpiredError extends Error {
+  constructor(readonly feed: "recommendation" | "discovery") {
+    super(feed === "recommendation" ? "推荐列表已过期，请刷新后重新浏览" : "论文列表已更新，请刷新后重新浏览");
+    this.name = "HomeFeedExpiredError";
   }
 }
 
+/** Both feeds answer a stale cursor with 409 / 20001. */
+function isStaleCursor(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && error.code === 20001;
+}
+
 async function homeDiscoveryPage(cursor: string | null): Promise<DiscoveryFeedPage> {
-  const page = await fetchDiscoveryFeedPage(cursor);
+  let page: DiscoveryFeedPage;
+  try {
+    page = await fetchDiscoveryFeedPage(cursor);
+  } catch (error) {
+    if (isStaleCursor(error)) throw new HomeFeedExpiredError("discovery");
+    throw error;
+  }
   return {
     ...page,
     nextCursor: page.nextCursor ? `${DISCOVERY_CURSOR_PREFIX}${page.nextCursor}` : null,
@@ -84,13 +93,12 @@ async function recommendationPage(cursor: string | null, userId: string): Promis
   return {
     items: page.items.map((item) => ({
       ...mapDiscoveryPaper(item),
-      recommendationReason: item.reason,
       recommendationRequestId: item.request_id,
       recommendationRank: item.rank,
     })),
     nextCursor: page.next_cursor,
     hasMore: page.has_more,
-    snapshotId: page.request_id,
+    listId: page.request_id,
     total: page.total,
     source: "recommendation",
   };
@@ -122,9 +130,7 @@ export async function fetchHomeFeedPage(cursor: string | null, userId: string | 
   try {
     return await recommendationPage(cursor, userId);
   } catch (error) {
-    if (error instanceof ApiError && error.status === 409 && error.code === 20001) {
-      throw new RecommendationFeedExpiredError();
-    }
+    if (isStaleCursor(error)) throw new HomeFeedExpiredError("recommendation");
     throw error;
   }
 }

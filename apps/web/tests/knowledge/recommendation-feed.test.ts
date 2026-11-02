@@ -4,7 +4,7 @@ import test from "node:test";
 import { InfiniteQueryObserver, QueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
   fetchHomeFeedPage,
-  RecommendationFeedExpiredError,
+  HomeFeedExpiredError,
   type DiscoveryFeedPage,
 } from "../../features/search/services/discovery-feed.js";
 import { recordPaperBehavior, recordSearchSubmit } from "../../clients/backend/behavior.js";
@@ -41,11 +41,41 @@ test("authenticated home feed preserves recommendation attribution and nullable 
     assert.equal(page.items[0].date, "年份未知");
     assert.equal(page.items[0].recommendationRequestId, "request-1");
     assert.equal(page.items[0].recommendationRank, 1);
-    assert.equal(page.items[0].recommendationReason, "与你关注的主题相匹配");
+    // The reason stays server-side for analysis; cards never surface it.
+    assert.equal("recommendationReason" in page.items[0], false);
     assert.equal(page.nextCursor, "request-1:1");
     assert.match(requested[0], /\/recommendations\/papers\?limit=12/);
   } finally {
     globalThis.fetch = original;
+  }
+});
+
+test("recalled recommendations use knowledge images while curated papers keep static thumbnails", async () => {
+  const original = globalThis.fetch;
+  const originalFlag = process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
+  const item = { sources: ["keyword"], reason: "与你近期搜索的方向相关", request_id: "request-1" };
+  globalThis.fetch = async () => json({
+    items: [
+      { ...paper, id: "recalled", image_id: "/images/2026/recalled.webp", rank: 1, ...item },
+      { ...paper, id: "curated", thumbnail_url: "/paper-thumbnails/curated.webp", image_id: null, rank: 2, ...item },
+      { ...paper, id: "legacy", rank: 3, ...item, reason: null },
+    ],
+    next_cursor: null, has_more: false, request_id: "request-1", total: 3, algorithm_version: "content-v1",
+  });
+  try {
+    process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = "true";
+    const enabled = await fetchHomeFeedPage(null, "user-a");
+    assert.deepEqual(enabled.items.map((entry) => entry.thumbnailUrl), [
+      "/api/paper-images/2026/recalled.webp", "/paper-thumbnails/curated.webp", null,
+    ]);
+    // The knowledge image flag still gates recalled images; static thumbnails are unaffected.
+    process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = "false";
+    const disabled = await fetchHomeFeedPage(null, "user-a");
+    assert.deepEqual(disabled.items.map((entry) => entry.thumbnailUrl), [null, "/paper-thumbnails/curated.webp", null]);
+  } finally {
+    globalThis.fetch = original;
+    if (originalFlag === undefined) delete process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED;
+    else process.env.NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED = originalFlag;
   }
 });
 
@@ -57,7 +87,7 @@ test("recommendation failure falls back to the existing discovery cursor", async
     requested.push(url);
     if (url.includes("/recommendations/")) return json(null, 503);
     return json({ items: [paper], next_cursor: "daily-1", has_more: true,
-      snapshot_id: "global-snapshot", total: 300 });
+      list_id: "home:global", total: 300 });
   };
   try {
     const first = await fetchHomeFeedPage(null, "user-a");
@@ -77,7 +107,7 @@ test("anonymous home feed only requests discovery", async () => {
   globalThis.fetch = async (input) => {
     requested.push(String(input));
     return json({ items: [paper], next_cursor: null, has_more: false,
-      snapshot_id: "global-snapshot", total: 1 });
+      list_id: "home:global", total: 1 });
   };
   try {
     const page = await fetchHomeFeedPage(null, null);
@@ -211,7 +241,7 @@ function fakeBackend(total: number, failures: Map<string, Response[]> = new Map(
     requested.push({ url, expectedUser: new Headers(init?.headers).get("x-shenzhi-expected-user-id") });
     if (url.includes("/discovery/")) {
       return json({ items: [{ ...paper, id: "global:1" }], next_cursor: "daily-1", has_more: true,
-        snapshot_id: "global-snapshot", total: 300 });
+        list_id: "home:global", total: 300 });
     }
     const cursor = new URL(url, "http://local").searchParams.get("cursor") ?? "";
     const injected = failures.get(cursor)?.shift();
@@ -246,8 +276,29 @@ test("an expired recommendation snapshot asks for a restart instead of falling b
   globalThis.fetch = backend.fetchImpl;
   try {
     const first = await fetchHomeFeedPage(null, "user-a");
-    await assert.rejects(fetchHomeFeedPage(first.nextCursor, "user-a"), RecommendationFeedExpiredError);
+    await assert.rejects(fetchHomeFeedPage(first.nextCursor, "user-a"), (error: unknown) =>
+      error instanceof HomeFeedExpiredError && error.feed === "recommendation");
     assert.equal(backend.requested.some(({ url }) => url.includes("/discovery/")), false);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("a replaced anonymous discovery list asks for a restart instead of retrying the stale cursor", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const cursor = new URL(String(input), "http://local").searchParams.get("cursor");
+    if (cursor) return failure(409, 20001);
+    return json({ items: [paper], next_cursor: "daily-1", has_more: true, list_id: "home:1", total: 300 });
+  };
+  try {
+    const first = await fetchHomeFeedPage(null, null);
+    await assert.rejects(fetchHomeFeedPage(first.nextCursor, null), (error: unknown) =>
+      error instanceof HomeFeedExpiredError && error.feed === "discovery");
+    // A malformed cursor (400) stays an ordinary, retryable failure.
+    globalThis.fetch = async () => failure(400, 20001);
+    await assert.rejects(fetchHomeFeedPage(first.nextCursor, null), (error: unknown) =>
+      !(error instanceof HomeFeedExpiredError));
   } finally {
     globalThis.fetch = original;
   }
@@ -260,7 +311,7 @@ test("an account-switch precondition failure on a later page is not treated as e
   try {
     const first = await fetchHomeFeedPage(null, "user-a");
     await assert.rejects(fetchHomeFeedPage(first.nextCursor, "user-a"), (error: unknown) =>
-      !(error instanceof RecommendationFeedExpiredError));
+      !(error instanceof HomeFeedExpiredError));
     assert.equal(backend.requested.some(({ url }) => url.includes("/discovery/")), false);
   } finally {
     globalThis.fetch = original;
@@ -334,7 +385,7 @@ test("infinite feed restarts from a new first page only after an explicit reset"
   try {
     await observer.refetch();
     const failed = await observer.fetchNextPage();
-    assert.ok(failed.error instanceof RecommendationFeedExpiredError);
+    assert.ok(failed.error instanceof HomeFeedExpiredError);
     assert.equal(loadedIds(observer).length, 12);
     await cache.resetQueries({ queryKey: ["home-feed", "user-a"] });
     assert.equal(observer.getCurrentResult().data?.pages.length, 1);
