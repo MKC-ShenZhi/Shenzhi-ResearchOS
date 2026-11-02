@@ -107,7 +107,10 @@ class PoolPersistenceTests(unittest.IsolatedAsyncioTestCase):
         await self._clear()
 
     async def asyncTearDown(self):
+        from app.core.database import dispose_engine
         await self._clear()
+        # The engine's connections belong to this test's loop; later tests run on other loops.
+        await dispose_engine()
 
     @staticmethod
     async def _clear():
