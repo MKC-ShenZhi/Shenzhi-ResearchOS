@@ -39,6 +39,8 @@ class SnapshotPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.unpublished_day = date(1990, 1, 1) + timedelta(days=uuid.uuid4().int % 300)
         self.service = PlatformStatsService()
         await self._cleanup()
+        # 主题来自真实目录，本地库可能已有真实关注者；断言只看本测试新增的关注。
+        self.topic_base = (await TopicFollowService().follower_counts([self.topic_id])).get(self.topic_id, 0)
 
     async def asyncTearDown(self):
         await self._cleanup()
@@ -98,7 +100,7 @@ class SnapshotPersistenceTests(unittest.IsolatedAsyncioTestCase):
 
         topics = await self.service.topics_page(snapshot_date=self.day, limit=500)
         self.assertEqual(len(topics.items), 293)
-        self.assertEqual({item.topic_id: item.follower_count for item in topics.items}[self.topic_id], 2)
+        self.assertEqual({item.topic_id: item.follower_count for item in topics.items}[self.topic_id], self.topic_base + 2)
 
         meta = await self.service.meta()
         self.assertTrue(meta.published)
@@ -127,7 +129,7 @@ class SnapshotPersistenceTests(unittest.IsolatedAsyncioTestCase):
             ), 1)
 
         topics = await self.service.topics_page(snapshot_date=self.day, limit=500)
-        self.assertEqual({item.topic_id: item.follower_count for item in topics.items}[self.topic_id], 1)
+        self.assertEqual({item.topic_id: item.follower_count for item in topics.items}[self.topic_id], self.topic_base + 1)
 
     async def test_failed_rebuild_keeps_the_previous_complete_publication(self):
         await self._seed()
@@ -210,13 +212,13 @@ class SnapshotPersistenceTests(unittest.IsolatedAsyncioTestCase):
         page = await self.service.papers_page(snapshot_date=self.day, limit=10, paper_ids=[self.paper_id])
         self.assertEqual((page.items[0].collector_count, page.items[0].like_count), (2, 2))
         topics = await self.service.topics_page(snapshot_date=self.day, limit=10, topic_ids=[self.topic_id])
-        self.assertEqual(topics.items[0].follower_count, 2)
+        self.assertEqual(topics.items[0].follower_count, self.topic_base + 2)
         self.assertEqual(await PaperLikeService().like_counts([self.paper_id]), {self.paper_id: 1})
         await SnapshotService().build(self.day)
         page = await self.service.papers_page(snapshot_date=self.day, limit=10, paper_ids=[self.paper_id])
         self.assertEqual((page.items[0].collector_count, page.items[0].like_count), (1, 1))
         topics = await self.service.topics_page(snapshot_date=self.day, limit=10, topic_ids=[self.topic_id])
-        self.assertEqual(topics.items[0].follower_count, 1)
+        self.assertEqual(topics.items[0].follower_count, self.topic_base + 1)
 
     async def test_reader_keeps_run_and_rows_consistent_during_rebuild(self):
         await self._seed()

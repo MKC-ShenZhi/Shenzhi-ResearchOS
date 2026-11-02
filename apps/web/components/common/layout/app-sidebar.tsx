@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import {
   Bookmark,
+  CalendarClock,
   ChevronDown,
   Compass,
   Layers,
@@ -14,7 +15,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
-  Send,
   Sparkles,
   User,
   X,
@@ -47,11 +47,19 @@ interface NavItem {
   disabled?: boolean;
   /** 前缀匹配(用于详情页保持高亮) */
   matchPrefix?: string;
+  /** 标题旁的动态提醒(如关注会议临近截稿);折叠时显示为图标角标 */
+  indicator?: (compact: boolean) => React.ReactNode;
 }
 
 const RESEARCH_NAV: NavItem[] = [
   { href: "/", label: "发现", icon: Compass, badge: "新" },
   { href: "/agents", label: "深知 AI", icon: Sparkles },
+  {
+    href: "/submit",
+    label: "会议DDL",
+    icon: CalendarClock,
+    indicator: (compact) => <FollowedDeadlineBadge compact={compact} />,
+  },
 ];
 
 const MY_PAPERS_NAV: NavItem = {
@@ -60,12 +68,6 @@ const MY_PAPERS_NAV: NavItem = {
   icon: Bookmark,
   matchPrefix: "/knowledge/papers",
 };
-
-/** 「投稿」的子栏目:会议即原投稿页面,点击投稿默认打开 */
-const SUBMIT_SUB_NAV = [
-  { href: "/submit", label: "会议" },
-  { href: "/submit/journals", label: "期刊" },
-];
 
 /** 「知识库」的子栏目 */
 const KNOWLEDGE_SUB_NAV = [
@@ -102,6 +104,7 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
           {item.badge}
         </span>
       )}
+      {item.indicator?.(collapsed)}
     </>
   );
 
@@ -132,13 +135,14 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
           if (active) setCollapsed(false);
         }}
         className={cn(
-          "flex h-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+          "relative flex h-10 shrink-0 items-center justify-center rounded-xl transition-colors",
           active
             ? "bg-primary text-white shadow-sm"
             : "text-ink-2 hover:bg-card",
         )}
       >
         <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
+        {item.indicator?.(true)}
       </Link>
     );
   }
@@ -178,7 +182,6 @@ function ExpandableNav({
   subNav,
   collapsed,
   footer,
-  badge,
 }: {
   href: string;
   label: string;
@@ -187,8 +190,6 @@ function ExpandableNav({
   collapsed: boolean;
   /** 子栏目列表末尾的附加内容(如「新建项目」) */
   footer?: React.ReactNode;
-  /** 主标题旁的提醒(如关注会议临近截稿);折叠时显示为图标角标 */
-  badge?: (compact: boolean) => React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -259,14 +260,13 @@ function ExpandableNav({
           }
         }}
         className={cn(
-          "relative flex h-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+          "flex h-10 shrink-0 items-center justify-center rounded-xl transition-colors",
           routeActive
             ? "bg-primary text-white shadow-sm"
             : "text-ink-2 hover:bg-card",
         )}
       >
         <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
-        {badge?.(true)}
       </button>
     );
   }
@@ -288,7 +288,6 @@ function ExpandableNav({
         >
           <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
           <span className="flex-1 text-[15px] font-medium">{label}</span>
-          {badge?.(false)}
         </button>
         <button
           type="button"
@@ -540,14 +539,6 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
               新建项目
             </button>
           }
-        />
-        <ExpandableNav
-          href="/submit"
-          label="投稿"
-          icon={Send}
-          subNav={SUBMIT_SUB_NAV}
-          collapsed={collapsed}
-          badge={(compact) => <FollowedDeadlineBadge compact={compact} />}
         />
         <React.Suspense fallback={null}>
           <SidebarChatHistory collapsed={collapsed} />

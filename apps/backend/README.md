@@ -29,7 +29,7 @@ BUSINESS_BACKEND_URL=http://127.0.0.1:8000
 
 两端配置相同 `BACKEND_BFF_SECRET`；后端只允许私网/BFF 访问，不能直接暴露公网。
 
-推荐行为事件保留 90 天、分页快照 1 小时。清理入口为维护命令 `uv run --frozen python -m app.services.recommendation.maintenance`（可安全重复执行），以及只接受 `Authorization: Bearer $CRON_SECRET` 的 `GET /api/v1/internal/recommendation-maintenance`（未配置 `CRON_SECRET` 时返回 503）。仓库当前**未**在 `vercel.json` 注册任何 Cron，线上调度需部署负责人另行配置并确认。
+推荐行为事件保留 90 天、分页快照 1 小时。清理入口为维护命令 `uv run --frozen python -m app.services.recommendation.maintenance`（可安全重复执行），以及只接受 `Authorization: Bearer $CRON_SECRET` 的 `GET /api/v1/internal/recommendation-maintenance`（未配置 `CRON_SECRET` 时返回 503）。开启 `HOME_FEED_SCHEDULER_ENABLED` 后，进程内调度器每小时执行一次同样的清理（见下文“首页论文数据源 · 调度”），无需额外配置 Cron。
 
 未配置 Secret 时默认拒绝；仅 loopback 本地开发可在两端显式设置：
 
@@ -99,21 +99,43 @@ uv add <package>
 uv add --dev <package>
 ```
 
-## 首页论文发现快照
+## 首页论文数据源
 
-首页论文发现使用随应用发布的版本化内容快照，`GET /api/v1/discovery/papers` 默认返回 12 篇并通过 cursor 分页。服务端以 `Asia/Shanghai` 日期作为确定性随机种子，每天仅在相同优先级内生成一套全局一致的新顺序；内容快照版本与日期共同构成浏览快照版本。cursor 同时绑定内容版本、排序日期和偏移量，因此同一天所有请求顺序一致，跨过北京时间午夜的既有翻页仍沿用开始浏览时的顺序。普通首页请求不访问知识底座，也不把这批静态候选冒充每日新增或个性化推荐。
+首页 Feed 由多个**数据源**组成，每个数据源只产出候选论文；合并、排序、去重统一由 `app/services/home_feed/composer.py` 完成。所有数据源的论文都要通过同一道准入检查（规则 B，`app/services/home_feed/rules.py`），不能在卡片上正常展示的论文会被剔除：图片必须是图片代理能接受的 png/jpg/webp（或兜底快照自带的静态 WebP），标题不能是章节名（如 "1 Introduction"），摘要至少 200 字，作者清洗后不能为空；topic 会去掉会议标签和重复项。
 
-从仓库根目录重复执行下列无网络命令，可基于正式 seed 刷新 FastAPI 快照，并仅发布入选论文对应的 300 张 WebP 静态图：
+| 数据源 | 来源 | 上限 | 何时读取 |
+| --- | --- | --- | --- |
+| `daily` | 当天的每日候选（`home_daily_editions`，由候选池离线生成）；当天没有时取 7 天内最新的一期，一条查询 | 300 | 每次组装 |
+| `trending` | 候选池中平台点赞数 + 收藏数最高的论文，按列表日期之前（不含当天）最新完成的统计快照计算，当天快照重算不会让列表在白天变化 | 30 | 每次组装（缓存 60 秒） |
+| `personal` | 登录用户的个人推荐（召回与排序见 [推荐实现](../../docs/engineering/search-recommendation-implementation.md)） | 100 | 登录用户首次请求 |
+| `fallback` | 随包快照 `app/data/home_discovery_snapshot.json`（298 篇，自带 `public/paper-thumbnails` 静态图，即使底座图片服务不可用也能显示） | — | **只在**实时数据源合计不足 36 篇时追加一次 |
+
+每屏 12 张按配额分配（`app/services/home_feed/config.py`）：匿名用户为每日 10、热门 2；登录用户为个人 6、每日 4、热门 2。某个数据源用完后，空位按其余数据源的权重比例分配（平滑加权轮询）。同一篇论文只保留第一次出现的位置；每屏同一会议不超过 4 张；整份列表最多 400 篇。每张卡片的 `source` 字段记录它来自哪个数据源，便于按数据源分析曝光和点击。
+
+`GET /api/v1/discovery/papers`（匿名）每天组装一份列表。输入相同，组装结果就完全相同，所以各个实例不需要共享存储也能保持一致；cursor 绑定日期和列表哈希，跨过午夜继续翻页仍然读开始浏览时的那份列表；cursor 里的日期只接受今天和昨天，其他日期一律按“列表已更新”处理，不会为任意日期组装或缓存列表。各数据源的进程内缓存有效 60 秒，写入时清掉过期条目，所以内存占用不随运行时间或请求内容增长。如果同一天列表发生变化（例如 0:05 生成了当天的每日候选），旧 cursor 返回 `20001/409`，前端提示刷新并从第一页重新开始；cursor 格式错误返回 400。匿名首页请求从不访问知识底座。
+
+登录用户的 `GET /api/v1/recommendations/papers` 每次访问对应一份 1 小时有效的私有快照：
+
+- **第一页**直接取当天的匿名列表（去掉用户已点赞、已收藏的论文），不等知识底座召回。
+- **第二页**请求时才召回、排序个人推荐，并与共享数据源按登录配额组装（排除第一页已展示的论文），追加到同一份快照。前端在第一页显示后立即请求第二页，所以召回时间被用户阅读第一屏的时间掩盖。并发的第二页请求只有一个会写入，其余读取已写入的结果。
+- 快照只保存每篇论文的 ID、位置、数据源、推荐理由和召回来源（每篇约 100 字节）；每页按 ID 从候选池取内容，兜底论文从随包快照取。候选池里没有的论文（例如召回到的其他会议论文）才在快照里保存完整内容。快照期间被同步移出候选池的论文会被跳过。
+
+### 候选池与每日候选
+
+`discovery_pool_papers`（迁移 `018_discovery_pool`）保存候选池年份内能在首页展示的知识底座论文，包括 `primary_subject`。候选池年份默认 2026（底座图片几乎只覆盖这一年），可以用 `HOME_FEED_POOL_YEAR` 覆盖。每日候选存于 `home_daily_editions`（迁移 `019_home_daily_editions` 由已退役功能的 `daily_recommendations` 表改名而来，旧数据不会被当作每日候选使用，超过 120 天后由调度器清理）。
+
+- `sync`：按会议遍历 `/api/papers` 该年份的全部分页，经规则 B 过滤后，在一个事务内整体替换该年份的候选池。任一分页重试后仍失败则整次中止；如果新结果少于原有的一半，视为上游异常，拒绝写入。2026-11-01 实测：24 个会议、抓取 18,863 篇、收录 15,803 篇，耗时约 2 分 20 秒。
+- `publish`（规则 A）：每天生成 300 篇。"最久未展示的优先、同一天内按哈希打散"，整个候选池轮完一遍才会重复（约 52 天一个周期）。展示时间相同的候选中，同一会议不超过 25%、同一 `primary_subject` 不超过 5%。同一天重复执行结果一致；只回溯最近 120 天的展示历史。
 
 ```bash
-python3 scripts/publish_home_discovery.py
-python3 scripts/publish_home_discovery.py --check
+cd apps/backend
+uv run --locked --env-file .env python -m app.services.discovery_pool sync [--year 2026] [--dry-run]
+uv run --locked --env-file .env python -m app.services.discovery_pool publish [--date 2026-11-02] [--dry-run]
 ```
 
-输入保持在 `data/discovery/home-seed-300.json`，部署产物为：
+**调度**：设置 `HOME_FEED_SCHEDULER_ENABLED=true` 后，API 进程每 10 分钟检查一次，并用 Postgres advisory lock 保证多个 worker 或实例中只有一个执行：候选池为空或距上次同步超过 7 天时执行 `sync`（失败后 1 小时内不重试）；上海时间 00:05 之后当天还没有每日候选时执行 `publish`；每小时执行一次 `purge`，删除已过期的推荐快照、90 天前的行为事件和 120 天前的每日候选（之后的生成不再读取它们）。是否到期完全由数据库状态判断，所以进程重启或错过某次检查后，下一次检查会自动补上。默认关闭，本地开发和测试不会去请求底座。
 
-- `apps/backend/app/data/home_discovery_snapshot.json`
-- `apps/web/public/paper-thumbnails/*.webp`
+**兜底快照**：输入是 `data/discovery/home-seed-300.json`，部署产物是 `apps/backend/app/data/home_discovery_snapshot.json` 和 `apps/web/public/paper-thumbnails/*.webp`，可以用 `python3 scripts/publish_home_discovery.py [--check]` 重新发布（需要种子中指向的原始图片）。2026-11-01 已用候选池数据为种子和快照补上了 `image_id`、`keywords` 和 `subjects`；种子里有 2 篇（标题为 "1 Introduction"、摘要被截断）会被规则 B 剔除。
 
 部署新版本仍需按常规流程执行数据库迁移：
 
@@ -121,8 +143,6 @@ python3 scripts/publish_home_discovery.py --check
 cd apps/backend
 uv run --locked --env-file .env alembic upgrade head
 ```
-
-当前没有把候选内容刷新绑定到自动调度；每日变化只重新计算现有候选的稳定顺序，不重新抓取知识底座。需要换批时显式更新 seed 并重新执行发布命令。已有 `daily_recommendations` 表保留为历史迁移兼容，不再承载首页请求。
 
 `agent_uploads` 临时文本表及匿名 Chat 会话仍按原维护策略清理。
 

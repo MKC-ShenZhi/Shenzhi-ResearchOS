@@ -32,6 +32,8 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.like_paper_id = f'paper:like:{uuid.uuid4()}'
         self.topic_id = 'deep-learning'
         await self._cleanup()
+        # 主题来自真实目录，本地库可能已有真实关注者；断言只看本测试新增的关注。
+        self.topic_base = (await TopicFollowService().follower_counts([self.topic_id])).get(self.topic_id, 0)
 
     async def asyncTearDown(self):
         await self._cleanup()
@@ -113,13 +115,13 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await likes.unlike(self.user_a, self.like_paper_id), 1)
         self.assertEqual(await likes.unlike(self.user_a, self.like_paper_id), 1)
 
-        self.assertEqual(await follows.follow(self.user_a, self.topic_id), 1)
-        self.assertEqual(await follows.follow(self.user_a, self.topic_id), 1)
-        self.assertEqual(await follows.follow(self.user_b, self.topic_id), 2)
-        self.assertEqual(await follows.follower_counts([self.topic_id]), {self.topic_id: 2})
+        self.assertEqual(await follows.follow(self.user_a, self.topic_id), self.topic_base + 1)
+        self.assertEqual(await follows.follow(self.user_a, self.topic_id), self.topic_base + 1)
+        self.assertEqual(await follows.follow(self.user_b, self.topic_id), self.topic_base + 2)
+        self.assertEqual(await follows.follower_counts([self.topic_id]), {self.topic_id: self.topic_base + 2})
         self.assertEqual(await follows.followed_topic_ids(self.user_a, [self.topic_id]), {self.topic_id})
-        self.assertEqual(await follows.unfollow(self.user_a, self.topic_id), 1)
-        self.assertEqual(await follows.unfollow(self.user_a, self.topic_id), 1)
+        self.assertEqual(await follows.unfollow(self.user_a, self.topic_id), self.topic_base + 1)
+        self.assertEqual(await follows.unfollow(self.user_a, self.topic_id), self.topic_base + 1)
         # Unfollowing never validates the catalog, so stale ids can always be released.
         self.assertEqual(await follows.unfollow(self.user_b, 'removed-from-catalog'), 0)
 
@@ -178,7 +180,7 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(authenticated_item['like_count'], 1)
 
         self.assertTrue(topics.json()['data']['items'][0]['is_following'])
-        self.assertEqual(topics.json()['data']['items'][0]['follower_count'], 1)
+        self.assertEqual(topics.json()['data']['items'][0]['follower_count'], self.topic_base + 1)
         self.assertEqual(liked.json()['data']['like_count'], 2)
         self.assertEqual(forbidden.status_code, 401)
 
@@ -193,7 +195,7 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         await AccountDeletionService().delete_all_for_user(self.user_a)
 
         self.assertEqual(await likes.like_counts([self.like_paper_id]), {self.like_paper_id: 1})
-        self.assertEqual(await follows.follower_counts([self.topic_id]), {self.topic_id: 1})
+        self.assertEqual(await follows.follower_counts([self.topic_id]), {self.topic_id: self.topic_base + 1})
         async with session_scope() as db:
             self.assertEqual(
                 list(await db.scalars(select(PaperLikeRow).where(PaperLikeRow.user_id == self.user_a))), [],
@@ -229,7 +231,7 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
             for operation, identifier in ((likes.like, self.paper_id), (follows.follow, self.topic_id))
         ))
         self.assertEqual(await likes.like_counts([self.paper_id]), {self.paper_id: 2})
-        self.assertEqual(await follows.follower_counts([self.topic_id]), {self.topic_id: 2})
+        self.assertEqual(await follows.follower_counts([self.topic_id]), {self.topic_id: self.topic_base + 2})
         await asyncio.gather(*(
             operation(self.user_a, identifier)
             for _ in range(8)

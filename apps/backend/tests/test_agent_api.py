@@ -13,7 +13,7 @@ from app.services.agent import AgentRuntime
 from app.services.agent.provider import Finish, TextDelta, ToolCallEvent
 from app.services.agent.types import StopReason, ToolCall
 from app.services.agent_sessions.entities import AgentSession
-from app.services.agent_sessions.repository import agent_session_repository
+from app.services.agent_sessions.repository import MemoryAgentSessionRepository
 from tests.test_agent import FakeProvider, make_echo
 
 
@@ -35,10 +35,21 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.env = patch.dict('os.environ', {
             'DEEPSEEK_API_KEY': 'test', 'DEEPSEEK_MODEL': 'deepseek-chat', 'DASHSCOPE_API_KEY': '',
-            'BACKEND_BFF_SECRET': '', 'BACKEND_ALLOW_INSECURE_LOCAL_BFF': 'true'})
+            'BACKEND_BFF_SECRET': '', 'BACKEND_ALLOW_INSECURE_LOCAL_BFF': 'true',
+            # 本地 .env 配了数据库时也固定走内存存储，避免连到开发库
+            'CHAT_DATABASE_URL': ''})
         self.env.start()
+        self.repo = MemoryAgentSessionRepository()
+        self.api_repo = patch('app.api.agent.agent_session_repository', self.repo)
+        self.service_repo = patch(
+            'app.services.agent_sessions.service.agent_session_repository', self.repo,
+        )
+        self.api_repo.start()
+        self.service_repo.start()
 
     def tearDown(self):
+        self.service_repo.stop()
+        self.api_repo.stop()
         self.env.stop()
 
     OWNER = {'x-shenzhi-anonymous-id': '00000000-0000-4000-8000-000000000001'}
@@ -97,7 +108,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         owner = f"anon:{self.OWNER_ID}"
         with tempfile.TemporaryDirectory() as tmp:
             with patch.object(workspace, 'WORKSPACE_ROOT', Path(tmp)):
-                agent_session_repository.sessions['ses_file1'] = AgentSession(
+                self.repo.sessions['ses_file1'] = AgentSession(
                     id='ses_file1', owner=owner, title='文件测试会话',
                 )
                 root = service.ensure_session_workspace(owner, 'ses_file1')
@@ -163,7 +174,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(patcher.stop)
         self.addCleanup(tmp.cleanup)
         owner = f'anon:{self.OWNER_ID}'
-        agent_session_repository.sessions[session_id] = AgentSession(
+        self.repo.sessions[session_id] = AgentSession(
             id=session_id, owner=owner, title='资源测试会话',
         )
         root = service.ensure_session_workspace(owner, session_id)

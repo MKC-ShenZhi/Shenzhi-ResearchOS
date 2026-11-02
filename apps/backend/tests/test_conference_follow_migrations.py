@@ -21,7 +21,7 @@ MIGRATION_URL = os.getenv('SHENZHI_MIGRATION_TEST_URL', '')
 
 @unittest.skipUnless(MIGRATION_URL, 'SHENZHI_MIGRATION_TEST_URL not set (disposable local database required)')
 class ConferenceFollowMigrationTests(unittest.TestCase):
-    def test_single_head_and_016_017_roundtrip(self):
+    def test_016_017_roundtrip(self):
         url = make_url(MIGRATION_URL)
         self.assertIn(url.host, ('127.0.0.1', 'localhost', '::1'))
         self.assertTrue((url.database or '').endswith('_migration_test'))
@@ -48,16 +48,15 @@ class ConferenceFollowMigrationTests(unittest.TestCase):
 
         # Refuse to destroy any previously populated database, even a test one.
         self.assertEqual(asyncio.run(run(tables)), set(), 'Migration roundtrip requires an EMPTY test database')
-        heads = alembic('heads')
-        self.assertEqual(heads.count('(head)'), 1)
-        self.assertIn('017_conference_follows (head)', heads)
+        # 018_discovery_pool now builds on 017 and owns the single-head check;
+        # this test keeps the 016-017 contract.
         self.assertIn('016_request_idempotency -> 017_conference_follows', alembic('history'))
 
         alembic('upgrade', '016_request_idempotency')
         baseline = asyncio.run(run(tables))
         self.assertNotIn('conference_follows', baseline)
 
-        alembic('upgrade', 'head')
+        alembic('upgrade', '017_conference_follows')
 
         async def check_upgraded(connection):
             pk = await connection.run_sync(lambda conn: inspect(conn).get_pk_constraint('conference_follows'))
@@ -72,7 +71,7 @@ class ConferenceFollowMigrationTests(unittest.TestCase):
 
         alembic('downgrade', '016_request_idempotency')
         self.assertEqual(asyncio.run(run(tables)), baseline)
-        alembic('upgrade', 'head')
+        alembic('upgrade', '017_conference_follows')
         self.assertIn('017_conference_follows', alembic('current'))
 
 

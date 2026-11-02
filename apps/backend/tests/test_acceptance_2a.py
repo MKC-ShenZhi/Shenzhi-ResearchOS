@@ -5,9 +5,12 @@ import json
 import os
 import unittest
 import uuid
+from pathlib import Path
 from unittest.mock import patch
 
 import httpx
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import select, text
 
 from app.core.database import session_scope
@@ -253,7 +256,13 @@ class EnvironmentChecks(unittest.TestCase):
         self.assertIn('chat_messages', tables)
         self.assertIn('user_settings', tables)
         self.assertIn('user_profiles', tables)
-        self.assertEqual(version, '004_user_profiles')
+        config = Config()
+        config.set_main_option('script_location', str(Path(__file__).resolve().parents[1] / 'migrations'))
+        script = ScriptDirectory.from_config(config)
+        if version not in {revision.revision for revision in script.walk_revisions()}:
+            # 多分支共用一个本地库时，库可能已被其他分支迁移到本检出不认识的版本。
+            self.skipTest(f'database revision {version} is not in this checkout; run alembic on a matching branch')
+        self.assertEqual(version, script.get_current_head())
 
 
 if __name__ == '__main__':

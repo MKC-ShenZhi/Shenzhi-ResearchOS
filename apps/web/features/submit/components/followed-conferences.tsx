@@ -102,7 +102,7 @@ export function FollowedConferences({
               <BellRing className="size-4 text-primary" />
               <h2 className="text-[15px] font-semibold text-ink">我关注的会议</h2>
               <span className="text-sm text-faint">{items.length}</span>
-              <span className="ml-auto hidden text-xs text-faint sm:inline">7 天内截止会在侧边栏「投稿」提醒</span>
+              <span className="ml-auto hidden text-xs text-faint sm:inline">7 天内截止会在侧边栏「会议DDL」提醒</span>
             </div>
             <ul className="-mx-1 mt-3 flex snap-x gap-2.5 overflow-x-auto px-1 pb-1">
               <AnimatePresence initial={false} mode="popLayout">
