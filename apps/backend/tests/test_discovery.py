@@ -2,7 +2,7 @@
 
 import os
 import unittest
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -154,6 +154,23 @@ class FallbackListTests(unittest.IsolatedAsyncioTestCase):
             await HomeDiscoveryService().page(limit=12, cursor='not-a-cursor')
         with self.assertRaisesRegex(ValueError, '已更新'):
             await HomeDiscoveryService(lambda: snapshot_of('other-v1', 20)).page(limit=12, cursor=first.next_cursor)
+
+    async def test_cursor_dates_other_than_today_or_yesterday_are_refused_before_any_work(self):
+        from app.services.discovery import _encode_cursor
+        day = date(2026, 11, 2)
+        loads: list[date] = []
+
+        async def edition_loader(ordering_date):
+            loads.append(ordering_date)
+            return ()
+        service = HomeDiscoveryService(today_provider=lambda: day, edition_loader=edition_loader)
+        first = await service.page(limit=12)
+        for crafted in (date(2001, 1, 1), day - timedelta(days=2), day + timedelta(days=1)):
+            with self.assertRaises(DiscoveryListChangedError):
+                await service.page(limit=12, cursor=_encode_cursor(first.list_id, crafted, 12))
+        # Nothing was loaded or cached for the crafted dates.
+        self.assertEqual(loads, [day])
+        self.assertEqual(list(service._lists), [day])
 
     async def test_snapshot_errors_surface_only_when_nothing_else_is_available(self):
         def broken():

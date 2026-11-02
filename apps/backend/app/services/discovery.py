@@ -16,7 +16,6 @@ import binascii
 import hashlib
 import json
 import logging
-import time
 from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import lru_cache
@@ -32,6 +31,7 @@ from app.core.time import utc_now
 from app.models.home_daily_edition import HomeDailyEditionRow
 from app.schemas.discovery import DiscoveryPaper, DiscoveryPaperPage
 from app.services.home_feed import config
+from app.services.home_feed.cache import cached, remember
 from app.services.home_feed.composer import compose
 from app.services.home_feed.rules import admit
 from app.services.home_feed.trending import load_trending
@@ -107,9 +107,8 @@ def parse_edition(payload: Any) -> tuple[DiscoveryPaper, ...] | None:
 
 async def load_latest_edition(ordering_date: date) -> tuple[DiscoveryPaper, ...]:
     """The newest valid edition on or before the date, within DAILY_MAX_AGE_DAYS; one query."""
-    cached = _edition_cache.get(ordering_date)
-    if cached and cached[0] > time.monotonic():
-        return cached[1]
+    if (hit := cached(_edition_cache, ordering_date)) is not None:
+        return hit
     papers: tuple[DiscoveryPaper, ...] = ()
     try:
         async with session_scope() as session:
@@ -127,8 +126,7 @@ async def load_latest_edition(ordering_date: date) -> tuple[DiscoveryPaper, ...]
     except Exception as error:  # noqa: BLE001 - the other sources and the fallback keep the feed available
         logger.warning('Daily discovery edition unavailable (%s)', type(error).__name__)
     # Editions are written once a day offline; a short cache keeps paging off the database.
-    _edition_cache[ordering_date] = (time.monotonic() + config.SOURCE_CACHE_SECONDS, papers)
-    return papers
+    return remember(_edition_cache, ordering_date, papers)
 
 
 def _read_snapshot(path: Path) -> DiscoverySnapshot:
@@ -272,19 +270,23 @@ class HomeDiscoveryService:
 
     async def list_for(self, ordering_date: date) -> HomeList:
         """The composed anonymous list for a day, cached briefly per instance."""
-        cached = self._lists.get(ordering_date)
-        if cached and cached[0] > time.monotonic():
-            return cached[1]
+        if (hit := cached(self._lists, ordering_date)) is not None:
+            return hit
         composed = compose(await self.shared_sources(ordering_date), config.ANONYMOUS_QUOTAS)
         papers = tuple(self.with_fallback(composed, ordering_date))
         home = HomeList(home_list_id(ordering_date, papers), ordering_date, papers)
-        self._lists[ordering_date] = (time.monotonic() + config.SOURCE_CACHE_SECONDS, home)
-        return home
+        return remember(self._lists, ordering_date, home)
 
     async def today_list(self) -> HomeList:
         return await self.list_for(self.today())
 
     async def _list_for_cursor(self, list_id: str, ordering_date: date) -> HomeList:
+        # Only a reader who started yesterday (and crossed midnight) needs an older list.
+        # Any other date is client-supplied input: refusing it here keeps crafted
+        # cursors from building and caching a list per arbitrary date.
+        today = self.today()
+        if not today - timedelta(days=1) <= ordering_date <= today:
+            raise DiscoveryListChangedError('论文发现列表已更新，请重新加载后继续浏览')
         home = await self.list_for(ordering_date)
         if home.list_id == list_id:
             return home

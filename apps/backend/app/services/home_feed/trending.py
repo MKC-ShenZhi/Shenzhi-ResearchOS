@@ -10,7 +10,6 @@ and the composer hands its slots to the other sources.
 from __future__ import annotations
 
 import logging
-import time
 from datetime import date
 
 from sqlalchemy import func, select
@@ -20,6 +19,7 @@ from app.models.discovery_pool import DiscoveryPoolPaperRow
 from app.models.stats import PaperStatDailyRow, StatsSnapshotRunRow
 from app.schemas.discovery import DiscoveryPaper
 from app.services.home_feed import config
+from app.services.home_feed.cache import cached, remember
 from app.services.home_feed.rules import admit
 
 logger = logging.getLogger(__name__)
@@ -28,9 +28,8 @@ _cache: dict[date, tuple[float, list[DiscoveryPaper]]] = {}
 
 
 async def load_trending(ordering_date: date) -> list[DiscoveryPaper]:
-    cached = _cache.get(ordering_date)
-    if cached and cached[0] > time.monotonic():
-        return cached[1]
+    if (hit := cached(_cache, ordering_date)) is not None:
+        return hit
     try:
         async with session_scope() as session:
             snapshot_date = await session.scalar(select(func.max(StatsSnapshotRunRow.snapshot_date)).where(
@@ -55,5 +54,4 @@ async def load_trending(ordering_date: date) -> list[DiscoveryPaper]:
     except Exception as error:  # noqa: BLE001 - a missing source only frees its slots
         logger.warning('Trending home papers unavailable (%s)', type(error).__name__)
         papers = []
-    _cache[ordering_date] = (time.monotonic() + config.SOURCE_CACHE_SECONDS, papers)
-    return papers
+    return remember(_cache, ordering_date, papers)

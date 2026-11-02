@@ -1,8 +1,11 @@
 """Home-feed rule B and source composition."""
 
 import unittest
+from unittest.mock import patch
 
 from app.schemas.discovery import DiscoveryPaper
+from app.services.home_feed import config
+from app.services.home_feed.cache import cached, remember
 from app.services.home_feed.composer import compose, spread_venues
 from app.services.home_feed.rules import admit
 
@@ -82,6 +85,25 @@ class ComposerTests(unittest.TestCase):
         composed = compose({'a': papers('a', 3), 'b': papers('b', 3)}, {'a': 1, 'b': 0, 'c': 5})
         self.assertEqual({paper.source for paper in composed}, {'a'})
         self.assertEqual(compose({}, {'a': 1}), [])
+
+
+
+class SourceCacheTests(unittest.TestCase):
+    def test_entries_expire_and_are_dropped_on_the_next_write(self):
+        cache: dict = {}
+        with patch('app.services.home_feed.cache.time.monotonic', return_value=100.0):
+            remember(cache, 'day-1', ())
+            # Empty results are cached too; only a miss returns None.
+            self.assertEqual(cached(cache, 'day-1'), ())
+        later = 100.0 + config.SOURCE_CACHE_SECONDS
+        with patch('app.services.home_feed.cache.time.monotonic', return_value=later):
+            self.assertIsNone(cached(cache, 'day-1'))
+            for day in range(50):
+                remember(cache, f'other-{day}', [day])
+        self.assertNotIn('day-1', cache)
+        with patch('app.services.home_feed.cache.time.monotonic', return_value=later + config.SOURCE_CACHE_SECONDS):
+            remember(cache, 'today', [])
+        self.assertEqual(list(cache), ['today'])
 
 
 if __name__ == '__main__':
