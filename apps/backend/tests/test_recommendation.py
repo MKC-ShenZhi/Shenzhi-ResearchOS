@@ -10,18 +10,21 @@ from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 
 from app.api import maintenance
 from app.core.database import session_scope
 from app.core.errors import BusinessError
 from app.main import app
+from app.models.discovery_pool import DiscoveryPoolPaperRow
 from app.models.interactions import PaperLikeRow
 from app.models.reading_history import ReadingHistoryRow
 from app.models.recommendation import BehaviorEventRow, RecommendationSnapshotRow, UserInterestProfileRow
 from app.schemas.behavior import BehaviorBatchRequest, BehaviorEventInput
 from app.schemas.discovery import DiscoveryPaper
 from app.schemas.knowledge import PaperDetail, Provenance
+from app.services.home_feed.composer import compose
+from app.services.home_feed.config import ANONYMOUS_QUOTAS
 from app.services.knowledge.service import KnowledgeServiceError
 from app.services.library.collections import CollectionService
 from app.services.library.paper_likes import PaperLikeService
@@ -65,10 +68,15 @@ def shared_list(*papers, trending=()):
     """Stands in for HomeDiscoveryService: fixed shared sources, no fallback."""
     async def shared_sources(_today):
         return {'daily': list(papers), 'trending': list(trending)}
-    return SimpleNamespace(
-        today=lambda: datetime(2026, 11, 2).date(), shared_sources=shared_sources,
+
+    async def list_for(today):
+        # Looked up at call time, so a test can swap in a failing shared_sources.
+        return SimpleNamespace(papers=compose(await service.shared_sources(today), ANONYMOUS_QUOTAS))
+    service = SimpleNamespace(
+        today=lambda: datetime(2026, 11, 2).date(), shared_sources=shared_sources, list_for=list_for,
         with_fallback=lambda composed, _today: composed,
     )
+    return service
 
 
 def curated(paper_id, title='Curated'):
@@ -731,16 +739,22 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
             recalled(liked, '/images/2026/liked.webp'),
         ]
         service = self._service_with(shared, interests, candidates)
-        page = await service.page(self.user_id, limit=48)
+        first = await service.page(self.user_id, limit=12)
+        # The first page is the shared list without the user's likes, and never waits for recall.
+        service.recall.recall.assert_not_awaited()
+        self.assertEqual([item['id'] for item in first['items']], [paper.id for paper in shared[:4]])
+        self.assertTrue(first['has_more'])
+        second = await service.page(self.user_id, limit=12, cursor=first['next_cursor'])
         # Recall is bounded to the year the shared home list shows.
         self.assertEqual(service.recall.recall.await_args.kwargs, {'year': 2026})
-        items = page['items']
+        self.assertFalse(second['has_more'])
+        items = first['items'] + second['items']
         ids = [item['id'] for item in items]
         for rejected in ('no-image', 'svg', 'heading'):
             self.assertNotIn(f'{self.paper_id}:{rejected}', ids)
         self.assertNotIn(liked, ids)
-        # One personal pick leads (6 of 12 slots), then the daily list in its order.
-        self.assertEqual(ids, [f'{self.paper_id}:with-image'] + [paper.id for paper in shared[:4]])
+        # The personal pick follows; shared papers already shown are not repeated.
+        self.assertEqual([item['id'] for item in second['items']], [f'{self.paper_id}:with-image'])
         by_id = {item['id']: item for item in items}
         self.assertEqual(by_id[f'{self.paper_id}:with-image']['reason'], '与你关注的主题相匹配')
         self.assertEqual(by_id[f'{self.paper_id}:with-image']['sources'], ['followed_topic'])
@@ -759,18 +773,25 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
             recall=SimpleNamespace(recall=AsyncMock(return_value=candidates)),
             discovery=shared_list(*daily, trending=trending),
         )
-        page = await service.page(self.user_id, limit=12)
-        sources = [item['source'] for item in page['items']]
-        self.assertEqual({name: sources.count(name) for name in set(sources)}, {'personal': 6, 'daily': 4, 'trending': 2})
+        first = await service.page(self.user_id, limit=12)
+        second = await service.page(self.user_id, limit=12, cursor=first['next_cursor'])
+
+        def counts(page):
+            sources = [item['source'] for item in page['items']]
+            return {name: sources.count(name) for name in set(sources)}
+        self.assertEqual(counts(first), {'daily': 10, 'trending': 2})
+        self.assertEqual(counts(second), {'personal': 6, 'daily': 4, 'trending': 2})
 
     async def test_personal_picks_are_capped_and_the_shared_list_fills_the_feed(self):
         candidates = [Candidate(recalled_paper(f'{self.paper_id}:personal:{index:03d}', f'/images/2026/{index}.webp'),
                                 ['RAG'], [], {'followed_topic'}) for index in range(130)]
         shared = self._candidates(300)
-        page = await self._service_with(
-            shared, profile(explicit_subjects=['RAG'], has_history=True), candidates,
-        ).page(self.user_id, limit=1)
-        self.assertEqual(page['total'], 100 + 300)
+        service = self._service_with(shared, profile(explicit_subjects=['RAG'], has_history=True), candidates)
+        first = await service.page(self.user_id, limit=1)
+        page = await service.page(self.user_id, limit=400, cursor=first['next_cursor'])
+        # One shared paper on page one, then 100 personal picks and the rest of the shared list.
+        self.assertEqual(page['total'], 1 + 100 + 299)
+        self.assertEqual(sum(item['source'] == 'personal' for item in page['items']), 100)
 
     async def test_shared_source_failure_keeps_personal_picks(self):
         async def broken(_today):
@@ -802,6 +823,44 @@ class RecommendationPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(pages[-1]['has_more'])
         # Recall ran once: later pages never re-rank or mix another snapshot.
         service.recall.recall.assert_awaited_once()
+
+    async def test_snapshot_stores_ids_and_resolves_pool_papers_per_page(self):
+        pooled = recalled_paper(f'{self.paper_id}:pooled', '/images/2026/pooled.webp', venue='ACL')
+        async with session_scope() as session:
+            session.add(DiscoveryPoolPaperRow(
+                paper_id=pooled['id'], title=pooled['title'], abstract=pooled['abstract'],
+                authors=pooled['authors'], year=2026, venue='ACL', image_id=pooled['image_id'],
+                subjects=['RAG'], keywords=['retrieval'], synced_at=datetime.now(UTC),
+            ))
+        try:
+            pool_paper = DiscoveryPaper.model_validate({**pooled, 'subjects': ['RAG'], 'keywords': ['retrieval']})
+            outside = curated(f'{self.paper_id}:outside')
+            service = self._service_with([pool_paper, outside])
+            first = await service.page(self.user_id, limit=2)
+            async with session_scope() as session:
+                stored = (await session.get(RecommendationSnapshotRow, UUID(first['request_id']))).items
+            # Only the paper the pool cannot resolve keeps a copy.
+            self.assertEqual(['paper' in item for item in stored], [False, True])
+            self.assertEqual(set(stored[0]), {'id', 'rank', 'source', 'reason', 'sources'})
+            card = first['items'][0]
+            self.assertEqual((card['id'], card['title'], card['venue'], card['keywords'], card['source'], card['rank']),
+                             (pooled['id'], pooled['title'], 'ACL', ['retrieval'], 'daily', 1))
+            self.assertEqual(first['items'][1]['id'], outside.id)
+        finally:
+            async with session_scope() as session:
+                await session.execute(delete(DiscoveryPoolPaperRow).where(DiscoveryPoolPaperRow.paper_id == pooled['id']))
+        # A paper resynced out of the pool is skipped; the page and its ranks stay consistent.
+        again = await RecommendationService._hydrate(stored, UUID(first['request_id']))
+        self.assertEqual([(item['id'], item['rank']) for item in again], [(outside.id, 2)])
+
+    async def test_concurrent_next_page_requests_complete_the_snapshot_once(self):
+        service = self._service_with(self._candidates(30))
+        first = await service.page(self.user_id, limit=12)
+        a, b = await asyncio.gather(*(
+            service.page(self.user_id, limit=12, cursor=first['next_cursor']) for _ in range(2)
+        ))
+        self.assertEqual(a, b)
+        self.assertEqual(a['total'], 30)
 
     async def test_stale_foreign_and_malformed_cursors(self):
         service = self._service_with(self._candidates(3))

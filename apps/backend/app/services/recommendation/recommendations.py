@@ -7,18 +7,19 @@ from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 
 from app.core.database import session_scope
 from app.core.errors import BusinessError
 from app.core.time import utc_now
 from app.models.collections import CollectionFolderRow, CollectionItemRow
+from app.models.discovery_pool import DiscoveryPoolPaperRow
 from app.models.interactions import PaperLikeRow
 from app.models.recommendation import RecommendationSnapshotRow
 from app.models.stats import PaperStatDailyRow, StatsSnapshotRunRow
 from app.schemas.knowledge import KnowledgeSearchRequest, PaperSearchResult
 from app.schemas.discovery import DiscoveryPaper
-from app.services.discovery import HomeDiscoveryService
+from app.services.discovery import HomeDiscoveryService, load_discovery_snapshot
 from app.services.home_feed import config as feed_config
 from app.services.home_feed.composer import compose
 from app.services.home_feed.rules import admit
@@ -33,6 +34,13 @@ from app.services.recommendation.config import (
 from app.services.recommendation.profile import UserProfileService, _token
 
 logger = logging.getLogger(__name__)
+
+
+def _fallback_papers() -> dict[str, DiscoveryPaper]:
+    try:
+        return {candidate.paper.id: candidate.paper for candidate in load_discovery_snapshot().items}
+    except Exception:  # noqa: BLE001 - fallback cards are skipped instead of failing the page
+        return {}
 
 
 @dataclass
@@ -185,7 +193,29 @@ class CandidateRecallService:
         return list(candidates.values())
 
 
+@dataclass
+class _Snapshot:
+    request_id: UUID
+    items: list[dict]
+    complete: bool
+    version: str
+
+
+# One feed entry before it is stored: the paper, its card reason and its attribution.
+FeedEntry = tuple[DiscoveryPaper, str | None, list[str]]
+
+
 class RecommendationService:
+    """The signed-in home feed: one snapshot per visit, paged by cursor.
+
+    The first page is the day's shared home list, so it never waits for the
+    knowledge base. The personal feed (recall, ranking and composition with the
+    shared sources) is built when the next page is requested, without the
+    papers already shown, and appended to the same snapshot. The snapshot keeps
+    only ids and attribution; each page resolves paper content from the pool,
+    the packaged fallback, or a stored copy for papers found in neither.
+    """
+
     def __init__(
         self, profiles: UserProfileService | None = None,
         recall: CandidateRecallService | None = None,
@@ -196,90 +226,187 @@ class RecommendationService:
         self.discovery = discovery or HomeDiscoveryService()
 
     async def page(self, user_id: str, *, limit: int, cursor: str | None = None) -> dict:
-        if cursor:
+        if cursor is None:
+            snapshot, offset = await self._start(user_id, limit), 0
+        else:
             try:
                 raw_id, raw_offset = cursor.split(':', 1)
                 request_id, offset = UUID(raw_id), int(raw_offset)
             except (ValueError, TypeError) as error:
                 raise BusinessError(20001, '推荐分页游标无效', 400) from error
-            async with session_scope() as session:
-                snapshot = await session.get(RecommendationSnapshotRow, request_id)
-                # Purged, expired and other accounts' snapshots look identical.
-                # Same stale-cursor contract as platform stats: 409 means this
-                # cursor cannot be retried and the client restarts at page one.
-                if snapshot is None or snapshot.user_id != user_id or snapshot.expires_at <= utc_now():
-                    raise BusinessError(20001, '推荐列表已过期，请刷新后重新浏览', 409)
-                items = snapshot.items
-                version = snapshot.algorithm_version
-        else:
-            offset = 0
-            today = self.discovery.today()
-            profile = await self.profiles.get(user_id)
-            shared = await self._shared_sources(today)
-            years = Counter(paper.year for papers in shared.values() for paper in papers)
-            candidates = await self.recall.recall(profile, year=years.most_common(1)[0][0] if years else today.year)
-            excluded, popularity = await self._account_and_popularity(
-                user_id,
-                [item.paper['id'] for item in candidates] + [paper.id for papers in shared.values() for paper in papers],
-            )
-            current_year = utc_now().year
-            scored = []
-            admitted: dict[str, DiscoveryPaper] = {}
-            for candidate in candidates:
-                paper_id = candidate.paper['id']
-                if paper_id in excluded:
-                    continue
-                # Rule B: the same admission every home source passes (displayable image included).
-                paper, _reason = admit(candidate.paper)
-                if paper is None:
-                    continue
-                admitted[paper_id] = paper
-                score, reason = _rank(candidate, profile, popularity.get(paper_id), current_year)
-                scored.append((score, candidate, reason))
-            scored.sort(key=lambda item: (-item[0], item[1].paper['id']))
-            top = self._diversify(scored)[:config.PERSONAL_RECOMMENDATION_LIMIT]
-            attribution = {
-                candidate.paper['id']: (reason, sorted(candidate.sources)) for _score, candidate, reason in top
-            }
-            composed = compose({
-                'personal': [admitted[candidate.paper['id']] for _score, candidate, _reason in top],
-                **{name: [paper for paper in papers if paper.id not in excluded] for name, papers in shared.items()},
-            }, feed_config.SIGNED_IN_QUOTAS)
-            try:
-                composed = self.discovery.with_fallback(composed, today)
-            except Exception as error:  # noqa: BLE001 - an empty feed sends the client to anonymous discovery
-                logger.warning('Home fallback unavailable for recommendations (%s)', type(error).__name__)
-            feed = [{
-                **paper.model_dump(mode='json'),
-                'reason': attribution[paper.id][0] if paper.source == 'personal'
-                else _popularity_reason(popularity.get(paper.id)),
-                'sources': attribution[paper.id][1] if paper.source == 'personal' else [paper.source],
-            } for paper in composed]
-            request_id = uuid4()
-            items = [{
-                **item, 'request_id': str(request_id), 'rank': rank,
-            } for rank, item in enumerate(feed, 1)]
-            version = ALGORITHM_VERSION
-            now = utc_now()
-            async with session_scope() as session:
-                session.add(RecommendationSnapshotRow(
-                    request_id=request_id, user_id=user_id,
-                    algorithm_version=version, created_at=now,
-                    expires_at=now + timedelta(hours=1), items=items,
-                ))
-                await session.execute(delete(RecommendationSnapshotRow).where(
-                    RecommendationSnapshotRow.user_id == user_id,
-                    RecommendationSnapshotRow.expires_at < now,
-                ))
+            snapshot = await self._load(user_id, request_id)
+            if not snapshot.complete and offset == len(snapshot.items):
+                snapshot = await self._complete(user_id, snapshot)
+        items = snapshot.items
         if offset < 0 or offset > len(items):
             raise BusinessError(20001, '推荐分页游标无效', 400)
         end = min(offset + limit, len(items))
+        has_more = end < len(items) or not snapshot.complete
         return {
-            'items': items[offset:end],
-            'next_cursor': f'{request_id}:{end}' if end < len(items) else None,
-            'has_more': end < len(items), 'request_id': str(request_id),
-            'total': len(items), 'algorithm_version': version,
+            'items': await self._hydrate(items[offset:end], snapshot.request_id),
+            'next_cursor': f'{snapshot.request_id}:{end}' if has_more else None,
+            'has_more': has_more, 'request_id': str(snapshot.request_id),
+            'total': len(items), 'algorithm_version': snapshot.version,
         }
+
+    async def _load(self, user_id: str, request_id: UUID) -> _Snapshot:
+        async with session_scope() as session:
+            row = await session.get(RecommendationSnapshotRow, request_id)
+            # Purged, expired and other accounts' snapshots look identical.
+            # Same stale-cursor contract as platform stats: 409 means this
+            # cursor cannot be retried and the client restarts at page one.
+            if row is None or row.user_id != user_id or row.expires_at <= utc_now():
+                raise BusinessError(20001, '推荐列表已过期，请刷新后重新浏览', 409)
+            return _Snapshot(row.request_id, row.items, row.complete, row.algorithm_version)
+
+    async def _start(self, user_id: str, limit: int) -> _Snapshot:
+        today = self.discovery.today()
+        entries = await self._shared_first_page(user_id, today, limit)
+        # Without a shared list the personal feed is the only content: build it now.
+        complete = not entries
+        if complete:
+            entries = await self._personal_feed(user_id, today, shown=set())
+        request_id, now = uuid4(), utc_now()
+        items = await self._pack(entries, first_rank=1)
+        async with session_scope() as session:
+            session.add(RecommendationSnapshotRow(
+                request_id=request_id, user_id=user_id,
+                algorithm_version=ALGORITHM_VERSION, created_at=now,
+                expires_at=now + timedelta(hours=1), items=items, complete=complete,
+            ))
+            await session.execute(delete(RecommendationSnapshotRow).where(
+                RecommendationSnapshotRow.user_id == user_id,
+                RecommendationSnapshotRow.expires_at < now,
+            ))
+        return _Snapshot(request_id, items, complete, ALGORITHM_VERSION)
+
+    async def _complete(self, user_id: str, snapshot: _Snapshot) -> _Snapshot:
+        shown = {item['id'] for item in snapshot.items}
+        entries = await self._personal_feed(user_id, self.discovery.today(), shown=shown)
+        entries = entries[:feed_config.FEED_LIMIT - len(snapshot.items)]
+        items = snapshot.items + await self._pack(entries, first_rank=len(snapshot.items) + 1)
+        async with session_scope() as session:
+            # A concurrent request (a retry, another tab) may have completed it first; its list wins.
+            stored = await session.scalar(
+                update(RecommendationSnapshotRow)
+                .where(RecommendationSnapshotRow.request_id == snapshot.request_id,
+                       RecommendationSnapshotRow.complete.is_(False))
+                .values(items=items, complete=True)
+                .returning(RecommendationSnapshotRow.items),
+            )
+            if stored is None:
+                stored = await session.scalar(select(RecommendationSnapshotRow.items).where(
+                    RecommendationSnapshotRow.request_id == snapshot.request_id,
+                ))
+        if stored is None:
+            raise BusinessError(20001, '推荐列表已过期，请刷新后重新浏览', 409)
+        return _Snapshot(snapshot.request_id, stored, True, snapshot.version)
+
+    async def _shared_first_page(self, user_id: str, today, limit: int) -> list[FeedEntry]:
+        """The day's shared home list without the user's own likes and collections."""
+        try:
+            papers = list((await self.discovery.list_for(today)).papers)
+        except Exception as error:  # noqa: BLE001 - the personal feed is built instead
+            logger.warning('Shared home list unavailable for recommendations (%s)', type(error).__name__)
+            return []
+        excluded, popularity = await self._account_and_popularity(user_id, [paper.id for paper in papers])
+        return [
+            (paper, _popularity_reason(popularity.get(paper.id)), [paper.source])
+            for paper in papers if paper.id not in excluded
+        ][:limit]
+
+    async def _personal_feed(self, user_id: str, today, *, shown: set[str]) -> list[FeedEntry]:
+        """Personal picks composed with the shared sources, without papers already shown."""
+        profile = await self.profiles.get(user_id)
+        shared = await self._shared_sources(today)
+        years = Counter(paper.year for papers in shared.values() for paper in papers)
+        candidates = await self.recall.recall(profile, year=years.most_common(1)[0][0] if years else today.year)
+        excluded, popularity = await self._account_and_popularity(
+            user_id,
+            [item.paper['id'] for item in candidates] + [paper.id for papers in shared.values() for paper in papers],
+        )
+        excluded |= shown
+        current_year = utc_now().year
+        scored = []
+        admitted: dict[str, DiscoveryPaper] = {}
+        for candidate in candidates:
+            paper_id = candidate.paper['id']
+            if paper_id in excluded:
+                continue
+            # Rule B: the same admission every home source passes (displayable image included).
+            paper, _reason = admit(candidate.paper)
+            if paper is None:
+                continue
+            admitted[paper_id] = paper
+            score, reason = _rank(candidate, profile, popularity.get(paper_id), current_year)
+            scored.append((score, candidate, reason))
+        scored.sort(key=lambda item: (-item[0], item[1].paper['id']))
+        top = self._diversify(scored)[:config.PERSONAL_RECOMMENDATION_LIMIT]
+        attribution = {
+            candidate.paper['id']: (reason, sorted(candidate.sources)) for _score, candidate, reason in top
+        }
+        composed = compose({
+            'personal': [admitted[candidate.paper['id']] for _score, candidate, _reason in top],
+            **{name: [paper for paper in papers if paper.id not in excluded] for name, papers in shared.items()},
+        }, feed_config.SIGNED_IN_QUOTAS)
+        try:
+            composed = self.discovery.with_fallback(composed, today)
+        except Exception as error:  # noqa: BLE001 - an empty feed sends the client to anonymous discovery
+            logger.warning('Home fallback unavailable for recommendations (%s)', type(error).__name__)
+        return [
+            (paper, *attribution[paper.id]) if paper.source == 'personal'
+            else (paper, _popularity_reason(popularity.get(paper.id)), [paper.source])
+            for paper in composed if paper.id not in shown
+        ]
+
+    @staticmethod
+    async def _pack(entries: list[FeedEntry], *, first_rank: int) -> list[dict]:
+        """Store ids and attribution; keep a paper copy only when the pool cannot resolve it later."""
+        resolvable = {paper.id for paper, _reason, _sources in entries if paper.source != 'fallback'}
+        if resolvable:
+            async with session_scope() as session:
+                resolvable = set(await session.scalars(select(DiscoveryPoolPaperRow.paper_id).where(
+                    DiscoveryPoolPaperRow.paper_id.in_(resolvable),
+                )))
+        items = []
+        for rank, (paper, reason, sources) in enumerate(entries, first_rank):
+            item = {'id': paper.id, 'rank': rank, 'source': paper.source, 'reason': reason, 'sources': sources}
+            if paper.source != 'fallback' and paper.id not in resolvable:
+                item['paper'] = paper.model_dump(mode='json', exclude={'source'})
+            items.append(item)
+        return items
+
+    @staticmethod
+    async def _hydrate(items: list[dict], request_id: UUID) -> list[dict]:
+        """Resolve one page of stored items to full cards; a paper gone from every store is skipped."""
+        pooled = [item['id'] for item in items if 'paper' not in item and item.get('source') != 'fallback']
+        papers: dict[str, DiscoveryPaper] = {}
+        if pooled:
+            async with session_scope() as session:
+                for row in await session.scalars(select(DiscoveryPoolPaperRow).where(
+                    DiscoveryPoolPaperRow.paper_id.in_(pooled),
+                )):
+                    if (paper := admit(row.paper_fields())[0]) is not None:
+                        papers[paper.id] = paper
+        fallback = _fallback_papers() if any(item.get('source') == 'fallback' for item in items) else {}
+        cards = []
+        for item in items:
+            if 'paper' in item:
+                paper = DiscoveryPaper.model_validate(item['paper'])
+            elif 'title' in item:
+                # Snapshots written before compact storage carried the whole paper.
+                paper = DiscoveryPaper.model_validate({key: value for key, value in item.items()
+                                                        if key in DiscoveryPaper.model_fields})
+            else:
+                paper = (fallback if item.get('source') == 'fallback' else papers).get(item['id'])
+            if paper is None:
+                continue
+            cards.append({
+                **paper.model_dump(mode='json'), 'source': item.get('source'),
+                'reason': item.get('reason'), 'sources': item.get('sources', []),
+                'request_id': str(request_id), 'rank': item['rank'],
+            })
+        return cards
 
     async def _shared_sources(self, today) -> dict[str, list[DiscoveryPaper]]:
         try:

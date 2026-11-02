@@ -30,6 +30,10 @@ function FeedLoading() {
  * Signed-in users page through one recommendation snapshot; anonymous users
  * (and a failed first recommendation page) use global discovery. Loaded pages
  * are never replaced by a failing next page.
+ *
+ * A recommendation snapshot starts with the shared list; its second page is
+ * where the personal feed is built, so it is requested as soon as the first
+ * page is shown instead of waiting for the reader to scroll.
  */
 export function FeedList() {
   const { session, isPending: authPending } = useAuth();
@@ -70,6 +74,11 @@ export function FeedList() {
     }
     return [...unique.values()];
   }, [data]);
+
+  const firstPageOnly = data?.pages.length === 1 && data.pages[0].source === "recommendation";
+  useEffect(() => {
+    if (firstPageOnly && hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
+  }, [fetchNextPage, firstPageOnly, hasNextPage, isFetchNextPageError, isFetchingNextPage]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -138,7 +147,7 @@ export function FeedList() {
         )}
         {!hasNextPage && !isFetchNextPageError && (
           <span className="text-sm text-faint">
-            今天的 {data?.pages[0]?.total ?? papers.length} 篇论文已全部浏览，明天会更新一批
+            今天的 {data?.pages.at(-1)?.total ?? papers.length} 篇论文已全部浏览，明天会更新一批
           </span>
         )}
       </div>
