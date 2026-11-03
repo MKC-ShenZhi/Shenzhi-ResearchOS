@@ -100,7 +100,8 @@ export function PdfDocumentView({
         .pdf-viewer-page {
           position: relative;
           background: #fff;
-          box-shadow: var(--shadow-card);
+          border-radius: 2px;
+          box-shadow: 0 0 0 1px rgb(0 0 0 / 0.04), var(--shadow-pop);
         }
 
         .pdf-viewer-page .textLayer {

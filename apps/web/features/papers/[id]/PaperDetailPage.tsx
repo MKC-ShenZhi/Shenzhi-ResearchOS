@@ -191,7 +191,7 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
             className="paper-detail-layout flex min-h-0 flex-1 flex-col lg:p-3"
             style={{ "--assistant-width": `${assistantWidthPercent}%` } as CSSProperties}
           >
-            <div className="paper-reader-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="paper-reader-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card lg:rounded-xl lg:border lg:border-line">
               <PaperTopbar
                 paper={paper}
                 returnTo={safeReturnTo}
@@ -199,11 +199,15 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
                 viewerState={!paper.pdfUrl ? "no_pdf" : viewerState}
                 zoom={zoom}
                 setZoom={setZoom}
+                actions={
+                  <>
+                    <PaperLikeButton paperId={paper.id} />
+                    <PaperCollectorCount paperId={paper.id} withIcon compact className="px-1" />
+                    <CollectionPicker paperId={paper.id} iconOnly />
+                  </>
+                }
               >
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <PaperLikeButton paperId={paper.id} />
-                  <PaperCollectorCount paperId={paper.id} withIcon compact />
-                  <CollectionPicker paperId={paper.id} iconOnly />
+                <div className="flex min-w-0 items-center">
                   <TabsList aria-label="论文内容" className="h-10 shrink-0 gap-0.5 rounded-full bg-chip p-1">
                     <TabsTrigger
                       value="abstract"
@@ -224,7 +228,7 @@ export function PaperDetailPage({ paperId, returnTo }: { paperId: string; return
                 <div className="h-full min-h-0">
                   {viewMode === "abstract" && (
                     <div role="tabpanel" aria-label="Abstract" className="h-full overflow-y-auto">
-                      <PaperAbstractView key={`abstract-${paperId}`} paper={paper} />
+                      <PaperAbstractView key={`abstract-${paperId}`} paper={paper} onOpenPaper={() => handleViewModeChange("paper")} />
                     </div>
                   )}
                   {hasOpenedPaper && (
