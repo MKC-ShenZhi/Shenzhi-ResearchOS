@@ -5,10 +5,43 @@ import { BookOpen, ExternalLink, Quote } from "lucide-react";
 import type { KnowledgePaperDetail } from "@/clients/knowledge";
 import { Badge } from "@/components/ui/badge";
 import { paperDoiUrl } from "@/lib/navigation/paper";
+import { ABSTRACT_LINK_PLACEHOLDER, replaceAbstractLinks, splitAbstractLinks } from "../abstract-links";
 import { HtmlGenerator, parse } from "latex.js";
 import "katex/dist/katex.min.css";
 
 const COLLAPSED_AUTHOR_COUNT = 6;
+const ABSTRACT_LINK_CLASS =
+  "[overflow-wrap:anywhere] text-primary underline decoration-primary/30 underline-offset-2 transition-colors hover:decoration-primary";
+
+function createAbstractLink(text: string, href: string) {
+  const link = document.createElement("a");
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.className = ABSTRACT_LINK_CLASS;
+  link.textContent = text;
+  return link;
+}
+
+/** 将 LaTeX 渲染结果中的网址占位符还原为链接；网址文本始终取自原始摘要。 */
+function restoreAbstractLinks(container: HTMLElement, links: ReturnType<typeof replaceAbstractLinks>["links"]) {
+  if (!links.length) return;
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    if (ABSTRACT_LINK_PLACEHOLDER.test(node.data)) textNodes.push(node);
+  }
+  for (const node of textNodes) {
+    // split 带捕获组时，奇数位为占位符中的链接序号。
+    const parts = node.data.split(new RegExp(ABSTRACT_LINK_PLACEHOLDER, "g"));
+    node.replaceWith(...parts.map((part, index) => {
+      if (index % 2 === 0) return part;
+      const link = links[Number(part)];
+      return link ? createAbstractLink(link.text, link.href) : "";
+    }));
+  }
+}
 
 export function PaperAbstractView({
   paper,
@@ -146,9 +179,11 @@ function LatexAbstractContent({ abstract }: { abstract: string }) {
     if (!container || !fallback) return;
 
     try {
+      const { source, links } = replaceAbstractLinks(abstract);
       const generator = new HtmlGenerator({ hyphenate: false });
-      parse(abstract, { generator });
+      parse(source, { generator });
       container.replaceChildren(generator.domFragment());
+      restoreAbstractLinks(container, links);
       container.hidden = false;
       fallback.hidden = true;
     } catch (error) {
@@ -173,7 +208,11 @@ function LatexAbstractContent({ abstract }: { abstract: string }) {
         ref={fallbackRef}
         className="mt-4 whitespace-pre-wrap text-[15px] leading-[1.85] text-ink-2"
       >
-        {abstract}
+        {splitAbstractLinks(abstract).map((segment, index) => (
+          segment.type === "link"
+            ? <a key={index} href={segment.href} target="_blank" rel="noreferrer" className={ABSTRACT_LINK_CLASS}>{segment.text}</a>
+            : segment.text
+        ))}
       </p>
     </>
   );
