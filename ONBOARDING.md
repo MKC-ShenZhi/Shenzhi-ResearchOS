@@ -12,11 +12,11 @@
 shenzhi/
 ├── apps/
 │   ├── web/            # Next.js 16 前端 + BFF(浏览器只访问它的 /api/v1)
-│   └── backend/        # FastAPI 业务后端(Chat / 知识检索 / 模型流 / 附件解析)
-├── infra/              # ECS + Docker 备用部署链路(当前未启用)
-├── docs/               # PRD、工程规范、各能力文档
+│   └── backend/        # FastAPI 核心业务后端(Agent 对话 / 知识库 / 个人数据 / 首页 Feed)
+├── data/ scripts/      # 离线数据源与数据发布脚本
+├── docs/               # 工程规范、模块文档、PRD 与历史记录
 ├── tests/ tools/       # 视觉验证脚本、品牌资产工具
-├── README.md           # 项目总览 + 部署文档(部署问题看这里)
+├── README.md           # 项目总览、路由与技术栈
 └── ONBOARDING.md       # 本文
 ```
 
@@ -69,8 +69,11 @@ BETTER_AUTH_URL=http://localhost:3000
 cd apps/backend
 uv sync
 cp .env.example .env         # 填 DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY 等
+uv run --env-file .env alembic upgrade head   # 配置 CHAT_DATABASE_URL 后执行数据库迁移
 uv run uvicorn app.main:app --env-file .env --reload --host 127.0.0.1 --port 8000
 ```
+
+会话、收藏、阅读记录等持久化能力需要 PostgreSQL:在 `.env` 中配置 `CHAT_DATABASE_URL` 并执行迁移;未配置时会话退化为进程内存态。Windows 可参考 `scripts/start-local-postgres.bat` 启动本地实例(可用 `PG_BIN` 指定 PostgreSQL 安装目录)。
 
 ### 3.4 提交前的检查
 
@@ -79,17 +82,17 @@ cd apps/web && pnpm typecheck && pnpm lint && pnpm test
 cd apps/backend && uv run python -m compileall app && uv run python -m unittest discover -s tests -v
 ```
 
-改动哪个范围就跑哪个范围的检查；CI 与评审以此为准。
+改动哪个范围就跑哪个范围的检查。仓库当前没有 CI 门禁，提交前需在本地执行，评审以此为准。
 
 ## 四、Git 协作流程
 
 ```
-dev ──┬── feat/xxx (你的功能分支,从最新 dev 切出)
+dev ──┬── feat/xxx、fix/xxx 等(你的工作分支,从最新 dev 切出)
       ▲
       └── PR 评审后合回 dev ──(管理员定期)──▶ main
 ```
 
-- **日常开发只碰 `feat/*` 分支**，从 `origin/dev` 创建：`git checkout -b feat/my-feature origin/dev`
+- **日常开发在工作分支上进行**（`feat/`、`fix/`、`refactor/`、`docs/` 等），从 `origin/dev` 创建：`git checkout -b feat/my-feature origin/dev`
 - 完成后在 GitHub 开 PR → 目标分支 `dev` → 找同学评审
 - **不要直接 push 到 `dev` / `main`**
 - Commit 格式：`<type>: <中文描述>`，type 用 `feat/fix/refactor/docs/chore/test`，例如 `feat: 新增论文收藏功能`；一个 commit 对应一个明确目的
@@ -99,30 +102,31 @@ dev ──┬── feat/xxx (你的功能分支,从最新 dev 切出)
 
 | 环境 | 地址 | 内容来源 | 用途 |
 |------|------|----------|------|
-| 生产 | https://shenzhi.vercel.app | `dev` 分支（临时，见 README 部署章节） | 对外展示与验收 |
-| 后端生产 | https://shenzhi-backend.vercel.app/health | `dev` 分支 | 前端 BFF 调用，不直接对外 |
+| Vercel（临时） | https://shenzhi.vercel.app | `dev` 分支 | 演示与联调 |
+| Vercel 后端（临时） | https://shenzhi-backend.vercel.app/health | `dev` 分支 | 前端 BFF 调用，不直接对外 |
 | 你的分支预览 | `shenzhi-git-<分支名>-hakrin-devs-projects.vercel.app` | push 后自动生成 | 给别人验收你的功能 |
 
 - PR 里 Vercel bot 会自动评论预览链接，直接发给测试同学即可（预览无需登录）
 - ⚠️ `*.vercel.app` 在国内被 DNS 污染，访问需要可上外网的网络环境
-- 部署配置、环境变量规则、已知限制：**必读 [README.md](README.md) 的部署章节**，改部署配置前先同步该文档
+- Vercel 目前只作临时用途，正式部署目标是自有服务器。部署配置、环境变量规则、已知限制：**必读 [docs/engineering/deployment.md](docs/engineering/deployment.md)**，改部署配置前先同步该文档
 - Vercel 后台/日志权限在管理员处，需要查看日志或配环境变量找管理员协助
 
 ## 六、遇到问题去哪查
 
 | 问题类型 | 去处 |
 |----------|------|
-| 部署/环境变量/线上限制 | [README.md 部署章节](README.md) |
-| 后端能力、Knowledge 接入 | [apps/backend/README.md](apps/backend/README.md) |
-| Chat 架构、SSE 协议 | [docs/chat/README.md](docs/chat/README.md) |
+| 部署/环境变量/线上限制 | [docs/engineering/deployment.md](docs/engineering/deployment.md) |
+| 工程架构与分层 | [docs/engineering/architecture-confirmation.md](docs/engineering/architecture-confirmation.md) |
+| 后端能力、首页 Feed、Knowledge 接入 | [apps/backend/README.md](apps/backend/README.md) |
+| 深知 AI（Agent）对话 | [docs/agent/README.md](docs/agent/README.md) |
 | 认证体系 | [docs/auth](docs/auth) |
-| ECS 备用部署 | [infra/README.md](infra/README.md) |
+| 各模块文档索引 | [docs/README.md](docs/README.md) |
 | Git 流程 | [docs/engineering/git-conventions.md](docs/engineering/git-conventions.md) |
 
 ## 七、常见坑（新人高发）
 
 1. **改了环境变量不生效** → Vercel 上必须 Redeploy；本地确认改的是 `.env.local`（web）/ `.env`（backend）
 2. **本地起后端后前端仍报 503** → 两端都要设 `BACKEND_ALLOW_INSECURE_LOCAL_BFF=true`，且 `BUSINESS_BACKEND_URL` 是 `http://127.0.0.1:8000`
-3. **push 后没有预览部署** → 确认分支名不是 `main`/`dev` 以外的保护例外；到 Vercel 项目 Deployments 看构建日志（需权限，找管理员）
+3. **push 后没有预览部署** → 到 Vercel 项目 Deployments 查看该分支的构建日志（需权限，找管理员）
 4. **Windows 上 `pnpm dev` 报 Turbopack 二进制被拦截** → 换到 WSL2 内开发
 5. **知识检索报"暂不可用"** → 先确认 `KNOWLEDGE_BASE_API_URL` 已配且公网可达，再怀疑代码
