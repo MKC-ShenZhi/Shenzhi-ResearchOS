@@ -1,4 +1,4 @@
-# LLM API Foundation（第一阶段）
+# LLM API Foundation：多 Provider 模型注册与 AutoDL 接入
 
 ## 调用与文件职责
 
@@ -68,7 +68,7 @@ Chat 创建与 Agent Runtime 构造保留离线测试注入体验，先验证型
 
 ## AutoDL
 
-AutoDL 复用 OpenAI Chat Completions Adapter，不新增协议或 API 路由。真实验收后经用户授权，现有共享选择组件仅补齐通用品牌回退和空目录提交保护。在 `apps/backend/.env` 配置：
+AutoDL 复用 OpenAI Chat Completions Adapter，不新增协议或 API 路由；前端共享模型选择组件为其补齐了通用品牌回退和空目录提交保护。在 `apps/backend/.env` 配置：
 
 ```ini
 AUTODL_API_KEY=
@@ -84,13 +84,13 @@ AI_AGENT_DEFAULT_MODEL=autodl/DeepSeek-V4.1-Flash-1017
 | --- | --- | --- | --- | --- |
 | `DeepSeek-V4.1-Flash-1017` | deepseek | 是 | 是，首选 | reasoning_content |
 | `Qwen3.5-397B-A17B` | platform | 是 | 是，备选 | reasoning_content |
-| `Kimi-K2.5` | moonshot（通用图标回退） | 是 | 是，备选 | 本次未出现 |
+| `Kimi-K2.5` | moonshot（通用图标回退） | 是 | 是，备选 | 探测中未出现 |
 
-2026-10-24（Asia/Tokyo）对当前账号执行 `scripts/autodl_probe.py` 的 T0–T7 后才添加声明：三者均通过普通流式输出、usage、temperature=0.3、32768 输出上限的接受探测，以及不回传 reasoning_content 的两轮工具调用（各连续两次通过）。Chat 预算仍为 4096。DeepSeek 与 Qwen 的两种关闭思考参数也各通过两次工具往返，但基线 T5 已通过，因此不声明额外 thinking 策略或 request_params。推理声明不表示每次响应一定有思考片段；32768 只验证请求被接受并收到首块，未付费生成到该长度。详见[交付报告](autodl-provider-delivery.md)。
+上表声明以 `scripts/autodl_probe.py`（T0–T7）的实测为依据：三者均通过普通流式输出、usage、temperature=0.3、32768 输出上限的接受探测，以及不回传 reasoning_content 的两轮工具调用。Chat 预算仍为 4096。不回传思考内容的基线工具往返已通过，因此不声明额外 thinking 策略或 request_params。推理声明不表示每次响应一定有思考片段；32768 只验证请求被接受并收到首块，未实际生成到该长度。新增或更换型号前应重新执行探测脚本。探测过程见[交付记录](../dev/records/engineering/autodl-provider-delivery.md)。
 
 `AUTODL_MODELS` 是区分大小写的上游 ID 列表，逗号分隔并清理两侧空白、重复项和空项；清理后为空时使用模块常量 `AUTODL_DEFAULT_MODELS`。仅 Key 非空才注册，ID 固定为 `autodl/<上游 ID>`，不生成裸名别名。清单之外的 ID 沿用保守 Chat 能力，`tool_calling=false`；部署者需确认这些型号的真实可用性。自定义文件在此之后按现有规则覆盖条目。`AUTODL_BASE_URL` 使用通用 HTTPS 校验。
 
-T0 没有 `GLM-5.1` 或 `DeepSeek-V3.2`，本批不注册，也不替换为其他版本。`gpt-*`、`claude-*`、`gemini-*` 存在参数差异风险；`*-cc` 为 Claude Code 专用，`*-codex` 为编码专用；MiniMax 可能把思考混入正文；图像模型不属于本任务范围，均不接入。
+探测时 AutoDL 目录（T0）没有 `GLM-5.1` 或 `DeepSeek-V3.2`，因此不注册，也不替换为其他版本。`gpt-*`、`claude-*`、`gemini-*` 存在参数差异风险；`*-cc` 为 Claude Code 专用，`*-codex` 为编码专用；MiniMax 可能把思考混入正文；图像模型不属于本任务范围，均不接入。
 
 ### 模型菜单只展示已配置 Provider
 
@@ -149,7 +149,7 @@ T0 没有 `GLM-5.1` 或 `DeepSeek-V3.2`，本批不注册，也不替换为其�
 
 `thinking` 策略可为 `none`、`enable_thinking` 或 `thinking`。`request_params` 仅接受与策略一致的 `enable_thinking: boolean` 或 `thinking: {"type":"enabled|disabled"}`，禁止覆盖 model、messages、tools、stream、地址或凭据。Chat 仅发送显式 request_params；Agent 可按已声明策略开启思考，`AGENT_DISABLE_THINKING=true` 可关闭扩展。只有响应明确指出相关可选参数不支持时才摘掉该参数重试；任意 400 不降级 / 重试。原始错误体只作内部分类，不进入日志或公开异常。
 
-DeepSeek 官方 Provider 推理型号的 Agent Tool Calling 暂时保守禁用：官方当前协议要求工具轮次回传完整 reasoning_content，而现有 Agent 历史契约没有保留该字段。本阶段不扩大历史协议修改；普通 Chat 可用。AutoDL 是独立渠道，V4.1 日期版仅因其 T5 实测通过而声明工具能力，不据此外推官方型号。参考 [DeepSeek thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/)。GLM 入口参考 [智谱 OpenAI 兼容说明](https://docs.bigmodel.cn/cn/guide/develop/openai/introduction)；真实型号权限与能力以部署平台联调为准。
+DeepSeek 官方 Provider 推理型号的 Agent Tool Calling 暂时保守禁用：官方当前协议要求工具轮次回传完整 reasoning_content，而现有 Agent 历史契约没有保留该字段。当前不为此修改历史协议；普通 Chat 可用。AutoDL 是独立渠道，V4.1 日期版仅因其 T5 实测通过而声明工具能力，不据此外推官方型号。参考 [DeepSeek thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/)。GLM 入口参考 [智谱 OpenAI 兼容说明](https://docs.bigmodel.cn/cn/guide/develop/openai/introduction)；真实型号权限与能力以部署平台联调为准。
 
 ## 验证与真实 API 边界
 
@@ -163,11 +163,11 @@ UV_CACHE_DIR=/tmp/shenzhi-uv-cache uv run --no-sync python -m unittest discover 
 `--no-sync` 使用已有 uv 环境；首次开发按仓库方式先 `uv sync`。在 `apps/web`：
 
 ```bash
-npm test
-npm run typecheck
-npm run lint
+pnpm test
+pnpm typecheck
+pnpm lint
 ```
 
 新增专项覆盖 A–K：旧默认优先级、三家实际请求 Host/Bearer/upstream、GLM 产品 SSE / 推理片段 / 工具参数分片、同名上游、多家同时可用、别名、禁用/缺凭据/未知/能力不足、两份 config 同源且兼容旧字段、公开 Schema / 日志无 Key，以及只新增 JSON 声明即可路由第四家。原有停止、恢复、上下文、工具修复和重试测试继续保留；明确更新了旧任意 400 降级与原始错误体外泄的断言。
 
-本地验收结果记录在 [阶段一交付报告](llm-api-foundation-delivery.md)。本次没有调用真实供应商接口：GLM 的 SSE、推理字段容错、Tool Calling、凭据隔离与参数策略均为 Mock 验证；实际模型权限、输出上限、地区兼容性、延迟与工具成功率待有凭据后联调。模拟流中的 reasoning_content 验证的是 Adapter 解析，不能证明 `glm-4-plus` 实际输出思考内容。
+阶段一的本地验收记录见 [交付记录](../dev/records/engineering/llm-api-foundation-delivery.md)。智谱 GLM 尚未对真实供应商接口联调：其 SSE、推理字段容错、Tool Calling、凭据隔离与参数策略均为 Mock 验证；实际模型权限、输出上限、地区兼容性、延迟与工具成功率待有凭据后联调。模拟流中的 reasoning_content 验证的是 Adapter 解析，不能证明 `glm-4-plus` 实际输出思考内容。

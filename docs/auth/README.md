@@ -37,7 +37,7 @@
 - `apps/web/app/api/auth/[...all]/route.ts` 只表示 Next.js HTTP boundary。
 - `apps/web/lib/` 表示 Better Auth/server 侧集成、策略、Provider boundary 和基础设施。
 - `apps/web/config/` 统一读取和规范化外部部署配置。
-- `apps/web/services/backend/` 表示未来独立业务后端的责任边界。
+- `apps/web/clients/backend/` 是调用 FastAPI 业务后端的 BFF/Client 边界（`forward.ts` 转发，`identity.ts` 注入可信身份头）。
 
 ### Core User Authentication Flows
 
@@ -49,7 +49,8 @@
 - `AUTH_REQUIRE_EMAIL_VERIFICATION` 已接入配置体系；默认 `false` 保持开发环境注册行为，
   设置为 `true` 时由 Better Auth 强制 Email/Password 注册邮箱验证。
 - 已接入真实 `/reset-password` 请求/重置流程，以及 Settings 的真实昵称、email/验证
-  状态、Change Password 和基础会话管理。
+  状态、Change Password、Change Email、OAuth 用户的 Set Password、基础会话管理和
+  账号注销。
 - Reset Password 和 Change Password 复用同一纯 password policy；Better Auth 继续负责
   hash、verify 和 credential storage。
 
@@ -69,14 +70,26 @@
 ### GitHub OAuth 与 Turnstile
 
 - GitHub OAuth 通过 Better Auth `socialProviders.github` 接入；凭据不完整时应用仍可启动。
-- GitHub 登录采用跳转式人机验证：点击 GitHub 图标先跳转到 `/login/github` 独立验证页，
-  完成 Turnstile 后由 `POST /api/auth/github/verify` 校验 token 并生成授权 URL，再跳转
+- GitHub 登录采用跳转式人机验证：点击 GitHub 图标先跳转到 `/login/github`
+  （`app/login/[provider]`）独立验证页，完成 Turnstile 后由
+  `POST /api/auth/oauth/verify?provider=github` 校验 token 并生成授权 URL，再跳转
   GitHub 授权页。
-- Email OTP 登录与注册验证码发送可启用 Cloudflare Turnstile；浏览器只接收公开 site
-  key，secret 仅在服务端校验。
+- Email OTP 登录、注册验证码发送和找回密码（`/request-password-reset`）可启用
+  Cloudflare Turnstile；浏览器只接收公开 site key，secret 仅在服务端校验。
 - Turnstile token 由服务端向 Cloudflare 验证，并可约束 action/hostname；验证状态保存在
-  后端 `turnstile_verification` 表(15 分钟有效)，邮箱验证码与 GitHub OAuth 共享，
-  任一入口通过后 15 分钟内不再重复挑战。
+  后端 `turnstile_verification` 表(15 分钟有效)，邮箱验证码、找回密码与 GitHub OAuth
+  共享，任一入口通过后 15 分钟内不再重复挑战。
+
+### Set Password 与账号注销
+
+- OAuth 首次登录会写入带 `scope=oauth-placeholder` 标记的随机占位 credential；
+  `apps/web/db/migrations/003_oauth_placeholder_scope.sql` 为既有 GitHub 用户补写该标记，
+  使其被识别为“尚未设置真实密码”。
+- Set Password 由 `apps/web/app/api/auth/password/send-otp` 与 `.../password/set` 承接：
+  要求已登录，以发往本人邮箱的验证码证明邮箱所有权，新密码复用同一 password policy。
+- 账号注销由 `apps/web/app/api/auth/account-deletion/route.ts` 编排：先由 FastAPI
+  清理该用户全部业务数据，成功后再调用 Better Auth `deleteUser` 删除认证数据，详见
+  [ARCHITECTURE.md](./ARCHITECTURE.md#account-deletion)。
 
 ## 尚未完成
 
@@ -84,7 +97,6 @@
 - 生产环境真实邮件投递验收后，将 `AUTH_REQUIRE_EMAIL_VERIFICATION` 设置为 `true`。
   代码侧的强制验证配置和 Provider 缺失保护已经完成。
 - OTP、Verification、Reset 邮件的真实投递验收。
-- 如果未来启用 Set Password，该创建新密码入口必须复用同一个 password policy。
 - trusted origins、GitHub OAuth、Turnstile 的正式部署值与端到端验收，以及多实例
   shared rate-limit storage。
 - 未来业务后端的稳定身份协议以及 Authorization/RBAC 产品决策。
@@ -95,4 +107,4 @@
 - [ARCHITECTURE.md](./ARCHITECTURE.md)
 - [CONFIGURATION.md](./CONFIGURATION.md)
 - [EMAIL.md](./EMAIL.md)
-- [WORKLOG.md](./WORKLOG.md)
+- [WORKLOG.md](../dev/records/auth/WORKLOG.md)（历史工作日志）
