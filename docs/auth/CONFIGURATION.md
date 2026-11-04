@@ -10,7 +10,7 @@ infrastructure modules do not scatter direct `process.env` access:
         ↓
       apps/web/config/
         ↓
-    apps/web/lib / apps/web/services
+    apps/web/lib / apps/web/clients / apps/web/app/api
 ```
 
 `apps/web/config/` does not implement authentication, create database connections,
@@ -27,7 +27,7 @@ repository.
 | `BETTER_AUTH_URL` | `apps/web/config/auth.ts` | Better Auth 应用基础地址 | 当前必须；生产使用实际 HTTPS 地址 |
 | `BETTER_AUTH_TRUSTED_ORIGINS` | `apps/web/config/auth.ts` | 可选的逗号分隔 trusted origins | 正式跨域部署前配置；空值不产生 `['']` |
 | `AUTH_REQUIRE_EMAIL_VERIFICATION` | `apps/web/config/auth.ts` | 是否强制 Email/Password 注册完成邮箱验证 | 默认 `false`；真实邮件 readiness 通过后生产设置为 `true` |
-| `BUSINESS_BACKEND_URL` | `apps/web/config/backend.ts` | FastAPI 业务后端的服务端地址 | 使用 Chat / Search 时必须；不暴露给浏览器 |
+| `BUSINESS_BACKEND_URL` | `apps/web/config/backend.ts` | FastAPI 业务后端的服务端地址 | 使用任一业务 API（含账号注销清理）时必须；不暴露给浏览器 |
 | `BACKEND_BFF_SECRET` | `apps/web/config/backend.ts` | Next.js BFF 调用 FastAPI 的内部凭据 | 默认必须；两端配置相同高熵值 |
 | `BACKEND_ALLOW_INSECURE_LOCAL_BFF` | `apps/web/config/backend.ts` / Backend | 无 Secret 的本地开发逃生开关 | 默认 `false`；仅两端显式为 `true` 且 loopback 时生效 |
 | `EMAIL_PROVIDER` | `apps/web/config/email.ts` | 当前 Provider 选择；使用 `aliyun-directmail` | 配置 DirectMail 发送前填写 |
@@ -39,7 +39,7 @@ repository.
 | `AUTH_EMAIL_FROM_ALIAS` | `apps/web/config/email.ts` | DirectMail `FromAlias` | 可选 |
 | `GITHUB_CLIENT_ID` | `apps/web/config/oauth.ts` | GitHub OAuth App Client ID | 启用 GitHub 登录时填写 |
 | `GITHUB_CLIENT_SECRET` | `apps/web/config/oauth.ts` | GitHub OAuth App Client Secret | 仅由 Deployment Secrets 注入，不提交 Git |
-| `TURNSTILE_ENABLED` | `apps/web/config/turnstile.ts` | 是否在发送 Email OTP 前强制人机验证 | 默认 `false`；启用时必须同时配置 site key 与 secret |
+| `TURNSTILE_ENABLED` | `apps/web/config/turnstile.ts` | 是否对 Email OTP / 注册验证码发送、找回密码和 OAuth 登录强制人机验证 | 默认 `false`；启用时必须同时配置 site key 与 secret |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Client Component | 浏览器渲染 Turnstile 的公开 site key | 可公开，但必须与 secret 对应 |
 | `TURNSTILE_SECRET_KEY` | `apps/web/config/turnstile.ts` | 服务端校验 Turnstile token | 仅由 Deployment Secrets 注入 |
 | `TURNSTILE_EXPECTED_ACTION` | `apps/web/config/turnstile.ts` | 可选的 token action 约束 | 与 Cloudflare Widget 配置一致时填写；OAuth 验证页会自动使用该值 |
@@ -53,8 +53,9 @@ https://example.com, https://admin.example.com
 
 会规范化为两个 origin。未配置时不显式传入 Better Auth，以保持当前默认
 行为。`BUSINESS_BACKEND_URL`（兼容旧名 `API_URL`）由
-`apps/web/app/api/v1/[...path]/route.ts` 作为 Chat / Search 的同源 BFF 使用，浏览器不会直接请求
-`BUSINESS_BACKEND_URL`。未配置 `BACKEND_BFF_SECRET` 时默认拒绝转发；只有显式开启本地逃生开关且地址为
+`apps/web/app/api/v1/[...path]/route.ts` 作为全部业务 API 的同源 BFF 使用，账号注销路由
+`apps/web/app/api/auth/account-deletion/route.ts` 与匿名会话认领路由也在服务端直接使用它；
+浏览器不会直接请求 `BUSINESS_BACKEND_URL`。未配置 `BACKEND_BFF_SECRET` 时默认拒绝转发；只有显式开启本地逃生开关且地址为
 loopback 时才允许无 Secret 运行。
 
 `AUTH_REQUIRE_EMAIL_VERIFICATION` 由通用 boolean parser 严格解析：未设置为 `false`，
@@ -106,20 +107,28 @@ Auth 写入用户前返回 `EMAIL_PROVIDER_NOT_CONFIGURED`。Provider 不会输�
 - Email OTP：6 位、300 秒有效、3 次尝试，发送 rate limit 为 60 秒窗口最多 3 次；OTP
   在 Better Auth 的 `verification` 表中以 hash 保存。
 - Reset Password：`revokeSessionsOnPasswordReset: true`。
+- `user.changeEmail.enabled`：`true`，`sendChangeEmailConfirmation` 先向当前邮箱发送确认，
+  再由 Better Auth 向新邮箱发送验证链接。
+- `user.deleteUser.enabled`：`true`，供 `/api/auth/account-deletion` 在业务数据清理成功后
+  调用；`databaseHooks.user.delete.before` 清理 `set-password-otp:<userId>` verification。
+- `databaseHooks.user.create.after`：OAuth 回调首次创建用户时写入带
+  `scope=oauth-placeholder` 的随机占位 credential。
 
 Email Verification 强制注册默认关闭，由 `AUTH_REQUIRE_EMAIL_VERIFICATION` 控制。
 OAuth 仅接入 GitHub，凭据从 `apps/web/config/oauth.ts` 读取，未配置时应用照常启动。
-Email OTP 发送可通过 `TURNSTILE_ENABLED` 启用 Cloudflare Turnstile；2FA、Passkey、
+Email OTP / 注册验证码发送、找回密码和 OAuth 登录可通过 `TURNSTILE_ENABLED` 启用
+Cloudflare Turnstile；2FA、Passkey、
 RBAC、Redis 和业务身份协议仍未实现。
 
-## 官方 Migration
+## Migration
 
-- 文件：`apps/web/db/migrations/001_better_auth.sql`
-- 数据库：PostgreSQL
-- 来源：Better Auth `1.6.28` 官方 CLI Migration
-- 核心表：`user`、`account`、`session`、`verification`
-- Email OTP 复用 `verification`，本阶段没有修改 Schema，也没有手写新的 auth
-  migration。
+- `apps/web/db/migrations/001_better_auth.sql`：Better Auth `1.6.28` 官方 CLI
+  Migration（PostgreSQL），核心表 `user`、`account`、`session`、`verification`。
+- `apps/web/db/migrations/002_turnstile_verification.sql`：非认证表
+  `turnstile_verification`，保存 Turnstile“已通过验证”状态。
+- `apps/web/db/migrations/003_oauth_placeholder_scope.sql`：数据迁移，不改 Schema；把既有
+  GitHub 用户的随机占位 credential 标记为 `scope='oauth-placeholder'`。
+- Email OTP 复用 `verification`，没有手写新的 auth Schema。
 
 ## 后续配置类别
 
@@ -131,11 +140,13 @@ RBAC、Redis 和业务身份协议仍未实现。
 - 生产设置 `AUTH_REQUIRE_EMAIL_VERIFICATION=true`，并完成 OTP/Verification/Reset 邮件的
   真实投递验收；代码实现已完成，真实环境联调不属于本次代码实现。
 - GitHub OAuth App 的 Client ID/Secret 与回调地址
-  `<BETTER_AUTH_URL>/api/auth/callback/github`；OAuth 首次登录会自动为账号写入随机
-  占位密码的 credential 凭证，无需用户设置密码。
+  `<BETTER_AUTH_URL>/api/auth/callback/github`；OAuth 首次登录会自动为账号写入带
+  `oauth-placeholder` 标记的随机占位 credential，用户可在 Settings 通过邮箱验证码设置
+  真实密码。
 - shared rate-limit storage（如果部署为多实例）。
 - Turnstile 正式 site key/secret、action/hostname 约束与端到端验收。
 - 未来业务后端服务地址 `BUSINESS_BACKEND_URL` 和语言无关的身份协议。
 
-未来可选能力包括更多 OAuth Provider、2FA 和 Passkey。若未来启用 Set Password 或其他
-创建新密码入口，必须继续复用同一个 password policy。
+未来可选能力包括更多 OAuth Provider、2FA 和 Passkey。Set Password
+（`apps/web/app/api/auth/password/{send-otp,set}`）已复用同一个 password policy；今后
+其他创建新密码入口也必须继续复用。

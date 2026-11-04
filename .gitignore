@@ -58,10 +58,6 @@ __pycache__/
 # vercel
 .vercel
 
-# feishu cli sync temp
-docs/dev/.feishu-sync-body.md
-docs/dev/.feishu-auth-qr.png
-
 # docker
 *.tar
 .superpowers/

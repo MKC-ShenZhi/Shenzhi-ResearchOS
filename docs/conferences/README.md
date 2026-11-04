@@ -13,13 +13,24 @@ clients/backend/conferences.ts
 Next.js /api/v1/*（BFF 透传）
   ↓
 FastAPI /api/v1/conferences*（app/api/conferences.py）
-  ↓
-app/services/conferences.py（时区换算、当届选择、排序、筛选）
-  ↓
-app/data/conference_deadlines_snapshot.json（随后端打包的版本化快照）
+  ├─ app/services/conferences.py（时区换算、当届选择、排序、筛选）
+  │    ↓
+  │  app/data/conference_deadlines_snapshot.json（随后端打包的版本化快照）
+  └─ app/services/library/conference_follows.py（关注截稿，PostgreSQL conference_follows 表）
 ```
 
-运行时不访问任何外部服务；与首页发现流一样由快照驱动。唯一的账号数据是「关注截稿」（`conference_follows` 表）。
+运行时不访问任何外部服务，截稿数据只来自随包快照。唯一的账号数据是「关注截稿」（`conference_follows` 表，
+由 `ConferenceFollowService` 读写）。
+
+接口一览：
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/v1/conferences` | 截稿列表，支持下文的筛选参数与 `followed=true` |
+| `GET /api/v1/conferences/categories` | 方向目录：`snapshot_id` 与 `items[]`（`id`、`name`、`name_en`、`count`） |
+| `PUT` / `DELETE /api/v1/conferences/{id}/follow` | 关注 / 取消关注截稿（需登录） |
+
+快照缺失或损坏时，列表、方向目录与关注时的 ID 校验返回 `20004/503`。
 
 ## 数据更新
 

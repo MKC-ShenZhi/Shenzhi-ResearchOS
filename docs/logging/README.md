@@ -1,12 +1,12 @@
-# ShenZhi 日志与异常 · 综合实现方案（V1 待审批）
+# ShenZhi 日志与异常 · 综合实现方案（V1，P1–P4 已合入）
 
 本文是 Logging Core 与 Chat 报错处理的唯一实现基线。  
 大方向、分层、**两个边界**、阶段、禁止项只看第 1～6 节。字段、事件名、文件清单、测试在第 7 节以后。  
-两人怎么拆任务见 [分工.md](./分工.md)。
+当时的任务拆分已归档为历史记录：[分工.md](../dev/records/logging/分工.md)。
 
 Chat 业务说明仍以 `docs/chat/` 为准。本文不改回答流程、认领、持久化和错误码语义。
 
-P1–P4 已合入 `dev`（PR #4、#10）。不要平行新建 Core，不要重写已合入的 `chat.py` / 错误气泡。走查见 [../chat/BROWSER-WALKTHROUGH.md](../chat/BROWSER-WALKTHROUGH.md)。分工见 [分工.md](./分工.md)。
+P1–P4 已合入 `dev`（PR #4、#10）。不要平行新建 Core，不要重写已合入的 `services/chat/service.py` 流边界 / 错误气泡。当时的浏览器走查记录见 [BROWSER-WALKTHROUGH.md](../dev/records/chat/BROWSER-WALKTHROUGH.md)（历史记录：旧 Chat 页面已不再挂路由，`/agents/ask` 现重定向到 `/`，其步骤不能再直接照做）。Agent 链路的日志现状见 5.4。
 
 ---
 
@@ -93,7 +93,7 @@ async def create_xxx():
 普通 HTTP：异常 → FastAPI handler 还能接住。  
 Chat：`GET /stream` 已发出 HTTP 200，`StreamingResponse` 已建立，后台 `generate()` 再失败，**不能再改成 HTTP 500**。
 
-现有 `generate` 里 CancelledError → `stopped`、BusinessError → `failed`+`error`、未知 Exception → 一份 traceback + `failed`、`finally` 发 `done`，是必要的业务生命周期边界，不是过度侵入。P3 只把终态日志收成结构化事件，**不删这套 except，不新套一层**。
+现有 `services/chat/service.py` 的 `generate` 里 CancelledError → `stopped`、BusinessError → `failed`+`error`、未知 Exception → 一份 traceback + `failed`、`finally` 发 `done`，是必要的业务生命周期边界，不是过度侵入。P3 只把终态日志收成结构化事件，**不删这套 except，不新套一层**。
 
 **（3）有业务意义的决策**才在业务函数里 catch：降级、补偿、释放资源、改状态、fallback、转换第三方错误、保证最终事件。
 
@@ -115,7 +115,7 @@ except DatabaseError:
 | --- | --- |
 | `lib/observability` + `core/logging.py` + `request_context.py` | P1 |
 | knowledge / model_provider / web_search 出口有 completed/failed 一行 | P2 |
-| `chat.py` 的 `generate` 仍是上述 except，且有 `chat.stream.*` | P3 |
+| `services/chat/service.py` 的 `generate` 仍是上述 except，且有 `chat.stream.completed/stopped/failed` | P3 |
 | 错误 UI 能复制 `request_id` | P4 |
 
 ---
@@ -161,7 +161,7 @@ except DatabaseError:
 ┌──────────────────┴──────────────────┐
 │      Business Instrumentation       │
 │  外部调用 completed/failed          │
-│  Chat stream started/…/failed       │
+│  Chat stream completed/…/failed     │
 │           只有诊断价值才补            │
 └─────────────────────────────────────┘
 ```
@@ -175,7 +175,7 @@ apps/web/clients/backend/       现有 BFF 边界增强，不新建路由
 apps/backend/app/core/          logging、request_context
 apps/backend/app/main.py        只注册基础设施
 docs/logging/README.md          本文（落地方案）
-docs/logging/分工.md            两人任务拆分
+docs/dev/records/logging/分工.md 两人任务拆分（历史记录）
 ```
 
 ---
@@ -224,7 +224,28 @@ Knowledge 原有 catch-all 若把未知异常转成 UNKNOWN 500：以该最终�
 Stop / Resume 是新的 `request_id`，仍带同一 `message_id`。  
 重连只重放事件，不自动再 POST 一条消息。
 
-### 5.4 排障（人）
+### 5.4 Agent 运行（现状）
+
+`/agents` 由 `features/agent-chat` 渲染，后端走 `api/agent.py` → `services/agent/`。Agent 链路的 HTTP 请求同样经过 BFF 与 FastAPI Core（`request_id`、HTTP 一行、未知异常一次 traceback），但**没有**接入 `log_event` 结构化事件，也没有 `agent.stream.*` 一类终态事件。
+
+现有日志是 `app.agent` logger 上的普通格式化文本（JSON 行里的 `event` 即整条文本，`run_id` 等不在 allowlist 结构化字段中）：
+
+```text
+agent.run.start run_id=… model=… resumed=… tools=…
+agent.run.resume run_id=… from_turn=…
+agent.run.end run_id=… status=… turns=… duration_ms=…
+agent.run.end run_id=… status=stopped(cancelled) turns=…
+agent.run.error run_id=…               ← logger.exception，带 traceback
+agent.run.delivery_window run_id=…     ← logger.exception
+agent.empty_response run_id=… turn=… stop_reason=…   (WARNING)
+agent.compaction run_id=… before=… after=…
+agent.compaction.summarize failed      ← logger.exception
+agent.on_event 回调失败（已忽略）       ← logger.exception
+```
+
+另有技能库装载/校验的 INFO/WARNING（`services/agent/skills.py`）、模型上游非 2xx 与参数被拒重试的 WARNING（`services/agent/provider.py`），以及 `api/agent.py` 删除已消费附件文本失败时的一次 `logger.exception`。排查 Agent 问题时按 `run_id` 搜索 Backend 日志。
+
+### 5.5 排障（人）
 
 ```text
 用户或 Network 里的 X-Request-ID
@@ -239,14 +260,14 @@ Stop / Resume 是新的 `request_id`，仍带同一 `message_id`。
 
 ## 6. 阶段与验收
 
-| 阶段 | 状态 | 做什么 | 完成标准 |
-| --- | --- | --- | --- |
-| **P1 Logging Core** | 已推 `feat/logging-v1`，未合 `dev` | BFF/FastAPI 贯通 `request_id`；HTTP 一行；未知异常一次；allowlist | 无业务日志代码的请求仍有 ID、status、耗时；两侧 `request_id` 一致；非法头被替换；连不上 Backend 为 `failed` |
-| **P2 外部能力** | 未开始 | Knowledge / LLM / Web Search 现有边界补 completed/failed | 不改现有 retry/fallback；能看到 provider 与耗时 |
-| **P3 Chat 流** | 未开始 | `chat.stream` started/completed/stopped/failed | HTTP duration ≠ 生成 duration；终态仍是 done/stopped/failed |
-| **P4 可诊断** | 未开始 | 错误 UI 可复制 `request_id` | 不改 `{code,message}` 主字段，只加展示 |
+P1–P4 均已合入，下表只保留各阶段的范围与完成标准：
 
-**P1 未合入 `dev` 前不开 P2/P3。** 浏览器走查可在 `feat/logging-v1` 上对照；Chat 仪器化前应先确认主路径没回归。
+| 阶段 | 做什么 | 完成标准 |
+| --- | --- | --- |
+| **P1 Logging Core** | BFF/FastAPI 贯通 `request_id`；HTTP 一行；未知异常一次；allowlist | 无业务日志代码的请求仍有 ID、status、耗时；两侧 `request_id` 一致；非法头被替换；连不上 Backend 为 `failed` |
+| **P2 外部能力** | Knowledge / LLM / Web Search 现有边界补 completed/failed | 不改现有 retry/fallback；能看到 provider 与耗时 |
+| **P3 Chat 流** | `chat.stream` completed/stopped/failed | HTTP duration ≠ 生成 duration；终态仍是 done/stopped/failed |
+| **P4 可诊断** | 错误 UI 可复制 `request_id` | 不改 `{code,message}` 主字段，只加展示 |
 
 ### 明确不做（V1）
 
@@ -287,7 +308,7 @@ V1 不上 `trace_id`、`error_id`。需要「一轮多请求」时先查 `messag
 
 ## 9. 实现顺序与文件（细）
 
-### P1 文件（已在 `origin/feat/logging-v1` · `405d1f0`）
+### P1 文件
 
 新增：
 
@@ -305,9 +326,9 @@ V1 不上 `trace_id`、`error_id`。需要「一轮多请求」时先查 `messag
 - `apps/backend/app/main.py`（`configure_logging`、`http_logging_middleware`、结构化未知异常）
 - `apps/backend/app/api/knowledge.py`（原 catch-all 增加一次 `log_exception`，不改返回语义）
 
-认领专用路由 `anonymous-claim` **未改**；合入时核对接头，缺则补。
+认领专用路由 `apps/web/app/api/chat/anonymous-claim/route.ts` 同样解析、转发并回写 `X-Request-ID`。
 
-### P2 文件（Core 合入后再开）
+### P2 文件
 
 仅在现有出口旁路一行：`integrations/knowledge`、`integrations/llm/provider.py`、`integrations/web_search/provider.py`。
 Knowledge 错误体里的 `requestId` 改为读 ContextVar，不再自己生成。
@@ -327,7 +348,7 @@ Knowledge 错误体里的 `requestId` 改为读 ContextVar，不再自己生成�
 
 ## 10. 结构化日志（细）
 
-单行 JSON，stdout/stderr。本地看终端；不写 `logs/`。生产轮转只放 `infra/`，本机 V1 不 blocker。
+单行 JSON，stdout/stderr。本地看终端；不写 `logs/`。日志轮转由部署环境负责，仓库内不实现。
 
 **P1 公共字段：** `timestamp` `level` `service` `environment` `event` `request_id`  
 **HTTP 再加：** `method` `route` `status_code` `duration_ms`  
@@ -342,7 +363,7 @@ bff.backend.completed / bff.backend.failed
 knowledge.request.completed / knowledge.request.failed
 llm.request.completed / llm.request.failed
 web_search.completed / web_search.provider_failed
-chat.stream.started / completed / stopped / failed
+chat.stream.completed / stopped / failed
 ```
 
 示例（P2 以后才需要这么全）：
@@ -392,7 +413,7 @@ chat.stream.started / completed / stopped / failed
 
 **P4：** 错误气泡展示并可复制 `request_id`，不改 `{code,message}`。Web：`tests/chat/error-bubble.test.ts`。已合入实现；该测试锁定接线。
 
-**浏览器：** 见 `docs/chat/BROWSER-WALKTHROUGH.md`。登录 / 迁移 / 账号隔离需真人两账号。未做走查不得宣称 Chat 仪器化验收完成。
+**浏览器：** 当时的走查记录见 [BROWSER-WALKTHROUGH.md](../dev/records/chat/BROWSER-WALKTHROUGH.md)，仅作历史参考：旧 Chat 页面已不再挂路由（`/agents/ask` 重定向到 `/`），该流程不再是现行验收步骤。
 
 ---
 

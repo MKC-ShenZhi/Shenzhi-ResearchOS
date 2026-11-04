@@ -1,12 +1,12 @@
 # Deep Research 页面功能与实现说明
 
-> 对应路由:`/agents/deep-research`
-> 设计规格:`docs/superpowers/specs/2026-08-07-deep-research-redesign-design.md`
-> 实现计划:`docs/superpowers/plans/2026-08-07-deep-research-redesign.md`
+> 对应路由:`/agents/deep-research`(当前未上线,见 §2)
+>
+> 本文描述的是**纯前端原型页**,数据全部为 mock。它与后端真实可用的 `deep-research` Agent Skill(`apps/backend/skills/deep-research/`,在 `/agents` 中选择或输入 `/research <主题>` 触发)是两套独立实现,二者没有调用关系;Skill 的说明见 [Agent 文档](../agent/README.md)。
 
 ## 1. 页面定位
 
-AI 助手栏目下的三档产品阶梯,Deep Research 居中:
+原型设计中的三档产品阶梯,Deep Research 居中(三个页面当前均未上线,也都是前端原型):
 
 | 页面 | 路由 | 定位 |
 |---|---|---|
@@ -18,14 +18,16 @@ AI 助手栏目下的三档产品阶梯,Deep Research 居中:
 
 ## 2. 入口与 URL 参数
 
+当前侧边栏没有该页入口。`apps/web/lib/feature-availability.ts` 把 `/agents` 之下的子路由(含 `/agents/deep-research`、`/agents/deep-search`、`/agents/auto-research`)标记为未上线,`apps/web/proxy.ts` 会将访问重定向到 `/?notice=coming-soon` 并提示「功能暂未上线」。下表参数仅在该路由放开后生效。
+
 | 入口 | 行为 |
 |---|---|
-| 侧边栏「AI 助手 → Deep Research」 | 进入入口态(home) |
-| `?q=xxx` | 预填问题,进入 session 从头播放;空串停留 home 并聚焦输入框 |
+| 无参数 | 进入入口态(home) |
+| `?q=xxx` | 预填问题,进入 session 从头播放;空串停留 home(输入框 autoFocus) |
 | `?autostart=1` | 进入 session 从头播放(演示用,注意判定是严格 `=== "1"`) |
 | `?mode=instant` | 直接进入完成态(历史记录 / headless 截图用;与 autostart 并存时优先) |
 
-参数在客户端 `useEffect` 里用 `URLSearchParams` 解析(沿用 auto-research 的 research-board 惯例,规避 `useSearchParams` 的 Suspense 约束,同时保持路由静态预渲染 `○`)。
+参数在客户端通过 `useSyncExternalStore` 读取 `window.location.search`,再用 `URLSearchParams` 解析(服务端快照为空串;规避 `useSearchParams` 的 Suspense 约束,同时保持路由静态预渲染 `○`)。优先级为 `mode=instant` > `autostart=1` > `q`。
 
 ## 3. 页面结构:单路由两视图
 
@@ -60,11 +62,11 @@ AI 助手栏目下的三档产品阶梯,Deep Research 居中:
 
 ## 4. 组件拆解
 
-全部位于 `components/features/deep-research/`:
+路由 `app/agents/deep-research/page.tsx` 渲染 `features/deep-research/DeepResearchPage.tsx`(包一层 `AppShell`),其余组件全部位于 `apps/web/features/deep-research/components/`:
 
 | 文件 | 职责 | 状态 |
 |---|---|---|
-| `deep-research-page.tsx` | 视图机 + URL 参数解析 + sessionKey 管理 | client |
+| `deep-research-page.tsx` | 视图机(`DeepResearchPageClient`)+ URL 参数解析 + sessionKey 管理 | client |
 | `deep-research-home.tsx` | 入口态全部(Hero/输入卡/建议/历史),提交上抛 | client(输入与范围 chips 本地 state) |
 | `research-workbench.tsx` | session 骨架:顶条 + 双栏 + 折叠;调用运行 hook 并分发状态 | client |
 | `use-deep-research-run.ts` | 运行播放器 hook(见 §6) | client hook |
@@ -73,7 +75,7 @@ AI 助手栏目下的三档产品阶梯,Deep Research 居中:
 | `source-wall.tsx` | 来源 chips 墙,hover title 显示全名;count 有 Math.min 夹取 | 纯展示 |
 | `report-viewer.tsx` | 报告头 + 章节三态 + 对比表 + 趋势列表 + 参考文献 | 纯展示 |
 
-共享:`withCitations`(`lib/citations.tsx`)把正文 `[n]` 渲染为主色上标,answer-card(深度搜索)与 report-viewer 共用。追问输入框直接复用 `components/features/agent/chat-input.tsx`。
+共享:`withCitations`(`apps/web/components/common/citations.tsx`)把正文 `[n]` 渲染为主色上标,answer-card(深度搜索)与 report-viewer 共用。追问输入框直接复用 `apps/web/features/chat/components/chat-input.tsx`(仅展示,不发请求)。
 
 ## 5. 数据模型
 
@@ -154,11 +156,12 @@ instant 模式只是初始值差异:`useState(() => instant ? TOTAL : 0)`,不启
 ## 7. 验证方式
 
 - `pnpm build`:编译 + 类型检查;`/agents/deep-research` 应保持静态 `○`。
-- 截图(shot_pages.py / shot_themes.py,Windows Edge headless):
+- 截图(`tests/visual/shot_pages.py` / `tests/visual/shot_themes.py`,Edge headless):
   - `f_dr_home.png` 入口态 / `f_dr_running.png` 进行中 / `f_dr_report.png` 完成态
   - `theme-dr-home-night.png` / `theme-dr-report-night.png` 夜间
   - `f_deep_search.png` 旧页回归
-- **坑**:参数驱动页(effect 解析 URL)不能用 `--virtual-time-budget` 截图——虚拟时间快进而 effect 未 flush,拍到的永远是 SSR 首帧。这两个页面走 `scripts/shot-cdp.mjs`(Windows node + CDP 管道,轮询目标文本出现后截图)。
+- **坑**:参数驱动页(effect 解析 URL)不能用 `--virtual-time-budget` 截图——虚拟时间快进而 effect 未 flush,拍到的永远是 SSR 首帧。这两个页面走仓库根目录的 `tests/visual/shot-cdp.mjs`(node + CDP 管道,轮询目标文本出现后截图;WSL 下需用 Windows 侧 node 执行)。
+- 路由处于未上线状态时会被 `proxy.ts` 重定向,截图只在该路由放开后有效。
 
 ## 8. 原型边界与后端接入点
 

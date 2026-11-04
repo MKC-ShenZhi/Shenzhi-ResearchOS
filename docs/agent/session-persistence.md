@@ -8,7 +8,7 @@ Agent 正式会话以 FastAPI 中的 Agent Session Repository 为 source of trut
 
 ## 数据模型
 
-Migration `007_agent_sessions` 创建两张表。
+Migration `007_agent_sessions` 创建两张表；`agent_turns` 的幂等键、Worker ID 与租约字段由 `016_request_idempotency` 增加。Agent 附件解析文本另存于 `011_agent_uploads` 创建的表，见下文 API。
 
 ### `agent_sessions`
 
@@ -16,7 +16,7 @@ Migration `007_agent_sessions` 创建两张表。
 - `owner`：复用 `request_owner`，值为 `user:<id>` 或 `anon:<uuid>`。
 - `title`：创建时由后端取首条 prompt 的前 50 个字符，后续可重命名。
 - `settings` JSONB：最近一轮的 `model` / `mode` / `attachments` / `skills` / `workspace_id`。
-- `branched_from`：为后续分叉保留的逻辑关联，本次不自动复制会话。
+- `branched_from`：为后续分叉保留的逻辑关联，不会自动复制会话。
 - `import_key`：旧 localStorage 迁移的幂等键，在同一 owner 内唯一。
 - `created_at` / `updated_at`。
 
@@ -45,7 +45,7 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 4. Backend 校验 owner，从已存最新 transcript 恢复 runtime history，预留 running Turn，再开始 SSE。
 5. 运行期间 SSE 实时传输 delta / tool / steer / report 等事件。正常结束、`ask_user`、失败、超时和手动停止都在终态时一次性写入 Turn。
 6. SSE 连接在 RunResult 产生前断开时，桥接层会把已可见的正文和 timeline 作为 `connection_closed` 停止轮次保存。PostgreSQL 中每个新 Turn 在创建时记录进程级 Worker ID 和五分钟租约，运行时每三十秒续租；启动恢复、会话详情读取、同键重放和新轮创建只将租约已过期的 `running` Turn 标记为 `failed` / `backend_restart`。租约续期、终态写入和恢复都以状态、Worker ID 与数据库时钟为条件，因此失去租约的 Worker 不能覆盖恢复后的终态。续租遇到瞬时数据库错误时在租约到期前重试；进程正常关闭时立即把本 Worker 的 running Turn 标记为 `backend_restart`，会话无需等待租约到期即可重新发送；进程异常退出时最长等待一个租约周期。
-7. `LiveRun` 与 SSE 事件缓冲仍是进程内状态。相同操作落到没有该 `LiveRun` 的进程时，运行中的重复 POST 返回 409，GET 续接和远端 stop 返回 404；前端不会无限自动重试，详情读取会按租约回收过期任务，远端任务仍在运行时提示稍后重新打开，完成后可从持久化 Turn 读取结果。跨 Worker 实时事件续传与远程取消尚未实现。迁移前已有的 running Turn 会获得十分钟过渡租约，避免升级时立即误恢复；过渡期后仍未完成的任务会在启动或后续访问时被恢复。Memory Repository 仍只提供单进程行为。
+7. `LiveRun` 与 SSE 事件缓冲仍是进程内状态。相同操作落到没有该 `LiveRun` 的进程时，运行中的重复 POST 返回 409，GET 续接和远端 stop 返回 404；前端不会无限自动重试，详情读取会按租约回收过期任务，远端任务仍在运行时提示稍后重新打开，完成后可从持久化 Turn 读取结果。跨 Worker 实时事件续传与远程取消尚未实现。另外 `deep` / `idea` / `doubt` 模式的运行时限为 900 秒（`services/agent/policies.py`），超过 Vercel 函数 300 秒的执行上限，部署影响见 [deployment.md](../engineering/deployment.md)。迁移前已有的 running Turn 会获得十分钟过渡租约，避免升级时立即误恢复；过渡期后仍未完成的任务会在启动或后续访问时被恢复。Memory Repository 仍只提供单进程行为。
 
 ## API
 
@@ -56,10 +56,12 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 - `PATCH /api/v1/agent/sessions/{id}`：重命名。
 - `DELETE /api/v1/agent/sessions/{id}`：删除 DB Session 及其 Turns。
 - `POST /api/v1/agent/sessions/{id}/run`：基于后端历史启动一轮 SSE Run；前端必须为一次用户提交生成并在该操作重试时复用 `Idempotency-Key`。
+- `GET /api/v1/agent/sessions/{id}/run/stream?after=<n>`：续接本进程内该 Session 运行中的事件流，从事件索引 `after`（默认 0）起重放；没有本进程 `LiveRun` 时返回 404。页面刷新后若最新 Turn 仍为 `running`，`ShenzhiAiPage` 用它重新订阅。
 - `POST /api/v1/agent/run/{run_id}/steer`：向当前 owner 的 active run 插话。
 - `POST /api/v1/agent/run/{run_id}/stop`：请求当前 owner 的 active run 正常停止。
 - `POST /api/v1/agent/sessions/import`：按 `(owner, import_key)` 幂等导入旧本地会话。
-- `POST /api/v1/agent/run`：旧无状态兼容接口，不是首页和正式 Agent 页的产品路径。
+- `POST /api/v1/agent/uploads` / `GET /api/v1/agent/uploads/{file_id}`：解析并暂存 owner 隔离的附件文本 / 查询状态（不返回正文）。配置 `CHAT_DATABASE_URL` 时存 PostgreSQL，否则存进程内存；24 小时过期，运行消费后删除。附件 ID 只在运行入参中引用，不写入 Turn。
+- `POST /api/v1/agent/run`：无状态运行接口，不是首页和正式 Agent 页的产品路径；论文详情页 Agent（`use-paper-agent.ts`）仍使用它。
 
 除 config/export 等明确的 BFF 端点外，Session 端点均使用 `request_owner`。查询条件同时带 `id` 和 `owner`；他人会话与不存在会话统一返回 404，不泄露存在性。
 
@@ -88,6 +90,6 @@ Sidebar 首次连接到 durable Repository 时检查 `shenzhi-agent-sessions`：
 ## 删除与后续项
 
 - 当前删除只删除 Session / Turn 数据库行。不会根据模型或请求提供的路径递归删除 workspace；需要后续增加以 owner + session id 为边界的产物保留/清理任务。
-- Repository 已预留匿名 owner 转移能力，但正式 Agent UI 本次未接入“登录后认领”确认流程。匿名会话已按浏览器 UUID 严格隔离；认领 UI/API 应后续复用现有 Chat 的双身份授权模式，不能由客户端任意指定 source owner。
-- Agent 匿名会话目前没有接入旧 Chat 的 TTL 清理任务；上线前应为 `agent_sessions` 增加同等的保留期策略，避免匿名数据无限增长。
+- 匿名会话按浏览器 UUID 严格隔离。登录后的认领已接入：全局 `AppShell` 中的 `AnonymousClaimCoordinator` 经同源 `/api/chat/anonymous-claim` 预览并在用户确认后认领，FastAPI `POST /api/v1/chat/anonymous-claim` 调用 `services/identity/anonymous_claim.py`，在同一次认领中迁移 Chat 与 Agent Session（含工作区复制）及 Agent 附件；有 `running` Turn 的 Session 暂不迁移并计入 `skipped_streaming_count`。source owner 只来自 BFF 注入的双身份请求头，客户端不能指定，细节见 [Chat 基础设施](../chat/README.md#匿名会话归属切换)。
+- Agent 匿名会话目前没有接入 TTL 清理：`app.services.chat.maintenance` 只删除过期匿名 Chat Session 和过期 Agent 附件，不处理 `agent_sessions`；上线前应增加同等的保留期策略，避免匿名数据无限增长。
 - PostgreSQL 会在后端启动、会话详情读取、同键重放和新轮创建时恢复租约过期的 running Turn；Memory fallback 不存在跨进程租约或重启恢复。

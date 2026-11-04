@@ -314,4 +314,4 @@ AccountSection（UI）
 
 ---
 
-*机器可读摘要见 [HANDOFF-phase3-codex.json](./HANDOFF-phase3-codex.json)*
+*机器可读摘要 `HANDOFF-phase3-codex.json` 未入库。*

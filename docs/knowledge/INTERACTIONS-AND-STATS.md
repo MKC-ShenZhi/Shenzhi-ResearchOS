@@ -1,6 +1,6 @@
 # 收藏人数、论文点赞与主题关注
 
-本文记录 `feat/likes-bookmarks-follows` 落地的账号级互动数据、平台级统计快照与知识底座
+本文说明账号级互动数据、平台级统计快照与知识底座
 只读接口。范围包含两期能力：论文收藏人数与主题关注（一期），以及论文点赞持久化、每日
 聚合快照与知识底座只读服务（二期）。
 
@@ -99,8 +99,13 @@ uv run --env-file .env python -m app.services.stats               # 上海时区
 - 同日重跑会删除当日旧行并整体替换；失败时事务回滚，上一次完整发布继续对外可见，
   `failure_reason` 只记录最近一次尝试的错误类型。
 - CLI 只生成运行时上海时区的当天快照。源表只保存当前有效关系，不能用当前人数回填过去日期并称作历史统计。
-- 调度不在仓库内实现。部署侧用 cron / systemd timer / 平台调度器每日调用一次 CLI；
-  仓库不预设已有 Cron 配置。
+- 快照调度不在仓库内实现：API 进程内的首页调度器（`app/services/discovery_pool/scheduler.py`，
+  `HOME_FEED_SCHEDULER_ENABLED`）只执行候选池 `sync`、每日候选 `publish` 与过期数据 `purge`，
+  不生成统计快照。部署侧需用 cron / systemd timer / 平台调度器每日调用一次 CLI；仓库不预设已有 Cron 配置。
+- 快照的站内消费方：首页 `trending` 数据源（`app/services/home_feed/trending.py`）读取列表日期之前
+  （不含当天）最新一次完整发布，按点赞数 + 收藏人数排序候选池论文；个人推荐排序中的“平台热度”
+  特征也来自已发布快照。从未运行 `python -m app.services.stats` 时 `trending` 始终为空，其配额由其他
+  数据源补位；长期不运行则一直沿用最后一次发布的旧数据。
 - `SNAPSHOT_VERSION` 常量标识计算口径版本，随快照写入并随接口返回。
 
 ### 只读服务接口
@@ -144,9 +149,9 @@ GET /api/v1/stats/topics?date=&limit=&cursor=&topic_id=…     主题关注人�
 
 ## 七、账号注销
 
-`AccountDeletionService` 在同一事务内额外删除 `paper_likes` 与 `topic_follows`；
-下一次查询与下一次快照即反映人数变化。推荐阶段（`015_recommendation_foundation`）集成后，
-同一事务还删除该用户的 `behavior_events`、`user_interest_profiles` 与 `recommendation_snapshots`。
+`AccountDeletionService` 在同一事务内额外删除 `paper_likes`、`topic_follows` 与
+`conference_follows`，并删除该用户的 `behavior_events`、`user_interest_profiles` 与
+`recommendation_snapshots`；下一次查询与下一次快照即反映人数变化。
 
 点赞/取消点赞、关注/取消关注、收藏状态变化会在原业务事务内追加推荐行为事件（由服务端写入，
 浏览器不能提交这些类型）。收藏事件按“用户 × 论文”判定：加入第二个文件夹、文件夹间移动不产生
@@ -155,7 +160,7 @@ GET /api/v1/stats/topics?date=&limit=&cursor=&topic_id=…     主题关注人�
 
 ## 八、已知边界
 
-- **论文 ID 未做归一化**（本期决定）：人数严格按 `paper_id` 字符串统计。现有数据里同时
+- **论文 ID 未做归一化**（当前决定）：人数严格按 `paper_id` 字符串统计。现有数据里同时
   存在 `paper:2503.22087v3` 与 `paper:2501.18116`（无版本）等格式，同一 arXiv 论文若以
   不同版本 ID 出现，会被当成两个统计对象。需要知识底座确认 ID 长期稳定、跨来源唯一后，
   再决定是否统一版本号并迁移历史收藏数据。
@@ -164,10 +169,11 @@ GET /api/v1/stats/topics?date=&limit=&cursor=&topic_id=…     主题关注人�
 - `/knowledge/papers` 的“点赞与收藏”面板提供账号的点赞论文、跨文件夹收藏论文和关注主题，
   支持取消关系；论文列表分页、搜索当前页。上游元数据不可用时遵循既有 Knowledge 错误契约。
 - 账号注销保留已经发布的匿名历史汇总；实时人数和后续重建/新快照反映关系删除。
-- 本阶段不配置线上调度，不集成推荐与请求幂等 Feature；迁移链为
-  `011_agent_uploads → 012_topic_follows → 013_paper_likes → 014_platform_snapshots`。
-  推荐集成后链尾追加 `015_recommendation_foundation`，见
-  [`search-recommendation-delivery.md`](../engineering/search-recommendation-delivery.md)。
+- 统计快照没有仓库内的线上调度（见上文“生成与发布”）。本文相关迁移为
+  `011_agent_uploads → 012_topic_follows → 013_paper_likes → 014_platform_snapshots`；
+  其后迁移链继续为 `015_recommendation_foundation → 016_request_idempotency →
+  017_conference_follows → 018_discovery_pool → 019_home_daily_editions → 020_snapshot_complete`。
+  推荐实现见 [搜索推荐实现](../engineering/search-recommendation-implementation.md)。
 
 ## 九、验收对照
 

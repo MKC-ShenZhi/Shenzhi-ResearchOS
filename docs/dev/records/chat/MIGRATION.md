@@ -80,4 +80,4 @@ Web 新增 `react-markdown`、`remark-gfm`、`remark-math`、`rehype-katex`、`k
 
 Auth 核心目录、数据库迁移、Auth 路由和配置与 dev 的 diff 为空。仅公共布局的 import 路径随 `components/common` 移动发生变化。
 
-测试与验收结果见 [VALIDATION.md](VALIDATION.md)。未来边界见 [维护指南](README.md#临时-session-与-auth)。
+测试与验收结果见 [VALIDATION.md](VALIDATION.md)。未来边界见 [维护指南](../../../chat/README.md#临时-session-与-auth)。

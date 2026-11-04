@@ -1,16 +1,16 @@
 # ShenZhi FastAPI
 
-Chat、论文检索、模型流、联网搜索、附件解析及 Knowledge Capability。浏览器只访问 Next.js 的 `/api/v1` BFF。
+深知 AI（Agent）对话、Knowledge Capability、个人数据（收藏、点赞、阅读记录、私有论文）、首页论文 Feed、推荐、会议截稿、模型流与附件解析。浏览器只访问 Next.js 的 `/api/v1` BFF。
 
 ```bash
 cd apps/backend
 uv sync
 cp .env.example .env
 
-# Windows 本地持久化开发：先启动项目专用 PostgreSQL 5433 实例。
-# PowerShell/CMD:
-#   ..\..\scripts\start-local-postgres.bat
-# 若已有可用的 PostgreSQL，请确保 CHAT_DATABASE_URL 的 host/port 与实例一致。
+# 持久化开发需要 PostgreSQL：配置 CHAT_DATABASE_URL 后执行迁移。
+#   uv run --env-file .env alembic upgrade head
+# Windows 可用 ..\..\scripts\start-local-postgres.bat 启动项目专用实例（端口 5433，
+# 可用 PG_BIN 指定安装目录）；CHAT_DATABASE_URL 的 host/port 需与实际实例一致。
 
 # Configure provider/search keys before starting.
 # Missing keys produce explicit errors, never mock answers.
@@ -46,31 +46,38 @@ Knowledge Base 是外部 Research Capability。FastAPI 后端统一通过
 FastAPI API → app/services/knowledge/service.py → app/integrations/knowledge → 上游知识底座科研组 API
 ```
 
-Chat 调用链：
+Agent 对话调用链（深知 AI、论文详情问答）：
 
 ```text
-api/chat.py → services/chat/service.py → services/chat/{repository,attachments,grounding,...}
-→ integrations/{llm,web_search} → 外部 Provider
+api/agent.py → services/agent/{runtime,service,...} + services/agent_sessions
+→ services/agent/{knowledge_tools,read_paper,...} 等工具 → integrations / 外部 Provider
 ```
 
-当前只承诺三条 ShenZhi-owned Capability API：
+`api/chat.py` 与 `services/chat/` 仍提供 `/chat/config`（匿名身份初始化）、匿名数据认领及会话存储等被 Agent 复用的基础设施，见 [docs/chat/README.md](../../docs/chat/README.md)。
 
-```text
-POST /api/v1/knowledge/search
-GET  /api/v1/knowledge/paper?paperId=...
-GET  /api/v1/knowledge/graph?paperId=...&depth=1
-```
+`app/api/knowledge.py` 提供的 ShenZhi-owned Knowledge API（前缀 `/api/v1/knowledge`）：
+
+| 能力 | 接口 |
+| --- | --- |
+| 论文检索 / 详情 / 图谱 | `POST /search`、`GET /paper`、`GET /graph` |
+| 会议导览 | `GET /conferences`、`GET /papers` |
+| 知识库总览 | `GET /overview`、`GET /personal-overview`、`POST /overview/search` |
+| 主题 | `GET /topics`、`GET /topics/{id}`、`GET /creators/{id}`、`GET /subjects/search` |
+| 学者 | `GET /scholars/search`、`GET /scholars/{id}` |
+| 基金 | `GET /funding/search`、`GET /fundings/search` |
+| 批量论文 | `POST /api/v1/papers/batch` |
+
+Agent 通过 `services/agent/knowledge_tools.py` 以工具形式调用同一 Knowledge Service。
 
 Integration 内部职责保持分离：`client.py` 负责上游 HTTP transport，`schemas.py`
 描述上游实际字段，`adapter.py` 映射到 ShenZhi Domain Contract，`exceptions.py`
-统一上游调用异常。当前上游资源仅限 retrieval search、paper detail、paper graph。
+统一上游调用异常。上游资源包括 retrieval search、scholars、funding、kg paper / graph、
+`/api/papers`（会议浏览与首页候选池同步）及 knowledge summary 等。
 
 响应使用 `data` envelope 和独立 Knowledge Contract；上游 `paper_id` 是不透明
-字符串，且必须来自 retrieval search，不能使用会议列表接口的 `paper_id`。本阶段
-不接 Chat Tool、`/api/papers`、multistep 或知识底座认证/收藏接口，也不在 ShenZhi
-侧修复上游数据和检索能力。
+字符串。不接知识底座认证/收藏接口，也不在 ShenZhi 侧修复上游数据和检索能力。
 
-Contract v0 的核心字段为：Search `results[].id/title/abstract/authors/year/venue/keywords/subjects/score/rank`；
+检索、详情、图谱 Contract v0 的核心字段为：Search `results[].id/title/abstract/authors/year/venue/keywords/subjects/score/rank`；
 Detail `id/title/abstract/authors/year/venue/doi/pdfUrl/keywords/subjects/citationCount/referenceCount`；
 Graph `rootId/nodes/edges`，边使用 `sourceId/targetId/relation`。空字符串归一化为 `null`，
 未知引用数保持 `null`，节点和关系类型为开放字符串。错误响应包含
@@ -85,7 +92,7 @@ CORS 响应头导致浏览器拒绝加载。端点只接受可信 `paperId`，�
 配置项为 `PAPER_RESOURCE_TIMEOUT`（秒）与
 `PAPER_MAX_SIZE_MB`（可获取资源大小上限）。
 
-配置 `CHAT_DATABASE_URL` 后，Agent 会话及待发送附件的解析文本可跨后端实例读取。Agent 附件源文件不入库；临时文本在对话运行结束并写入记录后删除，未发送的记录 24 小时后失效，并由上传请求及维护命令清理。旧 Chat 附件和未配置数据库时的会话仍依赖进程内存。
+配置 `CHAT_DATABASE_URL` 后，Agent 会话及待发送附件的解析文本可跨后端实例读取。Agent 附件源文件不入库；临时文本在对话运行结束并写入记录后删除，未发送的记录 24 小时后失效，并由上传请求及维护命令清理。旧 Chat 附件（`api/uploads.py`）和未配置数据库时的会话仍依赖进程内存。
 
 Python 环境与依赖统一使用 [uv](https://docs.astral.sh/uv/) 管理。新增依赖使用：
 
@@ -133,7 +140,7 @@ uv run --locked --env-file .env python -m app.services.discovery_pool sync [--ye
 uv run --locked --env-file .env python -m app.services.discovery_pool publish [--date 2026-11-02] [--dry-run]
 ```
 
-**调度**：设置 `HOME_FEED_SCHEDULER_ENABLED=true` 后，API 进程每 10 分钟检查一次，并用 Postgres advisory lock 保证多个 worker 或实例中只有一个执行：候选池为空或距上次同步超过 7 天时执行 `sync`（失败后 1 小时内不重试）；上海时间 00:05 之后当天还没有每日候选时执行 `publish`；每小时执行一次 `purge`，删除已过期的推荐快照、90 天前的行为事件和 120 天前的每日候选（之后的生成不再读取它们）。是否到期完全由数据库状态判断，所以进程重启或错过某次检查后，下一次检查会自动补上。默认关闭，本地开发和测试不会去请求底座。
+**调度**：设置 `HOME_FEED_SCHEDULER_ENABLED=true` 后，API 进程每 10 分钟检查一次，并用 Postgres advisory lock 保证多个 worker 或实例中只有一个执行：候选池为空或距上次同步超过 7 天时执行 `sync`（失败后 1 小时内不重试）；上海时间 00:05 之后当天还没有每日候选时执行 `publish`；每小时执行一次 `purge`，删除已过期的推荐快照、90 天前的行为事件和 120 天前的每日候选（之后的生成不再读取它们）。是否到期完全由数据库状态判断，所以进程重启或错过某次检查后，下一次检查会自动补上。默认关闭，本地开发和测试不会去请求底座。调度器随 FastAPI `lifespan` 启动，依赖长驻进程；Serverless 部署下的限制见 [部署与运行环境](../../docs/engineering/deployment.md)。
 
 **兜底快照**：输入是 `data/discovery/home-seed-300.json`，部署产物是 `apps/backend/app/data/home_discovery_snapshot.json` 和 `apps/web/public/paper-thumbnails/*.webp`，可以用 `python3 scripts/publish_home_discovery.py [--check]` 重新发布（需要种子中指向的原始图片）。2026-11-01 已用候选池数据为种子和快照补上了 `image_id`、`keywords` 和 `subjects`；种子里有 2 篇（标题为 "1 Introduction"、摘要被截断）会被规则 B 剔除。
 
@@ -146,4 +153,4 @@ uv run --locked --env-file .env alembic upgrade head
 
 `agent_uploads` 临时文本表及匿名 Chat 会话仍按原维护策略清理。
 
-维护说明：[Chat 架构、协议与配置](../../docs/chat/README.md)。
+维护说明：[Agent 对话](../../docs/agent/README.md) · [Chat 基础设施](../../docs/chat/README.md) · [部署与运行环境](../../docs/engineering/deployment.md)。

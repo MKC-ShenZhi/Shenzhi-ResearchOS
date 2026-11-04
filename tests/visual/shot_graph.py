@@ -2,8 +2,9 @@
 """知识图谱页日/夜截图"""
 import subprocess, os, sys, io, time
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-edge = r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
-tmp = os.environ['TEMP']
+from _tools import edge_path, node_path, out_dir
+edge = edge_path()
+tmp = out_dir()
 base = 'http://localhost:3100'
 shots = [
     ('/papers/rdt-1b/graph?theme=light', 'graph-public-day.png'),
