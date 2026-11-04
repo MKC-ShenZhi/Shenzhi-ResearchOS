@@ -80,7 +80,7 @@ Key 与具体型号均有效配置后才显示可用。智谱默认地址仅表�
 3. 在 Backend 环境配置对应 Key，重启并执行 Mock / 真实联调。
 4. 可选新增品牌 Logo。现有未知品牌通用图标已能安全显示。
 
-只需要修改部署声明 JSON / 环境配置；无需改 Chat、Agent、Runtime、两个 config API 或前端选择业务。`test_fourth_provider_and_duplicate_upstream_without_business_changes` 已用新声明验证两个 Adapter 的 Host、Bearer 和相同 upstream_model 路由隔离；仅第四家有 Key 时，也验证了无需旧 Key 即可成为默认模型。完整可复制 JSON 见 [接入指南](llm-api-foundation.md#声明第四家-openai-兼容-provider)。新协议才需要新 Adapter。
+只需要修改部署声明 JSON / 环境配置；无需改 Chat、Agent、Runtime、两个 config API 或前端选择业务。`test_fourth_provider_and_duplicate_upstream_without_business_changes` 已用新声明验证两个 Adapter 的 Host、Bearer 和相同 upstream_model 路由隔离；仅第四家有 Key 时，也验证了无需旧 Key 即可成为默认模型。完整可复制 JSON 见 [接入指南](../../../engineering/llm-api-foundation.md#声明第四家-openai-兼容-provider)。新协议才需要新 Adapter。
 
 ## 向后兼容与行为边界
 

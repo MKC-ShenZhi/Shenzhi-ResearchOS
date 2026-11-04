@@ -58,7 +58,7 @@ def events(text: str):
 
 @unittest.skipUnless(os.getenv('CHAT_DATABASE_URL'), 'CHAT_DATABASE_URL not set')
 class Acceptance2a(unittest.IsolatedAsyncioTestCase):
-    """Maps to docs/chat/ACCEPTANCE-2a.md case IDs."""
+    """Maps to docs/dev/records/chat/ACCEPTANCE-2a.md case IDs."""
 
     async def asyncSetUp(self):
         from app.core.database import dispose_engine

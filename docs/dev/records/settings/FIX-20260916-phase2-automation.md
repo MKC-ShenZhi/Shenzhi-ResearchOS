@@ -2,7 +2,7 @@
 
 > **日期：** 2026-09-16  
 > **分支：** `feat/personal-settings-foundation` @ `527e863`  
-> **关联：** [阶段二情况说明（飞书）](https://fcnuj1ibe921.feishu.cn/wiki/OLi0w6r9XijRbokSoGecpIaMncc) · [Profile API 说明](./README.md)
+> **关联：** [Profile API 说明](../../../settings/README.md)
 
 本文记录阶段二代码在本机自动化验收中暴露的问题、**第一轮测试结论**、根因、修复内容与复测结果，供第二轮浏览器走查前对照。
 
@@ -172,7 +172,7 @@ AI_TIMEOUT_SEC=90……（任意后缀）
 
 ## 6. 仍未由自动化覆盖的范围（第二轮浏览器）
 
-以下仍建议人工在浏览器验证（参见阶段二飞书说明中的「内置浏览器实测」项）：
+以下仍建议人工在浏览器验证：
 
 1. **个人简介编辑闭环**：登录 → 编辑 → 保存 → 刷新/重进仍可见  
 2. **列表排序**：成就/教育/机构上移下移后持久化  
@@ -218,8 +218,7 @@ pnpm typecheck
 
 1. 将 `docs/chat/ACCEPTANCE-2a.md` 中 E-02 期望版本同步为 `004_user_profiles`（与测试一致）。  
 2. 评估是否在 `repository.clear()`（PG）或测试基类中统一 `dispose_engine()`，减少 Windows 串跑 flaky。  
-3. 阶段二修复合入后，在飞书「测试落地结果」中追加 F-02 warnings 持久化条目。
 
 ---
 
-*文档随 `feat/personal-settings-foundation` 修复提交维护；产品契约仍以 [README.md](./README.md) 为准。*
+*文档随 `feat/personal-settings-foundation` 修复提交维护；产品契约仍以 [README.md](../../../settings/README.md) 为准。*

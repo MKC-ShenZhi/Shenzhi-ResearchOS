@@ -53,4 +53,4 @@ Auth 负向测试预期打印 `delivery failed`，坏 PDF 负向测试预期打�
 - 正式源码无旧 `features/agents`、`lib/api`、`services/backend` imports；Chat 外部调用集中于 Backend Client。
 - Auth 核心目录、Auth routes、数据库与配置相对 dev 没有变化；Auth 原有测试全部保留并通过。
 - 比较迁移前后 pnpm importer，既有直接依赖版本不变；仅增加 Markdown/数学渲染依赖，Backend 增加 pypdf。
-- 当前内存仓库仅支持单 worker、重启丢失。持久化/用户关联/公开分享/分布式任务留待下一阶段，见 [维护指南](README.md)。
+- 当前内存仓库仅支持单 worker、重启丢失。持久化/用户关联/公开分享/分布式任务留待下一阶段，见 [维护指南](../../../chat/README.md)。

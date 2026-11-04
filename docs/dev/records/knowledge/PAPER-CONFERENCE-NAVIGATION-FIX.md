@@ -1,6 +1,6 @@
 # 论文库会议、年份导航修复
 
-调查日期：2026-10-23。功能与 API 范围见 [Paper Library V2](PAPER-LIBRARY-V2.md)。
+调查日期：2026-10-23。功能与 API 范围见 [Paper Library V2](../../../knowledge/PAPER-LIBRARY-V2.md)。
 
 ## 现象与入口差异
 
@@ -85,7 +85,7 @@
 - URL 与高亮已更新，但论文区持续加载或显示失败：检查
   `GET /api/v1/knowledge/papers` 的状态、耗时及 Request ID。后端上游默认
   30 秒超时，正式错误契约使用 `TIMEOUT`、`RATE_LIMITED`、
-  `UPSTREAM_UNAVAILABLE` 等状态，详见 [知识底座接入说明](README.md)。
+  `UPSTREAM_UNAVAILABLE` 等状态，详见 [知识底座接入说明](../../../knowledge/README.md)。
 - RSC 导航请求持续 pending 也可能推迟路由提交，但它与本次已复现的缓存地址
   错误是不同机制，不能仅凭“点击无反应”认定两者相同。
 
