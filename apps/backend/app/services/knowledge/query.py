@@ -1,4 +1,4 @@
-"""Small deterministic cleanup for Chat's Knowledge retrieval query only."""
+"""Small deterministic cleanup for the Agent's Knowledge retrieval query."""
 
 from __future__ import annotations
 

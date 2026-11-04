@@ -408,7 +408,7 @@ class PostgresAgentSessionRepository:
 
     async def close(self) -> None:
         # Runs are process-local tasks; once this process stops they cannot finish.
-        # The shared database engine is owned and disposed by the Chat repository.
+        # The application lifespan disposes the shared database engine afterwards.
         try:
             async with session_scope() as db:
                 await self._recover_expired_turns(db, worker_id=current_worker_id())

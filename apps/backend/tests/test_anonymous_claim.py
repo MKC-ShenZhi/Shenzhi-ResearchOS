@@ -17,13 +17,6 @@ SOURCE_OWNER = 'anon:00000000-0000-4000-8000-000000000001'
 TARGET_OWNER = 'user:claimed'
 
 
-class FakeChatRepository:
-    is_durable = True
-
-    async def claim_anonymous_sessions(self, source_owner: str, target_owner: str) -> dict:
-        return {'moved_count': 0, 'skipped_streaming_count': 0, 'durable': True}
-
-
 class FakeAgentRepository:
     is_durable = True
 
@@ -83,10 +76,6 @@ class AnonymousClaimTests(unittest.IsolatedAsyncioTestCase):
             agent_workspace, 'WORKSPACE_ROOT', Path(self.temp_dir.name)
         )
         self.workspace_patch.start()
-        self.chat_patch = patch.object(
-            anonymous_claim, 'chat_repository', FakeChatRepository()
-        )
-        self.chat_patch.start()
         self.upload_patch = patch.object(
             agent_workspace, 'migrate_owner_workspaces', return_value=0
         )
@@ -94,7 +83,6 @@ class AnonymousClaimTests(unittest.IsolatedAsyncioTestCase):
 
     def tearDown(self):
         self.upload_patch.stop()
-        self.chat_patch.stop()
         self.workspace_patch.stop()
         self.temp_dir.cleanup()
         self.env.stop()

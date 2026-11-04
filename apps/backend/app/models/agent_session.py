@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import DateTime
 
-from app.models.chat import Base
+from app.models.base import Base
 
 
 class AgentSessionRow(Base):

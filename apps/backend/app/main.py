@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from app.api import account_deletion, agent, behavior, chat, collections, conferences, discovery, history, interactions, knowledge, maintenance, paper_resource, private_papers, profile, recommendations, settings, stats, uploads
+from app.api import account_deletion, agent, behavior, collections, conferences, discovery, history, identity, interactions, knowledge, maintenance, paper_resource, private_papers, profile, recommendations, settings, stats
 from app.core.logging import configure_logging, http_logging_middleware, log_exception, request_duration_ms
 from app.core.errors import BusinessError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE
 from app.core.responses import fail
@@ -10,7 +10,7 @@ from app.core.request_context import (
     REQUEST_ID_HEADER,
     get_request_id,
 )
-from app.services.chat.repository import repository
+from app.core.database import dispose_engine
 from app.services.agent_sessions.repository import agent_session_repository
 
 
@@ -19,13 +19,12 @@ async def lifespan(_app: FastAPI):
     from app.integrations.llm.resolver import load_registry
     from app.services.discovery_pool.scheduler import start_home_feed_scheduler, stop_home_feed_scheduler
     load_registry()
-    await repository.recover()
     await agent_session_repository.recover()
     home_feed_scheduler = start_home_feed_scheduler()
     yield
     await stop_home_feed_scheduler(home_feed_scheduler)
     await agent_session_repository.close()
-    await repository.close()
+    await dispose_engine()
 
 
 app = FastAPI(title='ShenZhi AI API', version='1.0.0', lifespan=lifespan)
@@ -37,20 +36,19 @@ for router in (
     recommendations.router,
     maintenance.router,
     agent.router,
-    chat.router,
     conferences.router,
     discovery.router,
     knowledge.papers_router,
     collections.router,
     interactions.router,
     history.router,
+    identity.router,
     knowledge.router,
     paper_resource.router,
     private_papers.router,
     profile.router,
     settings.router,
     stats.router,
-    uploads.router,
 ):
     app.include_router(router)
 

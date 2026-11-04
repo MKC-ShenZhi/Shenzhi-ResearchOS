@@ -7,7 +7,7 @@ from sqlalchemy import DateTime, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.chat import Base
+from app.models.base import Base
 
 
 class DiscoveryPoolPaperRow(Base):

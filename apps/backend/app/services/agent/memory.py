@@ -1,7 +1,7 @@
 """Agent 内部记忆与断点：turn 边界 Checkpoint 与可插拔存储。
 
 职责边界（与平台业务分层）：
-- 用户可见的会话历史归平台业务层（chat sessions）；Agent 内部的记忆只有两样——
+- 用户可见的会话历史归平台业务层（agent_sessions）；Agent 内部的记忆只有两样——
   上下文装配策略（context.py 的轮组预算）与这里的 Checkpoint（恢复/审计用）；
 - 跨 run 的记忆由调用方经 history 参数回传，基座不持有。
 Checkpoint 只在 turn 边界写（半途 turn 永不入库），因此任何时刻加载的快照

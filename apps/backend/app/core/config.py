@@ -26,16 +26,6 @@ class PaperResourceConfig:
     openreview_password: str
 
 
-def model_config() -> ModelConfig:
-    # Compatibility facade for older server-side integrations and tests.
-    from app.integrations.llm.resolver import load_registry
-    registry = load_registry()
-    resolved = registry.resolve_model(None, require_configured=False)
-    return ModelConfig(resolved.key, resolved.base_url, resolved.spec.id,
-                       tuple(item.id for item in registry.list_models()),
-                       resolved.provider.spec.id)
-
-
 def _positive_float(name: str, default: float) -> float:
     try:
         value = float(os.getenv(name, str(default)).strip())
@@ -93,6 +83,5 @@ def paper_resource_config() -> PaperResourceConfig:
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_FILE_CHARS = 30_000
 MAX_ATTACHMENT_CHARS = 60_000
-MAX_HISTORY_CHARS = 60_000
 MAX_FILES = 5
 UPLOAD_ACCEPT = ['.pdf', '.txt', '.md', '.markdown']

@@ -6,7 +6,7 @@ from sqlalchemy import Boolean, DateTime, Index, Integer, Text, text as sql_text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.chat import Base
+from app.models.base import Base
 
 
 class AgentUploadRow(Base):
