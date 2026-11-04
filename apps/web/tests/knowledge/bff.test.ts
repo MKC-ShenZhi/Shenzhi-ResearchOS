@@ -341,14 +341,14 @@ test("unknown formal errors normalize to UNKNOWN without losing safe metadata", 
 
 test("malformed upstream-facing error text is not exposed to the browser", async () => {
   await withFetch(async () => new Response(
-    "https://47.110.47.12 secret-token traceback",
+    "https://203.0.113.10 secret-token traceback",
     { status: 503 },
   ), async () => {
     await assert.rejects(
       new BffKnowledgeClient().paper("paper:opaque"),
       (error: unknown) => {
         assert.ok(error instanceof KnowledgeClientError);
-        assert.doesNotMatch(error.message, /47\.110\.47\.12|secret-token|traceback/);
+        assert.doesNotMatch(error.message, /203\.0\.113\.10|secret-token|traceback/);
         return true;
       },
     );

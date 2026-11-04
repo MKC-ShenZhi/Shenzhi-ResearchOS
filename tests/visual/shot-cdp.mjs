@@ -6,16 +6,14 @@
  * 还没来得及 flush 就截图了(拍到的永远是 SSR 首帧)。本脚本用 CDP 轮询
  * document.body.innerText,直到目标文本出现(或超时)再 Page.captureScreenshot。
  *
- * 运行方式(重要):必须由 **Windows 侧 node** 执行
- * (C:\Program Files\nodejs\node.exe)。
- * 传输用 --remote-debugging-pipe(fd3 写 / fd4 读,NUL 分隔):
- * 本机 loopback 上 WebSocket 连接会被莫名丢弃(实测 curl/netstat 均异常),
- * 管道不碰网络,最稳。
- * 脚本路径用 UNC:\\wsl.localhost\Ubuntu-24.04\home\hkr\projects\shenzhi\scripts\shot-cdp.mjs
+ * 运行方式:Edge 路径默认按平台取,可用 EDGE_PATH 覆盖。
+ * 传输用 --remote-debugging-pipe(fd3 写 / fd4 读,NUL 分隔),不依赖 loopback 网络。
+ * 在 WSL 中开发时,需用 Windows 侧 node 执行本脚本(WSL 与 Windows 间的
+ * loopback WebSocket 连接不稳定),脚本路径用 \\wsl.localhost\<发行版>\... 的 UNC 形式。
  *
  * 用法:
- *   node.exe shot-cdp.mjs --url http://localhost:3100/agents/deep-research?mode=instant \
- *     --out "C:\Users\xxx\AppData\Local\Temp\f_dr_report.png" \
+ *   node shot-cdp.mjs --url http://localhost:3100/agents/deep-research?mode=instant \
+ *     --out /tmp/f_dr_report.png \
  *     --width 1440 --height 2400 --wait-text 参考文献 [--settle 500] [--timeout 45000]
  */
 import { spawn } from "node:child_process";
@@ -23,7 +21,11 @@ import { writeFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
-const EDGE = String.raw`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`;
+const DEFAULT_EDGE = {
+  win32: String.raw`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
+  darwin: "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+}[process.platform] ?? "microsoft-edge";
+const EDGE = process.env.EDGE_PATH || DEFAULT_EDGE;
 
 function parseArgs(argv) {
   const args = { width: 1440, height: 1500, settle: 500, timeout: 45000 };

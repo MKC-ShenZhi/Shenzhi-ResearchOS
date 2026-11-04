@@ -2,7 +2,7 @@
 setlocal
 set PG=%LOCALAPPDATA%\shenzhi-postgresql
 set BIN=%PG%\pgsql\bin
-if not exist "%BIN%\pg_ctl.exe" if exist "D:\postgresql\bin\pg_ctl.exe" set BIN=D:\postgresql\bin
+if defined PG_BIN set BIN=%PG_BIN%
 set DATA=%PG%\data16
 set LOG=%PG%\postgresql-5433.log
 set PORT=5433
