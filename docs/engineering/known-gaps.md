@@ -14,14 +14,12 @@
 | 平台统计快照未调度 | `python -m app.services.stats` 不在进程内调度器中，首页 `trending` 数据源依赖这些快照 | 随部署方式确定定时任务 |
 | 无 CI 门禁 | 仓库没有运行 typecheck / lint / test 的 workflow | 增加基础检查 workflow |
 
-## 二、Chat 与 Agent
+## 二、Agent
 
 | 项 | 现状 | 方向 |
 |----|------|------|
-| 旧 Chat UI 无路由 | `/agents` 已由 `features/agent-chat` 承载，`features/chat/ChatPage.tsx`、`ask/AskPage.tsx`、`hooks/use-chat-session.ts` 及相关 services 不再被路由引用 | 下一阶段评估移除 Chat 链路；`ErrorBubble`、`MarkdownContent`、`model-catalog`、`AnonymousClaimCoordinator` 等仍被复用的部分先迁到 `components/common` 或 `lib` |
-| 后端 Chat 会话 API 无 UI 调用 | `api/chat.py` 的会话、消息、流式接口已无前端调用；`/chat/config` 与匿名认领仍在使用 | 与上一项一并评估 |
-| Composer 两份实现 | `features/chat/components/{composer,attachment-menu,composer-control-picker}.tsx` 与 `components/common/composer/*` 已分叉，前者只被 `chat-input.tsx` 使用 | `chat-input` 改用公共 Composer 后删除分叉 |
-| 两套上传 | `api/uploads.py` 走 Chat repository（进程内存），Agent 使用 `services/agent_uploads.py` 与 `/agent/uploads` | 统一为一个上传 Service |
+| 匿名 Agent 会话无保留期 | 维护命令 `python -m app.services.agent_uploads` 只清理过期附件暂存文本，`agent_sessions` 中的匿名会话不会过期删除 | 增加与匿名 Cookie 有效期一致的保留期清理 |
+| 沿用 chat 命名的外部状态 | 匿名 Cookie `shenzhi-chat-anon`、环境变量 `CHAT_DATABASE_URL` / `CHAT_ANONYMOUS_TTL_SECONDS` 仍带 chat 前缀；改名会让已有匿名浏览器失去身份或需要同步修改部署配置 | 需要时以“新名优先、旧名兼容”的方式迁移 |
 | 账号注销不清理 workspace | `services/user/account_deletion.py` 只删除数据库记录，Agent 会话的本地 workspace 文件不会删除 | 注销时一并清理，或随 workspace 外置统一处理 |
 
 ## 三、边界例外
@@ -30,9 +28,9 @@
 |----|------|------|
 | Web 直连知识底座图片 | `apps/web/app/api/paper-images/` 在 Web 服务端代理 `KNOWLEDGE_BASE_API_URL` 的图片 | 经 FastAPI `integrations/knowledge` 代理，或保留为显式的静态资源例外 |
 | Agent 外部调用未经 integrations | `services/agent/provider.py` 是第二套 OpenAI 兼容 Provider；`chart_tools.py` 直接调用 Exa 并 `os.getenv('EXA_API_KEY')`；`read_paper.py` 直接请求 arXiv / OpenReview / Unpaywall（Unpaywall 邮箱写死）；`fetch_url.py` 在 Service 层发起 HTTP | 迁入 `integrations/{llm,web_search,paper_resource}`，配置统一经 `core/config` |
-| Router 承载逻辑 | `api/agent.py` 内联请求 Schema 并直接调用 repository；`api/chat.py`、`api/uploads.py` 直接调用 Chat repository；`api/knowledge.py` 在路由内组合 `personal_overview` | 补薄 Service，Schema 移入 `schemas/` |
-| BFF 计算业务结果 | `apps/web/app/api/chat/anonymous-claim/route.ts` 的 GET 调用两个后端列表并在 Next 中计算数量 | 后端提供预览接口，BFF 只转发 |
-| 全局层反向依赖 Feature | `components/common/**`、`stores/collections.ts`、`providers/interaction-sync.tsx` 引用 `features/*`，如 `app-shell.tsx` → `features/chat`、`sidebar-chat-history.tsx` → `features/agent-chat`、`composer.tsx` → `features/chat/services/model-catalog` | 尽力收敛：共享部分迁到 `components/common`、`lib` 或 `stores` |
+| Router 承载逻辑 | `api/agent.py` 内联请求 Schema 并直接调用 repository；`api/knowledge.py` 在路由内组合 `personal_overview` | 补薄 Service，Schema 移入 `schemas/` |
+| BFF 计算业务结果 | `apps/web/app/api/identity/anonymous-claim/route.ts` 的 GET 读取匿名身份的 Agent 会话列表并在 Next 中计算数量 | 后端提供预览接口，BFF 只转发 |
+| 全局层反向依赖 Feature | `components/common/**`、`stores/collections.ts`、`providers/interaction-sync.tsx` 引用 `features/*`，如 `sidebar-chat-history.tsx`、`components/auth/anonymous-claim-coordinator.tsx` → `features/agent-chat`、`composer/attachment-menu.tsx` → `features/knowledge` 示例数据 | 尽力收敛：共享部分迁到 `components/common`、`lib` 或 `stores` |
 | 论文互动组件跨 Feature 共用 | 收藏选择、点赞、收藏数、已读标记被 papers、search、knowledge、graph 共用，目前位于 `features/knowledge` | 提升为公共论文组件 |
 
 ## 四、展示数据与遗留代码

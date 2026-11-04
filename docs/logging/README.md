@@ -1,20 +1,20 @@
 # ShenZhi 日志与异常 · 综合实现方案（V1，P1–P4 已合入）
 
-本文是 Logging Core 与 Chat 报错处理的唯一实现基线。  
+本文是 Logging Core 与报错处理的唯一实现基线。  
 大方向、分层、**两个边界**、阶段、禁止项只看第 1～6 节。字段、事件名、文件清单、测试在第 7 节以后。  
 当时的任务拆分已归档为历史记录：[分工.md](../dev/records/logging/分工.md)。
 
-Chat 业务说明仍以 `docs/chat/` 为准。本文不改回答流程、认领、持久化和错误码语义。
+本文不改业务流程、认领、持久化和错误码语义。
 
-P1–P4 已合入 `dev`（PR #4、#10）。不要平行新建 Core，不要重写已合入的 `services/chat/service.py` 流边界 / 错误气泡。当时的浏览器走查记录见 [BROWSER-WALKTHROUGH.md](../dev/records/chat/BROWSER-WALKTHROUGH.md)（历史记录：旧 Chat 页面已不再挂路由，`/agents/ask` 现重定向到 `/`，其步骤不能再直接照做）。Agent 链路的日志现状见 5.4。
+P1–P4 已合入 `dev`（PR #4、#10）。不要平行新建 Core。P3 的 `chat.stream.*` 终态事件随旧 Chat 链路一并删除；Agent 链路的日志现状见 5.3。
 
 ---
 
 ## 1. 目标
 
-系统出 Bug 时，能拿到一个 `request_id`，沿 Next.js BFF → FastAPI →（按需）Knowledge / LLM / Search / Chat 流，回答四件事：哪一层、什么错、耗时多少、未知异常的真实 traceback。
+系统出 Bug 时，能拿到一个 `request_id`，沿 Next.js BFF → FastAPI →（按需）Knowledge / LLM / Search / Agent 运行，回答四件事：哪一层、什么错、耗时多少、未知异常的真实 traceback。
 
-Chat 多请求（创建、SSE、Stop、Resume）用已有 `session_id` / `message_id` 旁路关联，不在 V1 强制上浏览器 `trace_id`。
+Agent 一次运行涉及的多次请求（创建、SSE、插话、Stop）用已有 `session_id` / `run_id` 旁路关联，不在 V1 强制上浏览器 `trace_id`。
 
 **不是：** 监控平台、业务异常框架、重试/降级中枢。不引入 ELK、Grafana、Sentry、OpenTelemetry。
 
@@ -22,7 +22,7 @@ Chat 多请求（创建、SSE、Stop、Resume）用已有 `session_id` / `messag
 
 ## 2. 原则（全局，必须遵守）
 
-1. **Logging Core 不理解业务。** 不维护事件枚举，不依赖 Chat / Knowledge 类型。
+1. **Logging Core 不理解业务。** 不维护事件枚举，不依赖 Agent / Knowledge 类型。
 2. **只观察，不决定。** 不改 retry、fallback、HTTP status、业务码、状态机、返回值。
 3. **普通能力自动有，业务事件按需补。** 新 API 不写日志，也必须有 `request_id`、HTTP 状态与耗时、未知异常 traceback。
 4. **禁止再造。** 新业务不得自建 logger、request-id、异常中间件。
@@ -89,11 +89,11 @@ async def create_xxx():
 四件事：译成内部可理解的错误；旁路记录 `provider` / `status` / `duration`；执行**原有** fallback；第三方 SDK 异常类型不准漏进业务层。  
 有没有 catch 不重要，重要的是 catch 出现在正确边界。
 
-**（2）Chat Streaming**（必须自己 try / except / finally）  
+**（2）Streaming**（必须自己 try / except）  
 普通 HTTP：异常 → FastAPI handler 还能接住。  
-Chat：`GET /stream` 已发出 HTTP 200，`StreamingResponse` 已建立，后台 `generate()` 再失败，**不能再改成 HTTP 500**。
+SSE：响应已发出 HTTP 200，`StreamingResponse` 已建立，后台运行再失败，**不能再改成 HTTP 500**。
 
-现有 `services/chat/service.py` 的 `generate` 里 CancelledError → `stopped`、BusinessError → `failed`+`error`、未知 Exception → 一份 traceback + `failed`、`finally` 发 `done`，是必要的业务生命周期边界，不是过度侵入。P3 只把终态日志收成结构化事件，**不删这套 except，不新套一层**。
+Agent 的现有边界：`services/agent/runtime.py` 中 BusinessError → `finalize(ERROR)`、未知 Exception → 一份 `agent.run.error` traceback + 安全错误，最后总是发 `run_end`；`services/agent_sessions/service.py` 的后台 `_drive` 再兜底一次 `Agent session run failed` 并把该轮落库为失败。这是必要的业务生命周期边界，不是过度侵入，**不删这套 except，不新套一层**。
 
 **（3）有业务意义的决策**才在业务函数里 catch：降级、补偿、释放资源、改状态、fallback、转换第三方错误、保证最终事件。
 
@@ -102,11 +102,11 @@ Chat：`GET /stream` 已发出 HTTP 200，`StreamingResponse` 已建立，后台
 except KnowledgeUnavailable:
     papers = []
 
-# persist 失败由 Chat / Repository 决定 Message 终态，不能交给 Logging Core
+# persist 失败由业务 / Repository 决定该轮终态，不能交给 Logging Core
 try:
     await persist(...)
 except DatabaseError:
-    ...  # 按业务语义处理 message
+    ...  # 按业务语义处理该轮记录
 ```
 
 一眼看进度：
@@ -114,8 +114,7 @@ except DatabaseError:
 | 你在文件里看到 | 阶段 |
 | --- | --- |
 | `lib/observability` + `core/logging.py` + `request_context.py` | P1 |
-| knowledge / model_provider / web_search 出口有 completed/failed 一行 | P2 |
-| `services/chat/service.py` 的 `generate` 仍是上述 except，且有 `chat.stream.completed/stopped/failed` | P3 |
+| knowledge / web_search 出口有 completed/failed 一行 | P2 |
 | 错误 UI 能复制 `request_id` | P4 |
 
 ---
@@ -146,8 +145,7 @@ except DatabaseError:
     Knowledge          LLM        Web Search     ← 仪器化（按需）
          └──────────────┼──────────────┘
                         ▼
-                       Chat
-                 Stream 生命周期         ← 仪器化（按需）
+                  Agent 运行 / SSE        ← 见 5.4
 ```
 
 ```text
@@ -161,7 +159,6 @@ except DatabaseError:
 ┌──────────────────┴──────────────────┐
 │      Business Instrumentation       │
 │  外部调用 completed/failed          │
-│  Chat stream completed/…/failed     │
 │           只有诊断价值才补            │
 └─────────────────────────────────────┘
 ```
@@ -209,22 +206,7 @@ Knowledge 原有 catch-all 若把未知异常转成 UNKNOWN 500：以该最终�
   → 不改 retry / fallback / UI
 ```
 
-### 5.3 Chat 流（HTTP 已 200 之后）
-
-```text
-创建消息（一次 request_id）
-  → 订阅 SSE（另一次 request_id，同一 message_id）
-  → generate 在后台跑
-       ├─ 完成  chat.stream.completed
-       ├─ 停止  chat.stream.stopped
-       └─ 失败  chat.stream.failed   ← 流边界打 traceback（HTTP 中间件够不到）
-  → 用 message_id 把上述请求和日志对上
-```
-
-Stop / Resume 是新的 `request_id`，仍带同一 `message_id`。  
-重连只重放事件，不自动再 POST 一条消息。
-
-### 5.4 Agent 运行（现状）
+### 5.3 Agent 运行（现状）
 
 `/agents` 由 `features/agent-chat` 渲染，后端走 `api/agent.py` → `services/agent/`。Agent 链路的 HTTP 请求同样经过 BFF 与 FastAPI Core（`request_id`、HTTP 一行、未知异常一次 traceback），但**没有**接入 `log_event` 结构化事件，也没有 `agent.stream.*` 一类终态事件。
 
@@ -243,15 +225,15 @@ agent.compaction.summarize failed      ← logger.exception
 agent.on_event 回调失败（已忽略）       ← logger.exception
 ```
 
-另有技能库装载/校验的 INFO/WARNING（`services/agent/skills.py`）、模型上游非 2xx 与参数被拒重试的 WARNING（`services/agent/provider.py`），以及 `api/agent.py` 删除已消费附件文本失败时的一次 `logger.exception`。排查 Agent 问题时按 `run_id` 搜索 Backend 日志。
+另有技能库装载/校验的 INFO/WARNING（`services/agent/skills.py`）、模型上游非 2xx 与参数被拒重试的 WARNING（`services/agent/provider.py`），以及 `api/agent.py` / `services/agent_sessions/service.py` 删除已消费附件文本失败时的一次 `logger.exception`。会话后台运行的兜底失败记为 `Agent session run failed: <session_id>`（`logger.exception`），续租失败为 `Agent turn lease heartbeat failed: <session_id>`。排查 Agent 问题时按 `run_id` 或 `session_id` 搜索 Backend 日志。
 
-### 5.5 排障（人）
+### 5.4 排障（人）
 
 ```text
 用户或 Network 里的 X-Request-ID
   → Web 窗口搜 ID
   → Backend 窗口搜同一 ID
-  → 若是生成问题，再搜 message_id
+  → 若是 Agent 运行问题，再搜 run_id
 ```
 
 日志在进程 stdout（本机两个启动窗口，或以后的 `docker logs`）。不自建日志库。
@@ -265,13 +247,13 @@ P1–P4 均已合入，下表只保留各阶段的范围与完成标准：
 | 阶段 | 做什么 | 完成标准 |
 | --- | --- | --- |
 | **P1 Logging Core** | BFF/FastAPI 贯通 `request_id`；HTTP 一行；未知异常一次；allowlist | 无业务日志代码的请求仍有 ID、status、耗时；两侧 `request_id` 一致；非法头被替换；连不上 Backend 为 `failed` |
-| **P2 外部能力** | Knowledge / LLM / Web Search 现有边界补 completed/failed | 不改现有 retry/fallback；能看到 provider 与耗时 |
-| **P3 Chat 流** | `chat.stream` completed/stopped/failed | HTTP duration ≠ 生成 duration；终态仍是 done/stopped/failed |
+| **P2 外部能力** | Knowledge / Web Search 现有边界补 completed/failed | 不改现有 retry/fallback；能看到 provider 与耗时 |
+| **P3 Chat 流** | 已随旧 Chat 链路删除 | — |
 | **P4 可诊断** | 错误 UI 可复制 `request_id` | 不改 `{code,message}` 主字段，只加展示 |
 
 ### 明确不做（V1）
 
-ELK / Loki / Grafana / Prometheus / Sentry / OTel；独立日志库；应用内 `logs/`；Prompt/正文/SQL 入日志；全仓库改 logger；统一 Knowledge 与 Chat 错误协议（P2 只做 ID 对齐）；改业务 retry；为 Logging 做 migration；浏览器强制 `trace_id`；`error_id` 与改信封（若以后要做，只追加字段，`code` 仍为数字）。
+ELK / Loki / Grafana / Prometheus / Sentry / OTel；独立日志库；应用内 `logs/`；Prompt/正文/SQL 入日志；全仓库改 logger；统一 Knowledge 与 Agent 错误协议（P2 只做 ID 对齐）；改业务 retry；为 Logging 做 migration；浏览器强制 `trace_id`；`error_id` 与改信封（若以后要做，只追加字段，`code` 仍为数字）。
 
 ---
 
@@ -280,11 +262,10 @@ ELK / Loki / Grafana / Prometheus / Sentry / OTel；独立日志库；应用内 
 | 名称 | 生命周期 | 谁生成 | 用途 |
 | --- | --- | --- | --- |
 | `request_id` | 一次 HTTP / 一次 BFF 转发 | BFF；FastAPI 兜底 | **V1 主关联键**，Header：`X-Request-ID`；P4 错误展示这个 |
-| `session_id` | 一个对话 | Chat 业务（已有） | 会话，不是链路 ID |
-| `message_id` | 一轮问答 | Chat 业务（已有） | 串联该轮多次 HTTP 与流日志 |
-| `research_run_id` / `agent_run_id` | 一次研究/Agent | 对应业务（已有或以后） | 仅仪器化时写入 |
+| `session_id` | 一个 Agent 会话 | Agent 业务（已有） | 会话，不是链路 ID |
+| `run_id` | 一次 Agent 运行 | Agent Runtime（已有） | 串联该轮日志（见 5.3） |
 
-V1 不上 `trace_id`、`error_id`。需要「一轮多请求」时先查 `message_id`。  
+V1 不上 `trace_id`、`error_id`。需要「一轮多请求」时先查 `run_id`。  
 若未来加 `X-Trace-Id`，由 Client 可选携带，Core 只校验透传，不进错误体、不入库。
 
 浏览器不生成 ID。非法/超长 Header 丢弃后重生成，防日志注入。
@@ -300,9 +281,7 @@ V1 不上 `trace_id`、`error_id`。需要「一轮多请求」时先查 `messag
 仅 `main.py` 全局 handler：`ERROR` + traceback + `request_id`。用户：稳定文案 + 响应头 ID。禁止 client/service/api/middleware 各打一遍堆栈。
 
 **层 3 异步 / Streaming**  
-`generate` 已离开 HTTP 成功路径。未知失败由 stream 边界打一次 traceback，SSE 仍走现有 `error` → `done(failed)`。`touch` 失败只记日志，不把已成功回答改成失败。
-
-现有 Chat `except` **P1 不改**。P3 只在终态旁路加事件，不把 Logging 写进状态机分支。
+后台运行已离开 HTTP 成功路径。未知失败由 stream 边界打一次 traceback（Agent 为 `agent.run.error`），SSE 仍以 `run_end` 下发失败终态。不把 Logging 写进状态机分支。
 
 ---
 
@@ -317,7 +296,7 @@ V1 不上 `trace_id`、`error_id`。需要「一轮多请求」时先查 `messag
 - `apps/backend/app/core/request_context.py`
 - `apps/backend/app/core/logging.py`
 - `apps/backend/tests/test_logging_core.py`
-- `apps/web/tests/chat/forward.test.ts`
+- `apps/web/tests/backend/forward.test.ts`
 - `apps/web/tests/config/observability.test.ts`
 
 改：
@@ -326,18 +305,12 @@ V1 不上 `trace_id`、`error_id`。需要「一轮多请求」时先查 `messag
 - `apps/backend/app/main.py`（`configure_logging`、`http_logging_middleware`、结构化未知异常）
 - `apps/backend/app/api/knowledge.py`（原 catch-all 增加一次 `log_exception`，不改返回语义）
 
-认领专用路由 `apps/web/app/api/chat/anonymous-claim/route.ts` 同样解析、转发并回写 `X-Request-ID`。
+认领专用路由 `apps/web/app/api/identity/anonymous-claim/route.ts` 同样解析、转发并回写 `X-Request-ID`。
 
 ### P2 文件
 
-仅在现有出口旁路一行：`integrations/knowledge`、`integrations/llm/provider.py`、`integrations/web_search/provider.py`。
+仅在现有出口旁路一行：`integrations/knowledge`、`integrations/web_search/provider.py`。原 `integrations/llm/provider.py` 的 `llm.request.*` 事件随旧 Chat Provider 一并删除；Agent 模型调用的日志见 5.3。
 Knowledge 错误体里的 `requestId` 改为读 ContextVar，不再自己生成。
-
-### P3 文件
-
-`apps/backend/app/services/chat/service.py` 终态各一条事件。
-可选：`clients/backend/http.ts` / `sse.ts` 只读响应头，不改业务编排。  
-不改 `use-chat-session` 状态机。
 
 ### P4 文件
 
@@ -353,7 +326,7 @@ Knowledge 错误体里的 `requestId` 改为读 ContextVar，不再自己生成�
 **P1 公共字段：** `timestamp` `level` `service` `environment` `event` `request_id`  
 **HTTP 再加：** `method` `route` `status_code` `duration_ms`  
 **出错再加：** `error_type`  
-**仪器化再加（有则写）：** `provider` `operation` `session_id` `message_id`
+**仪器化再加（有则写）：** `provider` `operation` `session_id`
 
 事件名：`domain.object.state`。Core 不维护允许列表。建议：
 
@@ -361,9 +334,7 @@ Knowledge 错误体里的 `requestId` 改为读 ContextVar，不再自己生成�
 http.request.completed / http.request.failed
 bff.backend.completed / bff.backend.failed
 knowledge.request.completed / knowledge.request.failed
-llm.request.completed / llm.request.failed
 web_search.completed / web_search.provider_failed
-chat.stream.completed / stopped / failed
 ```
 
 示例（P2 以后才需要这么全）：
@@ -373,12 +344,11 @@ chat.stream.completed / stopped / failed
   "timestamp": "2026-09-06T12:00:00.000Z",
   "level": "ERROR",
   "service": "backend",
-  "event": "chat.stream.failed",
+  "event": "knowledge.request.failed",
   "request_id": "abc123",
-  "session_id": "s1",
-  "message_id": "m1",
+  "provider": "knowledge",
   "duration_ms": 12004,
-  "error_type": "RuntimeError"
+  "error_type": "TimeoutError"
 }
 ```
 
@@ -386,7 +356,7 @@ chat.stream.completed / stopped / failed
 
 ## 11. 敏感字段（细）
 
-**允许：** `request_id`、route 模板、method、status、duration、provider、model 别名、result_count、`session_id`、`message_id`、MIME、文件大小、`owner_type`（anon/user）。
+**允许：** `request_id`、route 模板、method、status、duration、provider、model 别名、result_count、`session_id`、`run_id`、MIME、文件大小、`owner_type`（anon/user）。
 
 **禁止：** 密码、OTP、Authorization、Cookie、Token、API Key、BFF Secret、完整 Prompt/消息/模型输出、用户 Query 原文、论文正文、上传正文、HTTP body、SQL 参数、`console.log(headers)` / `logger.error(request.json())`。
 
@@ -396,7 +366,6 @@ chat.stream.completed / stopped / failed
 
 - FastAPI 已有响应头 `X-Request-Id` 与未知异常 500：P1 抽到 core，不叠第二套中间件。
 - `{code, message}` 保持数字业务码；ID 走 Header。
-- Chat `generate` 已有未知失败 / persist 失败日志：P3 收成结构化事件，避免再加一层 `except`。
 - 专用认领 BFF 必须与 `forward.ts` 同一套 ID，否则认领链对不上。
 - Knowledge 内部 catch-all 不进入全局 handler：以已安排的该边界 traceback 为准。
 - 单 worker 流状态不是 Logging 能解决的；跨 worker 以后再谈 OTel。
@@ -409,11 +378,7 @@ chat.stream.completed / stopped / failed
 
 **P2：** 各外部边界成功/失败各一条；降级路径与改前一致。已合入。
 
-**P3：** 完成 / Stop / persist 失败三条流，日志能用 `message_id` 对上多次 `request_id`；UI 终态与现在一致。Backend：`test_chat_api.py`。已合入。
-
-**P4：** 错误气泡展示并可复制 `request_id`，不改 `{code,message}`。Web：`tests/chat/error-bubble.test.ts`。已合入实现；该测试锁定接线。
-
-**浏览器：** 当时的走查记录见 [BROWSER-WALKTHROUGH.md](../dev/records/chat/BROWSER-WALKTHROUGH.md)，仅作历史参考：旧 Chat 页面已不再挂路由（`/agents/ask` 重定向到 `/`），该流程不再是现行验收步骤。
+**P4：** 论文详情页 Agent 面板的错误气泡展示并可复制 `request_id`，不改 `{code,message}`。Web：`tests/agent/paper-assistant.test.ts`。
 
 ---
 

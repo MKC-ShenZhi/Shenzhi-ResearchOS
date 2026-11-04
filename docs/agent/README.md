@@ -1,6 +1,6 @@
 # Agent Framework 与产品接入
 
-Agent Runtime、消息与事件类型、Provider、Tool、Context / Compaction、Memory / Checkpoint、Skill framework、Workspace、基础 policy、prompt/template infrastructure、export、安全与网络辅助模块已从 `feat/SZDR` 迁入 ShenZhi 主工程，并接入 FastAPI Agent API 和 Web `/agents` 产品入口，是 ShenZhi 继续开发的正式基座。旧 Chat UI 已被 Agent 取代，Chat 链路中仍被依赖的基础设施见 [Chat 基础设施](../chat/README.md)。
+Agent Runtime、消息与事件类型、Provider、Tool、Context / Compaction、Memory / Checkpoint、Skill framework、Workspace、基础 policy、prompt/template infrastructure、export、安全与网络辅助模块已从 `feat/SZDR` 迁入 ShenZhi 主工程，并接入 FastAPI Agent API 和 Web `/agents` 产品入口，是 ShenZhi 继续开发的正式基座，也是唯一的对话链路；匿名身份引导与登录后认领见 [认证架构](../auth/ARCHITECTURE.md#anonymous-identity-and-claim)。
 
 第一方 `deep-research` Skill 位于 `apps/backend/skills/deep-research/`，可在 `/agents` 选择，也可用 `/research <主题>` 触发。Agent 使用既有 Tool → `KnowledgeService` → `integrations/knowledge` 检索论文；legacy retrieval 未迁入。它与前端原型页 `/agents/deep-research`（见 [Deep Research 页面说明](../deep-research/README.md)）无关。历史验收记录见 [verification-2026-09-20.md](../dev/records/agent/verification-2026-09-20.md)。
 
@@ -8,7 +8,7 @@ Agent Runtime、消息与事件类型、Provider、Tool、Context / Compaction�
 
 `apps/backend/app/services/agent/` 保留现有 Runtime 实现：`runtime.py` 执行模型与工具循环，`types.py` 定义消息、事件和运行结果，`provider.py` 提供 OpenAI 兼容流式模型调用，`tools.py` 负责注册、参数校验和执行。`context.py`、`compaction.py`、`memory.py` 管理上下文和 checkpoint；`skills.py` 管理 Skill 发现、读取和工具加载；`prompt_templates.py` 提供独立的模板加载和参数展开机制。`workspace.py`、`ask_user.py`、`netguard.py`、`json_repair.py`、`export.py` 是配套能力。
 
-`service.py` 是应用组合根，按请求组装 Runtime，并通过适配工具复用现有 `KnowledgeService`、`integrations/web_search/provider.py`、`services/chat/attachments.py` 和 Chat 附件仓库。论文检索工具调用路径为 Agent Tool → `KnowledgeService` → `integrations/knowledge`；没有旧 `/search/explore` 或 `services/retrieval.py` 链路。`read_paper` 与 `fetch_url` 随 Runtime 注册，图表和图片工具在有工作区时注册；外部搜索未配置时由工具返回明确错误。没有业务 Skill、工作区或可选搜索服务时，Runtime 仍可初始化。
+`service.py` 是应用组合根，按请求组装 Runtime，并通过适配工具复用现有 `KnowledgeService` 与 `integrations/web_search/provider.py`；本轮附件上下文由 `services/agent/attachments.py` 基于 `agent_uploads` 暂存的解析文本组装，按模式的采样温度、时间与工具预算在 `policies.py`。论文检索工具调用路径为 Agent Tool → `KnowledgeService` → `integrations/knowledge`；没有旧 `/search/explore` 或 `services/retrieval.py` 链路。`read_paper` 与 `fetch_url` 随 Runtime 注册，图表和图片工具在有工作区时注册；外部搜索未配置时由工具返回明确错误。没有业务 Skill、工作区或可选搜索服务时，Runtime 仍可初始化。
 
 ## HTTP 接入
 

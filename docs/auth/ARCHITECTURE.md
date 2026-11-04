@@ -225,6 +225,40 @@ Authentication and Authorization/RBAC remain separate concerns. RBAC is a
 future product decision; this stage adds no role table, admin plugin, or
 permission service.
 
+## Anonymous identity and claim
+
+```text
+Browser first API call (clients/backend/http.ts ensureBackendIdentity)
+  ↓ GET /api/v1/identity/bootstrap  (serialized once per page)
+Next.js /api/v1 BFF issues HttpOnly shenzhi-chat-anon cookie on success
+  ↓
+login → AnonymousClaimCoordinator (components/auth, mounted in AppShell)
+  ↓ GET  /api/identity/anonymous-claim   preview: durable Agent session count
+  ↓ POST /api/identity/anonymous-claim   after the user confirms
+Dedicated dual-identity BFF (app/api/identity/anonymous-claim/route.ts)
+  ↓ X-ShenZhi-User-Id + X-ShenZhi-Source-Anonymous-Id + BFF secret
+POST /api/v1/identity/anonymous-claim  (apps/backend/app/api/identity.py)
+  ↓ services/identity/anonymous_claim.py
+```
+
+- 首次调用 Backend API 前，浏览器串行请求一次 `GET /api/v1/identity/bootstrap`
+  （只校验 BFF 凭据、返回空数据），避免并发请求签发不同的匿名身份。匿名请求经通用
+  BFF 得到成功上游响应后才写入或滚动续期 `shenzhi-chat-anon` Cookie；有效期由 Web
+  的 `CHAT_ANONYMOUS_TTL_SECONDS` 控制（默认 7 天）。Cookie 名沿用旧值，改名会让
+  已有匿名浏览器失去身份。
+- 登录后 Coordinator 先只读预览：BFF 用匿名身份读取 `/agent/sessions?limit=50`，只统计
+  持久化（`ephemeral=false`）的会话数。数量大于 0 时弹出“迁移对话历史？”确认框；
+  “暂不迁移”或 Escape 不执行认领、不删除历史，刷新页面或切换账号后可再次询问。
+- 浏览器只发送空 POST，不传用户 ID、匿名 ID 或 owner。专用 Route 从 Better Auth
+  Session 读取目标用户、从 Cookie 读取来源匿名 UUID；普通 `/api/v1` 转发仍只注入一个
+  主身份，FastAPI 端点只接受 BFF 注入的双身份头。
+- `anonymous_claim.py` 依次复制可认领 Agent Session 的工作区 → 迁移 Agent Session
+  owner（跳过有 `running` Turn 的会话）→ 迁移 Agent 附件 owner → 清理已迁移的匿名
+  工作区 → 迁移进程内上传工作区。Session ID 与 Turn 行不变，重复或并发调用幂等。
+- 返回 `moved_count`、`skipped_streaming_count`（仍在运行而跳过的会话数）与
+  `durable`；内存模式下 `durable=false`。跳过数大于 0 时 Coordinator 每 2 秒补试，
+  含首次共最多 4 次；只有 `durable=true` 且 `moved_count>0` 时通知侧栏刷新 Agent 历史。
+
 ## Schema and runtime boundary
 
 The current core schema remains the official Better Auth migration at

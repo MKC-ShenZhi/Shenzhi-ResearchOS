@@ -23,7 +23,7 @@
 
 1. 在 `apps/web` 中运行 `pnpm dev`，在「设置 → 个人 → 外观」或侧栏设置调色盘选中「极致黑白」或「青绿」。
 2. 在同一主题下选择日间、夜间或跟随系统；移动端顶栏按钮可以显式切换日夜。
-3. 检查 `/`、`/knowledge/search?q=transformer` 和已有的 `/agents?session=<真实会话 ID>`。旧 `/agents/ask` 会重定向，不用于会话验收。
+3. 检查 `/`、`/knowledge/search?q=transformer` 和已有的 `/agents?session=<真实会话 ID>`。
 4. 刷新页面并检查预设、模式及控制台；若浏览器中保存过自定义主题（`custom`），切换到其他预设后确认没有内联颜色残留。
 
 调试链接支持 `?theme=<预设 ID>`（如 `?theme=gpt`、`?theme=warm-teal`），仅指定预设，日夜读取已有模式偏好。`?theme=light|dark|system` 保留原有含义：选择深知预设及对应模式。登录账户的设置页仍按现有逻辑同步远端 `theme_mode`；侧栏和移动端模式切换沿用本地偏好行为。

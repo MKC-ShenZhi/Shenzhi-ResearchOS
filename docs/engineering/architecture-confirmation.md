@@ -73,11 +73,11 @@ shenzhi/
 │       │   ├── api/             # API 路由与请求边界；_support/ 放 HTTP transport helper
 │       │   ├── schemas/         # 输入输出 Schema
 │       │   ├── models/          # 持久化模型
-│       │   ├── services/        # 按 agent、agent_sessions、chat、knowledge、library、home_feed、
+│       │   ├── services/        # 按 agent、agent_sessions、identity、knowledge、library、home_feed、
 │       │   │                    # discovery_pool、recommendation、topics、user 等领域组织业务逻辑
 │       │   ├── integrations/    # 外部服务与科研能力接入边界
 │       │   │   ├── knowledge/   # Knowledge Base Research Capability
-│       │   │   ├── llm/         # 统一 Model Registry / Resolver 与 Chat Provider
+│       │   │   ├── llm/         # 统一 Model Registry / Resolver
 │       │   │   ├── web_search/  # 外部搜索 Provider
 │       │   │   └── paper_resource/ # 外部 PDF 资源 Provider
 │       │   ├── core/            # 配置、身份、错误、数据库、幂等与 Worker Lease 等基础能力
@@ -229,7 +229,6 @@ apps/web/features/{module}/
 home            # 发现页入口
 search          # 首页论文 Feed 与搜索组件；deep-search/ 为旧静态搜索原型
 agent-chat      # 深知 AI（Agent）新对话页与会话页
-chat            # 旧 Chat 实现；目前只作为共享组件与工具被复用，无路由
 papers          # 论文详情（PDF 阅读器 + 论文 Agent 问答）
 knowledge       # 知识库：论文库、我的文献、学者、主题、基金、图谱等子功能
 submit          # 会议DDL
@@ -237,7 +236,7 @@ settings / login / reset-password
 deep-research / auto-research / projects   # 前端原型页，由 feature-availability 拦截
 ```
 
-Agent 相关页面路由维护在 `app/agents` 体系下：`/agents` 由 `features/agent-chat` 承载，是当前唯一的对话链路；Deep Research、Auto Research 前端页面目前仍为原型。旧 Chat 链路（`features/chat` 页面部分与后端 Chat 会话 API）已被 Agent 取代，是否移除在下一阶段评估，见 [已知偏移与待收敛项](known-gaps.md)。
+Agent 相关页面路由维护在 `app/agents` 体系下：`/agents` 由 `features/agent-chat` 承载，是当前唯一的对话链路；Deep Research、Auto Research 前端页面目前仍为原型。
 
 旧 Deep Search 静态搜索结果原型统一归入 `features/search/deep-search`，不再建立平行业务实现。
 
@@ -333,7 +332,7 @@ clients/backend
 Backend API
 ```
 
-`clients/backend` 根目录是基础层，不得反向依赖 `chat`、`profile`、`settings`
+`clients/backend` 根目录是基础层，不得反向依赖 `profile`、`settings`
 等具体模块。模块 Client 只负责请求、协议封装和错误转换；模型目录合并、降级策略、
 多个接口组合等业务编排进入 `features/{module}/services/`。
 
@@ -520,8 +519,7 @@ Service
 例如：
 
 ```text
-features/chat/types.ts
-features/search/types.ts
+features/{module}/types.ts
 ```
 
 只有真正被多个业务模块共同使用的类型，再提升到全局位置。
@@ -599,7 +597,7 @@ docs/
 ```text
 docs/engineering/
 docs/auth/
-docs/chat/
+docs/agent/
 docs/knowledge/
 docs/deep-research/
 docs/auto-research/
@@ -669,8 +667,8 @@ docs/auto-research/
 
 ## LLM 接入基础设施
 
-Chat、Agent 与后续 AI Feature 统一通过 `integrations/llm` 的 Model Registry / Resolver
-解析 Model ID、Provider、上游型号和能力。Chat 的 `integrations/llm/provider.py` 与 Agent 的
-`services/agent/provider.py` 继续各自负责流式协议处理。模型品牌只用于展示，实际路由由
+Agent 与后续 AI Feature 统一通过 `integrations/llm` 的 Model Registry / Resolver
+解析 Model ID、Provider、上游型号和能力；流式协议处理由 Agent 的
+`services/agent/provider.py` 负责。模型品牌只用于展示，实际路由由
 `provider_id` 决定；Provider 凭据仅在服务端加载。接入规则、兼容策略及声明示例见
 [LLM API Foundation](llm-api-foundation.md)。
