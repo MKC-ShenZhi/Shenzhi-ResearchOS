@@ -30,10 +30,6 @@ const commonAttachmentMenu = readFileSync(
   "components/common/composer/attachment-menu.tsx",
   "utf8",
 );
-const chatAttachmentMenu = readFileSync(
-  "features/chat/components/attachment-menu.tsx",
-  "utf8",
-);
 const relatedSearch = readFileSync(
   "features/knowledge/components/related-paper-search.tsx",
   "utf8",
@@ -132,10 +128,8 @@ test("Patent compatibility route is unavailable and does not render mock data", 
   assert.doesNotMatch(patentsPage, /PatentsBrowser|data-patents/);
 });
 
-test("attachment menus do not expose unsupported Funding or Patent mock entities", () => {
-  for (const source of [commonAttachmentMenu, chatAttachmentMenu]) {
-    assert.doesNotMatch(source, /data-funding|data-patents|项目基金库|专利库/);
-  }
+test("attachment menu does not expose unsupported Funding or Patent mock entities", () => {
+  assert.doesNotMatch(commonAttachmentMenu, /data-funding|data-patents|项目基金库|专利库/);
 });
 
 test("Topic keeps the real paper result presentation", () => {

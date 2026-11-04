@@ -19,10 +19,10 @@ import { scholars } from "@/features/knowledge/data-scholars";
 import { institutions } from "@/features/knowledge/data-institutions";
 import { projects } from "@/features/projects/data";
 import { uploadAgentFile } from "@/clients/backend/uploads";
-import type { ChatAttachment, ChatAttachmentKind } from "@/types/ai-search";
+import type { ComposerAttachment, ComposerAttachmentKind } from "@/types/ai-search";
 
 interface RefItem {
-  kind: ChatAttachmentKind;
+  kind: ComposerAttachmentKind;
   ref_id: string;
   title: string;
 }
@@ -168,7 +168,7 @@ export function AttachmentMenu({
   maxSizeMb = 20,
   onWorkspaceFolder,
 }: {
-  onAdd?: (items: ChatAttachment[]) => void;
+  onAdd?: (items: ComposerAttachment[]) => void;
   onUploadingChange?: (uploading: boolean) => void;
   disabled?: boolean;
   accept?: string;
@@ -213,7 +213,7 @@ export function AttachmentMenu({
     if (uploading || disabled) return;
     if (!maxFiles) { setUploadError("最多添加 5 个附件，请先移除已有附件"); return; }
     const list = Array.from(files).slice(0, maxFiles);
-    const added: ChatAttachment[] = [];
+    const added: ComposerAttachment[] = [];
     const errors: string[] = [];
     if (files.length > maxFiles) errors.push(`仅上传前 ${maxFiles} 个文件`);
     setUploading(true); onUploadingChange?.(true); setUploadError("");
@@ -246,7 +246,7 @@ export function AttachmentMenu({
       setOpen(false);
       return;
     }
-    void pickFiles(files); // 兼容旧行为（Chat）：文件夹内文件逐个按附件解析
+    void pickFiles(files); // 未传 onWorkspaceFolder 时：文件夹内文件逐个按附件解析
   };
 
   const addRef = (item: RefItem) => {

@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 const ROUTE_SOURCE = readFileSync(
-  resolve(process.cwd(), "app/api/chat/anonymous-claim/route.ts"),
+  resolve(process.cwd(), "app/api/identity/anonymous-claim/route.ts"),
   "utf8",
 );
 

@@ -4,9 +4,6 @@ import test from "node:test";
 import { normalizeInternalReturnTo } from "../../lib/navigation/internal-return-to";
 import { paperHref } from "../../lib/navigation/paper";
 import {
-  paperReferenceHref,
-} from "../../features/chat/services/reference-navigation";
-import {
   navigateBackFromPaper,
   PAPER_DETAIL_FALLBACK_ROUTE,
 } from "../../features/papers/[id]/paper-back-navigation";
@@ -15,26 +12,7 @@ import {
   isFinalPageVisible,
   nextRenderedPageCount,
 } from "../../features/papers/[id]/components/pdf-pagination.js";
-import type { ChatReference } from "../../types/ai-search";
 
-const paper: ChatReference = {
-  referenceId: "1",
-  resourceType: "paper",
-  resourceId: "opaque/paper?id=1",
-  title: "Paper",
-  content: "abstract",
-  metadata: { authors: [], year: null, venue: null },
-};
-
-test("Chat paper links carry the current internal Chat URL as returnTo", () => {
-  const returnTo = "/agents/ask?session=opaque%2Fsession%3Fv%3D1";
-
-  assert.equal(normalizeInternalReturnTo(returnTo), returnTo);
-  assert.equal(
-    paperReferenceHref(paper, returnTo),
-    "/papers/opaque%2Fpaper%3Fid%3D1?returnTo=%2Fagents%2Fask%3Fsession%3Dopaque%252Fsession%253Fv%253D1",
-  );
-});
 
 test("Paper Detail rejects external, protocol-relative, and malformed returnTo values", () => {
   const route = readFileSync("app/papers/[id]/page.tsx", "utf8");
@@ -145,7 +123,6 @@ test("real Paper entry points create returnTo and Dashboard keeps its real graph
   const discovery = readFileSync("features/search/components/paper-card.tsx", "utf8");
   const dashboard = readFileSync("features/knowledge/components/knowledge-dashboard.tsx", "utf8");
   const search = readFileSync("features/knowledge/search/KnowledgeSearchPage.tsx", "utf8");
-  const chat = readFileSync("features/chat/components/reference-grid.tsx", "utf8");
   const privateGraph = readFileSync("components/common/graph/node-abstract-card.tsx", "utf8");
   const paperGraph = readFileSync("features/knowledge/graph/components/graph-workbench.tsx", "utf8");
 
@@ -158,21 +135,9 @@ test("real Paper entry points create returnTo and Dashboard keeps its real graph
   );
   assert.doesNotMatch(dashboard, /data-library/);
   assert.match(search, /returnTo=\{returnTo\}/);
-  assert.match(chat, /paperReferenceHref\(ref, returnTo\)/);
   assert.match(privateGraph, /paperHref\(node\.paperId, \{ mode: "create", source: returnTo \}\)/);
   assert.match(paperGraph, /paperHref\(paperId, \{ mode: "preserve", returnTo \}\)/);
   assert.doesNotMatch(paperGraph, /useCurrentInternalPath|currentPath|paperReturnTo/);
-});
-
-test("paper return preserves the URL session as the sole restore target", () => {
-  const hook = readFileSync("features/chat/hooks/use-chat-session.ts", "utf8");
-  const returnTarget = "/agents/ask?session=S1";
-
-  assert.equal(normalizeInternalReturnTo(returnTarget), returnTarget);
-  assert.match(hook, /initialSessionId/);
-  assert.match(hook, /void openSession\(urlSessionId\)/);
-  assert.equal((hook.match(/void openSession\(urlSessionId\)/g) ?? []).length, 1);
-  assert.match(hook, /phaseForRestoredStatus/);
 });
 
 test("unified detail, graph and compatibility links preserve opaque IDs and safe origins", async () => {

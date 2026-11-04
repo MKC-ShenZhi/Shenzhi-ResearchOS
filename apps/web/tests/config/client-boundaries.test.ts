@@ -43,7 +43,7 @@ test("backend base files do not depend on module clients", () => {
   );
   for (const file of baseFiles) {
     const imports = moduleSpecifiers(readFileSync(file, "utf8"));
-    const invalid = imports.find((specifier) => /^\.\/(?:chat|profile|settings)(?:\/|$)/.test(specifier));
+    const invalid = imports.find((specifier) => /^\.\/(?:profile|settings)(?:\/|$)/.test(specifier));
     assert.equal(invalid, undefined, `${relative(".", file)} imports ${invalid}`);
   }
 });

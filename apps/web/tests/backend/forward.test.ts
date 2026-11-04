@@ -45,12 +45,12 @@ test("BFF forwards the idempotency key without treating it as a request ID", asy
   });
 
   const response = await forwardToBusinessBackend(
-    request("trace-request-1", undefined, "chat-operation-1"),
+    request("trace-request-1", undefined, "agent-operation-1"),
     "http://backend.test",
-    ["chat", "sessions"],
+    ["agent", "sessions"],
   );
 
-  assert.equal(outgoingHeaders?.get("Idempotency-Key"), "chat-operation-1");
+  assert.equal(outgoingHeaders?.get("Idempotency-Key"), "agent-operation-1");
   assert.equal(outgoingHeaders?.get("X-Request-ID"), "trace-request-1");
   assert.equal(response.headers.get("X-Request-ID"), "trace-request-1");
 });

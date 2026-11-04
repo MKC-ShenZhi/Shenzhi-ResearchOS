@@ -6,7 +6,7 @@ import { MobileHeader } from "./mobile-header";
 import { MobileNavDrawer } from "./mobile-nav-drawer";
 import { useSidebarStore } from "@/stores/sidebar";
 import { cn } from "@/lib/utils";
-import { AnonymousClaimCoordinator } from "@/features/chat/components/anonymous-claim-coordinator";
+import { AnonymousClaimCoordinator } from "@/components/auth/anonymous-claim-coordinator";
 import { useRecordSearchRestoration } from "@/hooks/use-search-restoration";
 import { useVisualViewport } from "@/hooks/use-visual-viewport";
 

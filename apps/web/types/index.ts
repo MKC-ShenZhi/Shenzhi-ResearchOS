@@ -273,9 +273,8 @@ export interface DRHistoryItem {
 export type ComposerEntryMode = "search" | "ai";
 
 export type {
-  ChatAttachment,
-  ChatCapabilities,
-  ChatModelId,
-  ChatReplyMode,
+  ComposerAttachment,
+  ModelId,
+  ReplyMode,
   ComposerSubmitPayload,
 } from "./ai-search";

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { streamAgentRun } from "@/clients/backend/agent";
 import type { KnowledgePaperDetail } from "@/clients/knowledge";
-import { isAbortError, requestIdForApiError } from "@/features/chat/services/errors";
+import { isAbortError, requestIdForApiError } from "@/clients/backend/http";
 import {
   initialPaperAgentState,
   paperAgentReducer,

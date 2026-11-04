@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useRef, useState, type ReactNode } from "react";
-import { isKnownCitation } from "../services/citation-validation";
+import { isKnownCitation } from "./citation-validation";
 
 const CitationContext = createContext<{
   active: number;

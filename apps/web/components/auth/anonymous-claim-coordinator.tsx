@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@/components/auth/auth-provider";
-import { useAskSidebarBridge } from "@/stores/ask-sidebar-bridge";
+import { useAuth } from "./auth-provider";
 import {
   ANONYMOUS_CLAIM_RETRY_DELAY_MS,
   claimAnonymousSessions,
   previewAnonymousSessions,
   shouldRetryAnonymousClaim,
   shouldRefreshAfterAnonymousClaim,
-} from "../services/anonymous-claim";
+} from "./anonymous-claim";
 import { notifyAgentSessionsChanged } from "@/features/agent-chat/session-events";
 
 export function AnonymousClaimCoordinator() {
@@ -27,8 +26,6 @@ function ClaimPrompt({ account }: { account: string }) {
   const [count, setCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  const bumpHistoryRefresh = useAskSidebarBridge((state) => state.bumpHistoryRefresh);
-  const requestReset = useAskSidebarBridge((state) => state.requestReset);
 
   useEffect(() => {
     alive.current = true;
@@ -63,8 +60,6 @@ function ClaimPrompt({ account }: { account: string }) {
         const result = await claimAnonymousSessions();
         if (!alive.current) return;
         if (shouldRefreshAfterAnonymousClaim(result)) {
-          requestReset();
-          bumpHistoryRefresh();
           notifyAgentSessionsChanged();
         }
         if (shouldRetryAnonymousClaim(result, attempts)) {

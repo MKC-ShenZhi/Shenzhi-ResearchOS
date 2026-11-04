@@ -1,6 +1,6 @@
 import { optionalEnv, parseBooleanEnv, parsePositiveIntegerEnv } from "./env";
 
-export const ANONYMOUS_CHAT_TTL_SECONDS = parsePositiveIntegerEnv(
+export const ANONYMOUS_TTL_SECONDS = parsePositiveIntegerEnv(
   "CHAT_ANONYMOUS_TTL_SECONDS",
   604800,
 );

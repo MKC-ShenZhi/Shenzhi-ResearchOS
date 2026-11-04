@@ -10,7 +10,7 @@ import {
   previewAnonymousSessions,
   shouldRetryAnonymousClaim,
   shouldRefreshAfterAnonymousClaim,
-} from "../../features/chat/services/anonymous-claim";
+} from "../../components/auth/anonymous-claim";
 
 test("claim client sends an empty same-origin POST and returns counts", async () => {
   let capturedInput: string | URL | Request | undefined;
@@ -30,7 +30,7 @@ test("claim client sends an empty same-origin POST and returns counts", async ()
     skipped_streaming_count: 1,
     durable: true,
   });
-  assert.equal(capturedInput, "/api/chat/anonymous-claim");
+  assert.equal(capturedInput, "/api/identity/anonymous-claim");
   assert.equal(capturedInit?.method, "POST");
   assert.equal(capturedInit?.body, undefined);
   assert.equal(capturedInit?.headers, undefined);
@@ -94,11 +94,11 @@ test("coordinator attempts once per stable user and refreshes only after durable
   }, ANONYMOUS_CLAIM_MAX_ATTEMPTS), false);
 
   const coordinator = readFileSync(
-    "features/chat/components/anonymous-claim-coordinator.tsx",
+    "components/auth/anonymous-claim-coordinator.tsx",
     "utf8",
   );
-  assert.match(coordinator, /requestReset/);
-  assert.match(coordinator, /bumpHistoryRefresh/);
+  assert.match(coordinator, /notifyAgentSessionsChanged\(\)/);
+  assert.doesNotMatch(coordinator, /useAskSidebarBridge/);
   assert.match(coordinator, /clearTimeout/);
   assert.match(coordinator, /shouldRetryAnonymousClaim/);
   assert.match(coordinator, /previewAnonymousSessions/);
@@ -110,12 +110,7 @@ test("coordinator attempts once per stable user and refreshes only after durable
     "components/common/layout/app-shell.tsx",
     "utf8",
   );
-  assert.match(appShell, /import \{ AnonymousClaimCoordinator \} from "@\/features\/chat\/components\/anonymous-claim-coordinator"/);
+  assert.match(appShell, /import \{ AnonymousClaimCoordinator \} from "@\/components\/auth\/anonymous-claim-coordinator"/);
   assert.match(appShell, /<AnonymousClaimCoordinator \/>/);
 
-  const agentChat = readFileSync(
-    "features/chat/components/agent-chat.tsx",
-    "utf8",
-  );
-  assert.doesNotMatch(agentChat, /AnonymousClaimCoordinator/);
 });

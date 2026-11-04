@@ -1,5 +1,5 @@
-import { ApiError } from "../../../clients/backend/http";
-import type { ApiEnvelope } from "../../../clients/backend/types";
+import { ApiError } from "../../clients/backend/http";
+import type { ApiEnvelope } from "../../clients/backend/types";
 
 export interface AnonymousClaimResult {
   moved_count: number;
@@ -15,7 +15,7 @@ export async function previewAnonymousSessions(
   signal: AbortSignal,
   fetcher: typeof fetch = fetch,
 ): Promise<number> {
-  const response = await fetcher("/api/chat/anonymous-claim", { cache: "no-store", signal });
+  const response = await fetcher("/api/identity/anonymous-claim", { cache: "no-store", signal });
   const body = await response.json();
   if (!response.ok || body.code !== 0 || !Number.isInteger(body.data?.count)) {
     throw new Error("无法检查匿名历史");
@@ -48,7 +48,7 @@ export function shouldRefreshAfterAnonymousClaim(result: AnonymousClaimResult): 
 export async function claimAnonymousSessions(
   fetcher: typeof fetch = fetch,
 ): Promise<AnonymousClaimResult> {
-  const response = await fetcher("/api/chat/anonymous-claim", {
+  const response = await fetcher("/api/identity/anonymous-claim", {
     method: "POST",
     cache: "no-store",
     signal: AbortSignal.timeout(30_000),

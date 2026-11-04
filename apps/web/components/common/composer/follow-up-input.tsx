@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ComposerShell } from "./composer";
 
 /** 底部提问输入框 —— 支持追问 / 上传 PDF / arXiv 链接 */
-export function ChatInput() {
+export function FollowUpInput() {
   const [value, setValue] = useState("");
 
   return (
