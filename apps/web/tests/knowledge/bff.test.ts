@@ -394,11 +394,11 @@ test("a failed BFF request stays an error and never falls back to Mock", async (
 
 test("the generic numeric backend envelope remains compatible", async () => {
   await withFetch(async () => jsonResponse({ code: 0, data: { ok: true } }), async () => {
-    assert.deepEqual(await apiJson<{ ok: boolean }>("/chat/config"), { ok: true });
+    assert.deepEqual(await apiJson<{ ok: boolean }>("/agent/config"), { ok: true });
   });
   await withFetch(async () => jsonResponse({ code: 21001, message: "legacy error" }, 400), async () => {
     await assert.rejects(
-      apiJson("/chat/config"),
+      apiJson("/agent/config"),
       (error: unknown) => error instanceof ApiError &&
         error.code === 21001 &&
         error.message === "legacy error",

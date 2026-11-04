@@ -70,7 +70,6 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 - `/`：发现页。简单搜索只跳转 `/knowledge/search?q=...`；智能搜索创建 Backend Session 后跳转 Agent 对话。
 - `/agents`：深知 AI 新对话页（侧边栏「深知 AI」入口）。与发现页智能搜索共用 `features/agent-chat/use-agent-launcher.ts`，同样创建 Backend Session 后跳转 Agent 对话。
 - `/agents?session=<id>`：具体持久化会话。刷新和浏览器 back/forward 都按 URL 重新向后端加载。
-- `/agents/ask`：旧 Chat 路由保留为安全 redirect，正式路径不再调用旧 Chat message API。
 
 ## Sidebar 分页
 
@@ -90,6 +89,6 @@ Sidebar 首次连接到 durable Repository 时检查 `shenzhi-agent-sessions`：
 ## 删除与后续项
 
 - 当前删除只删除 Session / Turn 数据库行。不会根据模型或请求提供的路径递归删除 workspace；需要后续增加以 owner + session id 为边界的产物保留/清理任务。
-- 匿名会话按浏览器 UUID 严格隔离。登录后的认领已接入：全局 `AppShell` 中的 `AnonymousClaimCoordinator` 经同源 `/api/chat/anonymous-claim` 预览并在用户确认后认领，FastAPI `POST /api/v1/chat/anonymous-claim` 调用 `services/identity/anonymous_claim.py`，在同一次认领中迁移 Chat 与 Agent Session（含工作区复制）及 Agent 附件；有 `running` Turn 的 Session 暂不迁移并计入 `skipped_streaming_count`。source owner 只来自 BFF 注入的双身份请求头，客户端不能指定，细节见 [Chat 基础设施](../chat/README.md#匿名会话归属切换)。
-- Agent 匿名会话目前没有接入 TTL 清理：`app.services.chat.maintenance` 只删除过期匿名 Chat Session 和过期 Agent 附件，不处理 `agent_sessions`；上线前应增加同等的保留期策略，避免匿名数据无限增长。
+- 匿名会话按浏览器 UUID 严格隔离。登录后的认领已接入：全局 `AppShell` 中的 `AnonymousClaimCoordinator` 经同源 `/api/identity/anonymous-claim` 预览并在用户确认后认领，FastAPI `POST /api/v1/identity/anonymous-claim` 调用 `services/identity/anonymous_claim.py`，迁移 Agent Session（含工作区复制）及 Agent 附件；有 `running` Turn 的 Session 暂不迁移并计入 `skipped_streaming_count`。source owner 只来自 BFF 注入的双身份请求头，客户端不能指定，细节见 [认证架构](../auth/ARCHITECTURE.md#anonymous-identity-and-claim)。
+- Agent 匿名会话目前没有接入 TTL 清理：维护命令 `uv run --locked python -m app.services.agent_uploads` 只删除过期的 Agent 附件暂存文本（输出 `expired_agent_uploads`），不处理 `agent_sessions`；上线前应增加保留期策略，避免匿名数据无限增长。
 - PostgreSQL 会在后端启动、会话详情读取、同键重放和新轮创建时恢复租约过期的 running Turn；Memory fallback 不存在跨进程租约或重启恢复。

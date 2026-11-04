@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { ANONYMOUS_CHAT_TTL_SECONDS, backendConfig } from "../../config/backend";
+import { ANONYMOUS_TTL_SECONDS, backendConfig } from "../../config/backend";
 import { logError, logInfo } from "../../lib/observability/logger";
 import { REQUEST_ID_HEADER, resolveRequestId } from "../../lib/observability/request-id";
 import { attachIdentity, resolveBackendIdentity } from "./identity";
@@ -110,7 +110,7 @@ export async function forwardToBusinessBackend(
   // Only anonymous traffic renews this access key. An authenticated request
   // must not silently extend data that has already been (or will be) claimed.
   if (identity.kind === "anonymous" && upstream.ok) response.cookies.set("shenzhi-chat-anon", anonymousId, {
-    httpOnly: true, sameSite: "lax", secure: req.nextUrl.protocol === "https:", path: "/", maxAge: ANONYMOUS_CHAT_TTL_SECONDS,
+    httpOnly: true, sameSite: "lax", secure: req.nextUrl.protocol === "https:", path: "/", maxAge: ANONYMOUS_TTL_SECONDS,
   });
   return response;
 }

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { KnowledgePaperDetail } from "@/clients/knowledge";
-import { ErrorBubble } from "@/features/chat/components/error-bubble";
-import { MarkdownContent } from "@/features/chat/components/markdown-content";
+import { ErrorBubble } from "./error-bubble";
+import { MarkdownContent } from "./markdown-content";
 import { usePaperAgent } from "../use-paper-agent";
 
 const PAPER_PROMPTS = [

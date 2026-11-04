@@ -1,8 +1,8 @@
-"""Deterministic Chat-only Knowledge retrieval query normalization tests."""
+"""Deterministic Knowledge retrieval query normalization tests."""
 
 import unittest
 
-from app.services.chat.knowledge_query import normalize_knowledge_query
+from app.services.knowledge.query import normalize_knowledge_query
 
 
 class KnowledgeQueryNormalizerTests(unittest.TestCase):

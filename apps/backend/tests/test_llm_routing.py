@@ -1,4 +1,4 @@
-"""Offline acceptance: actual wire routing through both existing adapters."""
+"""Offline acceptance: actual wire routing through the Agent adapter."""
 import json
 import os
 import tempfile
@@ -8,7 +8,6 @@ from unittest.mock import patch
 import httpx
 
 from app.core.errors import BusinessError
-from app.integrations.llm.provider import ModelProvider
 from app.integrations.llm.resolver import AUTODL_DEFAULT_MODELS, load_registry
 from app.services.agent.provider import OpenAICompatProvider, ModelRequest, TextDelta, ToolCallEvent
 from app.services.agent.runtime import AgentRuntime
@@ -22,7 +21,7 @@ def sse(delta, finish='stop'):
 
 
 class RoutingTests(unittest.IsolatedAsyncioTestCase):
-    async def test_autodl_both_adapters_preserve_exact_wire_routing(self):
+    async def test_autodl_adapter_preserves_exact_wire_routing(self):
         with patch.dict(os.environ, {**ENV, 'AUTODL_API_KEY': 'autodl-private'}, clear=True):
             registry = load_registry()
         seen = []
@@ -34,20 +33,15 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
             seen.append(json.loads(request.content))
             return httpx.Response(200, text=sse({'content': '正文', 'reasoning_content': '思考'}))
 
-        transport = httpx.MockTransport(handler)
-        chat = ModelProvider(registry=registry, transport=transport)
-        agent = OpenAICompatProvider(registry=registry, transport=transport)
-        with self.assertLogs('app', level='INFO') as logs:
+        agent = OpenAICompatProvider(registry=registry, transport=httpx.MockTransport(handler))
+        # The Agent adapter logs nothing at INFO, so the key cannot reach logs.
+        with self.assertNoLogs('app', level='INFO'):
             for upstream in AUTODL_DEFAULT_MODELS:
                 model = f'autodl/{upstream}'
-                self.assertEqual([e async for e in chat.stream([], model, 'fast')],
-                                 [{'text': '正文', 'reasoning': '思考'}])
                 self.assertIn(TextDelta('正文'), [e async for e in agent.stream(ModelRequest(model, []))])
-                self.assertEqual([p['model'] for p in seen[-2:]], [upstream] * 2)
-                self.assertEqual(seen[-2]['max_tokens'], 4096)
+                self.assertEqual(seen[-1]['model'], upstream)
                 self.assertEqual(seen[-1]['max_tokens'], 32768)
                 self.assertEqual(seen[-1]['stream_options'], {'include_usage': True})
-        self.assertNotIn('autodl-private', str(logs.output))
 
     async def test_autodl_declared_disable_thinking_params_reach_agent(self):
         # All built-ins passed T5 without extensions. A deployment may explicitly
@@ -80,20 +74,15 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         def handler(request):
             seen.append((request.url.host, request.headers['authorization'], json.loads(request.content)))
             return httpx.Response(200, text=sse({'content': '正文', 'reasoning_content': '思考'}))
-        transport = httpx.MockTransport(handler)
-        chat = ModelProvider(registry=registry, transport=transport)
-        agent = OpenAICompatProvider(registry=registry, transport=transport)
+        agent = OpenAICompatProvider(registry=registry, transport=httpx.MockTransport(handler))
         for model, host, key in [('qwen-plus', 'dashscope.aliyuncs.com', 'dash-secret'),
                                  ('deepseek-chat', 'api.deepseek.com', 'deep-secret'),
                                  ('glm-4-plus', 'open.bigmodel.cn', 'glm-secret')]:
-            result = [event async for event in chat.stream([], model, 'fast')]
-            self.assertEqual(result, [{'text': '正文', 'reasoning': '思考'}])
             result = [event async for event in agent.stream(ModelRequest(model, []))]
             self.assertIn(TextDelta('正文'), result)
-            for actual_host, bearer, payload in seen[-2:]:
-                self.assertEqual((actual_host, bearer, payload['model']), (host, f'Bearer {key}', model))
-        self.assertEqual(seen[0][2]['max_tokens'], 4096)
-        self.assertEqual(seen[1][2]['max_tokens'], 32768)
+            actual_host, bearer, payload = seen[-1]
+            self.assertEqual((actual_host, bearer, payload['model']), (host, f'Bearer {key}', model))
+        self.assertEqual(seen[0][2]['max_tokens'], 32768)
         self.assertNotIn('enable_thinking', seen[-1][2])
         self.assertNotIn('stream_options', seen[-1][2])
 
@@ -130,21 +119,9 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
                 return httpx.Response(200, text=sse({'content': 'ok'}))
             for model, host, key in [('deepseek-chat', 'api.deepseek.com', 'deep-secret'),
                                      ('historical-id', 'fourth.example', 'fourth-secret')]:
-                chat = ModelProvider(registry=registry, transport=httpx.MockTransport(handler))
                 agent = OpenAICompatProvider(registry=registry, transport=httpx.MockTransport(handler))
-                _ = [event async for event in chat.stream([], model, 'fast')]
                 _ = [event async for event in agent.stream(ModelRequest(model, []))]
-                self.assertEqual(seen[-2:], [(host, f'Bearer {key}', 'deepseek-chat')] * 2)
-
-    async def test_followups_resolve_default_provider(self):
-        with patch.dict(os.environ, {**ENV, 'AI_DEFAULT_MODEL': 'glm-4-plus'}, clear=True):
-            registry = load_registry()
-        def handler(request):
-            self.assertEqual(request.url.host, 'open.bigmodel.cn')
-            self.assertEqual(request.headers['authorization'], 'Bearer glm-secret')
-            self.assertEqual(json.loads(request.content)['model'], 'glm-4-plus')
-            return httpx.Response(200, json={'choices': [{'message': {'content': '["追问"]'}}]})
-        self.assertEqual(await ModelProvider(registry=registry, transport=httpx.MockTransport(handler)).followups('q', 'a' * 21), ['追问'])
+                self.assertEqual(seen[-1], (host, f'Bearer {key}', 'deepseek-chat'))
 
     async def test_arbitrary_400_not_retried_and_upstream_secrets_not_logged(self):
         with patch.dict(os.environ, ENV, clear=True):
@@ -181,9 +158,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
             def handler(request):
                 seen.append(json.loads(request.content))
                 return httpx.Response(200, text=sse({'content': 'ok'}))
-            chat = ModelProvider(registry=registry, transport=httpx.MockTransport(handler))
             agent = OpenAICompatProvider(registry=registry, transport=httpx.MockTransport(handler))
-            _ = [event async for event in chat.stream([], 'zhipu/future-glm', 'idea')]
             _ = [event async for event in agent.stream(ModelRequest('zhipu/future-glm', [], temperature=1.0))]
             for payload in seen:
                 self.assertEqual(payload['model'], 'future-glm')

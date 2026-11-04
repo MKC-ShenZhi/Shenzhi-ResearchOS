@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
 from app.core.database import session_scope
-from app.models.chat import ChatMessageRow, ChatSessionRow
+from app.models.agent_session import AgentSessionRow
 from app.models.agent_upload import AgentUploadRow
 from app.models.collections import CollectionFolderRow, CollectionItemRow, CollectionUserStateRow
 from app.models.profile import UserProfileRow
@@ -31,10 +31,8 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
     async def test_deletes_all_target_data_preserves_other_user_and_is_idempotent(self):
         target_user = f'delete-test-{uuid.uuid4()}'
         other_user = f'keep-test-{uuid.uuid4()}'
-        target_session_id = uuid.uuid4()
-        other_session_id = uuid.uuid4()
-        target_message_id = uuid.uuid4()
-        other_message_id = uuid.uuid4()
+        target_session_id = str(uuid.uuid4())
+        other_session_id = str(uuid.uuid4())
         target_upload_id = uuid.uuid4()
         other_upload_id = uuid.uuid4()
 
@@ -48,18 +46,8 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 CollectionUserStateRow(user_id=other_user),
                 ReadingHistoryRow(user_id=target_user, paper_id='paper-a'),
                 ReadingHistoryRow(user_id=other_user, paper_id='paper-b'),
-                ChatSessionRow(id=target_session_id, owner=f'user:{target_user}', title='delete', settings={}),
-                ChatSessionRow(id=other_session_id, owner=f'user:{other_user}', title='keep', settings={}),
-                ChatMessageRow(
-                    id=target_message_id, session_id=target_session_id, question='delete', settings={},
-                    attachment_context='', warnings=[], content='', reasoning='', status='done',
-                    message_refs=[], followups=[], duration_ms=0,
-                ),
-                ChatMessageRow(
-                    id=other_message_id, session_id=other_session_id, question='keep', settings={},
-                    attachment_context='', warnings=[], content='', reasoning='', status='done',
-                    message_refs=[], followups=[], duration_ms=0,
-                ),
+                AgentSessionRow(id=target_session_id, owner=f'user:{target_user}', title='delete', settings={}),
+                AgentSessionRow(id=other_session_id, owner=f'user:{other_user}', title='keep', settings={}),
                 AgentUploadRow(id=target_upload_id, owner=f'user:{target_user}',
                                filename='target.md', text='delete', original_length=6,
                                final_length=6, truncated=False,
@@ -83,13 +71,12 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
 
         try:
             result = await AccountDeletionService().delete_all_for_user(target_user)
-            self.assertEqual((result.profiles_deleted, result.settings_deleted, result.chat_sessions_deleted), (1, 1, 1))
+            self.assertEqual((result.profiles_deleted, result.settings_deleted, result.agent_sessions_deleted), (1, 1, 1))
 
             async with session_scope() as db:
                 self.assertIsNone(await db.get(UserProfileRow, target_user))
                 self.assertIsNone(await db.get(UserSettingsRow, target_user))
-                self.assertIsNone(await db.get(ChatSessionRow, target_session_id))
-                self.assertIsNone(await db.get(ChatMessageRow, target_message_id))
+                self.assertIsNone(await db.get(AgentSessionRow, target_session_id))
                 self.assertIsNone(await db.get(AgentUploadRow, target_upload_id))
                 self.assertIsNotNone(await db.get(AgentUploadRow, other_upload_id))
                 self.assertIsNone(await db.get(CollectionUserStateRow, target_user))
@@ -101,19 +88,16 @@ class AccountDeletionPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len((await db.scalars(select(ReadingHistoryRow).where(ReadingHistoryRow.user_id == other_user))).all()), 1)
                 self.assertIsNotNone(await db.get(UserProfileRow, other_user))
                 self.assertIsNotNone(await db.get(UserSettingsRow, other_user))
-                self.assertIsNotNone(await db.get(ChatSessionRow, other_session_id))
-                self.assertIsNotNone(await db.get(ChatMessageRow, other_message_id))
+                self.assertIsNotNone(await db.get(AgentSessionRow, other_session_id))
 
             repeated = await AccountDeletionService().delete_all_for_user(target_user)
-            self.assertEqual((repeated.profiles_deleted, repeated.settings_deleted, repeated.chat_sessions_deleted), (0, 0, 0))
+            self.assertEqual((repeated.profiles_deleted, repeated.settings_deleted, repeated.agent_sessions_deleted), (0, 0, 0))
         finally:
             async with session_scope() as db:
                 for model, key in (
-                    (ChatMessageRow, target_message_id),
-                    (ChatMessageRow, other_message_id),
                     (AgentUploadRow, other_upload_id),
-                    (ChatSessionRow, target_session_id),
-                    (ChatSessionRow, other_session_id),
+                    (AgentSessionRow, target_session_id),
+                    (AgentSessionRow, other_session_id),
                     (UserProfileRow, target_user),
                     (UserProfileRow, other_user),
                     (UserSettingsRow, target_user),

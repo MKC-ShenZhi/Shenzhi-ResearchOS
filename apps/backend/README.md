@@ -53,7 +53,7 @@ api/agent.py → services/agent/{runtime,service,...} + services/agent_sessions
 → services/agent/{knowledge_tools,read_paper,...} 等工具 → integrations / 外部 Provider
 ```
 
-`api/chat.py` 与 `services/chat/` 仍提供 `/chat/config`（匿名身份初始化）、匿名数据认领及会话存储等被 Agent 复用的基础设施，见 [docs/chat/README.md](../../docs/chat/README.md)。
+`api/identity.py` 提供 `/identity/bootstrap`（匿名身份初始化）与 `/identity/anonymous-claim`（登录后认领匿名 Agent 会话、工作区与附件，`services/identity/anonymous_claim.py`），见 [认证架构](../../docs/auth/ARCHITECTURE.md#anonymous-identity-and-claim)。
 
 `app/api/knowledge.py` 提供的 ShenZhi-owned Knowledge API（前缀 `/api/v1/knowledge`）：
 
@@ -92,7 +92,7 @@ CORS 响应头导致浏览器拒绝加载。端点只接受可信 `paperId`，�
 配置项为 `PAPER_RESOURCE_TIMEOUT`（秒）与
 `PAPER_MAX_SIZE_MB`（可获取资源大小上限）。
 
-配置 `CHAT_DATABASE_URL` 后，Agent 会话及待发送附件的解析文本可跨后端实例读取。Agent 附件源文件不入库；临时文本在对话运行结束并写入记录后删除，未发送的记录 24 小时后失效，并由上传请求及维护命令清理。旧 Chat 附件（`api/uploads.py`）和未配置数据库时的会话仍依赖进程内存。
+配置 `CHAT_DATABASE_URL` 后，Agent 会话及待发送附件的解析文本可跨后端实例读取。Agent 附件源文件不入库；临时文本在对话运行结束并写入记录后删除，未发送的记录 24 小时后失效，并由上传请求及维护命令清理。未配置数据库时的会话与附件仍依赖进程内存。
 
 Python 环境与依赖统一使用 [uv](https://docs.astral.sh/uv/) 管理。新增依赖使用：
 
@@ -151,6 +151,6 @@ cd apps/backend
 uv run --locked --env-file .env alembic upgrade head
 ```
 
-`agent_uploads` 临时文本表及匿名 Chat 会话仍按原维护策略清理。
+`agent_uploads` 临时文本表的过期清理：`uv run --locked python -m app.services.agent_uploads`（输出 `expired_agent_uploads`）。迁移 `021_drop_chat_tables` 删除旧 Chat 会话表 `chat_sessions` / `chat_messages`，数据不保留。
 
-维护说明：[Agent 对话](../../docs/agent/README.md) · [Chat 基础设施](../../docs/chat/README.md) · [部署与运行环境](../../docs/engineering/deployment.md)。
+维护说明：[Agent 对话](../../docs/agent/README.md) · [认证架构](../../docs/auth/ARCHITECTURE.md) · [部署与运行环境](../../docs/engineering/deployment.md)。

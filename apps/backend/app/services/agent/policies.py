@@ -45,9 +45,9 @@ def compose_agent_system(specs: Sequence[ToolSpec], *, extra_sections: Sequence[
     return '\n\n'.join(sections)
 
 
-# run 的时间预算（秒）与工具调用次数（次），按模式给。与 model_provider.TEMPERATURE
-# 同为"按模式的业务策略"。
-#
+# 采样温度、run 的时间预算（秒）与工具调用次数（次），均为"按模式的业务策略"。
+TEMPERATURE = {'fast': 0.3, 'deep': 0.6, 'idea': 1.0, 'doubt': 0.85}
+
 # fast 是首页智能搜索的快速回答档：180 秒 / 12 次工具调用，优先及时给出有据可依的回答。
 # deep / idea / doubt 保持 SZDR（前代研究产品）量级：15 分钟 / 120 次工具调用，
 # 为完整研究流程保留空间；deadline 是上限，预算耗尽前由收尾模式/交付窗口兜底。

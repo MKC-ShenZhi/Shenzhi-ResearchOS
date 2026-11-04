@@ -9,7 +9,7 @@ import {
   Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ChatInput } from "@/features/chat/components/chat-input";
+import { FollowUpInput } from "@/components/common/composer/follow-up-input";
 import { cn } from "@/lib/utils";
 import { PlanCard } from "./plan-card";
 import { ReportViewer } from "./report-viewer";
@@ -124,7 +124,7 @@ export function ResearchWorkbench({
 
         <div className="min-w-0 flex-1 space-y-5">
           <ReportViewer sectionState={run.sectionState} />
-          <ChatInput />
+          <FollowUpInput />
         </div>
       </div>
     </div>

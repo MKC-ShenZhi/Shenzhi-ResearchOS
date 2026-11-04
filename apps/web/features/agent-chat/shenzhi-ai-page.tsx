@@ -31,7 +31,7 @@ import { ComposerShell, type ComposerSkill } from "@/components/common/composer/
 import type { WorkspaceFile } from "@/components/common/composer/attachment-menu";
 import { AppShell } from "@/components/common/layout/app-shell";
 import { useAuth } from "@/components/auth/auth-provider";
-import type { ChatAttachment, ChatConfig } from "@/types/ai-search";
+import type { ComposerAttachment, ComposerConfig } from "@/types/ai-search";
 import { takeAgentLaunch } from "./launch-store";
 import { notifyAgentSessionsChanged } from "./session-events";
 import { normalizeMathDelimiters } from "./math-delimiters";
@@ -103,7 +103,7 @@ interface Turn {
   id: string;
   role: "user" | "assistant";
   content: string;
-  attachments?: ChatAttachment[];
+  attachments?: ComposerAttachment[];
   reasoning: string;
   /** 过程流的全部状态（思考 / 正文 / 工具按到达顺序交错）；渲染与持久化都从它派生。 */
   stream: StreamState;
@@ -158,7 +158,7 @@ function fromStoredTurn(turn: AgentStoredTurn): StreamState {
 function storedTurns(turns: AgentStoredTurn[]): Turn[] {
   return turns.flatMap((turn) => [
     { id: `${turn.id}:user`, role: "user" as const, content: turn.user_content, reasoning: "",
-      attachments: (turn.settings.attachments ?? []) as ChatAttachment[],
+      attachments: (turn.settings.attachments ?? []) as ComposerAttachment[],
       stream: initialStreamState(), steers: [] },
     { id: `${turn.id}:assistant`, role: "assistant" as const, content: turn.assistant_content,
       reasoning: turn.reasoning ?? "", stream: fromStoredTurn(turn),
@@ -270,7 +270,7 @@ export function ShenzhiAiPage() {
   // 默认 fast。预算对齐 SZDR 的实测形态（15 分钟 / 120 次工具调用，见后端 policies.py）：
   // deadline 是上限不是目标，快问题照样快回；mode 只是资源倾向，不是方法论档位。
   const [mode, setMode] = useState<"fast" | "deep" | "idea" | "doubt">("fast");
-  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<ComposerSkill[]>([]);
   const [quote, setQuote] = useState<QuoteDraft | null>(null);   // 引用回复草稿
   /** 正在弹层里查看的报告（null = 关闭）。 */
@@ -546,7 +546,7 @@ export function ShenzhiAiPage() {
     setPendingOperationSessionId(sessionId);
     const context = { sessionId, generation, assistantId };
     const userTurn: Turn = {
-      id: userId, role: "user", content: prompt, attachments: runInput.attachments as ChatAttachment[],
+      id: userId, role: "user", content: prompt, attachments: runInput.attachments as ComposerAttachment[],
       reasoning: "", stream: initialStreamState(), steers: [],
     };
     const assistantTurn: Turn = {
@@ -587,7 +587,7 @@ export function ShenzhiAiPage() {
       if (!accepted && isCurrent()) {
         setTurns((previous) => previous.filter((turn) => turn.id !== userId && turn.id !== assistantId));
         setInput(prompt);
-        setAttachments(runInput.attachments as ChatAttachment[]);
+        setAttachments(runInput.attachments as ComposerAttachment[]);
       }
       if (!controller.signal.aborted && (error as Error).name !== "AbortError" && isCurrent()) {
         setRunError(error instanceof ApiError && error.status === 409
@@ -724,7 +724,7 @@ export function ShenzhiAiPage() {
     void send(text);
   }, [running, send]);
 
-  const chatConfig: ChatConfig = {
+  const composerConfig: ComposerConfig = {
     models: agentConfig.models,
     default_model: agentConfig.default_model,
     modes: ["fast", "deep", "idea", "doubt"],
@@ -891,7 +891,7 @@ export function ShenzhiAiPage() {
               selectedSkills={selectedSkills}
               onRemoveSkill={(name) => toggleSkill(name)}
               onSelectSkill={(name) => toggleSkill(name)}
-              config={chatConfig}
+              config={composerConfig}
               busy={uploading}
               disabled={loadingSession || !hydratedSessionId}
               hideStyleRow

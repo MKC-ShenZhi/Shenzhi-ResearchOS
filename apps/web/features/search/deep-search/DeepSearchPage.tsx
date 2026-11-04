@@ -1,7 +1,7 @@
 import { Share, Star } from "lucide-react";
 import { AppShell } from "@/components/common/layout/app-shell";
 import { Button } from "@/components/ui/button";
-import { ChatInput } from "@/features/chat/components/chat-input";
+import { FollowUpInput } from "@/components/common/composer/follow-up-input";
 import { ResearchNav } from "@/features/search/deep-search/components/research-nav";
 import { AnswerCard } from "@/features/search/deep-search/components/answer-card";
 import { ReferenceGrid } from "@/features/search/deep-search/components/reference-grid";
@@ -47,7 +47,7 @@ export function DeepSearchPage() {
           <AnswerCard />
           <ReferenceGrid />
           <FollowUps />
-          <ChatInput />
+          <FollowUpInput />
         </div>
       </div>
     </AppShell>

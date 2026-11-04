@@ -29,6 +29,14 @@ export class ApiError extends Error {
   }
 }
 
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+export function requestIdForApiError(error: unknown): string | undefined {
+  return error instanceof ApiError ? error.requestId ?? undefined : undefined;
+}
+
 export function apiPath(path: string) {
   const p = path.startsWith("/") ? path : `/${path}`;
   return `${API_PREFIX}${p}`;
@@ -51,7 +59,7 @@ export function expectedUserHeaders(userId: string): HeadersInit {
 let identityReady: Promise<void> | undefined;
 async function ensureBackendIdentity() {
   if (typeof window === "undefined") return;
-  identityReady ??= fetch(apiPath("/chat/config"), { cache: "no-store", signal: AbortSignal.timeout(30000) }).then((response) => {
+  identityReady ??= fetch(apiPath("/identity/bootstrap"), { cache: "no-store", signal: AbortSignal.timeout(30000) }).then((response) => {
     if (!response.ok) throw new ApiError(20004, "无法连接生成服务", response.status, {
       requestId: response.headers.get("X-Request-ID"),
     });

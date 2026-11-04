@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ComposerSkill } from "@/components/common/composer/composer";
 import { createAgentSession, fetchAgentConfig, type AgentConfig, type AgentMode } from "@/clients/backend/agent";
-import type { ChatAttachment, ChatConfig, ChatReplyMode } from "@/types/ai-search";
+import type { ComposerAttachment, ComposerConfig, ReplyMode } from "@/types/ai-search";
 import { saveAgentLaunch } from "./launch-store";
 import { notifyAgentSessionsChanged } from "./session-events";
 
@@ -17,7 +17,7 @@ export function useAgentLauncher() {
   const [agentConfig, setAgentConfig] = useState<AgentConfig>();
   const [model, setModel] = useState("default");
   const [mode, setMode] = useState<AgentMode>("fast");
-  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<ComposerSkill[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export function useAgentLauncher() {
       : [...current, ...(agentConfig?.skills.filter((skill) => skill.name === name) ?? [])]);
   };
 
-  const changeMode = (next: ChatReplyMode) => {
+  const changeMode = (next: ReplyMode) => {
     if (next === "fast" || next === "deep" || next === "idea" || next === "doubt") setMode(next);
   };
 
@@ -71,7 +71,7 @@ export function useAgentLauncher() {
     // Do not fall back to the old Chat catalog while Agent config is loading. An empty limit
     // keeps upload/model choices unavailable until /agent/config is authoritative.
     upload: agentConfig?.upload ?? { max_size_mb: 0, max_files: 0, accept: [] },
-  } as ChatConfig;
+  } as ComposerConfig;
 
   return {
     config, skills: agentConfig?.skills ?? [], model, setModel, mode, changeMode,

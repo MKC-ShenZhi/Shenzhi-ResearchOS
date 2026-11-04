@@ -67,7 +67,7 @@ cd apps/backend && uv run python -m unittest discover -s tests -v
 
 暂未开放(原型页面,由 `feature-availability` 拦截):`/knowledge/graph`(私域知识图谱)、`/projects/*`、`/submit/journals`、`/agents/deep-research`、`/agents/auto-research`、`/agents/deep-search`。
 
-兼容重定向:`/search` → `/knowledge/search`;`/scholars[/id]` → `/knowledge/scholars[/id]`;`/knowledge/search/[paperId][/graph]` → `/papers/[id][/graph]`;`/agents/ask` → `/`。
+兼容重定向:`/search` → `/knowledge/search`;`/scholars[/id]` → `/knowledge/scholars[/id]`;`/knowledge/search/[paperId][/graph]` → `/papers/[id][/graph]`。
 
 ---
 

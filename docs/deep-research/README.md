@@ -49,7 +49,7 @@
 │ │ 研究计划卡    │ 报告头(标题/摘要/数字条)      │ │
 │ │ 步骤时间线    │ 章节区(三态)                │ │
 │ │ 来源墙       │ 参考文献(全部完成后出现)      │ │
-│ │ (可折叠 48px)│ 追问输入框(复用 ChatInput)   │ │
+│ │ (可折叠 48px)│ 追问输入框(FollowUpInput)    │ │
 │ └─────────────┴─────────────────────────────┘ │
 └───────────────────────────────────────────────┘
 ```
@@ -75,7 +75,7 @@
 | `source-wall.tsx` | 来源 chips 墙,hover title 显示全名;count 有 Math.min 夹取 | 纯展示 |
 | `report-viewer.tsx` | 报告头 + 章节三态 + 对比表 + 趋势列表 + 参考文献 | 纯展示 |
 
-共享:`withCitations`(`apps/web/components/common/citations.tsx`)把正文 `[n]` 渲染为主色上标,answer-card(深度搜索)与 report-viewer 共用。追问输入框直接复用 `apps/web/features/chat/components/chat-input.tsx`(仅展示,不发请求)。
+共享:`withCitations`(`apps/web/components/common/citations.tsx`)把正文 `[n]` 渲染为主色上标,answer-card(深度搜索)与 report-viewer 共用。追问输入框使用 `apps/web/components/common/composer/follow-up-input.tsx` 的 `FollowUpInput`(包一层公共 `ComposerShell`,仅展示,不发请求)。
 
 ## 5. 数据模型
 

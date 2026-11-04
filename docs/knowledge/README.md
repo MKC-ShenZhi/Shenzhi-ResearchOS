@@ -148,7 +148,7 @@ Search 请求使用 `query`、`topK`、`offset`、`yearFrom`、`yearTo`、`venue
 `offset=(page-1)*20` 请求；响应通过 `hasMore` 表示是否存在下一页。当前外部
 接口接受较大的 `top_k`，但会忽略 `offset` 且不返回总数，因此 Backend adapter
 为显式携带 `offset` 的论文检索请求读取至目标页后一条、在服务端截取目标页并
-计算 `hasMore`。未携带 `offset` 的 Knowledge2Chat 请求仍保持原有 `top_k` 行为。
+计算 `hasMore`。未携带 `offset` 的请求（如 Agent 知识库工具 `services/agent/knowledge_tools.py`）仍保持原有 `top_k` 行为。
 其余筛选字段只在 adapter 边界映射为外部 API 所需字段（例如 `year_gte`、
 `conference`）。
 

@@ -6,6 +6,13 @@ from pydantic import BaseModel, Field
 from app.core.config import MAX_FILES
 
 
+class AgentAttachment(BaseModel):
+    kind: Literal['file', 'paper', 'patent', 'funding', 'scholar', 'institution', 'session', 'project']
+    file_id: str | None = Field(default=None, max_length=100)
+    ref_id: str | None = Field(default=None, max_length=200)
+    title: str | None = Field(default=None, max_length=500)
+
+
 class AgentSessionCreate(BaseModel):
     prompt: str = Field(min_length=1, max_length=10_000)
     model: str | None = None

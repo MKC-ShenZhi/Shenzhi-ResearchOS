@@ -11,7 +11,6 @@ docs/
 ├── engineering/     # 全局工程架构、部署、开发规范与公共技术决策
 ├── agent/           # 深知 AI（Agent）对话、会话持久化与 Skill
 ├── auth/            # 登录、注册、认证与账号体系
-├── chat/            # Chat 基础设施（匿名身份、会话存储等仍被 Agent 复用的部分）
 ├── knowledge/       # 知识库：论文库、学者、主题、互动与统计、论文图片
 ├── conferences/     # 会议DDL（会议截稿）
 ├── settings/        # 个人设置与账号管理

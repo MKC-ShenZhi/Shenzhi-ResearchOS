@@ -1,4 +1,4 @@
-"""Heartbeat supervision for durable Chat and Agent work (no database required)."""
+"""Heartbeat supervision for durable Agent work (no database required)."""
 import asyncio
 import unittest
 
