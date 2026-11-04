@@ -328,9 +328,9 @@ class DailyBudgetTests(unittest.IsolatedAsyncioTestCase):
         )
         job = ConferenceSync(store, client)
         self.assertEqual(
-            (await job.sync(now=NOW + timedelta(hours=22)))["status"], "not-due"
+            (await job.sync(now=NOW + timedelta(hours=21)))["status"], "not-due"
         )
         self.assertEqual(
-            (await job.sync(now=NOW + timedelta(hours=23)))["status"], "unchanged"
+            (await job.sync(now=NOW + timedelta(hours=22)))["status"], "unchanged"
         )
         client.download.assert_not_awaited()

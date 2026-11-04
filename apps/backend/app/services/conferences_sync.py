@@ -15,8 +15,8 @@ from app.services.conferences_source import snapshot_from_files
 
 logger = logging.getLogger(__name__)
 LOCK_KEY = 7_402_118_032
-# Reserve one hour for polling, download and per-instance catalog refresh.
-SYNC_INTERVAL = timedelta(hours=23)
+# Reserve time for hourly trigger jitter, download and catalog refresh.
+SYNC_INTERVAL = timedelta(hours=22)
 
 
 def validate_replacement(snapshot, previous, followed):

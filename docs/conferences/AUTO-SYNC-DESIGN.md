@@ -23,7 +23,7 @@ conference_snapshots 通过 id=1 约束只保存当前一份 JSONB，避免每�
 
 ## 一致性与错误处理
 
-手动与定时写入共用 Postgres advisory lock；检查到期和写入在持锁期间执行。约每天检查一次（23 小时间隔，给轮询、下载和缓存刷新留余量），失败后至少 1 小时再尝试，尝试时间存数据库，进程重启不丢退避。同步异常被调度器隔离，不阻断首页任务。
+手动与定时写入共用 Postgres advisory lock；检查到期和写入在持锁期间执行。约每天检查一次（22 小时间隔，给小时级外部触发、下载和缓存刷新留余量），失败后至少 1 小时再尝试，尝试时间存数据库，进程重启不丢退避。同步异常被调度器隔离，不阻断首页任务。
 
 写入前使用与打包快照相同的 schema、日期/时区/重复 ID/分类/年份校验。会议数量下降超过 10% 或用户关注 ID 消失，拒绝写入。消失 ID 也记录日志。已知 ds-dcc → cg-dcc、se-eusipco → cg-eusipco 由 021 迁移，合并重复关注并保留记录；合并不可逆，downgrade 不推测用户原选择。022 建立当前快照表。必须与新快照同批上线。
 
@@ -62,8 +62,28 @@ conference_snapshots 通过 id=1 约束只保存当前一份 JSONB，避免每�
 
 整个请求有 240 秒预算，低于配置的 300 秒函数上限；下载另有180秒预算。失败保留旧快照；若平台强制中断则由数据库连接关闭释放事务锁，尝试时间使后续请求遵守退避。响应不缓存。
 
-调度边界：默认每日配置兼容 Hobby 的每日频率限制，但平台不是精确时钟，也不会自动重试失败的 Cron。服务层的一小时退避只是允许一小时后重试，不会自行产生请求。默认失败后下一次定时尝试可能到次日；可在面板人工重跑。若验收要求失败自动一小时内恢复或严格上游滞后≤24小时，应在支持小时级 Cron 的套餐确认后把 schedule 改为 `0 * * * *`，仍由23小时成功间隔和一小时失败退避避免多余拉取，或由团队现有外部调度器按小时调用同一受保护入口。不能把每日一次的基线配置宣称为严格24小时SLA，也不能未经确认使用小时表达式导致 Hobby 部署失败。
+调度边界：Vercel 每日 Cron 保留为低频备用；不能单独承担失败自动重试。主触发由下节小时级 HTTP 工作流提供，后端统一22小时成功检查间隔、1小时失败退避。不增加后台等待，不依赖 Vercel 付费 Cron 频率。
 
 官方依据：https://vercel.com/docs/cron-jobs/quickstart 、https://vercel.com/docs/cron-jobs/manage-cron-jobs 、https://vercel.com/docs/cron-jobs/usage-and-pricing 。不新增依赖，不使用 GitHub Actions 发布快照。
 
 本地验证：新增6项HTTP Cron测试，会议相关共运行50项，49通过、1项跳过（依赖可选数据库环境）；覆盖鉴权拒绝、缺配置拒绝、共享服务的成功与跳过状态、异常不泄露、请求超时取消、Vercel进程循环禁用和调度配置。未进行本次Vercel云端部署或平台定时执行验收。
+
+## 每小时外部触发与失败自动重试
+
+新增 `.github/workflows/conference-sync.yml`，每小时第17分钟发起一次 HTTPS 请求（24次/天，另有Vercel每日一次备用）。无 checkout、不拉取上游数据、不生成或提交快照、不创建PR、无仓库写权限。GitHub Actions仅充当HTTP触发来源，全部业务仍在后端，符合“不使用Actions定时提快照PR”的边界。
+
+后端未到22小时成功检查间隔时只查询数据库元信息并返回not-due；真正请求GitHub仍约每天一次。失败尝试时间持久化；满1小时后的下一次小时触发自动重试，不必等到次日。重启不丢失退避；重叠触发由后端数据库锁防重。工作流失败标红，响应体、URL和密钥不写日志，不跟随重定向。
+
+上线配置（由有项目权限的部署人员操作，不把真实值提交仓库）：
+
+1. 完成上节后端迁移与配置，确认目标后端的 `/api/v1/internal/conference-sync` 可用。
+2. 仓库 Settings → Secrets and variables → Actions → Secrets：配置 `CONFERENCE_SYNC_URL` 为该后端完整HTTPS入口，`CONFERENCE_CRON_SECRET` 与后端 `CRON_SECRET` 一致（至少16字符随机ASCII密钥）。必须直接使用后端地址，不能填Web页面或登录重定向地址。
+3. Actions → Variables：配置 `CONFERENCE_SYNC_SCHEDULE_ENABLED=true`。未配置时工作流不运行，防止未准备好的环境被调用。
+4. GitHub的schedule只运行默认分支上的工作流（当前main）；功能分支上传不等于自动启用。按团队正常PR/发布流程集成工作流后才能启用自动调度，不为此直接推main或dev。已进入默认分支后，可先用workflow_dispatch选择已部署对应版本进行人工验收。
+5. 在Actions手动运行确认updated/unchanged，并观察下一次实际定时执行；同时检查数据库checked_at。可在隔离验收环境模拟一次上游失败，再观察退避后的定时恢复。不要针对生产制造故障。
+
+时效预算：健康调度下，22小时成功间隔 + 最多约1小时轮询 + 下载和5分钟页面缓存，为一天目标留余量；不是每小时下载。失败后至少1小时再重试，平台抖动可能使下一次请求更晚。GitHub定时任务可能排队/丢弃，公网中断或上游持续故障也无法保证数据新鲜度；此时按需求保留旧数据，通过Actions失败记录排查。公共仓库闲置60天会暂停计划任务，运维需关注工作流状态；若需要严格可用性承诺，使用团队受监控的服务器调度同一入口。不能把任何免费平台的尽力调度宣称为绝对SLA。
+
+这次修改解决的是“失败后没有新的自动请求来源”，不是靠去掉退避或在Serverless函数里长时间sleep。无需新增Python依赖，也无需提高Vercel Cron套餐。
+
+官方依据：https://docs.github.com/en/actions/how-tos/troubleshoot-workflows 、https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule 。

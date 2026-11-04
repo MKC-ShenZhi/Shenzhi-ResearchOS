@@ -88,4 +88,4 @@ uv run --locked python -m app.services.conferences_cli publish --source /path/to
 
 ## Vercel 定时同步
 
-后端 vercel.json 已注册每日 Cron，入口复用 ConferenceSync；必须配置 CRON_SECRET、CONFERENCE_CRON_ENABLED 和数据库并执行迁移。Preview 不自动调度，Production 部署后在 Cron Jobs 验收。完整部署步骤及每日频率/重试边界见 [自动同步设计](AUTO-SYNC-DESIGN.md#vercel-http-cron2026-11-04)。
+后端提供密钥保护的同步入口。主触发由 `.github/workflows/conference-sync.yml` 每小时调用，Vercel每日Cron仅作备用；后端到期前只做轻量数据库检查，约每天才访问上游。失败后满1小时，在后续触发中自动重试；保留旧快照。需完成数据库迁移、后端配置和仓库Actions密钥/开关配置；schedule只在默认分支生效，功能分支上传本身不会启用线上任务。完整步骤见 [自动同步设计](AUTO-SYNC-DESIGN.md#每小时外部触发与失败自动重试)。
