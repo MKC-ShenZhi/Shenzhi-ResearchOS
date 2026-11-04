@@ -12,8 +12,7 @@ export type BackendIdentity =
 
 async function getBetterAuthSession(headers: Headers): Promise<AuthSession> {
   // Keep this lazy so the transport helper does not initialize Better Auth at module load.
-  const authModulePath = "../../lib/auth/server";
-  const { auth } = await import(authModulePath);
+  const { auth } = await import("../../lib/auth/server");
   return auth.api.getSession({ headers });
 }
 

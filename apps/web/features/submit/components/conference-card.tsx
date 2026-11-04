@@ -114,14 +114,19 @@ export const ConferenceCard = memo(function ConferenceCard({
           </div>
         )}
 
-        {conference.status === "open"
+        {conference.needs_update ? (
+          <p className="mt-4 text-sm text-muted">
+            待更新 · 暂无新一届截稿信息，{" "}
+            <a href="https://github.com/ccfddl/ccf-deadlines" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">查看数据来源</a>
+          </p>
+        ) : conference.status === "open"
           ? <LiveDeadlineCountdown conference={conference} />
           : <DeadlineCountdown conference={conference} now={now} />}
 
         {edition.milestones.length > 1 && (
           <ol className="mt-3 flex flex-wrap gap-2" aria-label={`${conference.title} ${edition.year} 时间线`}>
             {timeline.passedCount > 0 && (
-              <li className="flex h-7 items-center rounded-lg bg-chip px-2.5 text-xs text-faint">
+              <li className="flex min-h-8 w-full items-center rounded-lg bg-chip px-5 py-2 text-xs text-faint">
                 已截止 {timeline.passedCount} 轮
               </li>
             )}
@@ -129,17 +134,17 @@ export const ConferenceCard = memo(function ConferenceCard({
               <li
                 key={edition.milestones.indexOf(milestone)}
                 className={cn(
-                  "flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs",
+                  "grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 rounded-lg px-5 py-2 text-xs sm:grid-cols-[4rem_minmax(0,1fr)_auto]",
                   milestone === next ? "bg-primary-soft text-primary" : "bg-chip text-muted",
                 )}
               >
-                <span className="font-medium">{milestoneLabel(milestone)}</span>
-                {milestone.comment && <span>{milestone.comment}</span>}
-                <span>{milestone.at ? formatInstant(milestone.at) : "待公布"}</span>
+                <span className="whitespace-nowrap font-medium">{milestoneLabel(milestone)}</span>
+                {milestone.comment && <span className="col-span-2 row-start-2 min-w-0 break-words leading-relaxed sm:col-span-1 sm:col-start-2 sm:row-start-1">{milestone.comment}</span>}
+                <span className="col-start-2 row-start-1 justify-self-end whitespace-nowrap tabular-nums sm:col-start-3">{milestone.at ? formatInstant(milestone.at) : "待公布"}</span>
               </li>
             ))}
             {timeline.hiddenUpcomingCount > 0 && (
-              <li className="flex h-7 items-center rounded-lg bg-chip px-2.5 text-xs text-faint">
+              <li className="flex min-h-8 w-full items-center rounded-lg bg-chip px-5 py-2 text-xs text-faint">
                 另有 {timeline.hiddenUpcomingCount} 轮
               </li>
             )}

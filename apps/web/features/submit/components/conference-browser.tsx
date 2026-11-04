@@ -62,7 +62,8 @@ export function ConferenceBrowser() {
   const categories = useQuery({
     queryKey: ["conference-categories"],
     queryFn: ({ signal }) => fetchConferenceCategories(signal),
-    staleTime: 60 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
     retry: conferenceQueryRetry,
   });
   const deadlines = useQuery({
@@ -71,6 +72,7 @@ export function ConferenceBrowser() {
     queryFn: ({ signal }) => fetchConferenceDeadlines(query, signal),
     placeholderData: keepPreviousData,
     staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
     retry: conferenceQueryRetry,
   });
 
@@ -161,6 +163,12 @@ export function ConferenceBrowser() {
 
   return (
     <div className="flex flex-col gap-5">
+      {data && (
+        <p className="text-xs text-muted">
+          数据更新于 {data.data_as_of} · 来源{" "}
+          <a href={data.source_url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">ccf-deadlines</a>
+        </p>
+      )}
       <FollowedConferences items={followed.items} now={now} onSelect={focusConference} />
 
       <ConferenceFilterBar

@@ -60,6 +60,7 @@ class SnapshotCategory(ConferenceModel):
 class SnapshotSource(ConferenceModel):
     name: str
     url: str
+    revision: str | None = None
 
 
 class ConferenceSnapshotFile(ConferenceModel):
@@ -104,6 +105,7 @@ class ConferenceDeadline(ConferenceModel):
     last_deadline_at: datetime | None = None
     edition: ConferenceEdition
     edition_count: int = Field(ge=1)
+    needs_update: bool = False
 
 
 class ConferenceDeadlineList(ConferenceModel):

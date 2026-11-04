@@ -32,7 +32,7 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         from app.core.database import dispose_engine
         await dispose_engine()
-        self.env = patch.dict(os.environ, {'HOME_FEED_POOL_YEAR': self.YEAR})
+        self.env = patch.dict(os.environ, {'HOME_FEED_POOL_YEAR': self.YEAR, 'HOME_FEED_SCHEDULER_ENABLED': 'true'})
         self.env.start()
 
     async def asyncTearDown(self):

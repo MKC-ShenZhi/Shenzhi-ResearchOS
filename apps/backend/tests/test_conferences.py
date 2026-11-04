@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services.conferences import (
     ConferenceDeadlineService,
+    ConferenceNotFoundError,
     ConferenceFilters,
     ConferenceSnapshotError,
     UnknownCategoryError,
@@ -187,7 +188,7 @@ class SnapshotTests(CatalogTestCase):
         self.assertGreater(len(ids), 300)
         self.assertEqual(len(ids), len(set(ids)))
         # Same acronym, different venues; and one venue listed under two categories.
-        self.assertTrue({'sc-fse', 'se-fse', 'cg-dcc', 'ds-dcc'} <= set(ids))
+        self.assertTrue({'sc-fse', 'se-fse', 'cg-dcc', 'cg-eusipco'} <= set(ids))
 
     def test_duplicate_ids_and_unknown_categories_are_rejected(self):
         with self.assertRaises(ConferenceSnapshotError):
@@ -223,7 +224,7 @@ class ConferenceApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()['data']
         self.assertTrue(body['snapshot_id'].startswith('ccfddl-'))
-        self.assertEqual(body['data_as_of'], '2026-10-29')
+        self.assertEqual(body['data_as_of'], load_conference_catalog().snapshot.data_as_of.isoformat())
         self.assertEqual(body['total'], len(body['items']))
         self.assertTrue(all(item['category'] == 'AI' for item in body['items']))
         self.assertTrue(all(item['rank']['ccf'] in {'A', 'B'} for item in body['items']))
@@ -271,6 +272,11 @@ class ConferenceApiTests(unittest.TestCase):
             released = self.client.delete('/api/v1/conferences/no-such/follow', headers=self.user_headers())
         self.assertEqual(released.json()['data'], {'conference_id': 'no-such', 'is_following': False})
         unfollow.assert_awaited_once_with('user-a', 'no-such')
+
+    def test_follow_disappearing_after_cached_validation_returns_404(self):
+        with patch('app.api.conferences.follows.follow', side_effect=ConferenceNotFoundError('ai-aaai')):
+            response = self.client.put('/api/v1/conferences/ai-aaai/follow', headers=self.user_headers())
+        self.assertEqual(response.status_code, 404)
 
     def test_follow_requires_login(self):
         response = self.client.put('/api/v1/conferences/ai-aaai/follow', headers=self.headers)
