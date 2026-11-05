@@ -51,7 +51,7 @@ class SteerBody(BaseModel):
 
 @router.get('/config')
 def config(_credential: None = Depends(require_bff)):
-    """运行配置：可选模型、技能清单、附件限制（结构与 chat/config 对齐）。"""
+    """运行配置：可选模型、技能清单、附件限制。"""
     registry = load_registry()
     store = agent_service.default_store()
     skills = [{'name': skill.name, 'description': skill.description}

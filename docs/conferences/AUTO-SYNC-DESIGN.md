@@ -1,89 +1,116 @@
-# 会议 DDL 自动同步设计与维护
+# 会议 DDL 自动同步设计
 
 ## 目标与边界
 
-在现有会议 DDL 功能上接通上游 YAML → 清洗校验 → 数据库当前快照 → API 缓存 → 页面。保留时区换算、当届选择、排序、筛选与已有 status 值；新增 needs_update 字段只用于展示。Rebuttal / decision 字段显式忽略，不进入公开契约。不新增依赖。
+在原有会议 DDL 上接入上游 YAML → 统一清洗校验 → 数据库当前快照 → 缓存 → 页面。保留原时区、当届选择、排序和筛选，响应只新增字段。忽略 rebuttal_deadline / decision_deadline；不新增依赖、后台录入或通用会议别名系统。
 
-## 模块职责
+## 目录与职责
 
-- integrations/conferences/client.py：GitHub HTTP、超时、大小限制、内存 tar 成员读取；不做业务写库。
-- services/conferences_source.py：离线 YAML 归一化与完整目录校验；发布命令和在线同步共用。
-- models/conference_snapshot.py + services/conferences_repository.py：当前快照与调度元信息持久化、异步缓存加载。
-- services/conferences_sync.py：版本比较、到期判断、替换保护、同步编排。
-- services/conferences_cli.py：本地发布 / check / 手动同步 / dry-run。
-- 原 HomeFeedScheduler：新增独立开关的会议任务，不更名、不建立第二个常驻调度循环。
+- `app/integrations/conferences/client.py`：版本查询、下载和压缩包输入防护。
+- `app/services/conferences/catalog.py`：快照校验、时区换算、当届选择和查询。
+- `app/services/conferences/source.py`：共用 YAML 清洗。
+- `app/services/conferences/repository.py`：数据库快照、缓存和已移除关注资料保留。
+- `app/services/conferences/sync.py`：到期、重试、版本比较和同步编排。
+- `app/services/conferences/cli.py`：发布、校验和手动同步。
+- `app/services/conferences/__init__.py`：保留原有公共目录查询导入接口。
+- API、Schema、Model 仍各归现有层，不全部塞入 Service。
 
-## 存储与性能
+## 核心流程
 
-conference_snapshots 通过 id=1 约束只保存当前一份 JSONB，避免每天复制历史全量数据。保存 snapshot_id、上游 SHA、资料日期、同步时间、成功检查时间、尝试时间。SHA 未变只更新小字段；失败仅更新尝试时间，原 payload 保留。需要回滚时可关闭开关，再用经核验的上游版本恢复数据；本次不实现历史版本后台。
+```mermaid
+flowchart TD
+    A[原 HomeFeedScheduler 每10分钟检查] --> L{获得数据库同步锁?}
+    L -->|否| X[本轮跳过]
+    L -->|是| D{成功检查满23小时<br/>或失败退避满1小时?}
+    D -->|否| X
+    D -->|是| T[持久化尝试时间]
+    T --> V[查询上游最新 SHA]
+    V --> S{版本相同?}
+    S -->|是| C[更新成功检查时间]
+    S -->|否| F[下载有大小限制的压缩包]
+    F --> Y[内存读取指定 YAML<br/>safe_load与统一清洗]
+    Y --> Q{Schema/时区/日期正确<br/>有效会议数量未骤减?}
+    Q -->|否| E[记录失败 保留旧快照]
+    Q -->|是| P[获得短时发布锁]
+    P --> R[重新读取当前快照和关注]
+    R --> H[对已关注且上游移除的会议<br/>保留最后资料并标记 source_removed]
+    H --> W[原子替换当前快照与检查时间]
+    V -.网络错误.-> E
+    F -.下载错误.-> E
+    Y -.清洗错误.-> E
+    E --> A
+    W --> B[API缓存每5分钟检查版本]
+    B --> U[页面显示新资料与来源日期]
+```
 
-进程缓存保存已校验并完成时区转换的目录，每 5 分钟只读取 snapshot_id；版本变化才加载并解析整份 JSON。并发刷新用 asyncio.Lock 合并；数据库读取有 3 秒超时。数据库暂时不可用时优先保留最近一次已验证目录，冷启动才使用打包快照，避免瞬间退回更旧数据。快照 ID 包含上游 SHA 和日期，因此上游仅更新元信息时也会刷新。
+## 上游移除会议
 
-在线下载只发版本与压缩包请求，不按会议逐条请求。下载上限 50 MiB，YAML 单文件 2 MiB、总量 20 MiB，tar 声明展开量 150 MiB / 10000 成员；拒绝路径穿越、链接、重复资料文件。只读取 conference/types.yml 和 conference/*/*.yml，不解压到磁盘。YAML 解析放在线程中避免阻塞异步请求。
+删除单条已关注会议不再拒绝整份同步。发布事务持有短锁，重新读取关注与旧快照，将缺失但仍被关注的会议作为历史记录保留，设置 `source_removed=true`。补回其历史分类，重新校验目录，并让快照版本包含保留资料的摘要。
 
-## 一致性与错误处理
+对这类记录：保留原关注，公开响应新增 source_removed；不输出下一截稿节点，页面不显示旧倒计时/旧时间线/日历导出，显示“暂无最新会议数据”，并注明“目前保留最后一次资料，截稿信息请以会议官网为准”。允许取消关注，拒绝新关注。后续发布时，已无人关注的历史记录不再携带；上游重新出现同ID时采用上游新资料，恢复为正常记录。对无历史资料的异常旧关注只告警，不凭空生成会议，也不阻断其他更新。
 
-手动与定时写入共用 Postgres advisory lock；检查到期和写入在持锁期间执行。约每天检查一次（22 小时间隔，给小时级外部触发、下载和缓存刷新留余量），失败后至少 1 小时再尝试，尝试时间存数据库，进程重启不丢退避。同步异常被调度器隔离，不阻断首页任务。
+```mermaid
+sequenceDiagram
+    participant User as 用户关注请求
+    participant DB as 数据库发布锁
+    participant Sync as 快照发布
+    Sync->>DB: 获取独占短锁
+    User->>DB: 请求共享锁（等待发布完成）
+    Sync->>DB: 重新读取关注和当前资料
+    Sync->>DB: 保留已关注的移除项，写新快照
+    Sync->>DB: 提交并释放
+    DB-->>User: 获得共享锁
+    User->>DB: 校验目标是否仍为有效会议
+    DB-->>User: 已移除则拒绝新关注
+```
 
-写入前使用与打包快照相同的 schema、日期/时区/重复 ID/分类/年份校验。会议数量下降超过 10% 或用户关注 ID 消失，拒绝写入。消失 ID 也记录日志。已知 ds-dcc → cg-dcc、se-eusipco → cg-eusipco 由 021 迁移，合并重复关注并保留记录；合并不可逆，downgrade 不推测用户原选择。022 建立当前快照表。必须与新快照同批上线。
+如果关注先提交，发布后的重新查询能看到该关注，因此保留最后资料。下载期间不持有发布短锁，避免让用户等网络请求。整轮同步锁防止多个实例重复拉取；两把锁解决的是不同问题。
 
-## 展示
+## 存储、缓存与保护
 
-/submit 显示资料日期和来源。closed 且最后投稿截止距今超过 365 天，新增 needs_update=true，卡片显示“待更新”及上游链接；不把它推断成会议停办，也不改变原筛选状态。此展示按交接建议实现，评审可调整文案。
+数据库用 id=1 保存一份当前 JSONB，以及 SHA、资料日期、同步/成功检查/失败尝试时间。不是按天保存全量历史；保留资料只服务仍被关注的移除会议。没有自动历史回滚后台。
 
-## 验证与上线
+SHA 未变不下载；API缓存五分钟检查小版本列，版本未变不读取整份JSON。并发缓存刷新合并。数据库异常保留最后已验证目录，冷启动才使用打包快照。页面每五分钟刷新查询。
 
-离线测试不访问 GitHub：覆盖归一化、新/未知字段、时间类型、压缩包防护、SHA 未变、替换成功、数量骤减、关注消失、超时、失败退避、空库兜底、缓存换版和调度隔离。迁移及实际写库使用独立本地 PostgreSQL 测试库。
+会议数下降超过10%仍拒绝写入；比较基线只统计旧快照中的正常会议，不让保留的历史记录扩大基线。异常日期、时区、未知时间轴字段或坏Schema仍拒绝发布。所有失败保留旧数据，至少1小时后由后续调度再次尝试；数据库尝试时间使重启不丢退避。
 
-上线前执行迁移；确认生产可访问 api.github.com 和 codeload.github.com。长驻后端配置 CONFERENCE_SYNC_ENABLED=true；Vercel 使用下节 HTTP Cron，不能靠进程内循环保证执行。两个环境复用相同业务服务。GitHub 共享 IP 限流时可配置服务端只读 CONFERENCE_GITHUB_TOKEN，不应写入代码或前端。
+压缩包只在内存读指定成员，不向磁盘解压；限制下载量、实际解压量、单文件和总YAML大小、成员数量，拒绝异常路径、链接和重复成员。YAML只使用safe_load。大块转换在线程中完成。
 
-## 当前验证结果
+## 触发与实际环境
 
-2026-11-03：41 项会议测试、迁移和实际 PostgreSQL 写读验证、6 项调度器数据库测试、11 项前端会议测试及类型检查通过。完整后端测试的 7 处非会议失败在原始 dev 上复现。匿名 GitHub API 当前限流；真实压缩包及写库验证使用已拉取的精确 SHA 元信息，不冒充 latest API 成功。正常检查间隔为 23 小时，已为 10 分钟轮询、下载与 5 分钟缓存刷新预留余量。已完成本地浏览器搜索、空结果、待更新提示、匿名关注登录拦截和手机宽度验收，无脚本错误或横向溢出。
+本轮以会议提出的常驻后端为部署目标，复用原HomeFeedScheduler，未建立另一个后台调度器。会议任务仅由CONFERENCE_SYNC_ENABLED显式开关控制，不再根据VERCEL变量静默关闭。已删除本功能新增的GitHub Actions、Vercel Cron和HTTP触发入口，不改原推荐维护接口。
 
-2026-11-04 补充：配置仅后端使用的本地 GitHub Token 后，真实应用启动自动同步及九项保护场景合计 10 项验收通过；真实最新提交为 aa5675e7e54ffde41032f97723cf5e52a4cc6844。采用测试进程加速轮询及独立测试库时间模拟，未进行连续 24 小时耐久运行或生产上线。
+最新dev部署文档仍将Vercel列为临时演示联调，正式服务器方式待负责人补充。会议记录中的裸机环境与文档记录不能代替实际验证。没有服务器访问权限时，不宣称已验证生产环境。Vercel Preview可检查构建/API，不能验收进程内任务每日自动执行。
 
-## 审查后补充
+## 配置和手动命令
 
-2026-11-04 修复发布与关注竞态、页面长期打开缺少定时刷新、压缩包元数据绕过解压预算问题，并将替换校验移到线程。新增短时发布锁不跨网络调用；查询页面每五分钟刷新。43 项离线测试、真实 PostgreSQL 竞态和 12 项自动运行/缓存检查通过。详见 REVIEW-2026-11-04.md；该结果不等同生产负载或 24 小时耐久验收。
+先核对目标数据库与迁移状态，再按团队流程执行迁移。现有迁移ID保持不变：dev的 `021_drop_chat_tables` 与会议的 `021_conference_follow_ids` → `022_conference_snapshots` 各自从020发展，新增空合并迁移 `023_merge_conference_chat` 汇合为唯一head。这样已执行任一旧分支迁移的数据库仍能识别原ID，无需重写历史。dev的021会删除旧Chat表，生产执行需由负责人审核备份；不要直接拿旧分支的迁移编号向生产执行。
 
-## Vercel HTTP Cron（2026-11-04）
+常驻后端设置 `CHAT_DATABASE_URL`、`CONFERENCE_SYNC_ENABLED=true`；原首页任务开关互相独立。共享IP限流时可配置服务端只读 `CONFERENCE_GITHUB_TOKEN`。密钥只放部署环境，不放代码或文档。
 
-后端 vercel.json 注册 GET /api/v1/internal/conference-sync，每天 01:00 UTC（北京时间 09:00）触发一次；不在 Web 项目重复配置。沿用 maintenance 路由的 CRON_SECRET 恒时比较鉴权。请求内 await ConferenceSync.run()，不依赖 lifespan 或响应后的后台任务；服务层的数据库锁、SHA 跳过、校验、持久退避、快照保护全部共用。VERCEL=1 时会议进程内循环不启用，长驻服务器继续复用原调度器；未改动其他首页任务开关。
+```bash
+uv run --locked --env-file .env alembic upgrade head
+uv run --locked --env-file .env python -m app.services.conferences.cli sync --dry-run
+uv run --locked --env-file .env python -m app.services.conferences.cli sync
+uv run --locked python -m app.services.conferences.cli publish --source /path/to/ccf-deadlines
+uv run --locked python -m app.services.conferences.cli publish --source /path/to/ccf-deadlines --check
+```
 
-部署清单：
+## 验收
 
-1. 在目标数据库执行 `uv run --env-file .env alembic -c alembic.ini upgrade head`（021/022），先确认目标库并按团队数据库变更流程操作。
-2. 后端 Vercel 项目配置 CHAT_DATABASE_URL、随机且至少 16 字符的 CRON_SECRET、CONFERENCE_CRON_ENABLED=true；建议配置只读 CONFERENCE_GITHUB_TOKEN。CRON_SECRET 只放服务端环境变量，不提交代码。Vercel 自动在 Cron 请求附带 Authorization: Bearer <CRON_SECRET>。
-3. CONFERENCE_SYNC_ENABLED=false；不要依赖临时实例的后台循环。配置变更后部署。
-4. 自动 Cron 只对 Production 部署生效；分支 Preview 不会自动定时执行。确认项目的 Production Branch 实际对应本次验收分支（例如团队配置的 dev），不是一律假设 main。PR 预览可用受密钥保护的请求手动验收。
-5. 在后端项目 Cron Jobs 面板确认任务已注册，手动 Run 并检查 HTTP 200 和 data.status；updated / unchanged 为成功检查，locked / not-due / retry-delayed 为安全跳过。确认数据库 SHA、checked_at，以及 /submit 五分钟缓存刷新后的资料日期。缺密钥、关开关、缺数据库返回非成功；执行异常503、超时504。日志不向响应泄露异常详情。
-6. 观察下一次实际定时执行记录后才能签线上自动运行验收；本地测试不能证明平台已经注册并执行。
+离线测试不访问外网；新增删除会议保留、不能新关注、无倒计时、取消后下一版清理、上游恢复、缩量保护不受历史条目影响的测试。独立PostgreSQL验证迁移和发布/关注两种锁竞争顺序，禁止使用生产库作测试。
 
-整个请求有 240 秒预算，低于配置的 300 秒函数上限；下载另有180秒预算。失败保留旧快照；若平台强制中断则由数据库连接关闭释放事务锁，尝试时间使后续请求遵守退避。响应不缓存。
+线上须由负责人确认实际服务进程和环境变量、到GitHub网络可达性，观察数据库SHA/checked_at、正常自动同步和失败退避恢复。持续上游故障时无法保证新鲜度，应保留旧数据并排查日志。代码测试通过不替代线上验收。
 
-调度边界：Vercel 每日 Cron 保留为低频备用；不能单独承担失败自动重试。主触发由下节小时级 HTTP 工作流提供，后端统一22小时成功检查间隔、1小时失败退避。不增加后台等待，不依赖 Vercel 付费 Cron 频率。
+## 两个开发分支的迁移汇合
 
-官方依据：https://vercel.com/docs/cron-jobs/quickstart 、https://vercel.com/docs/cron-jobs/manage-cron-jobs 、https://vercel.com/docs/cron-jobs/usage-and-pricing 。不新增依赖，不使用 GitHub Actions 发布快照。
+```mermaid
+flowchart LR
+    A[020_snapshot_complete] --> B[021_drop_chat_tables<br/>最新dev已有]
+    A --> C[021_conference_follow_ids<br/>原会议迁移ID不变]
+    C --> D[022_conference_snapshots<br/>原会议迁移ID不变]
+    B --> E[023_merge_conference_chat<br/>空合并迁移，唯一head]
+    D --> E
+```
 
-本地验证：新增6项HTTP Cron测试，会议相关共运行50项，49通过、1项跳过（依赖可选数据库环境）；覆盖鉴权拒绝、缺配置拒绝、共享服务的成功与跳过状态、异常不泄露、请求超时取消、Vercel进程循环禁用和调度配置。未进行本次Vercel云端部署或平台定时执行验收。
-
-## 每小时外部触发与失败自动重试
-
-新增 `.github/workflows/conference-sync.yml`，每小时第17分钟发起一次 HTTPS 请求（24次/天，另有Vercel每日一次备用）。无 checkout、不拉取上游数据、不生成或提交快照、不创建PR、无仓库写权限。GitHub Actions仅充当HTTP触发来源，全部业务仍在后端，符合“不使用Actions定时提快照PR”的边界。
-
-后端未到22小时成功检查间隔时只查询数据库元信息并返回not-due；真正请求GitHub仍约每天一次。失败尝试时间持久化；满1小时后的下一次小时触发自动重试，不必等到次日。重启不丢失退避；重叠触发由后端数据库锁防重。工作流失败标红，响应体、URL和密钥不写日志，不跟随重定向。
-
-上线配置（由有项目权限的部署人员操作，不把真实值提交仓库）：
-
-1. 完成上节后端迁移与配置，确认目标后端的 `/api/v1/internal/conference-sync` 可用。
-2. 仓库 Settings → Secrets and variables → Actions → Secrets：配置 `CONFERENCE_SYNC_URL` 为该后端完整HTTPS入口，`CONFERENCE_CRON_SECRET` 与后端 `CRON_SECRET` 一致（至少16字符随机ASCII密钥）。必须直接使用后端地址，不能填Web页面或登录重定向地址。
-3. Actions → Variables：配置 `CONFERENCE_SYNC_SCHEDULE_ENABLED=true`。未配置时工作流不运行，防止未准备好的环境被调用。
-4. GitHub的schedule只运行默认分支上的工作流（当前main）；功能分支上传不等于自动启用。按团队正常PR/发布流程集成工作流后才能启用自动调度，不为此直接推main或dev。已进入默认分支后，可先用workflow_dispatch选择已部署对应版本进行人工验收。
-5. 在Actions手动运行确认updated/unchanged，并观察下一次实际定时执行；同时检查数据库checked_at。可在隔离验收环境模拟一次上游失败，再观察退避后的定时恢复。不要针对生产制造故障。
-
-时效预算：健康调度下，22小时成功间隔 + 最多约1小时轮询 + 下载和5分钟页面缓存，为一天目标留余量；不是每小时下载。失败后至少1小时再重试，平台抖动可能使下一次请求更晚。GitHub定时任务可能排队/丢弃，公网中断或上游持续故障也无法保证数据新鲜度；此时按需求保留旧数据，通过Actions失败记录排查。公共仓库闲置60天会暂停计划任务，运维需关注工作流状态；若需要严格可用性承诺，使用团队受监控的服务器调度同一入口。不能把任何免费平台的尽力调度宣称为绝对SLA。
-
-这次修改解决的是“失败后没有新的自动请求来源”，不是靠去掉退避或在Serverless函数里长时间sleep。无需新增Python依赖，也无需提高Vercel Cron套餐。
-
-官方依据：https://docs.github.com/en/actions/how-tos/troubleshoot-workflows 、https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule 。
+合并迁移本身不增删业务数据；它让Alembic先补齐缺少的另一条分支，再到达统一版本。对旧会议分支已经执行022的数据库也验证可升级。dev中删除旧Chat表是团队已有改动，不是本次会议功能额外删除；正式执行仍需负责人审查。

@@ -12,18 +12,17 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { popoverPosition, usePopoverPlacement } from "@/lib/use-popover-placement";
-import { DEFAULT_CHAT_MODEL } from "@/features/chat/services/model-catalog";
-import { FALLBACK_CHAT_CONFIG } from "@/features/chat/services/chat-config";
+import { DEFAULT_MODEL, FALLBACK_COMPOSER_CONFIG } from "./config";
 import { AttachmentMenu, type WorkspaceFile } from "./attachment-menu";
 import { ComposerControlPicker } from "./composer-control-picker";
 import { questionSchema } from "@/lib/validations";
 import type { ComposerEntryMode } from "@/types";
 import type {
-  ChatAttachment,
-  ChatModelId,
-  ChatReplyMode,
+  ComposerAttachment,
+  ModelId,
+  ReplyMode,
   ComposerSubmitPayload,
-  ChatConfig,
+  ComposerConfig,
 } from "@/types/ai-search";
 
 export type { ComposerEntryMode, ComposerSubmitPayload } from "@/types";
@@ -265,7 +264,7 @@ export function ComposerShell({
   onWebSearchChange,
   attachments: attachmentsProp,
   onAttachmentsChange,
-  config = FALLBACK_CHAT_CONFIG,
+  config = FALLBACK_COMPOSER_CONFIG,
   busy = false,
   disabled = false,
   onStop,
@@ -285,15 +284,15 @@ export function ComposerShell({
   variant?: "home" | "agent";
   entryMode?: ComposerEntryMode;
   onEntryModeChange?: (mode: ComposerEntryMode) => void;
-  replyMode?: ChatReplyMode;
-  onReplyModeChange?: (mode: ChatReplyMode) => void;
-  model?: ChatModelId;
-  onModelChange?: (model: ChatModelId) => void;
+  replyMode?: ReplyMode;
+  onReplyModeChange?: (mode: ReplyMode) => void;
+  model?: ModelId;
+  onModelChange?: (model: ModelId) => void;
   webSearch?: boolean;
   onWebSearchChange?: (v: boolean) => void;
-  attachments?: ChatAttachment[];
-  onAttachmentsChange?: (items: ChatAttachment[]) => void;
-  config?: ChatConfig;
+  attachments?: ComposerAttachment[];
+  onAttachmentsChange?: (items: ComposerAttachment[]) => void;
+  config?: ComposerConfig;
   busy?: boolean;
   /** Blocks interaction while URL session hydration/stop confirmation runs. */
   disabled?: boolean;
@@ -317,11 +316,11 @@ export function ComposerShell({
   const [uploading, setUploading] = useState(false);
 
   const [innerEntryMode, setInnerEntryMode] = useState<ComposerEntryMode>("ai");
-  const [innerMode, setInnerMode] = useState<ChatReplyMode>("fast");
+  const [innerMode, setInnerMode] = useState<ReplyMode>("fast");
   const [innerDepth, setInnerDepth] = useState<"fast" | "deep">("fast");
-  const [innerModel, setInnerModel] = useState<ChatModelId>(DEFAULT_CHAT_MODEL);
+  const [innerModel, setInnerModel] = useState<ModelId>(DEFAULT_MODEL);
   const [innerWeb, setInnerWeb] = useState(false);
-  const [innerFiles, setInnerFiles] = useState<ChatAttachment[]>([]);
+  const [innerFiles, setInnerFiles] = useState<ComposerAttachment[]>([]);
   const [controlOpen, setControlOpen] = useState(false);
   const controlRef = useRef<HTMLDivElement>(null);
 

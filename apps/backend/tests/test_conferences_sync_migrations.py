@@ -49,7 +49,10 @@ class ConferenceSyncMigrationTests(unittest.TestCase):
         execute(
             "INSERT INTO conference_follows(user_id,conference_id) VALUES ('a','ds-dcc'),('a','cg-dcc'),('b','se-eusipco')"
         )
+        # An environment may already have run the published conference branch.
+        migrate("upgrade", "022_conference_snapshots")
         migrate("upgrade", "head")
+        self.assertEqual([tuple(row) for row in execute("SELECT version_num FROM alembic_version")], [("023_merge_conference_chat",)])
         rows = execute(
             "SELECT user_id,conference_id FROM conference_follows ORDER BY user_id"
         )
@@ -91,7 +94,7 @@ class ConferenceSyncMigrationTests(unittest.TestCase):
         )
         with self.assertRaises(asyncpg.CheckViolationError):
             execute("INSERT INTO conference_snapshots(id) VALUES (2)")
-        migrate("downgrade", "021_conference_follow_ids")
+        migrate("downgrade", "020_snapshot_complete")
         self.assertEqual(
             execute(
                 "SELECT tablename FROM pg_tables WHERE tablename='conference_snapshots'"

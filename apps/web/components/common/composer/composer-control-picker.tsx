@@ -12,14 +12,14 @@ import { popoverPosition, usePopoverPlacement } from "@/lib/use-popover-placemen
 import { ModelProviderLogo } from "./model-provider-logo";
 import { QuotaRing } from "./quota-ring";
 import type {
-  ChatModelId,
-  ChatReplyMode,
-  ChatConfig,
-  ChatModelOption,
+  ModelId,
+  ReplyMode,
+  ComposerConfig,
+  ModelOption,
 } from "@/types/ai-search";
 
 export const STYLE_OPTIONS: {
-  value: ChatReplyMode;
+  value: ReplyMode;
   label: string;
   description: string;
 }[] = [
@@ -29,7 +29,7 @@ export const STYLE_OPTIONS: {
   { value: "doubt", label: "严谨质疑", description: "批判性分析与反驳" },
 ];
 
-function styleLabel(mode: ChatReplyMode) {
+function styleLabel(mode: ReplyMode) {
   return STYLE_OPTIONS.find((s) => s.value === mode)?.label ?? "简明扼要";
 }
 
@@ -38,7 +38,7 @@ function StyleSubmenuRow({
   onPick,
 }: {
   value: string;
-  onPick: (v: ChatReplyMode) => void;
+  onPick: (v: ReplyMode) => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -76,16 +76,16 @@ export function ComposerControlPicker({
   open,
   onOpenChange,
 }: {
-  model: ChatModelId;
-  onModelChange: (v: ChatModelId) => void;
-  replyMode: ChatReplyMode;
-  onReplyModeChange: (v: ChatReplyMode) => void;
+  model: ModelId;
+  onModelChange: (v: ModelId) => void;
+  replyMode: ReplyMode;
+  onReplyModeChange: (v: ReplyMode) => void;
   depthMode: "fast" | "deep";
   onDepthModeChange: (v: "fast" | "deep") => void;
   /** 隐藏「风格」行（idea/doubt 等）：只要 快速/深度 两档的页面传 true。 */
   hideStyleRow?: boolean;
-  options: ChatModelOption[];
-  quota: ChatConfig["quota"];
+  options: ModelOption[];
+  quota: ComposerConfig["quota"];
   anchorRef: RefObject<HTMLDivElement | null>;
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -105,7 +105,7 @@ export function ComposerControlPicker({
     }
   };
 
-  const pickStyle = (v: ChatReplyMode) => {
+  const pickStyle = (v: ReplyMode) => {
     onReplyModeChange(v);
     if (v === "fast" || v === "deep") onDepthModeChange(v);
   };

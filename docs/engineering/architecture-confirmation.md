@@ -72,23 +72,29 @@ shenzhi/
 │       ├── app/
 │       │   ├── api/             # API 路由与请求边界；_support/ 放 HTTP transport helper
 │       │   ├── schemas/         # 输入输出 Schema
-│       │   ├── services/        # 按 chat、knowledge、uploads、user、library 等领域组织业务逻辑
+│       │   ├── models/          # 持久化模型
+│       │   ├── services/        # 按 agent、agent_sessions、identity、knowledge、library、home_feed、
+│       │   │                    # discovery_pool、recommendation、topics、user 等领域组织业务逻辑
 │       │   ├── integrations/    # 外部服务与科研能力接入边界
 │       │   │   ├── knowledge/   # Knowledge Base Research Capability
-│       │   │   ├── llm/         # 统一 Model Registry / Resolver 与 Chat Provider
+│       │   │   ├── llm/         # 统一 Model Registry / Resolver
 │       │   │   ├── web_search/  # 外部搜索 Provider
 │       │   │   └── paper_resource/ # 外部 PDF 资源 Provider
-│       │   ├── core/            # 配置、身份、错误等基础能力
+│       │   ├── core/            # 配置、身份、错误、数据库、幂等与 Worker Lease 等基础能力
+│       │   ├── data/            # 随包数据快照（会议截稿、首页兜底、主题目录）
 │       │   └── main.py          # FastAPI 应用入口
+│       ├── migrations/          # Alembic 数据库迁移
+│       ├── skills/              # Agent Skill 提示词与参考资料
+│       ├── evaluation/          # 推荐离线评估数据
 │       ├── tests/
 │       ├── pyproject.toml
 │       └── uv.lock
 │
+├── data/                        # 离线数据源（首页兜底种子、会议截稿等）
 ├── docs/                        # 开发与产品文档
-├── tests/
+├── tests/                       # 视觉截图脚本
 ├── tools/
-├── scripts/
-├── infra/
+├── scripts/                     # 数据发布与本地辅助脚本
 └── README.md
 ```
 
@@ -177,6 +183,10 @@ core/
 `app.core.time.utc_now()` 获取。数据库持久化事实时间继续由数据库自身的
 timezone-aware 时间逻辑负责，不与 Python 业务时钟强制合并。
 
+### 3. 运行形态
+
+后端按**长驻进程**设计：FastAPI `lifespan` 负责启动时的运行状态恢复与首页调度器，Agent 运行归属保存在进程内存，Agent workspace 写本地磁盘。部署到 Serverless 等非长驻环境时，这些能力不保证可用。当前部署形态与约束见 [部署与运行环境](deployment.md)。
+
 ---
 
 ## 四、页面与 Feature
@@ -216,29 +226,19 @@ apps/web/features/{module}/
 当前主要 Feature 包括：
 
 ```text
-chat
-deep-research
-auto-research
-search
-knowledge
-papers
-scholars
-projects
-login
-settings
-submit
-...
+home            # 发现页入口
+search          # 首页论文 Feed 与搜索组件；deep-search/ 为旧静态搜索原型
+agent-chat      # 深知 AI（Agent）新对话页与会话页
+papers          # 论文详情（PDF 阅读器 + 论文 Agent 问答）
+knowledge       # 知识库：论文库、我的文献、学者、主题、基金、图谱等子功能
+submit          # 会议DDL
+settings / login / reset-password
+deep-research / auto-research / projects   # 前端原型页，由 feature-availability 拦截
 ```
 
-当前 Agent 相关页面路由继续维护在 `app/agents` 体系下，Chat、Deep Research、Auto Research 等具体业务分别由对应 Feature 承载。
+Agent 相关页面路由维护在 `app/agents` 体系下：`/agents` 由 `features/agent-chat` 承载，是当前唯一的对话链路；Deep Research、Auto Research 前端页面目前仍为原型。
 
-旧 Deep Search 静态搜索结果原型统一归入：
-
-```text
-features/search
-```
-
-不再建立平行业务实现。
+旧 Deep Search 静态搜索结果原型统一归入 `features/search/deep-search`，不再建立平行业务实现。
 
 Feature 内部可按实际需要组织：
 
@@ -332,7 +332,7 @@ clients/backend
 Backend API
 ```
 
-`clients/backend` 根目录是基础层，不得反向依赖 `chat`、`profile`、`settings`
+`clients/backend` 根目录是基础层，不得反向依赖 `profile`、`settings`
 等具体模块。模块 Client 只负责请求、协议封装和错误转换；模型目录合并、降级策略、
 多个接口组合等业务编排进入 `features/{module}/services/`。
 
@@ -356,7 +356,7 @@ apps/web/clients/deep-research/
 apps/web/clients/auto-research/
 ```
 
-这类 `apps/web/clients/<capability>/` 属于前端领域 Client，负责面向当前业务能力提供稳定接口，使用 ShenZhi 自身的 Backend Contract，并可复用 `clients/backend` 的 transport。它们不感知科研组原始 API，不保存科研服务地址，也不直接处理科研组原始 Schema。当前仓库已经存在 `clients/knowledge`；其余路径表示后续能力采用这一边界时的命名示例，不代表对应 Client 已经实现。
+这类 `apps/web/clients/<capability>/` 属于前端领域 Client（当前已存在 `clients/knowledge`、`clients/profile`、`clients/settings`），负责面向当前业务能力提供稳定接口，使用 ShenZhi 自身的 Backend Contract，并可复用 `clients/backend` 的 transport。它们不感知科研组原始 API，不保存科研服务地址，也不直接处理科研组原始 Schema。`clients/deep-research`、`clients/auto-research` 表示后续能力采用这一边界时的命名示例，不代表对应 Client 已经实现。
 
 因此，`clients/knowledge` 表示前端的 Knowledge 领域调用边界，不表示浏览器直接连接知识底座科研组。
 
@@ -468,9 +468,9 @@ backend integrations/knowledge
 - `adapter.py` 集中完成上游协议与 `app/schemas/knowledge.py` Domain Schema 之间的映射。
 - `exceptions.py` 统一 timeout、connection、rate limit、not found、invalid response、contract violation 与 upstream unavailable 等上游异常。
 
-Knowledge Base 当前只承诺 Search、Paper Detail、Paper Graph；科研组内部业务由科研组维护，ShenZhi 只调用、隔离和适配，不在此边界内修改、补偿或修复科研组业务。
+Knowledge Base 当前接入论文检索、详情、图谱、会议浏览、学者、主题、基金与知识库总览等能力（接口清单见 [apps/backend/README.md](../../apps/backend/README.md)）；科研组内部业务由科研组维护，ShenZhi 只调用、隔离和适配，不在此边界内修改、补偿或修复科研组业务。
 
-当前仓库尚未存在 `integrations/deep_research` 或 `integrations/auto_research`。Deep Research、Auto Research 等能力后续在真实服务化、接口稳定并开始产品接入时，优先遵循 `backend integrations/<capability>` 边界；在职责尚未出现前，不创建空目录，也不描述为已存在稳定 Integration。
+当前仓库尚未存在 `integrations/deep_research` 或 `integrations/auto_research`。目前可用的 Deep Research 是深知自身的 Agent Skill（`apps/backend/skills/deep-research/`），在 Agent Runtime 内运行，不属于科研组能力接入；说明见 [docs/agent](../agent/README.md)。Deep Research、Auto Research 等能力后续在真实服务化、接口稳定并开始产品接入时，优先遵循 `backend integrations/<capability>` 边界；在职责尚未出现前，不创建空目录，也不描述为已存在稳定 Integration。
 
 接入科研能力前，需要明确：
 
@@ -486,6 +486,11 @@ Knowledge Base 当前只承诺 Search、Paper Detail、Paper Graph；科研组�
 - 降级方案
 
 不要默认科研组已经提供稳定生产 API。
+
+当前存在的边界例外（登记在 [已知偏移与待收敛项](known-gaps.md)）：
+
+- `apps/web/app/api/paper-images/` 由 Web 服务端直接代理知识底座图片（`KNOWLEDGE_BASE_API_URL`），说明见 [论文图片](../knowledge/PAPER-IMAGES.md)。
+- `services/agent/` 中部分外部调用尚未收敛到 `integrations/`：Agent 自有的流式 Provider、`chart_tools.py` 的 Exa 搜索、`read_paper.py` 的 arXiv / OpenReview / Unpaywall 全文获取及 `fetch_url.py`。
 
 当科研接口或内部实现仍在演进时，产品侧优先通过：
 
@@ -514,8 +519,7 @@ Service
 例如：
 
 ```text
-features/chat/types.ts
-features/search/types.ts
+features/{module}/types.ts
 ```
 
 只有真正被多个业务模块共同使用的类型，再提升到全局位置。
@@ -527,22 +531,14 @@ components/ui/       # 基础 UI
 components/common/   # 跨 Feature 通用组件
 ```
 
-搜索导航恢复由 `apps/web/lib/navigation/search-restoration.ts` 的静态路由与参数白名单管理，
-只在 `sessionStorage` 中按认证用户 ID（未登录为 `anonymous`）保存最后一次带参数的内部地址。
-`AppShell` 在 Suspense 内监听 URL，侧栏 `SearchNavigationLink` 读取恢复地址并保留原生 Link 行为；
-直接访问空路径不自动跳转，也不清除记录。Feature 继续负责 URL 的业务解析、请求和缓存，
-主动清空时调用 `useClearSearchRestoration`；部分条件清除后仍有参数则记录新的地址。
-新增搜索入口只需注册路径与允许参数，并在需要恢复的导航入口使用该 Link。
-论文库的 `?mode=keyword` 与 `?mode=conference` 是显式登记的模式导航入口，使用同一
-恢复机制分开保存各模式最近的查询地址；仅这些模式入口允许恢复，携带具体查询条件的
-完整链接仍直接使用。`/knowledge/search/conferences` 作为独立目录保存自身筛选条件。
-清空某一模式只清理该模式及指向它的最后导航地址，清空论文库主入口则同时清理两种模式。
-存储访问集中封装，可替换存储策略；不可用时退回原始导航地址。认证切换时不将当前旧 URL
-记到新身份下，直到 URL 再次变化。未提交的输入草稿、API 响应和其他页面状态不在此导航地址恢复机制内。
-首页简单搜索与论文库的短期文本草稿由 `lib/navigation/search-draft.ts` 和
-`hooks/use-search-draft.ts` 管理，按身份、入口及来源 URL 隔离，不保存附件或 API 结果。
-手机与桌面共用一个 AppSidebar 实例，AppShell 手机抽屉状态与桌面折叠状态分离。
-布局、状态归属及验收边界见 [响应式基础设施维护说明](responsive-core.md)。
+搜索导航恢复、搜索草稿与 AppShell 响应式布局属于 Web 框架级能力，分别位于
+`lib/navigation/` 与 `components/common/layout/`，维护说明见
+[响应式布局与搜索连续性](responsive-core.md)。
+
+依赖方向上，`components/common`、`stores`、`providers` 等全局层原则上不依赖
+`features/*`：被多个模块共用的组件、Hook 与工具应放入 `components/common` 或 `lib`。
+确实难以避免时可以保留，但不应继续扩大；现有的反向依赖登记在
+[已知偏移与待收敛项](known-gaps.md)，在相关模块修改时顺带收敛。
 
 不要因为两个组件代码相似就立即提升为全局公共组件；只有职责稳定且确有跨模块复用时再抽取。
 
@@ -601,7 +597,7 @@ docs/
 ```text
 docs/engineering/
 docs/auth/
-docs/chat/
+docs/agent/
 docs/knowledge/
 docs/deep-research/
 docs/auto-research/
@@ -618,25 +614,9 @@ docs/auto-research/
 - 维护说明
 - 重要问题
 
-`docs/` 不要求与代码目录严格镜像。
+`docs/` 不要求与代码目录严格镜像。维护文档与一次性记录分开存放，交付报告、验收记录等一次性记录放入 `docs/dev/records/<模块>/`，详见 [docs/README.md](../README.md)。
 
-Git 基本流程：
-
-```text
-dev
- ↓
-feat/*
- ↓
-dev
- ↓
-main
-```
-
-其中：
-
-- `main`：稳定 / 发布分支
-- `dev`：日常集成开发分支
-- `feat/*`：从 `dev` 创建的新功能开发分支
+分支、Commit 与合并流程以 [git-conventions.md](git-conventions.md) 为准。
 
 普通业务任务不得擅自进行与当前任务无关的大范围架构调整。
 
@@ -687,8 +667,8 @@ main
 
 ## LLM 接入基础设施
 
-Chat、Agent 与后续 AI Feature 统一通过 `integrations/llm` 的 Model Registry / Resolver
-解析 Model ID、Provider、上游型号和能力。Chat 的 `integrations/llm/provider.py` 与 Agent 的
-`services/agent/provider.py` 继续各自负责流式协议处理。模型品牌只用于展示，实际路由由
+Agent 与后续 AI Feature 统一通过 `integrations/llm` 的 Model Registry / Resolver
+解析 Model ID、Provider、上游型号和能力；流式协议处理由 Agent 的
+`services/agent/provider.py` 负责。模型品牌只用于展示，实际路由由
 `provider_id` 决定；Provider 凭据仅在服务端加载。接入规则、兼容策略及声明示例见
 [LLM API Foundation](llm-api-foundation.md)。

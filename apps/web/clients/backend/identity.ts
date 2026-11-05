@@ -43,7 +43,7 @@ export function attachIdentity(
   backendHeaders.set("X-ShenZhi-Anonymous-Id", anonymousId);
 }
 
-/** Writes the dedicated dual identity used only by anonymous Chat claim. */
+/** Writes the dedicated dual identity used only by the anonymous claim. */
 export function attachMigrationIdentity(
   backendHeaders: Headers,
   userId: string,

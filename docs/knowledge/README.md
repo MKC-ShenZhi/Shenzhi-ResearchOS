@@ -36,6 +36,11 @@ External Knowledge Base
 | `apps/web/clients/knowledge/index.ts` | Client 工厂；默认 BFF，显式 `source=mock` 才启用 Mock |
 | `apps/web/features/knowledge/retry.ts` | Knowledge 查询的局部 retry predicate |
 | `apps/web/features/knowledge/{search,paper,graph,scholars,topics,funding}` | 页面、交互和展示逻辑 |
+| `apps/web/features/knowledge/components/knowledge-dashboard.tsx`、`lib/overview-cache.ts` | `/knowledge` 总览、混合检索入口及按身份复用的概览请求缓存 |
+| `apps/web/features/knowledge/papers` | 我的文献（收藏、文件夹、阅读历史、点赞与收藏面板）；共用论文卡片版式 `components/paper-card-layout.tsx` 与 `paper-card-model.ts` |
+| `apps/web/features/knowledge/interactions` | 收藏人数、论文点赞、主题关注的批量读取、写入 hook 与按钮 |
+| `apps/web/features/knowledge/{institutions,patents}` | 兼容路由使用的原型页面，不进入正式导航 |
+| `apps/web/features/papers/[id]` | 统一论文详情、PDF 阅读器与论文助手 |
 
 ### Backend
 
@@ -44,6 +49,9 @@ External Knowledge Base
 | `apps/backend/app/api/knowledge.py` | `/api/v1/knowledge/*` HTTP 边界、鉴权和错误状态 |
 | `apps/backend/app/api/paper_resource.py` | 仅按可信 `paperId` 提供同源 PDF Range 字节流 |
 | `apps/backend/app/services/knowledge/service.py` | Knowledge 业务服务边界 |
+| `apps/backend/app/services/knowledge/cache.py` | 论文详情的进程内 TTL 缓存（10 分钟，最多 1024 条），供详情、批量论文与推荐特征共用 |
+| `apps/backend/app/services/topics/` | Topic Catalog 加载校验（`catalog.py`）与主题/创作者查询（`registry.py`） |
+| `apps/backend/app/services/library/` | 收藏、阅读历史、私有论文、点赞、主题关注、会议关注等账号级数据 |
 | `apps/backend/app/services/paper_resource/service.py` | PDF Provider 选择与资源用例编排 |
 | `apps/backend/app/integrations/paper_resource/` | OpenReview URL 适配及外部 HTTP 校验与读取 |
 | `apps/backend/app/schemas/paper_resource.py` | 浏览器可消费的 PDF 资源状态契约 |
@@ -72,8 +80,14 @@ Backend（`apps/backend/.env.example`）：
 ```dotenv
 KNOWLEDGE_BASE_API_URL=
 KNOWLEDGE_BASE_TIMEOUT_SEC=30
+# 上游检索接口接受的最大结果窗口
+KNOWLEDGE_BASE_SEARCH_MAX_TOP_K=100
 PAPER_RESOURCE_TIMEOUT=30
 PAPER_MAX_SIZE_MB=150
+# OpenReview PDF Provider；账号可选
+OPENREVIEW_API_BASE_URL=https://api2.openreview.net
+OPENREVIEW_USERNAME=
+OPENREVIEW_PASSWORD=
 ```
 
 `KNOWLEDGE_BASE_API_URL` 和 Backend 的 BFF secret 只能注入服务端环境，不能
@@ -84,15 +98,20 @@ PAPER_MAX_SIZE_MB=150
 | 能力 | ShenZhi API | 外部 API |
 |---|---|---|
 | 论文检索 | `POST /api/v1/knowledge/search` | `POST /api/retrieval/search` |
+| 知识库总览 | `GET /api/v1/knowledge/overview` | `GET /api/knowledge/papers/summary`、`GET /api/knowledge/research-assets/summary`，并聚合学者、Subject、Funding 检索 |
+| 个人概览 | `GET /api/v1/knowledge/personal-overview` | 无（读取 ShenZhi 收藏文件夹与最近阅读；匿名返回 `authRequired`） |
+| 混合检索 | `POST /api/v1/knowledge/overview/search` | 并发调用论文、学者、Subject、Funding 检索；`project`、`patent`、`graph` 标为不支持 |
 | 会议目录 | `GET /api/v1/knowledge/conferences` | `GET /api/papers/venues` |
 | 按会议和年份浏览论文 | `GET /api/v1/knowledge/papers?conference=...&year=...&limit=20&offset=0` | `GET /api/papers` |
 | 论文详情 | `GET /api/v1/knowledge/paper?paperId=...` | `GET /api/kg/paper?paperId=...` |
 | 论文图谱 | `GET /api/v1/knowledge/graph?paperId=...&depth=1\|2` | `GET /api/kg/graph?paperId=...&depth=1\|2` |
 | 学者搜索 | `GET /api/v1/knowledge/scholars/search?q=...&limit=20&offset=0` | `GET /api/retrieval/scholars/search?q=...&limit=20&offset=0` |
 | 学者详情 | `GET /api/v1/knowledge/scholars/{scholarId}` | `GET /api/retrieval/scholars/{scholar_id}` |
+| Topic 目录 / 详情 / 创作者 | `GET /api/v1/knowledge/topics`、`GET /api/v1/knowledge/topics/{topicId}`、`GET /api/v1/knowledge/creators/{creatorId}` | 无（读取后端 `topic_catalog.json`） |
 | 主题关联论文 | `GET /api/v1/knowledge/subjects/search?subject=...&offset=0&limit=10` | `GET /api/retrieval/search/by-subject?subject=...&offset=0&limit=10` |
 | Funding 候选检索 | `GET /api/v1/knowledge/fundings/search?q=...&limit=20&offset=0` | `GET /api/retrieval/fundings/search?q=...&limit=20&offset=0` |
 | Funding 关联论文 | `GET /api/v1/knowledge/funding/search?funding=...&topK=10` | `GET /api/retrieval/search/by-funding?funding=...&top_k=10` |
+| 批量论文摘要 | `POST /api/v1/papers/batch`（`paper_ids` 1–100） | 逐篇 `GET /api/kg/paper`（经详情缓存），未找到的论文跳过 |
 | PDF 字节流 | `GET /api/v1/paper-resource/pdf?paperId=...` | `pdf_url` 对应资源 |
 
 Scholar 公共契约统一使用 `id`、`paperCount`，不向 Web 暴露上游
@@ -129,7 +148,7 @@ Search 请求使用 `query`、`topK`、`offset`、`yearFrom`、`yearTo`、`venue
 `offset=(page-1)*20` 请求；响应通过 `hasMore` 表示是否存在下一页。当前外部
 接口接受较大的 `top_k`，但会忽略 `offset` 且不返回总数，因此 Backend adapter
 为显式携带 `offset` 的论文检索请求读取至目标页后一条、在服务端截取目标页并
-计算 `hasMore`。未携带 `offset` 的 Knowledge2Chat 请求仍保持原有 `top_k` 行为。
+计算 `hasMore`。未携带 `offset` 的请求（如 Agent 知识库工具 `services/agent/knowledge_tools.py`）仍保持原有 `top_k` 行为。
 其余筛选字段只在 adapter 边界映射为外部 API 所需字段（例如 `year_gte`、
 `conference`）。
 
@@ -188,24 +207,32 @@ Topic Catalog、分页上限、错误重试、数据核对与本地验收见
 
 | 路由 | 行为 |
 |---|---|
+| `/knowledge` | 知识库总览（`KnowledgeDashboard`）：真实统计、混合检索入口与个人概览 |
 | `/knowledge/search` | 会议/年份浏览及原有关键词检索；通过 URL 隔离查询模式 |
 | `/knowledge/search/conferences` | 完整会议目录、名称搜索、实际年份筛选、排序与本地分页 |
 | `/knowledge/papers` | 我的文献、收藏、文件夹和阅读历史 |
 | `/knowledge/scholars` | 真实 Scholar Search；仅按姓名搜索 |
 | `/knowledge/scholars/[scholarId]` | 真实 Scholar Detail；空 optional section 隐藏 |
-| `/knowledge/topics` | 按 Subject 查询关联论文 |
+| `/knowledge/scholars/graph` | 学者合作关系原型；上游尚无学者关系图谱 Contract，不进入产品导航 |
+| `/knowledge/topics` | Topic 广场：完整目录、精选与分类、关键词搜索 |
+| `/knowledge/topics/[topicId]` | Topic 详情：目录信息、关注按钮及按 `subjectQuery` 实时查询的关联论文；支持安全 `returnTo` |
 | `/knowledge/funding` | 项目基金库：浏览 Funding 候选；选择 Funding 后按名称查询关联论文；使用 `q` 与 opaque `funding` URL 参数恢复页面状态 |
-| `/knowledge/graph` | 保留现有论文关系图谱 |
+| `/knowledge/graph` | 侧栏「关系图谱」入口；页面使用静态示例数据（`features/knowledge/data-knowledge-graph.ts`）；真实论文图谱见 `/papers/[id]/graph` |
 | `/papers/[id]` | 统一论文详情与 PDF 阅读器；通过 Knowledge Client 加载真实详情 |
 | `/papers/[id]/graph` | fullGraph（保留异构节点/边）、References/Citations 筛选、节点详情 |
 | `/knowledge/search/[paperId]` | 旧链接兼容跳转到 `/papers/[id]`，保留合法 `returnTo` |
 | `/knowledge/search/[paperId]/graph` | 旧图谱链接兼容跳转到 `/papers/[id]/graph`，保留合法 `returnTo` |
+| `/search`、`/scholars`、`/scholars/[id]` | 旧入口兼容跳转：分别到 `/knowledge/search`（保留 `q`）、`/knowledge/scholars`、`/knowledge/scholars/[scholarId]` |
 
-当前 Knowledge MVP 打通 Search → 统一 Paper Detail → Graph，并由 Chat Core 复用
-Search Capability 完成 Knowledge → Chat。论文详情页的 Assistant 通过 `paper`
-attachment 显式绑定当前 `paperId`，由 Backend 重新读取对应论文详情，并仅使用
-title、authors、venue、year、abstract 等元信息回答；该流程不使用全局 Search
-猜测“这篇论文”，也不读取 PDF 全文。
+当前 Knowledge MVP 打通 Search → 统一 Paper Detail → Graph；Agent 通过
+`services/agent/knowledge_tools.py` 以工具形式复用同一 Knowledge Service。论文详情页的
+Assistant 运行在 Agent Runtime 上：`features/papers/[id]/use-paper-agent.ts` 经
+`streamAgentRun` 调用 `POST /api/v1/agent/run`，提示词显式绑定当前 `paperId` 与标题，
+涉及正文内容时要求调用 `read_paper` 工具。`apps/backend/app/services/agent/read_paper.py`
+经知识库详情的 `pdf_url`（及 arXiv / OpenReview / DOI 候选）读取 PDF 分页文本并保留页号，
+单次返回有长度上限并显式标记截断；PDF 不可达时退回网页正文并标明不是全文。
+页面在工具执行期间显示“正在阅读论文 PDF…”。该流程不使用全局 Search 猜测“这篇论文”，
+也不创建 Agent 产品会话。
 
 `/knowledge/patents` 与 `/knowledge/institutions` 兼容路由继续保留，但不进入正式
 产品导航；专利兼容路由只显示不可用状态。当前知识底座没有正式

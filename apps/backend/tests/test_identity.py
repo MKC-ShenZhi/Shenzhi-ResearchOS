@@ -23,7 +23,7 @@ class IdentityTests(unittest.TestCase):
     def tearDown(self):
         self.env.stop()
 
-    def test_authenticated_identity_is_reusable_and_chat_owner_is_derived(self):
+    def test_authenticated_identity_is_reusable_and_owner_is_derived(self):
         headers = {'x-shenzhi-bff-secret': 'shared-secret', 'x-shenzhi-user-id': 'user-1'}
         identity = request_identity(request(headers))
         self.assertEqual((identity.kind, identity.subject_id), ('user', 'user-1'))

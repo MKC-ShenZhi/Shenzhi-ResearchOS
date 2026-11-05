@@ -1,20 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api/index"
-    }
+    { "source": "/(.*)", "destination": "/api/index" }
   ],
   "functions": {
     "api/index.py": {
       "maxDuration": 300
     }
-  },
-  "crons": [
-    {
-      "path": "/api/v1/internal/conference-sync",
-      "schedule": "0 1 * * *"
-    }
-  ]
+  }
 }

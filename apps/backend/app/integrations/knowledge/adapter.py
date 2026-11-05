@@ -558,7 +558,7 @@ class KnowledgeAdapter:
         # and exposes no total count. Paginated Paper Search therefore asks for
         # all hits through the requested page plus one look-ahead hit, then
         # slices at this backend boundary. Callers that omit offset retain the
-        # original top_k request (Knowledge2Chat relies on that behavior).
+        # original top_k request (the Agent knowledge tools rely on that behavior).
         upstream_top_k = request.top_k
         page_end: int | None = None
         if request.offset is not None:

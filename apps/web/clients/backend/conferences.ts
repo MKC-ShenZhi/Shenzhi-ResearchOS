@@ -44,6 +44,7 @@ export interface ConferenceDeadlineDto {
   edition: ConferenceEditionDto;
   edition_count: number;
   needs_update?: boolean;
+  source_removed?: boolean;
 }
 
 export interface ConferenceDeadlineListDto {

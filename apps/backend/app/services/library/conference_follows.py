@@ -9,7 +9,7 @@ from app.core.database import session_scope
 from app.models.interactions import ConferenceFollowRow
 from app.models.conference_snapshot import ConferenceSnapshotRow
 from app.services.conferences import ConferenceNotFoundError, load_conference_catalog
-from app.services.conferences_repository import PUBLISH_LOCK_KEY
+from app.services.conferences.repository import PUBLISH_LOCK_KEY
 
 
 class ConferenceFollowService:
@@ -24,14 +24,13 @@ class ConferenceFollowService:
             # current DB version while publication is excluded, then insert.
             exists = await session.scalar(
                 select(
-                    ConferenceSnapshotRow.payload["conferences"].contains(
-                        [{"id": conference_id}]
-                    )
+                    (ConferenceSnapshotRow.payload["conferences"].contains([{ "id": conference_id }])
+                     & ~ConferenceSnapshotRow.payload["conferences"].contains([{ "id": conference_id, "source_removed": True }]))
                 ).where(ConferenceSnapshotRow.id == 1)
             )
             if exists is None:
                 exists = any(
-                    record.conference.id == conference_id
+                    record.conference.id == conference_id and not record.conference.source_removed
                     for record in load_conference_catalog().records
                 )
             if not exists:

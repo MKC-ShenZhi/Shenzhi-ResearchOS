@@ -1,16 +1,16 @@
 # ShenZhi FastAPI
 
-Chat、论文检索、模型流、联网搜索、附件解析及 Knowledge Capability。浏览器只访问 Next.js 的 `/api/v1` BFF。
+深知 AI（Agent）对话、Knowledge Capability、个人数据（收藏、点赞、阅读记录、私有论文）、首页论文 Feed、推荐、会议截稿、模型流与附件解析。浏览器只访问 Next.js 的 `/api/v1` BFF。
 
 ```bash
 cd apps/backend
 uv sync
 cp .env.example .env
 
-# Windows 本地持久化开发：先启动项目专用 PostgreSQL 5433 实例。
-# PowerShell/CMD:
-#   ..\..\scripts\start-local-postgres.bat
-# 若已有可用的 PostgreSQL，请确保 CHAT_DATABASE_URL 的 host/port 与实例一致。
+# 持久化开发需要 PostgreSQL：配置 CHAT_DATABASE_URL 后执行迁移。
+#   uv run --env-file .env alembic upgrade head
+# Windows 可用 ..\..\scripts\start-local-postgres.bat 启动项目专用实例（端口 5433，
+# 可用 PG_BIN 指定安装目录）；CHAT_DATABASE_URL 的 host/port 需与实际实例一致。
 
 # Configure provider/search keys before starting.
 # Missing keys produce explicit errors, never mock answers.
@@ -46,31 +46,38 @@ Knowledge Base 是外部 Research Capability。FastAPI 后端统一通过
 FastAPI API → app/services/knowledge/service.py → app/integrations/knowledge → 上游知识底座科研组 API
 ```
 
-Chat 调用链：
+Agent 对话调用链（深知 AI、论文详情问答）：
 
 ```text
-api/chat.py → services/chat/service.py → services/chat/{repository,attachments,grounding,...}
-→ integrations/{llm,web_search} → 外部 Provider
+api/agent.py → services/agent/{runtime,service,...} + services/agent_sessions
+→ services/agent/{knowledge_tools,read_paper,...} 等工具 → integrations / 外部 Provider
 ```
 
-当前只承诺三条 ShenZhi-owned Capability API：
+`api/identity.py` 提供 `/identity/bootstrap`（匿名身份初始化）与 `/identity/anonymous-claim`（登录后认领匿名 Agent 会话、工作区与附件，`services/identity/anonymous_claim.py`），见 [认证架构](../../docs/auth/ARCHITECTURE.md#anonymous-identity-and-claim)。
 
-```text
-POST /api/v1/knowledge/search
-GET  /api/v1/knowledge/paper?paperId=...
-GET  /api/v1/knowledge/graph?paperId=...&depth=1
-```
+`app/api/knowledge.py` 提供的 ShenZhi-owned Knowledge API（前缀 `/api/v1/knowledge`）：
+
+| 能力 | 接口 |
+| --- | --- |
+| 论文检索 / 详情 / 图谱 | `POST /search`、`GET /paper`、`GET /graph` |
+| 会议导览 | `GET /conferences`、`GET /papers` |
+| 知识库总览 | `GET /overview`、`GET /personal-overview`、`POST /overview/search` |
+| 主题 | `GET /topics`、`GET /topics/{id}`、`GET /creators/{id}`、`GET /subjects/search` |
+| 学者 | `GET /scholars/search`、`GET /scholars/{id}` |
+| 基金 | `GET /funding/search`、`GET /fundings/search` |
+| 批量论文 | `POST /api/v1/papers/batch` |
+
+Agent 通过 `services/agent/knowledge_tools.py` 以工具形式调用同一 Knowledge Service。
 
 Integration 内部职责保持分离：`client.py` 负责上游 HTTP transport，`schemas.py`
 描述上游实际字段，`adapter.py` 映射到 ShenZhi Domain Contract，`exceptions.py`
-统一上游调用异常。当前上游资源仅限 retrieval search、paper detail、paper graph。
+统一上游调用异常。上游资源包括 retrieval search、scholars、funding、kg paper / graph、
+`/api/papers`（会议浏览与首页候选池同步）及 knowledge summary 等。
 
 响应使用 `data` envelope 和独立 Knowledge Contract；上游 `paper_id` 是不透明
-字符串，且必须来自 retrieval search，不能使用会议列表接口的 `paper_id`。本阶段
-不接 Chat Tool、`/api/papers`、multistep 或知识底座认证/收藏接口，也不在 ShenZhi
-侧修复上游数据和检索能力。
+字符串。不接知识底座认证/收藏接口，也不在 ShenZhi 侧修复上游数据和检索能力。
 
-Contract v0 的核心字段为：Search `results[].id/title/abstract/authors/year/venue/keywords/subjects/score/rank`；
+检索、详情、图谱 Contract v0 的核心字段为：Search `results[].id/title/abstract/authors/year/venue/keywords/subjects/score/rank`；
 Detail `id/title/abstract/authors/year/venue/doi/pdfUrl/keywords/subjects/citationCount/referenceCount`；
 Graph `rootId/nodes/edges`，边使用 `sourceId/targetId/relation`。空字符串归一化为 `null`，
 未知引用数保持 `null`，节点和关系类型为开放字符串。错误响应包含
@@ -85,7 +92,7 @@ CORS 响应头导致浏览器拒绝加载。端点只接受可信 `paperId`，�
 配置项为 `PAPER_RESOURCE_TIMEOUT`（秒）与
 `PAPER_MAX_SIZE_MB`（可获取资源大小上限）。
 
-配置 `CHAT_DATABASE_URL` 后，Agent 会话及待发送附件的解析文本可跨后端实例读取。Agent 附件源文件不入库；临时文本在对话运行结束并写入记录后删除，未发送的记录 24 小时后失效，并由上传请求及维护命令清理。旧 Chat 附件和未配置数据库时的会话仍依赖进程内存。
+配置 `CHAT_DATABASE_URL` 后，Agent 会话及待发送附件的解析文本可跨后端实例读取。Agent 附件源文件不入库；临时文本在对话运行结束并写入记录后删除，未发送的记录 24 小时后失效，并由上传请求及维护命令清理。未配置数据库时的会话与附件仍依赖进程内存。
 
 Python 环境与依赖统一使用 [uv](https://docs.astral.sh/uv/) 管理。新增依赖使用：
 
@@ -133,7 +140,7 @@ uv run --locked --env-file .env python -m app.services.discovery_pool sync [--ye
 uv run --locked --env-file .env python -m app.services.discovery_pool publish [--date 2026-11-02] [--dry-run]
 ```
 
-**调度**：设置 `HOME_FEED_SCHEDULER_ENABLED=true` 后，API 进程每 10 分钟检查一次，并用 Postgres advisory lock 保证多个 worker 或实例中只有一个执行：候选池为空或距上次同步超过 7 天时执行 `sync`（失败后 1 小时内不重试）；上海时间 00:05 之后当天还没有每日候选时执行 `publish`；每小时执行一次 `purge`，删除已过期的推荐快照、90 天前的行为事件和 120 天前的每日候选（之后的生成不再读取它们）。是否到期完全由数据库状态判断，所以进程重启或错过某次检查后，下一次检查会自动补上。默认关闭，本地开发和测试不会去请求底座。
+**调度**：设置 `HOME_FEED_SCHEDULER_ENABLED=true` 后，API 进程每 10 分钟检查一次，并用 Postgres advisory lock 保证多个 worker 或实例中只有一个执行：候选池为空或距上次同步超过 7 天时执行 `sync`（失败后 1 小时内不重试）；上海时间 00:05 之后当天还没有每日候选时执行 `publish`；每小时执行一次 `purge`，删除已过期的推荐快照、90 天前的行为事件和 120 天前的每日候选（之后的生成不再读取它们）。是否到期完全由数据库状态判断，所以进程重启或错过某次检查后，下一次检查会自动补上。默认关闭，本地开发和测试不会去请求底座。调度器随 FastAPI `lifespan` 启动，依赖长驻进程；Serverless 部署下的限制见 [部署与运行环境](../../docs/engineering/deployment.md)。
 
 **兜底快照**：输入是 `data/discovery/home-seed-300.json`，部署产物是 `apps/backend/app/data/home_discovery_snapshot.json` 和 `apps/web/public/paper-thumbnails/*.webp`，可以用 `python3 scripts/publish_home_discovery.py [--check]` 重新发布（需要种子中指向的原始图片）。2026-11-01 已用候选池数据为种子和快照补上了 `image_id`、`keywords` 和 `subjects`；种子里有 2 篇（标题为 "1 Introduction"、摘要被截断）会被规则 B 剔除。
 
@@ -144,6 +151,18 @@ cd apps/backend
 uv run --locked --env-file .env alembic upgrade head
 ```
 
-`agent_uploads` 临时文本表及匿名 Chat 会话仍按原维护策略清理。
+`agent_uploads` 临时文本表的过期清理：`uv run --locked python -m app.services.agent_uploads`（输出 `expired_agent_uploads`）。迁移 `021_drop_chat_tables` 删除旧 Chat 会话表 `chat_sessions` / `chat_messages`，数据不保留。
 
-维护说明：[Chat 架构、协议与配置](../../docs/chat/README.md)。
+维护说明：[Agent 对话](../../docs/agent/README.md) · [认证架构](../../docs/auth/ARCHITECTURE.md) · [部署与运行环境](../../docs/engineering/deployment.md)。
+
+## 会议 DDL 后台同步
+
+会议更新统一由原有 `HomeFeedScheduler` 在常驻后端中执行，不使用独立的 Vercel Cron、Actions 或 HTTP 触发接口。
+
+- 配置 `CHAT_DATABASE_URL` 并按团队数据库变更流程执行迁移。
+- 设置 `CONFERENCE_SYNC_ENABLED=true`，启动后端；该开关与首页任务开关独立。
+- 每10分钟检查数据库状态，成功检查满23小时才访问上游；失败满1小时后由后续检查重试，失败保留旧快照。
+- 是否启用只由上述显式开关决定，不再根据 VERCEL 环境变量静默关闭；部署者须确保后端进程持续运行。临时Serverless环境不能据此验收定时任务。
+- 手动排查：`uv run --locked --env-file .env python -m app.services.conferences.cli sync --dry-run`。
+
+部署步骤、删除会议处理和流程图见 [会议同步设计](../../docs/conferences/AUTO-SYNC-DESIGN.md)。

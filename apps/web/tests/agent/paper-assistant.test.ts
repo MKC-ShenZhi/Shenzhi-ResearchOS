@@ -139,3 +139,16 @@ test("switching papers clears the previous paper conversation and binding", () =
   assert.match(request.prompt, /paper_id: paper:next-456/);
   assert.doesNotMatch(request.prompt, /paper:current-123/);
 });
+
+test("paper assistant errors show the requestId kept on the client ApiError", () => {
+  const bubble = readFileSync("features/papers/[id]/components/error-bubble.tsx", "utf8");
+  const assistant = readFileSync("features/papers/[id]/components/paper-assistant-panel.tsx", "utf8");
+  const http = readFileSync("clients/backend/http.ts", "utf8");
+  assert.match(bubble, /requestId\?: string/);
+  assert.match(bubble, /请求 ID：/);
+  assert.match(bubble, /navigator\.clipboard\.writeText\(requestId\)/);
+  assert.doesNotMatch(bubble, /\{code,\s*message\}/);
+  assert.match(assistant, /requestId=\{turn\.requestId\}/);
+  assert.match(http, /export function requestIdForApiError/);
+  assert.match(http, /error instanceof ApiError \? error\.requestId/);
+});

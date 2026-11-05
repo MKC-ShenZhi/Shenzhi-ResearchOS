@@ -30,7 +30,7 @@ class AccountDeletionApiTests(unittest.TestCase):
         ) as cleanup:
             response = self.client.post('/api/v1/account-deletion/cleanup', headers=self.headers)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['data']['chat_sessions_deleted'], 2)
+        self.assertEqual(response.json()['data']['agent_sessions_deleted'], 2)
         cleanup.assert_awaited_once_with('delete-user-a')
 
     def test_cleanup_rejects_anonymous_or_a_missing_internal_marker(self):

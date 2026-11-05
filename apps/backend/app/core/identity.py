@@ -18,7 +18,7 @@ class RequestIdentity:
 
 @dataclass(frozen=True)
 class MigrationIdentity:
-    """Trusted target account and source browser identity for Chat claim only."""
+    """Trusted target account and source browser identity for anonymous claim only."""
     target_owner: str
     source_owner: str
 
@@ -85,7 +85,7 @@ def require_stats_service(request: Request) -> None:
 
 
 def request_owner(request: Request) -> str:
-    """Chat compatibility adapter; other modules may depend on request_identity directly."""
+    """Owner string (`user:` / `anon:`) used by Agent sessions and uploads."""
     identity = request_identity(request)
     prefix = 'user' if identity.kind == 'user' else 'anon'
     return f'{prefix}:{identity.subject_id}'

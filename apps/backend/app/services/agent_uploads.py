@@ -1,12 +1,15 @@
 """Temporary, owner-scoped Agent attachment text shared through PostgreSQL."""
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, select, text, update
 
-from app.core.database import chat_database_url, session_scope
+from app.core.database import database_url, dispose_engine, session_scope
 from app.core.errors import BusinessError
 from app.models.agent_upload import AgentUploadRow
+
+logger = logging.getLogger(__name__)
 
 UPLOAD_TTL_SECONDS = 86400
 MAX_PENDING_PER_OWNER = 20
@@ -37,7 +40,7 @@ class AgentUploadStore:
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=UPLOAD_TTL_SECONDS)
         filename = filename.replace('\\', '/').rsplit('/', 1)[-1][:500]
-        if not chat_database_url():
+        if not database_url():
             self._memory = {key: value for key, value in self._memory.items()
                             if value['expires_at'] > now}
             if sum(item['owner'] == owner for item in self._memory.values()) >= MAX_PENDING_PER_OWNER:
@@ -71,7 +74,7 @@ class AgentUploadStore:
         except (ValueError, TypeError) as exc:
             raise BusinessError(20004, MISSING_UPLOAD, 404) from exc
         now = datetime.now(timezone.utc)
-        if not chat_database_url():
+        if not database_url():
             found = {file_id: item for file_id in file_ids
                      if (item := self._memory.get(file_id)) and item['owner'] == owner
                      and item['expires_at'] > now}
@@ -91,7 +94,7 @@ class AgentUploadStore:
     async def consume(self, owner: str, file_ids: list[str]) -> None:
         if not file_ids:
             return
-        if not chat_database_url():
+        if not database_url():
             for file_id in file_ids:
                 if self._memory.get(file_id, {}).get('owner') == owner:
                     self._memory.pop(file_id, None)
@@ -103,7 +106,7 @@ class AgentUploadStore:
 
     async def purge_owner(self, owner: str) -> None:
         self._memory = {key: item for key, item in self._memory.items() if item['owner'] != owner}
-        if chat_database_url():
+        if database_url():
             async with session_scope() as db:
                 await db.execute(delete(AgentUploadRow).where(AgentUploadRow.owner == owner))
 
@@ -111,7 +114,7 @@ class AgentUploadStore:
         for item in self._memory.values():
             if item['owner'] == source:
                 item['owner'] = target
-        if chat_database_url():
+        if database_url():
             async with session_scope() as db:
                 await db.execute(update(AgentUploadRow).where(
                     AgentUploadRow.owner == source, AgentUploadRow.expires_at > datetime.now(timezone.utc)
@@ -119,7 +122,7 @@ class AgentUploadStore:
 
     async def purge_expired(self) -> int:
         now = datetime.now(timezone.utc)
-        if not chat_database_url():
+        if not database_url():
             expired = [key for key, item in self._memory.items() if item['expires_at'] <= now]
             for key in expired:
                 del self._memory[key]
@@ -130,3 +133,22 @@ class AgentUploadStore:
 
 
 agent_upload_store = AgentUploadStore()
+
+
+async def _purge_expired_command() -> int:
+    try:
+        expired = await agent_upload_store.purge_expired()
+    except Exception:
+        logger.exception('Agent upload cleanup failed')
+        return 1
+    finally:
+        await dispose_engine()
+    print(f'expired_agent_uploads={expired}')
+    return 0
+
+
+if __name__ == '__main__':
+    # Explicit maintenance command: python -m app.services.agent_uploads
+    import asyncio
+    import sys
+    sys.exit(asyncio.run(_purge_expired_command()))

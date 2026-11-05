@@ -14,9 +14,9 @@ import yaml
 from app.integrations.conferences.client import ConferenceGitHubClient, conference_files
 from app.services.conferences import catalog_from_snapshot, ConferenceDeadlineService
 from app.schemas.conferences import ConferenceSnapshotFile
-from app.services.conferences_source import snapshot_from_files
-from app.services.conferences_sync import ConferenceSync, validate_replacement
-from app.services.conferences_repository import ConferenceCatalogCache
+from app.services.conferences.source import snapshot_from_files
+from app.services.conferences.sync import ConferenceSync, validate_replacement
+from app.services.conferences.repository import ConferenceCatalogCache
 from tests.test_conferences import snapshot, conference, edition
 
 SHA = "a" * 40
@@ -114,13 +114,13 @@ class SourceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "expanded"):
                 conference_files(data.getvalue())
 
-    def test_replacement_shrink_and_missing_follow_fail(self):
+    def test_replacement_rejects_shrink_but_warns_on_missing_follow(self):
         p = payload()
         old = copy.deepcopy(p)
         old["conferences"].append({**old["conferences"][0], "id": "ai-other"})
         with self.assertRaisesRegex(ValueError, "10%"):
             validate_replacement(p, old, set())
-        with self.assertRaisesRegex(ValueError, "Followed"):
+        with self.assertLogs("app.services.conferences.sync", "WARNING"):
             validate_replacement(p, p, {"ai-gone"})
 
     def test_stale_is_additive_and_does_not_change_closed(self):
@@ -172,7 +172,7 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
         for dry in (False, True):
             job = self.make()
             with patch(
-                "app.services.conferences_sync.load_conference_catalog",
+                "app.services.conferences.sync.load_conference_catalog",
                 return_value=catalog_from_snapshot(
                     ConferenceSnapshotFile.model_validate(payload())
                 ),
@@ -203,7 +203,7 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
         job.store.attempt.assert_awaited_once()
 
     async def test_protections_and_malformed_yaml_do_not_write(self):
-        for invalid in ("shrink", "follow", "yaml"):
+        for invalid in ("shrink", "yaml"):
             job = self.make()
             previous = payload()
             if invalid == "shrink":
@@ -215,7 +215,7 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
             if invalid == "yaml":
                 job.client.download.return_value = {}
             with patch(
-                "app.services.conferences_sync.load_conference_catalog",
+                "app.services.conferences.sync.load_conference_catalog",
                 return_value=catalog_from_snapshot(
                     ConferenceSnapshotFile.model_validate(previous)
                 ),
@@ -246,7 +246,7 @@ class CacheTests(unittest.IsolatedAsyncioTestCase):
         )
         cache = ConferenceCatalogCache(store, lambda: clock[0], ttl=300)
         with patch(
-            "app.services.conferences_repository.chat_database_url",
+            "app.services.conferences.repository.database_url",
             return_value="configured",
         ):
             catalogs = await asyncio.gather(*(cache.get() for _ in range(10)))
@@ -271,13 +271,13 @@ class CacheTests(unittest.IsolatedAsyncioTestCase):
         )
         cache = ConferenceCatalogCache(store, ttl=0)
         with patch(
-            "app.services.conferences_repository.chat_database_url",
+            "app.services.conferences.repository.database_url",
             return_value="configured",
         ):
             fallback = await cache.get()
             self.assertGreater(len(fallback.records), 300)
             store.version.side_effect = RuntimeError("offline")
-            with self.assertLogs("app.services.conferences_repository", "ERROR"):
+            with self.assertLogs("app.services.conferences.repository", "ERROR"):
                 self.assertIs(await cache.get(), fallback)
             store.version.side_effect = None
             store.version.return_value = payload()["snapshot_id"]
@@ -286,11 +286,20 @@ class CacheTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(good.records), 1)
             store.version.return_value = "broken"
             store.payload.return_value = {}
-            with self.assertLogs("app.services.conferences_repository", "ERROR"):
+            with self.assertLogs("app.services.conferences.repository", "ERROR"):
                 self.assertIs(await cache.get(), good)
 
 
 class SchedulerTests(unittest.IsolatedAsyncioTestCase):
+    def test_conference_switch_is_explicit_and_independent(self):
+        from app.services.discovery_pool.scheduler import conference_sync_enabled, scheduler_enabled
+        with patch.dict(os.environ, {"CONFERENCE_SYNC_ENABLED": "true", "HOME_FEED_SCHEDULER_ENABLED": "false", "VERCEL": "1"}):
+            self.assertTrue(conference_sync_enabled())
+            self.assertTrue(scheduler_enabled())
+        with patch.dict(os.environ, {"CONFERENCE_SYNC_ENABLED": "false", "HOME_FEED_SCHEDULER_ENABLED": "true"}):
+            self.assertFalse(conference_sync_enabled())
+            self.assertTrue(scheduler_enabled())
+
     async def test_conference_only_and_failure_isolated(self):
         from app.services.discovery_pool.scheduler import HomeFeedScheduler
 
@@ -328,9 +337,9 @@ class DailyBudgetTests(unittest.IsolatedAsyncioTestCase):
         )
         job = ConferenceSync(store, client)
         self.assertEqual(
-            (await job.sync(now=NOW + timedelta(hours=21)))["status"], "not-due"
+            (await job.sync(now=NOW + timedelta(hours=22)))["status"], "not-due"
         )
         self.assertEqual(
-            (await job.sync(now=NOW + timedelta(hours=22)))["status"], "unchanged"
+            (await job.sync(now=NOW + timedelta(hours=23)))["status"], "unchanged"
         )
         client.download.assert_not_awaited()

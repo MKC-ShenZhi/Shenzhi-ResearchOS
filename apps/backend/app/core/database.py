@@ -1,4 +1,4 @@
-"""Async SQLAlchemy engine for Chat persistence (CHAT_DATABASE_URL)."""
+"""Async SQLAlchemy engine shared by every business table (CHAT_DATABASE_URL)."""
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -9,7 +9,7 @@ _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
-def chat_database_url() -> str | None:
+def database_url() -> str | None:
     url = os.getenv('CHAT_DATABASE_URL', '').strip()
     return url or None
 
@@ -25,7 +25,7 @@ def _normalize_url(url: str) -> str:
 def get_engine() -> AsyncEngine:
     global _engine, _session_factory
     if _engine is None:
-        raw = chat_database_url()
+        raw = database_url()
         if not raw:
             raise RuntimeError('CHAT_DATABASE_URL is not configured')
         _engine = create_async_engine(_normalize_url(raw), pool_pre_ping=True)

@@ -16,7 +16,7 @@ from app.services.conferences import (
     UnknownCategoryError,
 )
 from app.services.library.conference_follows import ConferenceFollowService
-from app.services.conferences_repository import conference_catalog_cache
+from app.services.conferences.repository import conference_catalog_cache
 
 
 router = APIRouter(prefix='/api/v1/conferences', tags=['conferences'])

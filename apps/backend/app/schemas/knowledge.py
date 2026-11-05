@@ -58,7 +58,7 @@ class KnowledgeSearchRequest(KnowledgeModel):
         validation_alias='topK',
         serialization_alias='topK',
     )
-    # None keeps non-paginated callers (notably Knowledge2Chat) on the
+    # None keeps non-paginated callers (notably Agent knowledge tools) on the
     # existing upstream request. Paper Search sends an explicit offset,
     # including 0 for its first page.
     offset: int | None = Field(default=None, ge=0)

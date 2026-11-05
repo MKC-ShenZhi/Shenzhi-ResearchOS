@@ -59,3 +59,13 @@ test("Sidebar uses cursor pagination and one shared scroll container", () => {
   assert.doesNotMatch(sidebar, /HISTORY_NAV|历史\s*<\/p>/);
   assert.match(sidebar, /overflow-y-auto/);
 });
+
+test("shared Composer gates only the AI path on model availability", () => {
+  const composer = readFileSync("components/common/composer/composer.tsx", "utf8");
+  assert.match(composer, /const modelAvailable = config\.models\.some\(/);
+  assert.match(composer, /const canSend =[\s\S]*?&& \(!isSmartSearch \|\| modelAvailable\)/);
+  assert.match(composer, /\(intent \?\? entryMode\) === "ai" && !modelAvailable/);
+  assert.match(composer, /disabled=\{!canSend\}/);
+  const picker = readFileSync("components/common/composer/composer-control-picker.tsx", "utf8");
+  assert.match(picker, /current\?\.label \?\? "选择模型"/);
+});

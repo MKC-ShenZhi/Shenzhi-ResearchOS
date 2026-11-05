@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Index, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.chat import Base
+from app.models.base import Base
 
 
 class PaperLikeRow(Base):

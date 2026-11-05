@@ -58,7 +58,7 @@ export const ConferenceCard = memo(function ConferenceCard({
 }) {
   const { edition, rank } = conference;
   const closed = conference.status === "closed";
-  const next = upcomingMilestone(edition.milestones, now);
+  const next = conference.source_removed ? null : upcomingMilestone(edition.milestones, now);
   const timeline = compactTimeline(edition.milestones, now);
   const meta = [
     { icon: Folder, text: categoryName ?? conference.category },
@@ -114,7 +114,12 @@ export const ConferenceCard = memo(function ConferenceCard({
           </div>
         )}
 
-        {conference.needs_update ? (
+        {conference.source_removed ? (
+          <div className="mt-4 rounded-xl bg-panel px-5 py-4 text-sm text-muted">
+            <p className="font-medium text-ink-2">暂无最新会议数据</p>
+            <p className="mt-1 leading-relaxed">目前保留最后一次资料，截稿信息请以会议官网为准。</p>
+          </div>
+        ) : conference.needs_update ? (
           <p className="mt-4 text-sm text-muted">
             待更新 · 暂无新一届截稿信息，{" "}
             <a href="https://github.com/ccfddl/ccf-deadlines" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">查看数据来源</a>
@@ -123,7 +128,7 @@ export const ConferenceCard = memo(function ConferenceCard({
           ? <LiveDeadlineCountdown conference={conference} />
           : <DeadlineCountdown conference={conference} now={now} />}
 
-        {edition.milestones.length > 1 && (
+        {!conference.source_removed && edition.milestones.length > 1 && (
           <ol className="mt-3 flex flex-wrap gap-2" aria-label={`${conference.title} ${edition.year} 时间线`}>
             {timeline.passedCount > 0 && (
               <li className="flex min-h-8 w-full items-center rounded-lg bg-chip px-5 py-2 text-xs text-faint">

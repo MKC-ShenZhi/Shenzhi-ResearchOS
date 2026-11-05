@@ -1,4 +1,3 @@
-import asyncio
 import io
 import json
 import unittest
@@ -6,32 +5,27 @@ from unittest.mock import patch
 import httpx
 from pypdf import PdfWriter
 from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
-from app.core.config import ModelConfig
 from app.core.errors import BusinessError
 from app.integrations.knowledge.client import KnowledgeBaseClient
-from app.schemas.chat import ChatAttachment
+from app.schemas.agent import AgentAttachment
 from app.services.uploads.parser import parse_document
-from app.services.chat.attachments import attachment_context
-from app.integrations.llm.provider import ModelProvider, completion_payload, resolve_model
-from app.services.chat.repository import MemorySessionRepository
+from app.services.agent.attachments import attachment_context
 from app.integrations.web_search.provider import web_search
-
-CONFIG = ModelConfig('test-key', 'https://model.test/v1', 'deepseek-chat', ('deepseek-chat', 'deepseek-reasoner'), 'deepseek')
 
 
 class DocumentTests(unittest.TestCase):
-    def test_text_normalization_limits_and_ownership(self):
-        repo = MemorySessionRepository()
-        files = [repo.save_upload('a', f'{i}.md', parse_document(('x' * 31000).encode(), f'{i}.md')) for i in range(3)]
-        self.assertTrue(files[0]['truncated'])
-        self.assertEqual(files[0]['original_length'], 31000)
-        self.assertEqual(files[0]['final_length'], 30000)
-        attachments = [ChatAttachment(kind='file', file_id=f['file_id']) for f in files]
-        context, warnings = attachment_context(attachments, 'a', repo)
+    def test_text_normalization_and_combined_attachment_limit(self):
+        files = {f'f{i}': {**parse_document(('x' * 31000).encode(), f'{i}.md'), 'filename': f'{i}.md'}
+                 for i in range(3)}
+        self.assertTrue(files['f0']['truncated'])
+        self.assertEqual(files['f0']['original_length'], 31000)
+        self.assertEqual(files['f0']['final_length'], 30000)
+        attachments = [AgentAttachment(kind='file', file_id=file_id) for file_id in files]
+        context, warnings = attachment_context(attachments, files)
         self.assertLessEqual(len(context), 60000)
         self.assertTrue(any('60,000' in warning for warning in warnings))
         with self.assertRaises(BusinessError):
-            attachment_context(attachments, 'b', repo)
+            attachment_context([AgentAttachment(kind='file', file_id='expired')], files)
         self.assertEqual(parse_document(b'\xef\xbb\xbfhello\r\n\n\nworld', 'a.txt')['text'], 'hello\n\nworld')
 
     def test_pdf_and_invalid_files(self):
@@ -49,56 +43,7 @@ class DocumentTests(unittest.TestCase):
                 parse_document(data, name)
 
 
-class ProviderTests(unittest.IsolatedAsyncioTestCase):
-    async def test_delta_reasoning_crlf_and_payload(self):
-        requests = []
-        def handler(request):
-            requests.append(json.loads(request.content))
-            return httpx.Response(200, text='data: {"choices":[{"delta":{"reasoning_content":"分析"}}]}\r\n\r\ndata: {"choices":[{"delta":{"content":"答案"}}]}\n\ndata: [DONE]\n\n')
-        provider = ModelProvider(CONFIG, httpx.MockTransport(handler))
-        result = [event async for event in provider.stream([{'role': 'user', 'content': 'q'}], 'deepseek-reasoner', 'deep')]
-        self.assertEqual(result, [{'reasoning': '分析'}, {'text': '答案'}])
-        self.assertNotIn('temperature', requests[0])
-        self.assertEqual(requests[0]['max_tokens'], 8192)
-        self.assertEqual(completion_payload('deepseek-chat', [], 'idea')['temperature'], 1.0)
-        with self.assertRaises(BusinessError):
-            resolve_model('arbitrary-model', CONFIG)
-
-    async def test_errors_missing_key_and_premature_eof(self):
-        for response in [httpx.Response(401, text='secret upstream response'), httpx.Response(200, text='data: {"choices":[{"delta":{"content":"partial"}}]}\n\n')]:
-            provider = ModelProvider(CONFIG, httpx.MockTransport(lambda req: response))
-            with self.assertRaises(BusinessError) as caught:
-                _ = [event async for event in provider.stream([], 'deepseek-chat', 'fast')]
-            self.assertNotIn('secret', caught.exception.message)
-        missing = ModelProvider(ModelConfig('', CONFIG.base_url, CONFIG.model, CONFIG.models, CONFIG.provider))
-        with self.assertRaises(BusinessError):
-            _ = [event async for event in missing.stream([], 'deepseek-chat', 'fast')]
-
-    async def test_followups_and_optional_failure(self):
-        provider = ModelProvider(CONFIG, httpx.MockTransport(lambda req: httpx.Response(200, json={'choices': [{'message': {'content': '```json\n["细节？", "对比？", "应用？"]\n```'}}]})))
-        self.assertEqual(len(await provider.followups('q', 'a' * 21)), 3)
-        provider.transport = httpx.MockTransport(lambda req: httpx.Response(503))
-        self.assertEqual(await provider.followups('q', 'a' * 21), [])
-
-    async def test_provider_cancellation_closes_response(self):
-        started, closed = asyncio.Event(), asyncio.Event()
-        class BlockingStream(httpx.AsyncByteStream):
-            async def __aiter__(self):
-                started.set()
-                await asyncio.Event().wait()
-                yield b''
-            async def aclose(self):
-                closed.set()
-        provider = ModelProvider(CONFIG, httpx.MockTransport(lambda req: httpx.Response(200, stream=BlockingStream())))
-        async def consume():
-            return [event async for event in provider.stream([], 'deepseek-chat', 'fast')]
-        task = asyncio.create_task(consume())
-        await asyncio.wait_for(started.wait(), 1)
-        task.cancel()
-        with self.assertRaises(asyncio.CancelledError):
-            await task
-        self.assertTrue(closed.is_set())
-
+class WebSearchTests(unittest.IsolatedAsyncioTestCase):
     async def test_search_fallback_and_news(self):
         requests = []
         def handler(request):
@@ -151,31 +96,6 @@ class P2ObservabilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(records[0][1]['operation'], 'POST /api/retrieval/search')
         self.assertNotIn('query', records[0][1])
         self.assertEqual(records[1][0], 'knowledge.request.failed')
-        self.assertEqual(records[1][1]['status_code'], 503)
-
-    async def test_model_provider_records_stream_terminal_events_without_changing_errors(self):
-        records = []
-
-        def record(_logger, _level, event, fields):
-            records.append((event, fields))
-
-        with patch('app.integrations.llm.provider.log_event', side_effect=record):
-            provider = ModelProvider(
-                CONFIG,
-                httpx.MockTransport(lambda request: httpx.Response(200, text='data: [DONE]\n\n')),
-            )
-            self.assertEqual([event async for event in provider.stream([], 'deepseek-chat', 'fast')], [])
-
-            failing = ModelProvider(
-                CONFIG,
-                httpx.MockTransport(lambda request: httpx.Response(503)),
-            )
-            with self.assertRaises(BusinessError):
-                _ = [event async for event in failing.stream([], 'deepseek-chat', 'fast')]
-
-        self.assertEqual(records[0][0], 'llm.request.completed')
-        self.assertEqual(records[0][1]['operation'], 'chat.completions.stream')
-        self.assertEqual(records[1][0], 'llm.request.failed')
         self.assertEqual(records[1][1]['status_code'], 503)
 
     async def test_web_search_records_provider_failure_and_fallback_completion(self):

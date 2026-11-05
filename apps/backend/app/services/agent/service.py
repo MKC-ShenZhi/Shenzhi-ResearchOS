@@ -19,7 +19,7 @@ from app.services.agent.chart_tools import chart_tool, image_search_tool
 from app.services.agent.fetch_url import fetch_url_tool
 from app.services.agent.knowledge_tools import knowledge_tools
 from app.services.agent.policies import (
-    compose_agent_system, run_deadline_s, tool_call_budget,
+    TEMPERATURE, compose_agent_system, run_deadline_s, tool_call_budget,
 )
 from app.services.agent.read_paper import read_paper_tool
 from app.services.agent.types import RUN_START, RunChannel
@@ -30,10 +30,8 @@ from app.services.agent.workspace import (
     Workspace, build_workspace_tools, create_workspace, ensure_session_workspace,
     mount_workspace, mount_workspace_into, read_session_file, write_workspace_file,
 )
-from app.services.chat.attachments import attachment_context
+from app.services.agent.attachments import attachment_context
 from app.services.knowledge.service import KnowledgeService
-from app.integrations.llm.provider import TEMPERATURE
-from app.services.chat.repository import repository
 from app.integrations.web_search.provider import web_search
 
 # API 层的调用面（app/api/agent.py 经 service.* 使用）；其余 workspace 符号本模块自用。
@@ -81,15 +79,15 @@ def decode_history(raw: Sequence[dict]) -> list[AgentMessage]:
 
 async def resolve_attachments(raw: Sequence[dict], owner: str) -> tuple[str, list[str], dict[str, dict]]:
     """Resolve short-lived parsed Agent uploads and assemble this turn's context."""
-    from app.schemas.chat import ChatAttachment
+    from app.schemas.agent import AgentAttachment
     from app.services.agent_uploads import agent_upload_store
     try:
-        parsed = [ChatAttachment.model_validate(item) for item in raw]
+        parsed = [AgentAttachment.model_validate(item) for item in raw]
     except Exception as exc:
         raise BusinessError(20001, 'attachments 格式无效') from exc
     files = await agent_upload_store.get_many(
         owner, [item.file_id or '' for item in parsed if item.kind == 'file'])
-    context, warnings = attachment_context(parsed, owner, repository, file_contexts=files)
+    context, warnings = attachment_context(parsed, files)
     return context, warnings, files
 
 

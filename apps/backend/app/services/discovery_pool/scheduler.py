@@ -32,7 +32,7 @@ from app.services.discovery_pool.edition import DailyEditionBuilder
 from app.services.discovery_pool.sync import DiscoveryPoolSync
 from app.services.home_feed.config import pool_year
 from app.services.recommendation.maintenance import purge_expired
-from app.services.conferences_sync import ConferenceSync
+from app.services.conferences.sync import ConferenceSync
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +51,7 @@ def home_feed_enabled() -> bool:
 
 
 def conference_sync_enabled() -> bool:
-    # Serverless uses an awaited HTTP cron invocation, never an idle process loop.
-    if os.getenv('VERCEL') == '1':
-        return False
+    # Conference jobs use this scheduler only; deployment must keep it running.
     return os.getenv('CONFERENCE_SYNC_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 

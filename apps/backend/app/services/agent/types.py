@@ -26,7 +26,7 @@ class StopReason(str, Enum):
 
 
 # 事件名常量；seq 是 run 内排序号。断线重放由业务层事件日志承载
-#（chat 的 Message.events + Last-Event-ID 是现成先例），基座不内建。
+#（agent_sessions 的 turn 事件 + Last-Event-ID），基座不内建。
 RUN_START = 'run_start'
 TURN_START = 'turn_start'
 MESSAGE = 'message'  # run 中注入的 steer / system 消息（pi message_start/end 的单事件对应）

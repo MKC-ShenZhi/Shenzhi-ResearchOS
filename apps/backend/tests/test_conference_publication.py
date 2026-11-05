@@ -11,7 +11,7 @@ from app.core.database import dispose_engine, session_scope
 from app.models.conference_snapshot import ConferenceSnapshotRow as Row
 from app.models.interactions import ConferenceFollowRow
 from app.services.conferences import ConferenceNotFoundError
-from app.services.conferences_repository import (
+from app.services.conferences.repository import (
     ConferenceSnapshotStore,
     PUBLISH_LOCK_KEY,
 )
@@ -95,15 +95,21 @@ class PublicationRaceTests(unittest.IsolatedAsyncioTestCase):
                     pending = asyncio.create_task(store.save(replacement, now))
                     with self.assertRaises(asyncio.TimeoutError):
                         await asyncio.wait_for(asyncio.shield(pending), 0.2)
-                with self.assertRaisesRegex(ValueError, "Followed"):
-                    await asyncio.wait_for(pending, 5)
-                self.assertEqual(await store.payload(), original)
+                await asyncio.wait_for(pending, 5)
+                published = await store.payload()
+                retained = next(item for item in published["conferences"] if item["id"] == "ai-old")
+                self.assertTrue(retained["source_removed"])
+                self.assertEqual(len(published["conferences"]), 2)
+                with self.assertRaises(ConferenceNotFoundError):
+                    await follows.follow("another-user", "ai-old")
+                await follows.unfollow("audit-user", "ai-old")
+                self.assertNotIn("ai-old", await follows.followed_ids("audit-user"))
                 # Ordinary existing conference follows still work and stay idempotent.
                 await follows.follow("audit-user", "ai-keep")
                 await follows.follow("audit-user", "ai-keep")
                 self.assertEqual(
                     await follows.followed_ids("audit-user"),
-                    frozenset({"ai-old", "ai-keep"}),
+                    frozenset({"ai-keep"}),
                 )
             finally:
                 if pending and not pending.done():

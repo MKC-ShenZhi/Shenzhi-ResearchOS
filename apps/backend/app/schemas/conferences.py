@@ -42,6 +42,7 @@ class ConferenceRank(ConferenceModel):
 
 
 class SnapshotConference(ConferenceModel):
+    source_removed: bool = False
     id: str
     title: str
     description: str
@@ -94,6 +95,7 @@ class ConferenceEdition(ConferenceModel):
 
 
 class ConferenceDeadline(ConferenceModel):
+    source_removed: bool = False
     id: str
     title: str
     description: str

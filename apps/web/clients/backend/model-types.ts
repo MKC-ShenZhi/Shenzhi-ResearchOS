@@ -1,4 +1,4 @@
-/** Public model catalog contract shared by Chat and Agent. No credentials. */
+/** Public model catalog contract served by /agent/config. No credentials. */
 export type ModelProvider = "openai" | "anthropic" | "google" | "deepseek" | "zhipu" | "platform" | (string & {});
 
 export interface ModelOption {

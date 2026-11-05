@@ -7,7 +7,7 @@ from sqlalchemy import Date, DateTime, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.chat import Base
+from app.models.base import Base
 
 
 class HomeDailyEditionRow(Base):

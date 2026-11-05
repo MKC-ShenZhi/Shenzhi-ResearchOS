@@ -14,12 +14,13 @@ Next.js /api/v1/*（BFF 透传）
   ↓
 FastAPI /api/v1/conferences*（app/api/conferences.py）
   ↓
-app/services/conferences.py（时区换算、当届选择、排序、筛选）
+app/services/conferences/catalog.py（时区换算、当届选择、排序、筛选）
   ↓
 conference_snapshots（数据库当前快照；打包 JSON 兜底）
 ```
 
 页面请求不访问上游服务；后台任务更新数据库当前快照。账号数据为「关注截稿」（`conference_follows` 表）。
+
 
 ## 数据更新
 
@@ -27,27 +28,27 @@ conference_snapshots（数据库当前快照；打包 JSON 兜底）
 
 长驻后端设置 `CONFERENCE_SYNC_ENABLED=true` 后复用现有 `HomeFeedScheduler`，每 10 分钟检查是否到期；成功检查距今满 23 小时才获取上游最新提交。SHA 未变只更新检查时间；有变化则从 `ccfddl/ccf-deadlines` 下载该 SHA 的压缩包，读取 `conference/types.yml` 和 `conference/*/*.yml`，校验后原子替换当前快照。失败保留旧数据，至少 1 小时后重试。首页调度开关与会议开关独立。
 
-上线前先运行迁移（021 关注 ID 迁移 + 022 快照表），再启用任务。生产服务器必须能访问 `api.github.com` 和 `codeload.github.com`。进程内调度不适用于无法保证持续运行的 Serverless 实例。共享 IP 限流时可选配置仅后端使用的 `CONFERENCE_GITHUB_TOKEN`。
+上线前先运行迁移（原会议 021/022 与 dev 的 Chat 清理迁移经 023 合并迁移汇合），再启用任务。生产服务器必须能访问 `api.github.com` 和 `codeload.github.com`。进程内调度不适用于无法保证持续运行的 Serverless 实例。共享 IP 限流时可选配置仅后端使用的 `CONFERENCE_GITHUB_TOKEN`。
 
 ```bash
 cd apps/backend
 uv run --locked --env-file .env alembic upgrade head
 # dry-run 只检查，不更新快照和检查时间；--force 忽略时间间隔，不绕过保护规则
-uv run --locked --env-file .env python -m app.services.conferences_cli sync --dry-run --force
-uv run --locked --env-file .env python -m app.services.conferences_cli sync --force
+uv run --locked --env-file .env python -m app.services.conferences.cli sync --dry-run --force
+uv run --locked --env-file .env python -m app.services.conferences.cli sync --force
 # 离线发布：上游目录为干净 Git checkout，自动记录其提交 SHA / 提交日期
-uv run --locked python -m app.services.conferences_cli publish --source /path/to/ccf-deadlines
-uv run --locked python -m app.services.conferences_cli publish --source /path/to/ccf-deadlines --check
+uv run --locked python -m app.services.conferences.cli publish --source /path/to/ccf-deadlines
+uv run --locked python -m app.services.conferences.cli publish --source /path/to/ccf-deadlines --check
 # 解压目录则显式提供 --revision <40位SHA> --commit-date YYYY-MM-DD
 ```
 
-共用清洗模块为 `app/services/conferences_source.py`；不新增依赖。TBD / 空串归一为未公布，等级 N / 空值归一为 null，修正 abstract deadline 键名，显式忽略 rebuttal_deadline / decision_deadline，其他未知时间轴字段拒绝。快照保存官方当地时间和时区，不在采集阶段换算 UTC。
+共用清洗模块为 `app/services/conferences/source.py`；不新增依赖。TBD / 空串归一为未公布，等级 N / 空值归一为 null，修正 abstract deadline 键名，显式忽略 rebuttal_deadline / decision_deadline，其他未知时间轴字段拒绝。快照保存官方当地时间和时区，不在采集阶段换算 UTC。
 
-保护规则：完整 schema 和目录校验；会议数量不得比当前资料减少超过 10%；不能丢失用户已关注的会议 ID。失败记录日志且不替换 payload。下载与解压声明大小均受限，不解压至磁盘。数据库只保留当前一份，避免历史快照无限增长；已知分类变化由 021 迁移保住关注，后续变化需核查。
+保护规则：完整 schema 和目录校验；会议数量不得比当前资料减少超过 10%；已关注的上游移除项保留最后资料并标记，不阻断其他会议更新。校验失败记录日志且不替换 payload。下载与解压声明大小均受限，不解压至磁盘。数据库只保留当前一份，避免历史快照无限增长；已知分类变化由 021_conference_follow_ids 迁移保住关注，后续变化需核查。
 
 `data_as_of` 是上游提交日期，`source.revision` 标识精确来源版本，并不意味着逐条官网核验日期。页面显示资料日期及来源。[设计与验证说明](AUTO-SYNC-DESIGN.md)。
 
-## 业务规则（`app/services/conferences.py`）
+## 业务规则（`app/services/conferences/catalog.py`）
 
 - **时区**：`AoE` = UTC-12；`UTC` / `UTC±N` 为固定偏移；`PT` 按 `America/Los_Angeles` 计算夏令时。其他标签视为快照错误。
   响应中的 `at` 为 UTC 绝对时刻，前端按浏览者本地时区显示，同时展示 `local` 官方时间。
@@ -84,8 +85,20 @@ uv run --locked python -m app.services.conferences_cli publish --source /path/to
 
 发布快照和新增关注使用配套的短时事务锁；发布事务重新检查关注，关注写入依据数据库当前快照校验 ID，避免缓存滞后导致失效关注。下载不持有发布短锁。压缩包实际解压字节（含 PAX/GNU 元数据）受上限约束。完整目录校验在线程中执行。
 
-详见 [2026-11-04 审查与修复](REVIEW-2026-11-04.md)。
+详见 [2026-11-04 审查与修复](../dev/records/conferences/REVIEW-2026-11-04.md)。
 
-## Vercel 定时同步
 
-后端提供密钥保护的同步入口。主触发由 `.github/workflows/conference-sync.yml` 每小时调用，Vercel每日Cron仅作备用；后端到期前只做轻量数据库检查，约每天才访问上游。失败后满1小时，在后续触发中自动重试；保留旧快照。需完成数据库迁移、后端配置和仓库Actions密钥/开关配置；schedule只在默认分支生效，功能分支上传本身不会启用线上任务。完整步骤见 [自动同步设计](AUTO-SYNC-DESIGN.md#每小时外部触发与失败自动重试)。
+## 上游移除已关注会议
+
+不会因一条关注失效而阻断全部会议更新。仍被关注的移除项保留最后资料，响应新增 source_removed=true；卡片明确标识上游已移除，不再给出旧倒计时，允许取消关注、拒绝新增关注。后续新版本发布时清理无人关注的保留项，上游恢复则恢复正常数据。
+
+## 架构与验收
+
+会议服务集中到 app/services/conferences/，API、模型与Schema保持原分层。常驻后端复用原HomeFeedScheduler；本功能的Actions/Vercel外部触发已清理。正式服务器环境待负责人实际验证。完整流程图、锁的用途、迁移链和命令见 [自动同步设计](AUTO-SYNC-DESIGN.md)。
+
+## API接口
+
+- `GET /api/v1/conferences`：列表、等级/方向/状态筛选、搜索；followed=true只返回当前用户关注。
+- `GET /api/v1/conferences/categories`：方向目录。
+- `PUT /api/v1/conferences/{id}/follow`：新增关注，已移除目标拒绝；`DELETE`取消关注，即使上游已移除也允许。
+- 新增响应字段 `source_removed` 区分保留资料；原有status枚举不扩展，不把它当会议停办结论。

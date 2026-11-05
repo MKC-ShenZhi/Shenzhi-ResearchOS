@@ -13,7 +13,7 @@
 ```text
 main
 dev
-feat/*
+<type>/*    # 工作分支：feat/*、fix/*、refactor/*、docs/*、chore/*、test/*
 ```
 
 ### `main`
@@ -28,17 +28,16 @@ feat/*
 
 各功能完成开发和验收后，统一合并回 `dev`。
 
-### `feat/*`
+### `<type>/*`
 
-功能开发分支。
+工作分支，前缀与 Commit 类型一致（见第三节）：新功能用 `feat/*`，问题修复用 `fix/*`，文档用 `docs/*`，依此类推。
 
-新功能原则上从 `dev` 创建，例如：
+工作分支原则上从最新的 `dev` 创建，例如：
 
 ```text
-feat/auth
-feat/chat
 feat/knowledge-search
-feat/deep-research
+fix/email-login
+docs/docs-maintenance
 ```
 
 基本流程：
@@ -46,7 +45,7 @@ feat/deep-research
 ```text
 dev
  ↓
-feat/*
+<type>/*
  ↓
 dev
  ↓
@@ -180,10 +179,10 @@ final-final
 
 ## 六、合并原则
 
-功能开发完成后：
+工作分支完成后，通过 PR 合并：
 
 ```text
-feat/* → dev
+<type>/* → dev
 ```
 
 准备发布时：

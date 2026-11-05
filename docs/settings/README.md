@@ -26,7 +26,7 @@ Notification values currently record preference only. No delivery channel, inbox
 
 ## Account management (phase three)
 
-The **Account** block on `/settings?tab=profile` manages authentication data only. It does **not** add FastAPI routes or read Better Auth tables from the business backend.
+The **Account** block on `/settings?tab=profile` manages authentication data through Better Auth. The business backend never reads Better Auth tables; its only account-related route is the internal `POST /api/v1/account-deletion/cleanup` (`apps/backend/app/api/account_deletion.py`) used by account deletion.
 
 | Capability | Boundary | Notes |
 | --- | --- | --- |
@@ -46,17 +46,17 @@ Implementation layout:
 
 Out of scope for this phase:
 
-- FastAPI account APIs or business-database credential storage
+- FastAPI authentication/account APIs (beyond the internal deletion cleanup) or business-database credential storage
 - Avatar upload and scholar profile fields (phase two `user_profiles`)
-- Retaining any user profile, preference, or Chat history after an approved account deletion
+- Retaining any business data listed under account deletion below after an approved account deletion
 
 ## Dependency and route boundaries
 
 - `clients/backend/*` is the browser client boundary for FastAPI business APIs such as settings and profile. It does not own authentication and must not import Feature/UI code.
 - `lib/auth/*` is server-side Better Auth configuration, security policy, and email infrastructure. It does not import `clients`; Feature components may depend on both boundaries, but the boundaries never depend on each other.
 - `/api/auth/[...all]` remains the sole Better Auth HTTP handler for its official endpoints. `/api/auth/password/*` is deliberately narrower: Better Auth's initial `setPassword` endpoint is server-only, while the product needs an authenticated mailbox-OTP proof and OAuth placeholder-credential handling. The browser calls `features/settings/services/account-password.ts`; that service holds no secret and cannot access the Adapter.
-- Account deletion is the one cross-database orchestration: the browser calls `/api/auth/account-deletion`, which derives identity from its Better Auth session, marks the internal FastAPI cleanup request, deletes `user_profiles`, `user_settings`, and `user:*` Chat sessions/messages in one `CHAT_DATABASE_URL` transaction, then deletes Better Auth authentication data. A cleanup retry returning zero deleted rows is successful and can complete a previously failed final Auth deletion.
+- Account deletion is the one cross-database orchestration: the browser calls `/api/auth/account-deletion`, which derives identity from its Better Auth session, calls FastAPI directly with the internal `X-ShenZhi-Account-Deletion: 1` marker (the generic `/api/v1` BFF never forwards it), and `services/user/account_deletion.py` deletes in one `CHAT_DATABASE_URL` transaction: `agent_uploads`; owner `user:<id>` Agent sessions (turns cascade); collection folders, items and per-user collection state (private papers cascade with folders); paper likes, topic follows and conference follows; reading history; behavior events, interest profiles and recommendation snapshots; `user_profiles`; and `user_settings`. It then deletes Better Auth authentication data via `auth.api.deleteUser`. The cleanup response reports `profiles_deleted`, `settings_deleted` and `agent_sessions_deleted`. A cleanup retry returning zero deleted rows is successful and can complete a previously failed final Auth deletion.
 - Better Auth database hooks remove the user-bound `set-password-otp:<userId>` verification before deleting the user. The `verification` table has no user foreign key, so this ShenZhi-owned challenge cannot rely on the `user` cascade used by `account` and `session`.
 - Account actions keep independent pending and feedback state. Deletion failures retain the response request ID so operators can correlate the UI error with server logs.
 
-Known production boundary: Chat generation cancellation currently reaches only the Backend worker handling the deletion request. A multi-worker deployment still needs distributed cancellation. Account deletion is synchronous and idempotent, but it does not yet use a durable deletion-job table or background retry/alert workflow.
+Known production boundary: account deletion does not stop an Agent run that is still in progress on any worker. Account deletion is synchronous and idempotent, but it does not yet use a durable deletion-job table or background retry/alert workflow. The cleanup removes database rows only; on-disk Agent session workspace files (`services/agent/workspace.py`) are not deleted by it.
