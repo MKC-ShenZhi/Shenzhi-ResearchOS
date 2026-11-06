@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { cn } from "@/lib/utils";
 import type { ConferenceDeadlineDto } from "@/clients/backend/conferences";
 import {
@@ -50,11 +51,11 @@ export function DeadlineCountdown({
     const values = [left.days, left.hours, left.minutes, left.seconds];
 
     return (
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-panel px-5 py-4">
+      <div className="mt-4 grid grid-cols-1 items-center gap-4 rounded-xl bg-panel px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary">
+          <span className="flex min-w-0 flex-col gap-1 text-xs font-medium text-primary">
             {milestoneLabel(next)}
-            {next.comment && <span className="font-normal text-primary/80">· {next.comment}</span>}
+            {next.comment && <span className="break-words font-normal leading-relaxed text-primary/80">{next.comment}</span>}
           </span>
           <span className="text-[13px] text-ink-2">{formatInstant(next.at)}</span>
           {next.local && (
@@ -65,28 +66,28 @@ export function DeadlineCountdown({
         </div>
 
         <div
-          className="flex items-start gap-4"
+          className="grid justify-self-center grid-cols-[2.5rem_0.625rem_2.5rem_0.625rem_2.5rem_0.625rem_2.5rem] items-start sm:grid-cols-[3rem_1rem_3rem_1rem_3rem_1rem_3rem]"
           role="timer"
           aria-label={`距${milestoneLabel(next)}还有 ${left.days} 天 ${left.hours} 小时 ${left.minutes} 分钟`}
         >
           {values.map((value, i) => (
-            <div key={UNITS[i]} className="flex items-start gap-4">
-              <div className="flex w-11 flex-col items-center gap-0.5">
+            <Fragment key={UNITS[i]}>
+              <div className="flex flex-col items-center gap-0.5">
                 <span className={cn("text-[28px] font-bold leading-none tabular-nums", style.digits)}>
                   {pad(value)}
                 </span>
                 <span className="text-[11px] text-faint">{UNITS[i]}</span>
               </div>
               {i < 3 && (
-                <span className={cn("-mx-2 text-xl font-bold leading-[28px]", style.digits)} aria-hidden>
+                <span className={cn("text-center text-xl font-bold leading-[28px]", style.digits)} aria-hidden>
                   :
                 </span>
               )}
-            </div>
+            </Fragment>
           ))}
         </div>
 
-        <span className={cn("rounded-full px-3 py-1 text-xs font-medium", style.pill)}>
+        <span className={cn("w-20 justify-self-end whitespace-nowrap rounded-full px-3 py-1 text-center text-xs font-medium", style.pill)}>
           {style.label}
         </span>
       </div>

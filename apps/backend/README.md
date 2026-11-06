@@ -154,3 +154,15 @@ uv run --locked --env-file .env alembic upgrade head
 `agent_uploads` 临时文本表的过期清理：`uv run --locked python -m app.services.agent_uploads`（输出 `expired_agent_uploads`）。迁移 `021_drop_chat_tables` 删除旧 Chat 会话表 `chat_sessions` / `chat_messages`，数据不保留。
 
 维护说明：[Agent 对话](../../docs/agent/README.md) · [认证架构](../../docs/auth/ARCHITECTURE.md) · [部署与运行环境](../../docs/engineering/deployment.md)。
+
+## 会议 DDL 后台同步
+
+会议更新统一由原有 `HomeFeedScheduler` 在常驻后端中执行，不使用独立的 Vercel Cron、Actions 或 HTTP 触发接口。
+
+- 配置 `CHAT_DATABASE_URL` 并按团队数据库变更流程执行迁移。
+- 设置 `CONFERENCE_SYNC_ENABLED=true`，启动后端；该开关与首页任务开关独立。
+- 每10分钟检查数据库状态，成功检查满23小时才访问上游；失败满1小时后由后续检查重试，失败保留旧快照。
+- 是否启用只由上述显式开关决定，不再根据 VERCEL 环境变量静默关闭；部署者须确保后端进程持续运行。临时Serverless环境不能据此验收定时任务。
+- 手动排查：`uv run --locked --env-file .env python -m app.services.conferences.cli sync --dry-run`。
+
+部署步骤、删除会议处理和流程图见 [会议同步设计](../../docs/conferences/AUTO-SYNC-DESIGN.md)。

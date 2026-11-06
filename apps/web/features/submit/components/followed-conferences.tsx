@@ -68,7 +68,7 @@ function FollowedTile({
             </span>
           </span>
         ) : (
-          <span className="text-xs text-faint">{conference.status === "tbd" ? "截稿时间待公布" : "本届已截止"}</span>
+          <span className="text-xs text-faint">{conference.source_removed ? "暂无最新会议数据" : conference.status === "tbd" ? "截稿时间待公布" : "本届已截止"}</span>
         )}
       </button>
     </motion.li>

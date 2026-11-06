@@ -29,6 +29,7 @@ export function useFollowedConferences() {
     queryFn: ({ signal }) => fetchConferenceDeadlines({ followed: true }, signal),
     enabled: Boolean(userId) && !isPending,
     staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
     retry: conferenceQueryRetry,
   });
   const items = query.data?.items;

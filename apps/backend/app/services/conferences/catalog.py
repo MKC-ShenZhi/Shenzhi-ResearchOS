@@ -35,11 +35,15 @@ from app.schemas.conferences import (
 )
 
 
-SNAPSHOT_PATH = Path(__file__).resolve().parents[1] / 'data' / 'conference_deadlines_snapshot.json'
+SNAPSHOT_PATH = Path(__file__).resolve().parents[2] / 'data' / 'conference_deadlines_snapshot.json'
 UNRANKED = 'N'
 _UTC_OFFSET = re.compile(r'^UTC([+-])(\d{1,2})$')
 _LOCAL_FORMAT = '%Y-%m-%d %H:%M:%S'
 _STATUS_ORDER: dict[DeadlineStatus, int] = {'open': 0, 'tbd': 1, 'closed': 2}
+
+
+class ConferenceNotFoundError(ValueError):
+    """A follow target is absent from the authoritative current snapshot."""
 
 
 class ConferenceSnapshotError(RuntimeError):
@@ -118,7 +122,19 @@ def read_catalog(path: Path) -> ConferenceCatalog:
     except (OSError, json.JSONDecodeError, ValidationError) as error:
         raise ConferenceSnapshotError(f'Unable to read conference snapshot: {path}') from error
 
+    return catalog_from_snapshot(snapshot)
+
+
+def catalog_from_snapshot(snapshot: ConferenceSnapshotFile) -> ConferenceCatalog:
+    if not snapshot.conferences:
+        raise ConferenceSnapshotError('Conference snapshot is empty')
     category_ids = {category.id for category in snapshot.categories}
+    if len(category_ids) != len(snapshot.categories):
+        raise ConferenceSnapshotError('Conference snapshot contains duplicate categories')
+    for conference in snapshot.conferences:
+        years = [edition.year for edition in conference.editions]
+        if len(years) != len(set(years)):
+            raise ConferenceSnapshotError('Conference snapshot contains duplicate edition years')
     ids = [conference.id for conference in snapshot.conferences]
     if len(set(ids)) != len(ids):
         raise ConferenceSnapshotError('Conference snapshot contains duplicate ids')
@@ -167,9 +183,12 @@ def evaluate(record: ConferenceRecord, now: datetime) -> ConferenceDeadline:
         next_milestone, edition = None, record.editions[-1]
         status = 'tbd' if any(item.at is None for item in edition.milestones) else 'closed'
 
+    if record.conference.source_removed:
+        status, next_milestone = 'closed', None
     dated = [item.at for item in edition.milestones if item.at is not None]
     conference = record.conference
     return ConferenceDeadline(
+        source_removed=conference.source_removed,
         id=conference.id,
         title=conference.title,
         description=conference.description,
@@ -181,6 +200,7 @@ def evaluate(record: ConferenceRecord, now: datetime) -> ConferenceDeadline:
         last_deadline_at=max(dated) if dated else None,
         edition=edition,
         edition_count=len(record.editions),
+        needs_update=status == 'closed' and bool(dated) and now - max(dated) > timedelta(days=365),
     )
 
 
@@ -223,8 +243,8 @@ class ConferenceDeadlineService:
         self._catalog_loader = catalog_loader
         self._now_provider = now_provider
 
-    def categories(self) -> ConferenceCategoryList:
-        catalog = self._catalog_loader()
+    def categories(self, *, catalog: ConferenceCatalog | None = None) -> ConferenceCategoryList:
+        catalog = catalog or self._catalog_loader()
         counts = Counter(record.conference.category for record in catalog.records)
         return ConferenceCategoryList(
             snapshot_id=catalog.snapshot.snapshot_id,
@@ -237,12 +257,12 @@ class ConferenceDeadlineService:
             ],
         )
 
-    def has_conference(self, conference_id: str) -> bool:
-        return any(record.conference.id == conference_id for record in self._catalog_loader().records)
+    def has_conference(self, conference_id: str, *, catalog: ConferenceCatalog | None = None) -> bool:
+        return any(record.conference.id == conference_id and not record.conference.source_removed for record in (catalog or self._catalog_loader()).records)
 
-    def deadlines(self, filters: ConferenceFilters = ConferenceFilters()) -> ConferenceDeadlineList:
+    def deadlines(self, filters: ConferenceFilters = ConferenceFilters(), *, catalog: ConferenceCatalog | None = None) -> ConferenceDeadlineList:
         """Rank filters are OR within one system and AND across systems."""
-        catalog = self._catalog_loader()
+        catalog = catalog or self._catalog_loader()
         unknown = filters.categories - {category.id for category in catalog.snapshot.categories}
         if unknown:
             raise UnknownCategoryError(', '.join(sorted(unknown)))

@@ -1,7 +1,7 @@
 # 会议截稿（会议DDL `/submit`）
 
 `/submit` 展示 CCF / CORE / TH-CPL 分级会议的投稿截止时间与实时倒计时。需求参考 ccfddl 的 DDL 页面，数据来自
-[ccf-deadlines](https://github.com/ccfddl/ccf-deadlines) 的导出快照；实现按 ShenZhi 分层重写，不沿用原 Vue 代码。
+[ccf-deadlines](https://github.com/ccfddl/ccf-deadlines) 的版本化 YAML 快照；实现按 ShenZhi 分层重写，不沿用原 Vue 代码。
 
 ## 调用链
 
@@ -13,38 +13,42 @@ clients/backend/conferences.ts
 Next.js /api/v1/*（BFF 透传）
   ↓
 FastAPI /api/v1/conferences*（app/api/conferences.py）
-  ├─ app/services/conferences.py（时区换算、当届选择、排序、筛选）
-  │    ↓
-  │  app/data/conference_deadlines_snapshot.json（随后端打包的版本化快照）
-  └─ app/services/library/conference_follows.py（关注截稿，PostgreSQL conference_follows 表）
+  ↓
+app/services/conferences/catalog.py（时区换算、当届选择、排序、筛选）
+  ↓
+conference_snapshots（数据库当前快照；打包 JSON 兜底）
 ```
 
-运行时不访问任何外部服务，截稿数据只来自随包快照。唯一的账号数据是「关注截稿」（`conference_follows` 表，
-由 `ConferenceFollowService` 读写）。
+页面请求不访问上游服务；后台任务更新数据库当前快照。账号数据为「关注截稿」（`conference_follows` 表）。
 
-接口一览：
-
-| 接口 | 说明 |
-| --- | --- |
-| `GET /api/v1/conferences` | 截稿列表，支持下文的筛选参数与 `followed=true` |
-| `GET /api/v1/conferences/categories` | 方向目录：`snapshot_id` 与 `items[]`（`id`、`name`、`name_en`、`count`） |
-| `PUT` / `DELETE /api/v1/conferences/{id}/follow` | 关注 / 取消关注截稿（需登录） |
-
-快照缺失或损坏时，列表、方向目录与关注时的 ID 校验返回 `20004/503`。
 
 ## 数据更新
 
-1. 将新的 ccf-deadlines 导出（`categories` + `conferences`，含 `exported_at`）放到 `data/conferences/`。
-2. 运行 `python3 scripts/publish_conference_deadlines.py --source <导出文件>` 生成快照；`--check` 校验已发布快照与源一致。
-3. 运行后端测试 `uv run python -m unittest tests.test_conferences`。
+后端优先读取数据库 `conference_snapshots` 当前快照，数据库无可用资料时使用随后端打包的快照。运行时请求不访问 GitHub；缓存每 5 分钟检查数据库版本，变化后重新加载，数据库异常时保留最近一次已校验目录。活动页面每 5 分钟重新请求会议、分类及关注数据；仅设置 staleTime 不等同于定时刷新。
 
-发布脚本只做结构清洗并拒绝未知格式：丢弃旧管理后台录入的 `source: manual` 测试记录；`TBD` / 空串归一为未公布；
-修正 `abstract deadline` 键名；`N` / 空等级归一为 `null`。会议 ID 为 `<方向>-<简称>`（如 `se-fse` 与 `sc-fse` 是不同会议，
-`cg-dcc` 与 `ds-dcc` 是同一会议在两个方向下的不同等级记录）。截稿时间在快照中保留官方本地时间 + 时区，便于与上游比对。
+长驻后端设置 `CONFERENCE_SYNC_ENABLED=true` 后复用现有 `HomeFeedScheduler`，每 10 分钟检查是否到期；成功检查距今满 23 小时才获取上游最新提交。SHA 未变只更新检查时间；有变化则从 `ccfddl/ccf-deadlines` 下载该 SHA 的压缩包，读取 `conference/types.yml` 和 `conference/*/*.yml`，校验后原子替换当前快照。失败保留旧数据，至少 1 小时后重试。首页调度开关与会议开关独立。
 
-当前快照为 2026-10-29 从旧 ccfddl 后端导出，上游最后维护时间未知。接口仍返回 `data_as_of` 与 `source_url`，页面暂不展示。
+上线前先运行迁移（原会议 021/022 与 dev 的 Chat 清理迁移经 023 合并迁移汇合），再启用任务。生产服务器必须能访问 `api.github.com` 和 `codeload.github.com`。进程内调度不适用于无法保证持续运行的 Serverless 实例。共享 IP 限流时可选配置仅后端使用的 `CONFERENCE_GITHUB_TOKEN`。
 
-## 业务规则（`app/services/conferences.py`）
+```bash
+cd apps/backend
+uv run --locked --env-file .env alembic upgrade head
+# dry-run 只检查，不更新快照和检查时间；--force 忽略时间间隔，不绕过保护规则
+uv run --locked --env-file .env python -m app.services.conferences.cli sync --dry-run --force
+uv run --locked --env-file .env python -m app.services.conferences.cli sync --force
+# 离线发布：上游目录为干净 Git checkout，自动记录其提交 SHA / 提交日期
+uv run --locked python -m app.services.conferences.cli publish --source /path/to/ccf-deadlines
+uv run --locked python -m app.services.conferences.cli publish --source /path/to/ccf-deadlines --check
+# 解压目录则显式提供 --revision <40位SHA> --commit-date YYYY-MM-DD
+```
+
+共用清洗模块为 `app/services/conferences/source.py`；不新增依赖。TBD / 空串归一为未公布，等级 N / 空值归一为 null，修正 abstract deadline 键名，显式忽略 rebuttal_deadline / decision_deadline，其他未知时间轴字段拒绝。快照保存官方当地时间和时区，不在采集阶段换算 UTC。
+
+保护规则：完整 schema 和目录校验；会议数量不得比当前资料减少超过 10%；已关注的上游移除项保留最后资料并标记，不阻断其他会议更新。校验失败记录日志且不替换 payload。下载与解压声明大小均受限，不解压至磁盘。数据库只保留当前一份，避免历史快照无限增长；已知分类变化由 021_conference_follow_ids 迁移保住关注，后续变化需核查。
+
+`data_as_of` 是上游提交日期，`source.revision` 标识精确来源版本，并不意味着逐条官网核验日期。页面显示资料日期及来源。[设计与验证说明](AUTO-SYNC-DESIGN.md)。
+
+## 业务规则（`app/services/conferences/catalog.py`）
 
 - **时区**：`AoE` = UTC-12；`UTC` / `UTC±N` 为固定偏移；`PT` 按 `America/Los_Angeles` 计算夏令时。其他标签视为快照错误。
   响应中的 `at` 为 UTC 绝对时刻，前端按浏览者本地时区显示，同时展示 `local` 官方时间。
@@ -73,5 +77,28 @@ FastAPI /api/v1/conferences*（app/api/conferences.py）
 
 - 数据无 Rebuttal / 录用通知 / 定稿时间，原型中的这些标签页未实现。
 - `/submit/journals`（期刊）仍为静态原型，保持“功能暂未上线”。
-- 全量响应约 200KB（353 个会议），默认只请求未截止的会议；数据规模显著增长时再引入分页。
+- closed 且最后截稿超过 365 天的会议显示“待更新”，通过新增 needs_update 字段表示，不改变原状态和筛选规则。
+- 资料量随上游变化，默认只请求未截止的会议；数据规模显著增长时再引入分页。
   前端按 20 张一批渲染、滚动接近底部再追加；只有首批卡片参与布局补位动画；秒级倒计时只重渲染倒计时本身，卡片按分钟更新。
+
+## 并发发布与审查
+
+发布快照和新增关注使用配套的短时事务锁；发布事务重新检查关注，关注写入依据数据库当前快照校验 ID，避免缓存滞后导致失效关注。下载不持有发布短锁。压缩包实际解压字节（含 PAX/GNU 元数据）受上限约束。完整目录校验在线程中执行。
+
+详见 [2026-11-04 审查与修复](../dev/records/conferences/REVIEW-2026-11-04.md)。
+
+
+## 上游移除已关注会议
+
+不会因一条关注失效而阻断全部会议更新。仍被关注的移除项保留最后资料，响应新增 source_removed=true；卡片明确标识上游已移除，不再给出旧倒计时，允许取消关注、拒绝新增关注。后续新版本发布时清理无人关注的保留项，上游恢复则恢复正常数据。
+
+## 架构与验收
+
+会议服务集中到 app/services/conferences/，API、模型与Schema保持原分层。常驻后端复用原HomeFeedScheduler；本功能的Actions/Vercel外部触发已清理。正式服务器环境待负责人实际验证。完整流程图、锁的用途、迁移链和命令见 [自动同步设计](AUTO-SYNC-DESIGN.md)。
+
+## API接口
+
+- `GET /api/v1/conferences`：列表、等级/方向/状态筛选、搜索；followed=true只返回当前用户关注。
+- `GET /api/v1/conferences/categories`：方向目录。
+- `PUT /api/v1/conferences/{id}/follow`：新增关注，已移除目标拒绝；`DELETE`取消关注，即使上游已移除也允许。
+- 新增响应字段 `source_removed` 区分保留资料；原有status枚举不扩展，不把它当会议停办结论。

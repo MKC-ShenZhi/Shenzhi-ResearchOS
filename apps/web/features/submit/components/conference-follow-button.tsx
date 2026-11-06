@@ -51,7 +51,7 @@ export function ConferenceFollowButton({
         variant={following ? "soft" : "default"}
         size="sm"
         aria-pressed={following}
-        disabled={isAuthPending || resolving}
+        disabled={isAuthPending || resolving || (conference.source_removed && !following)}
         onClick={() => void handleClick()}
       >
         <AnimatePresence initial={false} mode="popLayout">

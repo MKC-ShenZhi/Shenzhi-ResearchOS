@@ -32,6 +32,7 @@ from app.services.discovery_pool.edition import DailyEditionBuilder
 from app.services.discovery_pool.sync import DiscoveryPoolSync
 from app.services.home_feed.config import pool_year
 from app.services.recommendation.maintenance import purge_expired
+from app.services.conferences.sync import ConferenceSync
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,17 @@ PURGE_INTERVAL = timedelta(hours=1)
 LOCK_KEY = 7_402_118_031
 
 
-def scheduler_enabled() -> bool:
+def home_feed_enabled() -> bool:
     return os.getenv('HOME_FEED_SCHEDULER_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def conference_sync_enabled() -> bool:
+    # Conference jobs use this scheduler only; deployment must keep it running.
+    return os.getenv('CONFERENCE_SYNC_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def scheduler_enabled() -> bool:
+    return home_feed_enabled() or conference_sync_enabled()
 
 
 class HomeFeedScheduler:
@@ -59,9 +69,19 @@ class HomeFeedScheduler:
     async def run_due(self, now: datetime | None = None) -> list[str]:
         """Run every job that is due now; returns the jobs that ran."""
         now = now or utc_now()
+        conference_ran = []
+        if conference_sync_enabled():
+            try:
+                result = await ConferenceSync().run(now=now)
+                if result['status'] in {'updated', 'unchanged'}:
+                    conference_ran.append('conferences')
+            except Exception:
+                logger.exception('Conference sync failed; the existing snapshot is kept')
+        if not home_feed_enabled():
+            return conference_ran
         local = now.astimezone(SHANGHAI_TIMEZONE)
         year = pool_year()
-        ran: list[str] = []
+        ran: list[str] = conference_ran
         async with session_scope() as session:
             if not await session.scalar(select(func.pg_try_advisory_xact_lock(LOCK_KEY))):
                 return ran

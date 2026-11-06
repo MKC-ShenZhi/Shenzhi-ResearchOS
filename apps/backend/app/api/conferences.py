@@ -10,11 +10,13 @@ from app.core.responses import ok
 from app.schemas.conferences import ConferenceFollowState
 from app.services.conferences import (
     ConferenceDeadlineService,
+    ConferenceNotFoundError,
     ConferenceFilters,
     ConferenceSnapshotError,
     UnknownCategoryError,
 )
 from app.services.library.conference_follows import ConferenceFollowService
+from app.services.conferences.repository import conference_catalog_cache
 
 
 router = APIRouter(prefix='/api/v1/conferences', tags=['conferences'])
@@ -48,7 +50,7 @@ async def deadlines(
         query=q,
     )
     try:
-        response = service.deadlines(filters)
+        response = service.deadlines(filters, catalog=await conference_catalog_cache.get())
     except UnknownCategoryError as error:
         raise BusinessError(20001, f'未知的研究方向：{error}', 422) from error
     except ConferenceSnapshotError as error:
@@ -59,15 +61,15 @@ async def deadlines(
 @router.get('/categories')
 async def categories(_identity: RequestIdentity = Depends(request_identity)):
     try:
-        response = service.categories()
+        response = service.categories(catalog=await conference_catalog_cache.get())
     except ConferenceSnapshotError as error:
         raise BusinessError(20004, UNAVAILABLE_MESSAGE, 503) from error
     return ok(response.model_dump(mode='json'))
 
 
-def _followable_conference(conference_id: str) -> str:
+async def _followable_conference(conference_id: str) -> str:
     try:
-        exists = service.has_conference(conference_id)
+        exists = service.has_conference(conference_id, catalog=await conference_catalog_cache.get())
     except ConferenceSnapshotError as error:
         raise BusinessError(20004, UNAVAILABLE_MESSAGE, 503) from error
     if not exists:
@@ -77,7 +79,10 @@ def _followable_conference(conference_id: str) -> str:
 
 @router.put('/{conference_id}/follow')
 async def follow_conference(conference_id: str, identity: RequestIdentity = Depends(require_user)):
-    await follows.follow(identity.subject_id, _followable_conference(conference_id))
+    try:
+        await follows.follow(identity.subject_id, await _followable_conference(conference_id))
+    except ConferenceNotFoundError as error:
+        raise BusinessError(40401, '未找到对应会议', 404) from error
     return ok(ConferenceFollowState(conference_id=conference_id, is_following=True).model_dump(mode='json'))
 
 
