@@ -151,12 +151,12 @@ export function PaperPdfViewer({
   return (
     <section
       aria-label={`${title} PDF 阅读区`}
-      className="flex h-full min-h-0 flex-col overflow-hidden bg-background"
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-chip/60"
     >
       {showViewer && (
         <div
           ref={contentRef}
-          className="relative min-h-0 flex-1 overflow-auto bg-background/70 p-4"
+          className="relative min-h-0 flex-1 overflow-auto p-4"
         >
           {(state === "loading" || state === "rendering") && (
             <div className="pointer-events-none absolute inset-x-0 top-4 z-10 flex justify-center">

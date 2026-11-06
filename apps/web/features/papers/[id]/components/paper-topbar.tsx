@@ -35,6 +35,7 @@ export function PaperTopbar({
   viewerState,
   zoom,
   setZoom,
+  actions,
   children,
 }: {
   paper: KnowledgePaperDetail;
@@ -43,6 +44,8 @@ export function PaperTopbar({
   viewerState: ViewerState;
   zoom: number;
   setZoom: Dispatch<SetStateAction<number>>;
+  /** 论文互动操作（点赞、收藏），与返回按钮同组显示在左侧。 */
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   const pdfPath = apiPath(
@@ -57,7 +60,15 @@ export function PaperTopbar({
 
   return (
     <header className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1 border-b border-line/70 bg-card px-2 py-1 lg:h-14 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:py-0 sm:px-3">
-      <PaperBackButton returnTo={returnTo} />
+      <div className="flex min-w-0 items-center gap-1">
+        <PaperBackButton returnTo={returnTo} />
+        {actions && (
+          <>
+            <span className="mx-1 h-5 w-px shrink-0 bg-line" />
+            <div className="flex min-w-0 items-center gap-0.5">{actions}</div>
+          </>
+        )}
+      </div>
       <div className="min-w-0 justify-self-center">{children}</div>
       <div className="col-span-full flex min-w-0 items-center justify-end gap-1 lg:col-span-1">
         {controlsVisible && (
@@ -104,6 +115,7 @@ export function PaperTopbar({
             >
               <Download />
             </a>
+            <span className="mx-1 h-5 w-px shrink-0 bg-line" />
           </div>
         )}
         <Link
