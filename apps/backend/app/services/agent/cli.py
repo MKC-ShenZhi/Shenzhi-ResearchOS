@@ -19,15 +19,16 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from app.services.agent import AgentRuntime, AgentEvent, default_store
-from app.services.agent.fetch_url import fetch_url_tool
-from app.services.agent.policies import compose_agent_system, run_deadline_s
-from app.services.agent.read_paper import read_paper_tool
-from app.services.agent.types import RunChannel
-from app.services.agent.skills import sync_loaded_skill_scripts
-from app.services.agent.tools import Tool
-from app.services.agent.types import DELTA, MESSAGE, TOOL_CALL, TOOL_END
-from app.services.agent.workspace import Workspace, build_workspace_tools
+from app.services.agent import AgentEvent, default_store
+from app.services.agent.app.composition import default_runtime
+from app.services.agent.capabilities.fetch_url import fetch_url_tool
+from app.services.agent.app.policies import compose_agent_system, run_deadline_s
+from app.services.agent.capabilities.read_paper import read_paper_tool
+from app.services.agent.execution.types import RunChannel
+from app.services.agent.extensions.skills import sync_loaded_skill_scripts
+from app.services.agent.execution.tools import Tool
+from app.services.agent.execution.types import DELTA, MESSAGE, TOOL_CALL, TOOL_END
+from app.services.agent.extensions.workspace import Workspace, build_workspace_tools
 from app.services.knowledge.service import KnowledgeService
 
 BANNER = """
@@ -60,7 +61,7 @@ class ShenzhiAi:
         # 否则本地跑研究会缺全文/网页能力（两个入口能力不一致是最难查的 bug）。
         extra_tools.append(read_paper_tool(knowledge=KnowledgeService()))
         extra_tools.append(fetch_url_tool())
-        self.runtime = AgentRuntime(
+        self.runtime = default_runtime(
             tools=extra_tools,
             skills=self.store,
             system=compose_agent_system,  # 骨架：身份 + 工具清单（按注册表生成）+ 日期

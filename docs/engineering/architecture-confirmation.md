@@ -490,7 +490,7 @@ Knowledge Base 当前接入论文检索、详情、图谱、会议浏览、学�
 当前存在的边界例外（登记在 [已知偏移与待收敛项](known-gaps.md)）：
 
 - `apps/web/app/api/paper-images/` 由 Web 服务端直接代理知识底座图片（`KNOWLEDGE_BASE_API_URL`），说明见 [论文图片](../knowledge/PAPER-IMAGES.md)。
-- `services/agent/` 中部分外部调用尚未收敛到 `integrations/`：Agent 自有的流式 Provider、`chart_tools.py` 的 Exa 搜索、`read_paper.py` 的 arXiv / OpenReview / Unpaywall 全文获取及 `fetch_url.py`。
+- Agent 上游协议集中在 `integrations/llm/agent_stream.py`、`integrations/web_search/`、`integrations/paper_resource/` 与 `integrations/public_web/`；Agent Tool 负责调用和结果整形。Exa 与 Unpaywall 的凭证配置仍需后续统一到 `core/config`。
 
 当科研接口或内部实现仍在演进时，产品侧优先通过：
 
@@ -669,6 +669,6 @@ docs/auto-research/
 
 Agent 与后续 AI Feature 统一通过 `integrations/llm` 的 Model Registry / Resolver
 解析 Model ID、Provider、上游型号和能力；流式协议处理由 Agent 的
-`services/agent/provider.py` 负责。模型品牌只用于展示，实际路由由
+`integrations/llm/agent_stream.py` 负责。协议类型位于 `services/agent/execution/provider.py`。模型品牌只用于展示，实际路由由
 `provider_id` 决定；Provider 凭据仅在服务端加载。接入规则、兼容策略及声明示例见
 [LLM API Foundation](llm-api-foundation.md)。

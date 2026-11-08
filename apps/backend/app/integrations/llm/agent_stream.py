@@ -1,0 +1,393 @@
+"""OpenAI compatible streaming transport for Agent model requests."""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import random
+import time
+from collections.abc import AsyncIterator, Callable, Mapping
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from typing import Any
+
+import httpx
+
+from app.core.config import ModelConfig
+from app.core.errors import BusinessError
+from app.integrations.llm.registry import ModelRegistry, ResolvedModel
+from app.integrations.llm.resolver import load_registry, registry_from_legacy
+from app.services.agent.execution.json_repair import parse_streaming_json
+from app.services.agent.execution.provider import (
+    Finish, ModelProvider, ModelRequest, ProviderEvent, ReasoningDelta, TextDelta,
+    ToolCallEvent, Usage, MAX_OUTPUT_TOKENS,
+)
+from app.services.agent.execution.types import StopReason, ToolCall
+
+# 可重试状态码（pi provider-retry.ts:23-35）：408/409/429/≥500。
+# 400 不在其中——它是参数/内容错误，重试必然复现；此前把 400 加进来是为了兜住一次
+# 未确诊的线上失败，根因（截断的 function.arguments 原样回传）已在 json_repair 层修掉，
+# 因此回到 pi 的口径。`x-should-retry` 响应头有一票裁决权（pi 同机制）。
+RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504}
+RETRY_MIN_REMAINING_S = 2.0  # 剩余 deadline 不足时重试只会白耗预算，直接失败
+RETRY_JITTER = 0.25          # pi：退避加 25% 抖动，避免同批客户端同时重连
+# 明确的额度/账单类错误不重试（pi utils/retry.ts:7-90 的错误文本分类）
+_NON_RETRYABLE_MARKERS = ('insufficient_quota', 'insufficient quota', 'billing', 'arrears',
+                          'quota exceeded', 'balance')
+
+_STATUS_MESSAGES = {
+    401: '模型服务凭据无效，请联系管理员',
+    403: '模型服务无访问权限',
+    429: '模型服务限流或额度不足，请稍后重试',
+    400: '模型不支持当前请求参数',
+}
+
+# finish_reason → 停止原因（pi openai-completions.ts:1550-1574）：
+# 未知取值与 content_filter 一律判 error 并保留原文，不静默降级成 stop——
+# 静默降级会让"被内容审核截断"看起来像"模型正常说完了"。
+_FINISH_REASONS = {
+    'stop': StopReason.STOP,
+    'length': StopReason.LENGTH,
+    'tool_calls': StopReason.TOOL_CALLS,
+    'function_call': StopReason.TOOL_CALLS,
+}
+
+
+# 单次输出上限：DashScope 对 qwen-plus 的硬顶（实测 max_tokens>32768 直接 400：
+# "Range of max_tokens should be [1, 32768]"）。此前用 8192 只发挥了 1/4，
+# 而思考与正文共享这个额度——报告写不长的机械原因就在这。拉满到平台顶。
+MAX_OUTPUT_TOKENS = 32768
+
+
+def _parse_usage(raw: dict) -> Usage:
+    """pi openai-completions.ts:1507-1548 parseChunkUsage 的字段口径（只取消费的两项）。"""
+    return Usage(prompt_tokens=_as_int(raw.get('prompt_tokens')),
+                 completion_tokens=_as_int(raw.get('completion_tokens')))
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+class _UpstreamStatus(Exception):
+    def __init__(self, status: int, detail: str = '', headers: Mapping[str, str] | None = None):
+        super().__init__(str(status))
+        self.status = status
+        self.detail = detail
+        self.headers = dict(headers or {})
+
+
+def _retryable_status(status: int, headers: Mapping[str, str], detail: str) -> bool:
+    """该不该重试（pi provider-retry.ts + utils/retry.ts 的判定合并）。
+
+    优先级：`x-should-retry` 头一票裁决 → 额度/账单类文本明确不重试 → 状态码集合。
+    """
+    header = str(headers.get('x-should-retry', '')).lower()
+    if header in ('true', 'false'):
+        return header == 'true'
+    lowered = detail.lower()
+    if any(marker in lowered for marker in _NON_RETRYABLE_MARKERS):
+        return False
+    return status in RETRYABLE_STATUS or status >= 500
+
+
+def _retry_after_seconds(headers: Mapping[str, str]) -> float | None:
+    """服务端要求的等待时长：`retry-after-ms` 优先，其次 `Retry-After`（秒或 HTTP-date）。"""
+    millis = headers.get('retry-after-ms')
+    if millis:
+        try:
+            return max(0.0, float(millis) / 1000.0)
+        except ValueError:
+            pass
+    raw = headers.get('retry-after')
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        pass
+    try:
+        return max(0.0, (parsedate_to_datetime(raw) - datetime.now(timezone.utc)).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+
+def _status_error(status: int, detail: str = '') -> BusinessError:
+    """上游状态 → 安全业务错误；原始响应体仅用于内部重试分类。"""
+    message = _STATUS_MESSAGES.get(status, f'模型服务暂不可用（HTTP {status}）')
+    return BusinessError(20004, message, 502)
+
+
+def _parse_usage(raw: dict) -> Usage:
+    """pi openai-completions.ts:1507-1548 parseChunkUsage 的字段口径（只取消费的两项）。"""
+    return Usage(prompt_tokens=_as_int(raw.get('prompt_tokens')),
+                 completion_tokens=_as_int(raw.get('completion_tokens')))
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+class _UpstreamStatus(Exception):
+    def __init__(self, status: int, detail: str = '', headers: Mapping[str, str] | None = None):
+        super().__init__(str(status))
+        self.status = status
+        self.detail = detail
+        self.headers = dict(headers or {})
+
+
+def _retryable_status(status: int, headers: Mapping[str, str], detail: str) -> bool:
+    """该不该重试（pi provider-retry.ts + utils/retry.ts 的判定合并）。
+
+    优先级：`x-should-retry` 头一票裁决 → 额度/账单类文本明确不重试 → 状态码集合。
+    """
+    header = str(headers.get('x-should-retry', '')).lower()
+    if header in ('true', 'false'):
+        return header == 'true'
+    lowered = detail.lower()
+    if any(marker in lowered for marker in _NON_RETRYABLE_MARKERS):
+        return False
+    return status in RETRYABLE_STATUS or status >= 500
+
+
+def _retry_after_seconds(headers: Mapping[str, str]) -> float | None:
+    """服务端要求的等待时长：`retry-after-ms` 优先，其次 `Retry-After`（秒或 HTTP-date）。"""
+    millis = headers.get('retry-after-ms')
+    if millis:
+        try:
+            return max(0.0, float(millis) / 1000.0)
+        except ValueError:
+            pass
+    raw = headers.get('retry-after')
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        pass
+    try:
+        return max(0.0, (parsedate_to_datetime(raw) - datetime.now(timezone.utc)).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+
+def _status_error(status: int, detail: str = '') -> BusinessError:
+    """上游状态 → 安全业务错误；原始响应体仅用于内部重试分类。"""
+    message = _STATUS_MESSAGES.get(status, f'模型服务暂不可用（HTTP {status}）')
+    return BusinessError(20004, message, 502)
+
+
+class OpenAICompatProvider:
+    """唯一内置实现：任意 OpenAI 兼容 /chat/completions 端点（DashScope/DeepSeek/代理）。
+
+    max_retries 为零增量重试上限（默认 1，pi 重试策略的裁剪版）；退避 retry_delay×2^n
+    封顶 max_retry_delay。on_payload/on_response 是 wire 层观测钩子（pi onPayload/onResponse），
+    默认关闭，异常不影响请求。
+    """
+
+    def __init__(self, config: ModelConfig | None = None, *,
+                 registry: ModelRegistry | None = None,
+                 transport: httpx.AsyncBaseTransport | None = None, retry_delay: float = 1.5,
+                 max_retries: int = 2, max_retry_delay: float = 24.0,
+                 on_payload: Callable[[dict], None] | None = None,
+                 on_response: Callable[[dict | None], None] | None = None):
+        self.registry = registry or (registry_from_legacy(config) if config is not None else load_registry())
+        self.transport = transport
+        self.retry_delay = retry_delay
+        self.max_retries = max_retries
+        self.max_retry_delay = max_retry_delay
+        self.on_payload = on_payload
+        self.on_response = on_response
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ProviderEvent]:
+        resolved = self.registry.resolve_model(request.model, 'agent')
+        attempt = 0
+        while True:
+            attempt += 1
+            emitted = False
+            retry_after: float | None = None
+            try:
+                async for event in self._stream_once(request, resolved):
+                    emitted = True
+                    yield event
+                return
+            except _UpstreamStatus as exc:
+                retryable = _retryable_status(exc.status, exc.headers, exc.detail)
+                if not retryable or attempt > self.max_retries or not self._time_for_retry(request):
+                    raise _status_error(exc.status, exc.detail) from exc
+                retry_after = _retry_after_seconds(exc.headers)
+            except httpx.TimeoutException:
+                if emitted or attempt > self.max_retries or not self._time_for_retry(request):
+                    raise BusinessError(20004, '模型响应超时，可以继续生成', 504) from None
+            except httpx.HTTPError:
+                if emitted or attempt > self.max_retries or not self._time_for_retry(request):
+                    raise BusinessError(20004, '模型连接中断，可以继续生成', 502) from None
+            await asyncio.sleep(self._retry_delay_seconds(attempt, retry_after))
+
+    def _retry_delay_seconds(self, attempt: int, retry_after: float | None) -> float:
+        """退避：服务端给的延迟优先（pi retry-after-ms / Retry-After），
+        否则 1.5·2^n 封顶 max_retry_delay，并加 25% 抖动避免同批客户端同时重连。"""
+        base = (retry_after if retry_after is not None
+                else min(self.retry_delay * 2 ** (attempt - 1), self.max_retry_delay))
+        return base * (1 + random.random() * RETRY_JITTER)
+
+    @staticmethod
+    def _time_for_retry(request: ModelRequest) -> bool:
+        """零增量重试条件之一：剩余 deadline > 2s（无 deadline 视为充裕）。"""
+        if request.deadline_at is None:
+            return True
+        return request.deadline_at - time.monotonic() > RETRY_MIN_REMAINING_S
+
+    @staticmethod
+    def _observe(hook: Callable[[Any], None] | None, data: Any) -> None:
+        """观测钩子（pi onPayload/onResponse）：纯观察，异常绝不影响请求。"""
+        if hook is None:
+            return
+        try:
+            hook(data)
+        except Exception:
+            logging.getLogger('app.agent').exception('provider 观测钩子失败（已忽略）')
+
+    def _build_payload(self, request: ModelRequest, *, resolved: ResolvedModel | None = None,
+                       thinking: bool = True, include_usage: bool = True) -> dict:
+        resolved = resolved or self.registry.resolve_model(request.model, 'agent')
+        caps = resolved.spec.capabilities
+        payload: dict = {
+            'model': resolved.upstream_model,
+            'messages': request.messages,
+            'stream': True,
+            'max_tokens': min(request.max_tokens, caps.agent_max_tokens, caps.max_output_tokens),
+        }
+        if request.tools:
+            payload['tools'] = request.tools
+            payload['tool_choice'] = 'auto'
+        if request.temperature is not None and caps.temperature:
+            payload['temperature'] = request.temperature
+        if include_usage and caps.stream_options:
+            payload['stream_options'] = {'include_usage': True}
+        if (thinking and caps.thinking != 'none'
+                and os.getenv('AGENT_DISABLE_THINKING', '').strip().lower() != 'true'):
+            payload[caps.thinking] = (True if caps.thinking == 'enable_thinking' else {'type': 'enabled'})
+            payload.update(resolved.spec.request_params)
+        return payload
+
+    async def _stream_once(self, request: ModelRequest, resolved: ResolvedModel) -> AsyncIterator[ProviderEvent]:
+        # Only retry explicitly rejected optional parameters. Arbitrary 400s
+        # (context length, invalid messages, etc.) must fail without degradation.
+        degradations = ('enable_thinking', 'thinking', 'stream_options')
+        dropped: set[str] = set()
+        timeout = httpx.Timeout(float(os.getenv('AI_TIMEOUT_SEC', '90')), connect=10)
+        while True:
+            payload = self._build_payload(request, resolved=resolved,
+                                          thinking=not ({'enable_thinking', 'thinking'} & dropped),
+                                          include_usage='stream_options' not in dropped)
+            usage: Usage | None = None
+            tool_calls: dict[int, dict[str, str]] = {}
+            finish_text: str | None = None
+            finished = False
+            self._observe(self.on_payload, payload)
+            try:
+                async with httpx.AsyncClient(timeout=timeout, transport=self.transport) as client:
+                    async with client.stream(
+                        'POST', f'{resolved.base_url}/chat/completions',
+                        headers={'Authorization': f'Bearer {resolved.key}', 'Accept': 'text/event-stream'},
+                        json=payload,
+                    ) as response:
+                        if response.status_code >= 400:
+                            # Inspect privately: upstream bodies may echo secrets.
+                            detail = (await response.aread()).decode('utf-8', 'replace')
+                            next_drop = next((name for name in degradations
+                                              if name not in dropped and name in payload
+                                              and name in detail.lower()
+                                              and any(marker in detail.lower() for marker in
+                                                      ('not supported', 'unsupported', 'unknown parameter',
+                                                       'unrecognized', 'not allowed'))), None)
+                            if response.status_code == 400 and next_drop is not None:
+                                dropped.add(next_drop)
+                                logging.getLogger('app.agent').warning(
+                                    '%s 参数被上游明确拒绝(400)，摘掉后重试', next_drop)
+                                continue
+                            logging.getLogger('app.agent').warning(
+                                '模型上游返回 %s（Provider: %s）',
+                                response.status_code, resolved.provider.spec.id)
+                            raise _UpstreamStatus(response.status_code, detail, response.headers)
+                        async for line in response.aiter_lines():
+                            if not line.startswith('data:'):
+                                continue
+                            raw = line[5:].strip()
+                            if not raw:
+                                continue
+                            if raw == '[DONE]':
+                                finished = True
+                                break
+                            try:
+                                data = json.loads(raw)
+                            except ValueError:
+                                raise BusinessError(20004, '模型流数据格式错误', 502) from None
+                            self._observe(self.on_response, data)
+                            if data.get('error'):
+                                raise BusinessError(20004, '模型流返回错误，请稍后重试', 502)
+                            if isinstance(data.get('usage'), dict):
+                                usage = _parse_usage(data['usage'])
+                            choices = data.get('choices') or []
+                            if not choices:
+                                continue
+                            choice = choices[0]
+                            delta = choice.get('delta') or {}
+                            if isinstance(delta.get('content'), str) and delta['content']:
+                                yield TextDelta(delta['content'])
+                            if isinstance(delta.get('reasoning_content'), str) and delta['reasoning_content']:
+                                yield ReasoningDelta(delta['reasoning_content'])
+                            for fragment in delta.get('tool_calls') or []:
+                                if not isinstance(fragment, dict):
+                                    continue
+                                index = fragment.get('index') or 0
+                                entry = tool_calls.setdefault(index, {'id': '', 'name': '', 'arguments': ''})
+                                # 首帧带 id/name，后续帧通常只有 arguments 片段；
+                                # 供应商重复发送 id/name 时赋值覆盖天然容错。
+                                if isinstance(fragment.get('id'), str) and fragment['id']:
+                                    entry['id'] = fragment['id']
+                                function = fragment.get('function') or {}
+                                if isinstance(function.get('name'), str) and function['name']:
+                                    entry['name'] = function['name']
+                                if isinstance(function.get('arguments'), str):
+                                    entry['arguments'] += function['arguments']
+                            if choice.get('finish_reason'):
+                                finish_text = str(choice['finish_reason'])
+                                finished = True
+                        if not finished:
+                            raise BusinessError(20004, '模型流提前结束，可以继续生成', 502)
+                        for index in sorted(tool_calls):
+                            entry = tool_calls[index]
+                            if entry['name']:
+                                # 参数在 AI 层解析成对象（pi toolcall_end 定稿同位置）：
+                                # 残缺 JSON 走修复阶梯、保留已写完的字段，绝不抛错——
+                                # 因此下游拿到的参数恒为对象，回传上游时恒为合法 JSON。
+                                yield ToolCallEvent(ToolCall(entry['id'] or f'call_{index}',
+                                                             entry['name'],
+                                                             parse_streaming_json(entry['arguments'])))
+                        raw_reason = finish_text or ''
+                        stop = _FINISH_REASONS.get(raw_reason)
+                        error_message = ''
+                        if stop is None:
+                            if not raw_reason:
+                                # 流正常收尾但上游没给 finish_reason：按内容推断（pi compat 分支）
+                                stop = StopReason.TOOL_CALLS if tool_calls else StopReason.STOP
+                            else:
+                                # content_filter / 未知取值 → error 并保留原文（pi:1550-1574）；
+                                # 静默降级成 stop 会让"被审核截断"伪装成"正常说完"
+                                stop = StopReason.ERROR
+                                error_message = '模型返回异常停止原因，请重试'
+                        yield Finish(stop, usage, error_message=error_message)
+            except BusinessError:
+                raise
+            except (ValueError, TypeError, AttributeError, IndexError, KeyError) as exc:
+                raise BusinessError(20004, '模型流数据格式错误', 502) from exc
+            return  # 本轮流式完成，退出重试循环（否则 while True 会再发一次请求）

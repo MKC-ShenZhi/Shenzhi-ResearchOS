@@ -15,7 +15,7 @@ Agent / Future AI Features
 - `registry.py`：类型、校验、模型查询、默认模型、兼容别名、用途校验及公开目录投影。用途（`Purpose`）有 `chat` 与 `agent` 两种：`chat` 是基础用途与共享默认（要求流式对话能力，对应 `AI_DEFAULT_MODEL`），`agent` 在此之上要求 Tool Calling；它们是 Registry 内的能力 / 默认划分，不对应独立产品。`ResolvedModel` 包含 `spec`、`provider`、`upstream_model`、`base_url`、`key`；它是服务端对象，禁止直接序列化为 API 响应。
 - `resolver.py`：服务端配置加载器。组合内置声明、旧变量、自定义 JSON，生成单一 Registry。现阶段按配置请求 / Provider / Runtime 构造加载，不引入数据库、远程管理或缓存失效机制。进程启动也校验配置。
 - `core/config.py`：保留 `ModelConfig` 兼容结构；`OpenAICompatProvider(config)` 经 `resolver.registry_from_legacy()` 用它注入测试 / MockTransport。业务路由使用 Registry。
-- `services/agent/provider.py`、`runtime.py`：唯一的模型调用 Adapter。负责 Tool Calling、JSON 修复、超时（`AI_TIMEOUT_SEC`）、零增量重试、历史恢复与预算，模型解析及请求参数构造统一走 Registry。上下文摘要仍通过相同 Agent Provider 与模型。
+- `integrations/llm/agent_stream.py`、`services/agent/execution/provider.py`、`services/agent/execution/runtime.py`：唯一的模型调用 Adapter。负责 Tool Calling、JSON 修复、超时（`AI_TIMEOUT_SEC`）、零增量重试、历史恢复与预算，模型解析及请求参数构造统一走 Registry。上下文摘要仍通过相同 Agent Provider 与模型。
 - `api/agent.py` 的 `GET /agent/config`：Registry 中 `agent` 用途的公开目录与默认模型；保留 JSON 外层及 `value/label/provider/enabled` 字段。`provider` 表示展示品牌，另有 `provider_id/brand/capabilities/aliases`。
 - Web 的 `clients/backend/model-types.ts` 为公开模型契约，`types/ai-search.ts` 定义 Composer 使用的 `ComposerConfig` / `ModelId` 等类型；配置加载失败时的禁用占位目录在 `components/common/composer/config.ts`。模型选择器不维护可用性白名单，只展示 `/agent/config` 的能力过滤结果。
 

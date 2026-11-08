@@ -2,25 +2,24 @@
 import json
 import logging
 from pathlib import PurePosixPath
-from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.api._support.upload_reader import read_upload
 from app.core.config import MAX_FILES, UPLOAD_ACCEPT
 from app.core.errors import BusinessError
 from app.core.idempotency import request_fingerprint, validate_idempotency_key
-from app.integrations.llm.resolver import load_registry
 from app.core.identity import request_owner, require_bff
 from app.core.responses import ok
+from app.integrations.llm.resolver import load_registry
 from app.services.agent import service as agent_service
 from app.services.agent import export as agent_export
 from app.schemas.agent import (
-    AgentSessionCreate, AgentSessionRun, AgentSessionUpdate, LegacyAgentSessionImport,
+    AgentRunBody, AgentSessionCreate, AgentSessionRun, AgentSessionUpdate,
+    LegacyAgentSessionImport, SteerBody,
 )
 from app.services.agent_sessions.repository import agent_session_repository
 from app.services.agent_sessions.live import LiveRun, get_live, subscribe
@@ -30,23 +29,6 @@ from app.services.uploads.parser import parse_document
 
 router = APIRouter(prefix='/api/v1/agent', tags=['agent'])
 logger = logging.getLogger(__name__)
-
-
-class AgentRunBody(BaseModel):
-    prompt: str = Field(min_length=1, max_length=10_000)
-    history: list[dict] = Field(default_factory=list, max_length=200)
-    model: str | None = None
-    # 默认 fast：180 秒 / 12 次工具调用，其余模式保持 900 秒 / 120 次（见 policies.py）。
-    # mode 决定温度、运行预算，以及未显式选择技能时的快速回答技能与工具集。
-    mode: Literal['fast', 'deep', 'idea', 'doubt'] = 'fast'
-    attachments: list[dict] = Field(default_factory=list, max_length=MAX_FILES)
-    workspace_id: str | None = None
-    skills: list[str] = Field(default_factory=list, max_length=10)  # 用户显式选中：本轮强制启用
-    session_id: str | None = None  # 会话即工作区：选中深度研究技能时自动挂载
-
-
-class SteerBody(BaseModel):
-    text: str = Field(min_length=1, max_length=4_000)
 
 
 @router.get('/config')
