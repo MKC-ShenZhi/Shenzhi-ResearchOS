@@ -1,1 +1,1 @@
-"""Agent application assembly and policy."""
+"""Compatibility package for the former Agent application paths."""

@@ -4,12 +4,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from app.services.agent.execution.runtime import AgentRuntime
-from app.services.agent.app import composition
-from app.services.agent.app.composition import (
+from app.services.agent.application import composition
+from app.services.agent.application.composition import (
     decode_history, default_runtime, load_project_context, resolve_attachments,
 )
-from app.services.agent.app.events import run_events, steer_run, stop_run
-from app.services.agent.app.policies import compose_agent_system, run_deadline_s
+from app.services.agent.application.events import run_events, steer_run, stop_run
+from app.services.agent.application.policies import compose_agent_system, run_deadline_s
 from app.services.agent.extensions.skills import default_store
 from app.services.agent.extensions.workspace import (
     create_workspace, ensure_session_workspace, read_session_file, write_workspace_file,

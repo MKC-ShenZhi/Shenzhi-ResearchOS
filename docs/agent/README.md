@@ -34,6 +34,6 @@ Skill 默认从 `apps/backend/skills/` 发现第一方 Skill，并可从 `skills
 - legacy retrieval 未迁入；论文工具仍通过 `KnowledgeService → integrations/knowledge`。
 - 工作区文件使用本地文件系统；在无共享持久存储的多实例或 Serverless 环境中，跨实例读取和长期保留没有保证。
 - Stop 调用 `POST /run/{run_id}/stop` 请求 Runtime 正常收尾并保存已有结果；插话与停止通道只在当前进程有效。
-- **已知约束**：运行归属与事件缓冲是单进程内存状态（`services/agent_sessions/live.py`），续接、steer、stop 落到其他实例时无法命中；`deep` / `idea` / `doubt` 模式运行时限为 900 秒（`services/agent/app/policies.py`），超过 Vercel 函数 300 秒的执行上限。部署影响见 [deployment.md](../engineering/deployment.md)。
+- **已知约束**：运行归属与事件缓冲是单进程内存状态（`services/agent_sessions/live.py`），续接、steer、stop 落到其他实例时无法命中；`deep` / `idea` / `doubt` 模式运行时限为 900 秒（`services/agent/application/policies.py`），超过 Vercel 函数 300 秒的执行上限。部署影响见 [deployment.md](../engineering/deployment.md)。
 - **P0 before public production:** `run_command` 需要宿主机 shell / env sandbox 与隔离。本阶段保留现有 netguard、路径禁闭及命令检查，不放宽安全边界。
 - 不调用真实付费模型的验证可用 `uv run python -m unittest -q tests.test_agent tests.test_agent_api tests.test_agent_memory tests.test_agent_workspace tests.test_edit_fuzzy tests.test_agent_skills tests.test_deep_research_skill`；会话、附件、`read_paper` 和匿名认领另见 `tests.test_agent_sessions`、`tests.test_agent_uploads`、`tests.test_agent_read_paper`、`tests.test_anonymous_claim`。

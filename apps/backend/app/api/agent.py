@@ -2,10 +2,12 @@
 import json
 import logging
 from pathlib import PurePosixPath
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.api._support.upload_reader import read_upload

@@ -1,4 +1,4 @@
-"""Agent 基座兼容公共出口；新应用组装应使用 app.services.agent.app.composition。
+"""Agent 基座兼容公共出口；新应用组装应使用 app.services.agent.application.composition。
 
 这里保留旧 AgentRuntime 的默认 Provider 行为和常用类型导出，避免迁移破坏既有调用方。
 纯执行代码直接从 execution 子包导入；能力、扩展与应用装配从各自子包导入。

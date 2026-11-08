@@ -63,7 +63,7 @@ Vercel Postgres (Neon):Auth 表与业务表共存于同一库
 
 1. **Serverless 与进程内运行时不匹配**。后端按长驻进程设计,以下能力在 Vercel 上不保证可用:
    - `lifespan` 不保证执行:启动时的 `recover()`(中断流式消息、Agent 运行的状态修复)与首页调度器(`HOME_FEED_SCHEDULER_ENABLED`)可能不运行;仓库未配置 Vercel Cron,候选池同步与每日候选生成需手动执行(见 [apps/backend/README.md](../../apps/backend/README.md))。
-   - 函数单次执行上限 300s;Agent 的 deep / idea / doubt 模式运行时限为 900s(`services/agent/app/policies.py`)。
+   - 函数单次执行上限 300s;Agent 的 deep / idea / doubt 模式运行时限为 900s(`services/agent/application/policies.py`)。
    - Agent 运行归属保存在单进程内存(`services/agent_sessions/live.py`),重连、steer、stop 请求可能落到其他实例。
    - Agent workspace 写本地磁盘(`apps/backend/workspace/`),Serverless 下不持久。
 2. **会话与附件**:`CHAT_DATABASE_URL` 必须配置,缺失时会话退化为函数内存态(接口返回 `ephemeral: true`)。Agent 附件只将解析文本短暂写入数据库,不保存源文件。

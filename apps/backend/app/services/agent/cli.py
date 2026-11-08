@@ -20,9 +20,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from app.services.agent import AgentEvent, default_store
-from app.services.agent.app.composition import default_runtime
+from app.services.agent.application.composition import default_runtime
 from app.services.agent.capabilities.fetch_url import fetch_url_tool
-from app.services.agent.app.policies import compose_agent_system, run_deadline_s
+from app.services.agent.application.policies import compose_agent_system, run_deadline_s
 from app.services.agent.capabilities.read_paper import read_paper_tool
 from app.services.agent.execution.types import RunChannel
 from app.services.agent.extensions.skills import sync_loaded_skill_scripts
