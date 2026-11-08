@@ -60,10 +60,15 @@ _FINISH_REASONS = {
 MAX_OUTPUT_TOKENS = 32768
 
 
-def _parse_usage(raw: dict) -> Usage:
-    """pi openai-completions.ts:1507-1548 parseChunkUsage 的字段口径（只取消费的两项）。"""
-    return Usage(prompt_tokens=_as_int(raw.get('prompt_tokens')),
-                 completion_tokens=_as_int(raw.get('completion_tokens')))
+def _parse_usage(raw: dict) -> Usage | None:
+    """Only complete, measured provider usage can enter a Run total."""
+    prompt = raw.get('prompt_tokens')
+    completion = raw.get('completion_tokens')
+    if not isinstance(prompt, int) or not isinstance(completion, int):
+        return None
+    if prompt < 0 or completion < 0:
+        return None
+    return Usage(prompt_tokens=prompt, completion_tokens=completion)
 
 
 def _as_int(value: Any) -> int:
@@ -122,10 +127,15 @@ def _status_error(status: int, detail: str = '') -> BusinessError:
     return BusinessError(20004, message, 502)
 
 
-def _parse_usage(raw: dict) -> Usage:
-    """pi openai-completions.ts:1507-1548 parseChunkUsage 的字段口径（只取消费的两项）。"""
-    return Usage(prompt_tokens=_as_int(raw.get('prompt_tokens')),
-                 completion_tokens=_as_int(raw.get('completion_tokens')))
+def _parse_usage(raw: dict) -> Usage | None:
+    """Only complete, measured provider usage can enter a Run total."""
+    prompt = raw.get('prompt_tokens')
+    completion = raw.get('completion_tokens')
+    if not isinstance(prompt, int) or not isinstance(completion, int):
+        return None
+    if prompt < 0 or completion < 0:
+        return None
+    return Usage(prompt_tokens=prompt, completion_tokens=completion)
 
 
 def _as_int(value: Any) -> int:

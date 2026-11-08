@@ -91,8 +91,9 @@ def report_from_result(request: RunRequest, result: RunResult) -> ExecutionRepor
     return ExecutionReport(
         run_id=request.run_id, task_id=request.task_id, status=status,
         result=result,
-        usage=UsageReport(prompt_tokens=result.prompt_tokens,
-                          completion_tokens=result.completion_tokens,
+        usage=UsageReport(prompt_tokens=result.prompt_tokens if result.usage_measured else None,
+                          completion_tokens=result.completion_tokens if result.usage_measured else None,
+                          tool_calls=result.tool_calls,
                           duration_ms=result.duration_ms),
         error_code=str(error.code) if error else None,
         error_message=str(error.message) if error else None,

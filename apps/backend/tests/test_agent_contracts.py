@@ -54,6 +54,10 @@ class FakeControl:
         return await self.get(task_id, owner_id)
 
     async def record_report(self, report) -> TaskRecord:
+        if report.run_id in self.reports:
+            if self.reports[report.run_id] != report:
+                raise ValueError('conflicting report')
+            return await self.get(report.task_id, 'user:1')
         self.last_report = report
         self.reports[report.run_id] = report
         return await self.get(report.task_id, 'user:1')
@@ -63,7 +67,7 @@ class FakeControl:
         return self.reports.get(run_id)
 
     async def report(self, report: ExecutionReport) -> None:
-        self.reports[report.run_id] = report
+        await self.record_report(report)
 
     async def authorize(self, task: TaskRecord) -> BudgetLimits:
         return BudgetLimits()
@@ -101,22 +105,72 @@ class FakeExecution:
 
 
 class FakeRuntime:
-    async def run(self, prompt: str, *, stop: asyncio.Event) -> RunResult:
+    async def run(self, prompt: str, *, stop: asyncio.Event, on_event=None) -> RunResult:
+        if on_event:
+            on_event(AgentEvent(1, 0, 'run_start', {}))
         return RunResult(stop_reason=StopReason.CANCELLED if stop.is_set() else StopReason.STOP,
-                         final_text=prompt, prompt_tokens=3, completion_tokens=4)
+                         final_text=prompt, prompt_tokens=3, completion_tokens=4,
+                         usage_measured=True, tool_calls=0)
 
 
 class BlockingRuntime:
     def __init__(self) -> None:
         self.started = asyncio.Event()
 
-    async def run(self, prompt: str, *, stop: asyncio.Event) -> RunResult:
+    async def run(self, prompt: str, *, stop: asyncio.Event, on_event=None) -> RunResult:
         self.started.set()
         await stop.wait()
         return RunResult(stop_reason=StopReason.CANCELLED)
 
 
+class EmittingRuntime:
+    async def run(self, prompt: str, *, stop: asyncio.Event, on_event=None) -> RunResult:
+        for seq in (1, 2, 3):
+            if on_event:
+                on_event(AgentEvent(seq, 1, 'delta', {'text': str(seq)}))
+        await asyncio.sleep(0)
+        return RunResult(stop_reason=StopReason.STOP, tool_calls=0)
+
+
+class SlowSink(FakeEventSink):
+    async def publish(self, event: PlatformEvent) -> None:
+        await asyncio.sleep(0.01)
+        await super().publish(event)
+
+
+class FailingSink(FakeEventSink):
+    async def publish(self, event: PlatformEvent) -> None:
+        raise RuntimeError('sink unavailable')
+
+
 class ContractTests(unittest.IsolatedAsyncioTestCase):
+    async def test_event_delivery_is_ordered_and_drained_before_report(self) -> None:
+        sink = SlowSink()
+        worker = ApplicationWorkerExecutor(lambda _: EmittingRuntime(), sink)
+        for run_id in ('run-1', 'run-2'):
+            report = await worker.execute(RunRequest(run_id, 'task-1', 'user:1', 'x'))
+            self.assertEqual(report.status, RunStatus.COMPLETED)
+            self.assertEqual([e.seq for e in sink.events[-3:]], [1, 2, 3])
+        self.assertEqual(len({e.event_key for e in sink.events}), 6)
+        self.assertTrue(all(e.occurred_at.tzinfo for e in sink.events))
+
+    async def test_event_failure_prevents_success_report(self) -> None:
+        worker = ApplicationWorkerExecutor(lambda _: EmittingRuntime(), FailingSink())
+        with self.assertRaisesRegex(RuntimeError, 'delivery failed'):
+            await worker.execute(RunRequest('run-1', 'task-1', 'user:1', 'x'))
+
+    async def test_unknown_usage_is_not_zero(self) -> None:
+        report = await ApplicationWorkerExecutor(lambda _: EmittingRuntime()).execute(
+            RunRequest('run-1', 'task-1', 'user:1', 'x'))
+        self.assertIsNone(report.usage.model_tokens)
+        self.assertEqual(report.usage.tool_calls, 0)
+
+    async def test_unsupported_budget_rejected_before_run(self) -> None:
+        worker = ApplicationWorkerExecutor(lambda _: EmittingRuntime())
+        with self.assertRaises(NotImplementedError):
+            await worker.execute(RunRequest('run-1', 'task-1', 'user:1', 'x',
+                                            budget=BudgetLimits(max_tool_calls=1)))
+
     async def test_two_sides_connect_without_shared_implementation(self) -> None:
         control = FakeControl()
         task_manager: TaskManager = control
@@ -124,17 +178,13 @@ class ContractTests(unittest.IsolatedAsyncioTestCase):
         dispatcher: Dispatcher = FakeDispatcher()
         event_sink: EventSink = FakeEventSink()
         run_reporter: RunReporter = control
-        worker: WorkerExecutor = ApplicationWorkerExecutor(lambda _request: FakeRuntime())
+        worker: WorkerExecutor = ApplicationWorkerExecutor(lambda _request: FakeRuntime(), event_sink)
         task = await task_manager.submit(TaskSubmission(owner_id='user:1', prompt='research'))
         limits = await budget_manager.authorize(task)
         request = await task_manager.create_run(task.task_id, task.owner_id, limits)
         await dispatcher.submit(request)
-        await event_sink.publish(PlatformEvent(task.task_id, request.run_id,
-                                               AgentEvent(seq=1, turn=1, name='run_start', data={})))
         report = await worker.execute(dispatcher.requests.pop())
         await run_reporter.report(report)
-        await task_manager.record_report(report)
-        await budget_manager.record_usage(report)
         self.assertEqual(report.status, RunStatus.COMPLETED)
         self.assertEqual((await task_manager.get_report('run-1', 'user:1')).status,
                          RunStatus.COMPLETED)
@@ -143,6 +193,9 @@ class ContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(report.result.stop_reason, StopReason.STOP)
         self.assertIsNotNone(task.created_at.tzinfo)
         self.assertEqual(RunRecord(request, attempt=1).status, RunStatus.PENDING)
+        await run_reporter.report(report)
+        with self.assertRaises(ValueError):
+            await run_reporter.report(ExecutionReport(report.run_id, report.task_id, RunStatus.FAILED))
 
     async def test_unsupported_work_is_rejected_explicitly(self) -> None:
         worker = ApplicationWorkerExecutor(lambda _request: FakeRuntime())

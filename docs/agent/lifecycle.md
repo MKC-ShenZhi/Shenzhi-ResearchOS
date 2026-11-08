@@ -16,7 +16,30 @@ Task/Run 是新平台执行生命周期的权威来源；Session/Turn 只保存�
 | 重试 | 按 Control 策略重新排队 | 新 Run 为 `PENDING` | 同一 Task 创建新 `run_id`，attempt 递增；旧 Run 的结果和事件不变。 |
 | 等待用户输入 | `AWAITING_INPUT` | `AWAITING_INPUT` | 本次 Runtime 尝试已交出问题；续接方式待定。 |
 
-`TaskStatus.PAUSED` 已在契约中保留，`TaskManager.pause/resume` 已定义，但没有冻结具体暂停、续接或 Run 归属行为。`TaskRecord.current_run_id` 仅指向当前尝试，不能据此删除或改写历史 Run。
+`TaskRecord.current_run_id` 只指向当前尝试；每次重试分配新的 `run_id` 和从 1 递增的 `attempt`，历史 Run、事件、报告不可覆盖。
+
+## V1 状态转换约束（Control 待实现）
+
+| 当前 Task / Run | 操作与执行主体 | 允许的结果 | 拒绝或竞争规则 |
+| --- | --- | --- | --- |
+| `QUEUED` / 无或 `PENDING` | Control pause | `PAUSED` / 原 Run 不执行 | 已领取则条件更新失败，不能假装暂停 |
+| `PAUSED` / `PENDING` | Control resume | `QUEUED` / 原 Run 待领取 | 不恢复已运行的 Run |
+| `QUEUED` / `PENDING` | Worker 原子领取 | `RUNNING` / `RUNNING` | 与 pause、cancel 竞争，只有一个条件更新胜出 |
+| `RUNNING` / `RUNNING` | Control pause | 不变，明确业务错误 | V1 无运行中 checkpoint 暂停 |
+| `QUEUED` 或 `RUNNING` / 非终态 | Control request_cancel | `CANCELLING`，通知 Worker | 仅记录意图，不宣称已取消 |
+| `CANCELLING` / `RUNNING` | Worker 报告，经 Control 原子处理 | `CANCELLED`、`COMPLETED`、`FAILED` 或按重试策略排队 | 以实际报告决定；终态不得再取消 |
+| `RUNNING` / `RUNNING` | Worker 报告 `AWAITING_INPUT` | `AWAITING_INPUT` / `AWAITING_INPUT` | Run 终态，不能重复执行或复用 ID |
+| `RUNNING` / `RUNNING` | Worker 报告超时 | `FAILED` 或按策略 `QUEUED` / `TIMED_OUT` | 保留原 Run，重试建新 Run |
+| `RUNNING` / `RUNNING` | Worker 报告失败 | `FAILED` 或按策略 `QUEUED` / `FAILED` | 一次失败不自动等于 Task 失败 |
+| 任意 / 终态 | 迟到或重复报告 | 相同报告幂等返回 | 冲突报告拒绝；旧 Run 不改当前 Task |
+
+这些规则已冻结为接口约定；本分支没有 Task/Run 数据库状态机。Control 必须在一个事务中校验 `task_id/run_id/current_run_id`、写报告、更新状态并只结算一次用量。唯一 `run_id` 和报告约束、条件更新及租约 fencing token 不能由进程内字典代替。
+
+## 等待输入与会话关联决策
+
+现有 `AgentTurnRow` 属于一个 Session，包含一次用户内容、执行状态、问题和 Transcript；它没有跨多个用户 Turn 的 Task 关联。V1 推荐 A：每次用户提交一个 Task，后续回答创建新 Turn 和新 Task，并以 continuation 关联前一个 Task。B（一个 Task 跨多个 Turn）需要 `TaskTurn` 关联表、重定义当前 Run 与权限/幂等边界，超出本轮。推荐方案待负责人确认；自动续接暂不支持。
+
+现有 Session API 继续用 `agent_turns.worker_id/lease_expires_at` 的 Turn Lease。新平台 Run Lease 由 Control 后续实现，必须有过期时间、续租、过期识别和 fencing token；同一次执行只允许一套 Lease 决定所有权。新平台未接管 Session 执行前不得删除 Turn Lease。迟到 Worker 报告不能覆盖新 Run 的结果。
 
 ## Runtime 终止原因到 Run 状态
 
@@ -36,10 +59,4 @@ Task/Run 是新平台执行生命周期的权威来源；Session/Turn 只保存�
 
 当前 `agent_sessions` Repository 负责 Session/Turn 的创建、幂等键、对话正文、事件展示、Transcript 和 Turn 的持久化。PostgreSQL 中 `agent_turns` 已有 `worker_id`、`lease_expires_at`，运行中 Turn 由现有心跳续租，过期后按既有规则恢复；Memory Repository 只提供进程内行为。新 Task/Run 契约中的 `session_id`、`turn_id` 是关联键，尚未写入现有表，也没有 Task/Run 数据库表或 Run 租约。现有 Session API 的运行状态不能被误写成新平台已接管。
 
-后续需由双方与负责人确认：
-
-1. `pause/resume` 是暂停当前 Run、终止后新建 Run，还是只控制排队；何时允许调用。
-2. `AWAITING_INPUT` 后用户回答如何形成新 Task/Turn，以及原 Task 何时结束。
-3. Worker 丢失、Run Lease 过期后的领取、重试与旧 Worker 晚到报告的处理规则。
-4. Run Lease 与现有 Session/Turn Worker Lease 的一致性与恢复顺序。
-5. 取消与完成同时到达时的胜出规则、排队中取消，以及超时后 Task 的最终投影和重试政策。
+后续需确认具体的重试次数、失败与超时后的 Task 最终投影、continuation 数据结构和 Session 执行迁移顺序。

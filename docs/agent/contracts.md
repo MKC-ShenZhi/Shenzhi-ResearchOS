@@ -21,7 +21,7 @@ User → Session → Turn → Task → Run 1 / Run 2 / ...
 
 现有 `report_from_result` 负责把 Runtime `RunResult.status`、错误和测得用量转换为平台报告，同时原样保留 `RunResult`。Runtime 原始消息、最终文本和产物由 `RunResult` 表达。Execution 侧生成报告并经 `RunReporter.report` 交给 Control；Control 负责按 `run_id` 持久保存结果，`TaskManager.record_report` 负责相应的 Task/Run 状态处理，`TaskManager.get_report(run_id, owner_id)` 提供带 owner 限制的读取。持久化与状态更新如何在同一事务内协调，留待 Control 实现；当前 Fake 测试只验证接口交互。
 
-`BudgetLimits` 只有 `max_duration_s`、`max_tool_calls`、`max_model_tokens`。`BudgetManager.authorize` 由 Control 授权限制，Execution 侧在运行期间执行限制并报告 `UsageReport`，`BudgetManager.record_usage` 由 Control 结算。`UsageReport` 的 `prompt_tokens`、`completion_tokens`、`tool_calls`、`duration_ms` 均允许 `None` 表示未知；已知的 0 才写 0。只要任一模型 token 数未知，`model_tokens` 也为 `None`。当前 Runtime `RunResult` 没有可靠的工具调用计数，因此 `report_from_result` 保留 `tool_calls=None`；其余三个数字直接取 Runtime 报告值。Runtime 现有数值字段的默认 0 无法区分未测量与真实零，后续接入用量来源时必须解决这一测量边界。显式平台预算在现有 `ApplicationWorkerExecutor` 中仍未接通，不能宣称强制执行或生产级计费。
+`BudgetLimits` 包含时长、工具次数和模型 Token 限制。Control 授权和结算，Execution 执行并测量。`UsageReport` 用 `None` 表示未知。Runtime 现在记录工具派发次数；模型用量仅在收到每次调用的 Provider usage 时视为已测量。时长与工具次数可由进程内 Worker 强制执行，模型 Token 限制仍拒绝。
 
 ## 事件
 
@@ -42,4 +42,12 @@ Runtime `AgentEvent(seq, turn, name, data)` 是事件来源。Execution 侧把�
 | `EventSink` | Control 接收边界 | `publish(PlatformEvent) → None` |
 | `RunReporter` | Execution 到 Control 的报告边界 | `report(ExecutionReport) → None` |
 
-构造输入不一致时数据契约抛出 `ValueError`；运行失败以终态 `ExecutionReport` 表达。取消请求通过 Dispatcher/WorkerExecutor 传递，最终是否取消以报告为准。当前适配器对尚不支持的会话运行和显式预算抛出 `NotImplementedError`，不会返回虚假的成功报告。
+构造输入不一致时抛出 `ValueError`。Session-bound 执行和模型 Token 显式限制仍在执行前拒绝；时长与工具次数可执行。
+
+## V1 进程内适配现状
+
+`RuntimeDriver.run` 接收同步 `on_event`。`ApplicationWorkerExecutor` 依次排队 Runtime 原始事件，单协程调用异步 `EventSink.publish`，等待已产生事件交付后才返回报告。发布失败停止 Runtime 并抛错；此时不得提交成功报告。接收侧应以 `(run_id, seq)` 唯一约束实现幂等，事件发布与报告交付的跨进程原子性尚未实现。
+
+Worker Host 只调用一次 `RunReporter.report`；Control 适配器在其内部调用 `TaskManager.record_report`，并在同一事务结算 `BudgetManager.record_usage`。相同报告重试幂等成功，冲突报告拒绝；数据库唯一约束、事务和迟到 Worker fencing 留给 Control 实现。
+
+进程内 Worker 已将显式时长限制传给 Runtime 的单调钟 deadline，将显式工具次数限制传到实际工具派发边界，并在严格预算模式阻止收尾工具越额。`RunResult.tool_calls` 记录派发次数，`usage_measured` 标记 Runtime 是否收到每次模型调用用量；未知 token 在报告中为 `None`。模型 token 上限仍无法可靠预先约束，执行前拒绝。Session-bound Run 仍拒绝。当前适配不提供持久化、跨进程恢复或生产级幂等。

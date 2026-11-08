@@ -85,6 +85,7 @@ class _RunState:
         self.truncated = False
         self.prompt_tokens = 0
         self.completion_tokens = 0
+        self.usage_measured = True
         self.executed_tools = 0
         self.loaded_skills: set[str] = set()
         self.pinned_chars = 0
@@ -124,6 +125,8 @@ class _RunState:
             truncated=self.truncated,
             prompt_tokens=self.prompt_tokens,
             completion_tokens=self.completion_tokens,
+            tool_calls=self.executed_tools,
+            usage_measured=self.usage_measured,
         )
 
 
@@ -249,6 +252,7 @@ class AgentRuntime:
         # 上限 60s、下限 1s（测试用的极短 deadline 也给得出窗口）。
         self.deadline_grace_s = min(60.0, max(1.0, deadline_s * 0.5))
         self.max_tool_calls = max_tool_calls
+        self.strict_tool_budget = False
         # 预算读数进系统提示：不给这个数，模型只能盲判——实测一次并行就烧掉大半预算，
         # 剩下一路撞到拒绝为止（基座机制，不是业务准则，故由内核生成）。
         self.tool_budget = tool_budget
@@ -545,6 +549,8 @@ class AgentRuntime:
                         # usage 挂最终消息（pi ai/types.ts）：compaction 优先用真实用量估算
                         assistant.usage_tokens = (event.usage.prompt_tokens
                                                    + event.usage.completion_tokens)
+                    else:
+                        state.usage_measured = False
         calls = assistant.tool_calls
         # stop_reason 从不改写（pi agent-loop:222-233）：是否续跑只看"有没有工具调用"，
         # transcript 里保留模型给的原始语义（此前把 stop+calls 改成 tool_calls、
@@ -686,12 +692,12 @@ class AgentRuntime:
         for call in calls:
             if stop_requested():
                 break
-            if state.wrap_up and not self._is_delivery(call.name):
+            if state.wrap_up and (self.strict_tool_budget or not self._is_delivery(call.name)):
                 # 收尾模式：非交付调用一律拒绝（预算/时间两个来历同一文案），交付类放行
                 prepared.append((call, None, ToolResult(call.call_id, call.name,
                                                         WRAP_UP_REJECT_MESSAGE, is_error=True)))
                 continue
-            if not state.wrap_up and self._budget_spent(state):
+            if (self.strict_tool_budget or not state.wrap_up) and self._budget_spent(state):
                 state.budget_rejects += 1
                 prepared.append((call, None, ToolResult(call.call_id, call.name,
                                                         BUDGET_REJECT_MESSAGE, is_error=True)))
@@ -785,13 +791,13 @@ class AgentRuntime:
 
     async def _execute_call(self, state: _RunState, call: ToolCall) -> tuple[ToolResult, int]:
         """单个工具调用：策略拦截（如技能重复装载）+ 工具预算 + 分发 + 策略结算。"""
-        if state.wrap_up and not self._is_delivery(call.name):
+        if state.wrap_up and (self.strict_tool_budget or not self._is_delivery(call.name)):
             return ToolResult(call.call_id, call.name, WRAP_UP_REJECT_MESSAGE, is_error=True), 0
         if self.tool_policy is not None:
             blocked = self.tool_policy.intercept(call, state)
             if blocked is not None:
                 return blocked, 0
-        if not state.wrap_up and self._budget_spent(state):
+        if (self.strict_tool_budget or not state.wrap_up) and self._budget_spent(state):
             state.budget_rejects += 1
             return ToolResult(call.call_id, call.name, BUDGET_REJECT_MESSAGE, is_error=True), 0
         # 放行即占名额（与并行路径同一口径）

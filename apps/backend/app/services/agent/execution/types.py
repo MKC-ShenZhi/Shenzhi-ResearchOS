@@ -137,6 +137,8 @@ class RunResult:
     truncated: bool = False
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    tool_calls: int | None = None
+    usage_measured: bool = False
 
     @property
     def status(self) -> str:

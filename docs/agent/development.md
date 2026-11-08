@@ -17,6 +17,8 @@
 
 Control 侧从 `TaskSubmission` 创建 Task 和独立 Run，记录 attempt 与 `current_run_id`，经 `BudgetManager` 授权并通过 `Dispatcher` 提交 `RunRequest`。Control 实现 `EventSink`、`RunReporter` 的接收和持久化，按 `run_id` 保留报告、按 `(run_id, seq)` 保留事件。Session 任务创建前须协调同一个 `session_id`、`turn_id` 的持久关联；不要把既有 Turn 状态作为另一份执行真相。
 
-Execution 侧消费 `RunRequest`，在可执行能力接通后用 Runtime `RunResult` 生成 `ExecutionReport`，按 Runtime 原有 `AgentEvent` 包装并发布 `PlatformEvent`。执行中预算限制及实际用量由 Execution 侧报告。现有 `ApplicationWorkerExecutor` 只支持无 Session 且无显式平台预算的进程内尝试；Session 与预算能力需在协调边界完成后再接通。
+Execution 侧消费 `RunRequest`，包装并有序发布 Runtime `AgentEvent`，完成发布后返回 `ExecutionReport`。进程内 Worker 支持无 Session 的显式时长和工具次数预算；模型 Token 限制与 Session-bound 执行仍拒绝。
 
 独立 Fake 契约测试入口是 `apps/backend/tests/test_agent_contracts.py`，命令为 `uv run python -m unittest -q tests.test_agent_contracts`。双方变更共享契约时应同步测试和文档，并保持 `api/agent.py` 的既有路由与 HTTP 方法兼容。Run 租约恢复、等待输入续接和暂停/恢复的待确认规则见 [生命周期](lifecycle.md)。
+
+V1 已接通进程内事件发布、显式时长与工具次数限制以及真实用量报告边界。Execution 后续补模型 token 预扣与 Provider 用量完整性、事件传输重试和 Worker Host；Control 后续实现 `RunReporter → TaskManager.record_report` 唯一入口、事务幂等结算、Run Lease/fencing 与状态机。运行中暂停、自动等待输入续接、Session-bound 平台执行仍不支持。具体冻结规则见 [生命周期](lifecycle.md)。
