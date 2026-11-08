@@ -17,8 +17,16 @@ class PlatformEvent:
     occurred_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
-    def sequence(self) -> int:
+    def seq(self) -> int:
         return self.runtime_event.seq
+
+    @property
+    def event_key(self) -> tuple[str, int]:
+        return (self.run_id, self.seq)
+
+    @property
+    def sequence(self) -> int:
+        return self.seq
 
     @property
     def name(self) -> str:

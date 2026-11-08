@@ -10,6 +10,7 @@ from .tasks import TaskRecord, TaskSubmission
 
 
 class TaskManager(Protocol):
+    """Control owns Task/Run transitions and owner-scoped reads."""
     async def submit(self, submission: TaskSubmission) -> TaskRecord: ...
     async def get(self, task_id: str, owner_id: str) -> TaskRecord: ...
     async def create_run(self, task_id: str, owner_id: str,
@@ -22,23 +23,28 @@ class TaskManager(Protocol):
 
 
 class BudgetManager(Protocol):
+    """Control authorizes limits and settles reported usage."""
     async def authorize(self, task: TaskRecord) -> BudgetLimits: ...
     async def record_usage(self, report: ExecutionReport) -> None: ...
 
 
 class Dispatcher(Protocol):
+    """Control submits attempts and forwards cancellation requests."""
     async def submit(self, request: RunRequest) -> None: ...
     async def request_cancel(self, task_id: str, run_id: str) -> None: ...
 
 
 class WorkerExecutor(Protocol):
+    """Execution runs one attempt and returns its final report."""
     async def execute(self, request: RunRequest) -> ExecutionReport: ...
     async def request_cancel(self, run_id: str) -> None: ...
 
 
 class EventSink(Protocol):
+    """Control receives Runtime events wrapped with Task/Run identity."""
     async def publish(self, event: PlatformEvent) -> None: ...
 
 
 class RunReporter(Protocol):
+    """Execution delivers reports to Control for durable recording."""
     async def report(self, report: ExecutionReport) -> None: ...

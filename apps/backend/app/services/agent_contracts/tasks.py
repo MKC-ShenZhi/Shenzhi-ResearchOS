@@ -24,6 +24,11 @@ class TaskSubmission:
     session_id: str | None = None
     input_ref: str | None = None
     idempotency_key: str | None = None
+    turn_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if (self.session_id is None) != (self.turn_id is None):
+            raise ValueError('session_id and turn_id must be provided together')
 
 
 @dataclass(frozen=True)
@@ -42,3 +47,7 @@ class TaskRecord:
     @property
     def session_id(self) -> str | None:
         return self.submission.session_id
+
+    @property
+    def turn_id(self) -> str | None:
+        return self.submission.turn_id

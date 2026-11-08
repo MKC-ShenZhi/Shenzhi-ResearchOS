@@ -2,6 +2,12 @@
 
 Agent Runtime、消息与事件类型、Provider、Tool、Context / Compaction、Memory / Checkpoint、Skill framework、Workspace、基础 policy、prompt/template infrastructure、export、安全与网络辅助模块已从 `feat/SZDR` 迁入 ShenZhi 主工程，并接入 FastAPI Agent API 和 Web `/agents` 产品入口，是 ShenZhi 继续开发的正式基座，也是唯一的对话链路；匿名身份引导与登录后认领见 [认证架构](../auth/ARCHITECTURE.md#anonymous-identity-and-claim)。
 
+## Agent Platform 共享基线
+
+`services/agent_contracts/` 冻结后续 Control 与 Execution 两侧共用的 Task、Run、预算、事件及 Protocol 数据边界。一次用户提交对应一个 Task；一次执行尝试对应一个 Run，重试在同一 Task 下创建新 Run。会话任务同时关联现有 Session 与 Turn；Session/Turn 继续保存对话和 Transcript，Task/Run 是新平台执行生命周期的权威来源。身份沿用 `app.core.identity`。详见 [共享契约](contracts.md)、[生命周期](lifecycle.md) 和 [并行开发边界](development.md)。
+
+当前 Agent Session API 仍按现有路径运行；新平台 Task/Run 持久化、调度和 Session/Turn 关联尚未接入。`ApplicationWorkerExecutor` 只是进程内执行适配器，Session 任务和显式平台预算仍会明确拒绝，不能视为生产 Worker。
+
 第一方 `deep-research` Skill 位于 `apps/backend/skills/deep-research/`，可在 `/agents` 选择，也可用 `/research <主题>` 触发。Agent 使用既有 Tool → `KnowledgeService` → `integrations/knowledge` 检索论文；legacy retrieval 未迁入。它与前端原型页 `/agents/deep-research`（见 [Deep Research 页面说明](../deep-research/README.md)）无关。历史验收记录见 [verification-2026-09-20.md](../dev/records/agent/verification-2026-09-20.md)。
 
 ## 结构与调用边界

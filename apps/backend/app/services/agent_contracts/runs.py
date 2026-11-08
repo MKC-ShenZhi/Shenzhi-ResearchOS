@@ -35,6 +35,11 @@ class RunRequest:
     skills: tuple[str, ...] = ()
     budget: BudgetLimits = field(default_factory=BudgetLimits)
     input_ref: str | None = None
+    turn_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if (self.session_id is None) != (self.turn_id is None):
+            raise ValueError('session_id and turn_id must be provided together')
 
 
 @dataclass(frozen=True)
@@ -52,9 +57,14 @@ class RunRecord:
         if self.attempt < 1:
             raise ValueError('attempt must start at one')
 
+    @property
+    def task_id(self) -> str:
+        return self.request.task_id
+
 
 @dataclass(frozen=True)
 class ExecutionReport:
+    """Final attempt outcome; result is the unmodified Runtime RunResult."""
     run_id: str
     task_id: str
     status: RunStatus
@@ -62,6 +72,10 @@ class ExecutionReport:
     usage: UsageReport = field(default_factory=UsageReport)
     error_code: str | None = None
     error_message: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.status in (RunStatus.PENDING, RunStatus.RUNNING):
+            raise ValueError('execution report requires a final run status')
 
 
 def report_from_result(request: RunRequest, result: RunResult) -> ExecutionReport:

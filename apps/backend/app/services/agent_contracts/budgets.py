@@ -21,16 +21,18 @@ class BudgetLimits:
 
 @dataclass(frozen=True)
 class UsageReport:
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
     tool_calls: int | None = None
-    duration_ms: int = 0
+    duration_ms: int | None = None
 
     def __post_init__(self) -> None:
-        values = (self.prompt_tokens, self.completion_tokens, self.duration_ms)
-        if any(value < 0 for value in values) or (self.tool_calls is not None and self.tool_calls < 0):
+        values = (self.prompt_tokens, self.completion_tokens, self.tool_calls, self.duration_ms)
+        if any(value is not None and value < 0 for value in values):
             raise ValueError('usage values cannot be negative')
 
     @property
-    def model_tokens(self) -> int:
+    def model_tokens(self) -> int | None:
+        if self.prompt_tokens is None or self.completion_tokens is None:
+            return None
         return self.prompt_tokens + self.completion_tokens
