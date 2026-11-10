@@ -78,7 +78,7 @@ SHA 未变不下载；API缓存五分钟检查小版本列，版本未变不读�
 
 ## 触发与实际环境
 
-本轮以会议提出的常驻后端为部署目标，复用原HomeFeedScheduler，未建立另一个后台调度器。会议任务仅由CONFERENCE_SYNC_ENABLED显式开关控制，不再根据VERCEL变量静默关闭。已删除本功能新增的GitHub Actions、Vercel Cron和HTTP触发入口，不改原推荐维护接口。
+常驻后端复用 `HomeFeedScheduler`，会议 DDL 和首页数据任务由 `BACKGROUND_JOBS_ENABLED` 统一启停，各任务独立判断是否到期。
 
 最新dev部署文档仍将Vercel列为临时演示联调，正式服务器方式待负责人补充。会议记录中的裸机环境与文档记录不能代替实际验证。没有服务器访问权限时，不宣称已验证生产环境。Vercel Preview可检查构建/API，不能验收进程内任务每日自动执行。
 
@@ -86,7 +86,7 @@ SHA 未变不下载；API缓存五分钟检查小版本列，版本未变不读�
 
 先核对目标数据库与迁移状态，再按团队流程执行迁移。现有迁移ID保持不变：dev的 `021_drop_chat_tables` 与会议的 `021_conference_follow_ids` → `022_conference_snapshots` 各自从020发展，新增空合并迁移 `023_merge_conference_chat` 汇合为唯一head。这样已执行任一旧分支迁移的数据库仍能识别原ID，无需重写历史。dev的021会删除旧Chat表，生产执行需由负责人审核备份；不要直接拿旧分支的迁移编号向生产执行。
 
-常驻后端设置 `CHAT_DATABASE_URL`、`CONFERENCE_SYNC_ENABLED=true`；原首页任务开关互相独立。共享IP限流时可配置服务端只读 `CONFERENCE_GITHUB_TOKEN`。密钥只放部署环境，不放代码或文档。
+常驻后端设置 `CHAT_DATABASE_URL` 和 `BACKGROUND_JOBS_ENABLED=true`。共享 IP 限流时可配置服务端只读 `CONFERENCE_GITHUB_TOKEN`。密钥只放部署环境，不放代码或文档。
 
 ```bash
 uv run --locked --env-file .env alembic upgrade head

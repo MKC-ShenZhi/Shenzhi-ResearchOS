@@ -26,7 +26,7 @@ conference_snapshots（数据库当前快照；打包 JSON 兜底）
 
 后端优先读取数据库 `conference_snapshots` 当前快照，数据库无可用资料时使用随后端打包的快照。运行时请求不访问 GitHub；缓存每 5 分钟检查数据库版本，变化后重新加载，数据库异常时保留最近一次已校验目录。活动页面每 5 分钟重新请求会议、分类及关注数据；仅设置 staleTime 不等同于定时刷新。
 
-长驻后端设置 `CONFERENCE_SYNC_ENABLED=true` 后复用现有 `HomeFeedScheduler`，每 10 分钟检查是否到期；成功检查距今满 23 小时才获取上游最新提交。SHA 未变只更新检查时间；有变化则从 `ccfddl/ccf-deadlines` 下载该 SHA 的压缩包，读取 `conference/types.yml` 和 `conference/*/*.yml`，校验后原子替换当前快照。失败保留旧数据，至少 1 小时后重试。首页调度开关与会议开关独立。
+长驻后端设置 `BACKGROUND_JOBS_ENABLED=true` 后，统一调度器每 10 分钟检查会议 DDL 是否到期。成功检查距今满 23 小时才获取上游最新提交。SHA 未变只更新检查时间；有变化则从 `ccfddl/ccf-deadlines` 下载该 SHA 的压缩包，读取 `conference/types.yml` 和 `conference/*/*.yml`，校验后原子替换当前快照。失败保留旧数据，至少 1 小时后重试。
 
 上线前先运行迁移（原会议 021/022 与 dev 的 Chat 清理迁移经 023 合并迁移汇合），再启用任务。生产服务器必须能访问 `api.github.com` 和 `codeload.github.com`。进程内调度不适用于无法保证持续运行的 Serverless 实例。共享 IP 限流时可选配置仅后端使用的 `CONFERENCE_GITHUB_TOKEN`。
 

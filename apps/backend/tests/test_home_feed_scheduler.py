@@ -1,5 +1,6 @@
 """The in-process scheduler for the home pool sync, the daily edition and retention purges."""
 
+import asyncio
 import os
 import unittest
 from datetime import date, datetime, timedelta, timezone
@@ -13,14 +14,36 @@ from app.services.home_feed.config import pool_year
 
 class SchedulerConfigTests(unittest.TestCase):
     def test_scheduler_is_opt_in_and_the_pool_year_is_overridable(self):
-        with patch.dict(os.environ, {'HOME_FEED_SCHEDULER_ENABLED': ''}):
+        with patch.dict(os.environ, {'BACKGROUND_JOBS_ENABLED': ''}):
+            os.environ.pop('BACKGROUND_JOBS_ENABLED')
             self.assertFalse(scheduler_enabled())
-        with patch.dict(os.environ, {'HOME_FEED_SCHEDULER_ENABLED': 'true'}):
+            self.assertIsNone(scheduler_module.start_home_feed_scheduler())
+        with patch.dict(os.environ, {'BACKGROUND_JOBS_ENABLED': 'true'}):
             self.assertTrue(scheduler_enabled())
         with patch.dict(os.environ, {'HOME_FEED_POOL_YEAR': ''}):
             self.assertEqual(pool_year(), 2026)
         with patch.dict(os.environ, {'HOME_FEED_POOL_YEAR': '2027'}):
             self.assertEqual(pool_year(), 2027)
+
+
+class SchedulerStartupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_switch_starts_the_scheduler_and_false_skips_work(self):
+        started = asyncio.Event()
+        with patch.dict(os.environ, {'BACKGROUND_JOBS_ENABLED': 'true'}), patch.object(
+            HomeFeedScheduler, 'run_due', AsyncMock(side_effect=started.set),
+        ):
+            task = scheduler_module.start_home_feed_scheduler()
+            try:
+                await asyncio.wait_for(started.wait(), timeout=2)
+            finally:
+                await scheduler_module.stop_home_feed_scheduler(task)
+
+        with patch.dict(os.environ, {'BACKGROUND_JOBS_ENABLED': 'false'}), patch.object(
+            scheduler_module.ConferenceSync, 'run', AsyncMock(),
+        ) as sync_deadlines:
+            self.assertIsNone(scheduler_module.start_home_feed_scheduler())
+            self.assertEqual(await HomeFeedScheduler().run_due(), [])
+            sync_deadlines.assert_not_awaited()
 
 
 @unittest.skipUnless(os.getenv('CHAT_DATABASE_URL'), 'CHAT_DATABASE_URL not set')
@@ -32,12 +55,13 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         from app.core.database import dispose_engine
         await dispose_engine()
-        self.env = patch.dict(os.environ, {'HOME_FEED_POOL_YEAR': self.YEAR, 'HOME_FEED_SCHEDULER_ENABLED': 'true'})
-        self.env.start()
+        self.enterContext(patch.dict(os.environ, {'HOME_FEED_POOL_YEAR': self.YEAR, 'BACKGROUND_JOBS_ENABLED': 'true'}))
+        self.sync_deadlines = self.enterContext(patch.object(
+            scheduler_module.ConferenceSync, 'run', AsyncMock(return_value={'status': 'not-due'}),
+        ))
 
     async def asyncTearDown(self):
         from app.core.database import dispose_engine
-        self.env.stop()
         await dispose_engine()
 
     def scheduler(self, sync=None):
@@ -48,10 +72,17 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_due_jobs_run_in_order_for_the_pool_year_and_shanghai_day(self):
+        self.sync_deadlines.return_value = {'status': 'updated'}
         scheduler = self.scheduler()
-        self.assertEqual(await scheduler.run_due(self.NOW), ['sync', 'publish', 'purge'])
+        self.assertEqual(await scheduler.run_due(self.NOW), ['conferences', 'sync', 'publish', 'purge'])
+        self.sync_deadlines.assert_awaited_once_with(now=self.NOW)
         scheduler.sync.sync.assert_awaited_once_with(1903)
         self.assertEqual(scheduler.builder.publish.await_args.args[0].isoformat(), '2001-03-01')
+
+    async def test_failed_deadline_sync_does_not_block_home_jobs(self):
+        self.sync_deadlines.side_effect = RuntimeError('GitHub down')
+        with self.assertLogs(scheduler_module.logger, 'ERROR'):
+            self.assertEqual(await self.scheduler().run_due(self.NOW), ['sync', 'publish', 'purge'])
 
     async def test_publish_waits_until_just_after_shanghai_midnight(self):
         scheduler = self.scheduler()

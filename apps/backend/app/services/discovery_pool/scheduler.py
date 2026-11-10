@@ -1,8 +1,8 @@
-"""In-process scheduling for the home feed's periodic jobs.
+"""In-process scheduling for the long-running backend's periodic jobs.
 
-Opt-in with ``HOME_FEED_SCHEDULER_ENABLED=true``. Every CHECK_INTERVAL the
-process tries a Postgres advisory lock; only the holder runs what is due, so
-several workers or instances never duplicate a job:
+Opt-in with ``BACKGROUND_JOBS_ENABLED=true``. Each tick checks conference
+deadlines independently of the home feed. For the home feed jobs below,
+only the holder of the Postgres advisory lock runs what is due:
 
 - ``sync`` when the pool year has no papers or was synced SYNC_INTERVAL ago;
 - ``publish`` when today's edition (Shanghai) is missing and it is past PUBLISH_AFTER;
@@ -46,17 +46,8 @@ PURGE_INTERVAL = timedelta(hours=1)
 LOCK_KEY = 7_402_118_031
 
 
-def home_feed_enabled() -> bool:
-    return os.getenv('HOME_FEED_SCHEDULER_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
-
-
-def conference_sync_enabled() -> bool:
-    # Conference jobs use this scheduler only; deployment must keep it running.
-    return os.getenv('CONFERENCE_SYNC_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
-
-
 def scheduler_enabled() -> bool:
-    return home_feed_enabled() or conference_sync_enabled()
+    return os.getenv('BACKGROUND_JOBS_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
 class HomeFeedScheduler:
@@ -68,20 +59,18 @@ class HomeFeedScheduler:
 
     async def run_due(self, now: datetime | None = None) -> list[str]:
         """Run every job that is due now; returns the jobs that ran."""
+        if not scheduler_enabled():
+            return []
         now = now or utc_now()
-        conference_ran = []
-        if conference_sync_enabled():
-            try:
-                result = await ConferenceSync().run(now=now)
-                if result['status'] in {'updated', 'unchanged'}:
-                    conference_ran.append('conferences')
-            except Exception:
-                logger.exception('Conference sync failed; the existing snapshot is kept')
-        if not home_feed_enabled():
-            return conference_ran
+        ran: list[str] = []
+        try:
+            result = await ConferenceSync().run(now=now)
+            if result['status'] in {'updated', 'unchanged'}:
+                ran.append('conferences')
+        except Exception:
+            logger.exception('Conference sync failed; the existing snapshot is kept')
         local = now.astimezone(SHANGHAI_TIMEZONE)
         year = pool_year()
-        ran: list[str] = conference_ran
         async with session_scope() as session:
             if not await session.scalar(select(func.pg_try_advisory_xact_lock(LOCK_KEY))):
                 return ran
@@ -124,15 +113,15 @@ class HomeFeedScheduler:
             try:
                 await self.run_due()
             except Exception:  # noqa: BLE001 - one bad tick must not stop scheduling
-                logger.exception('Home feed scheduler tick failed')
+                logger.exception('Background scheduler tick failed')
             await asyncio.sleep(CHECK_INTERVAL_SECONDS)
 
 
 def start_home_feed_scheduler() -> asyncio.Task | None:
     if not scheduler_enabled():
         return None
-    logger.info('Home feed scheduler started')
-    return asyncio.create_task(HomeFeedScheduler().run_forever(), name='home-feed-scheduler')
+    logger.info('Background scheduler started')
+    return asyncio.create_task(HomeFeedScheduler().run_forever(), name='background-scheduler')
 
 
 async def stop_home_feed_scheduler(task: asyncio.Task | None) -> None:

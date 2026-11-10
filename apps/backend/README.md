@@ -29,7 +29,7 @@ BUSINESS_BACKEND_URL=http://127.0.0.1:8000
 
 两端配置相同 `BACKEND_BFF_SECRET`；后端只允许私网/BFF 访问，不能直接暴露公网。
 
-推荐行为事件保留 90 天、分页快照 1 小时。清理入口为维护命令 `uv run --frozen python -m app.services.recommendation.maintenance`（可安全重复执行），以及只接受 `Authorization: Bearer $CRON_SECRET` 的 `GET /api/v1/internal/recommendation-maintenance`（未配置 `CRON_SECRET` 时返回 503）。开启 `HOME_FEED_SCHEDULER_ENABLED` 后，进程内调度器每小时执行一次同样的清理（见下文“首页论文数据源 · 调度”），无需额外配置 Cron。
+推荐行为事件保留 90 天、分页快照 1 小时。清理入口为维护命令 `uv run --frozen python -m app.services.recommendation.maintenance`（可安全重复执行），以及只接受 `Authorization: Bearer $CRON_SECRET` 的 `GET /api/v1/internal/recommendation-maintenance`（未配置 `CRON_SECRET` 时返回 503）。开启 `BACKGROUND_JOBS_ENABLED` 后，进程内调度器每小时执行一次同样的清理（见下文“首页论文数据源 · 调度”），无需额外配置 Cron。
 
 未配置 Secret 时默认拒绝；仅 loopback 本地开发可在两端显式设置：
 
@@ -140,7 +140,7 @@ uv run --locked --env-file .env python -m app.services.discovery_pool sync [--ye
 uv run --locked --env-file .env python -m app.services.discovery_pool publish [--date 2026-11-02] [--dry-run]
 ```
 
-**调度**：设置 `HOME_FEED_SCHEDULER_ENABLED=true` 后，API 进程每 10 分钟检查一次，并用 Postgres advisory lock 保证多个 worker 或实例中只有一个执行：候选池为空或距上次同步超过 7 天时执行 `sync`（失败后 1 小时内不重试）；上海时间 00:05 之后当天还没有每日候选时执行 `publish`；每小时执行一次 `purge`，删除已过期的推荐快照、90 天前的行为事件和 120 天前的每日候选（之后的生成不再读取它们）。是否到期完全由数据库状态判断，所以进程重启或错过某次检查后，下一次检查会自动补上。默认关闭，本地开发和测试不会去请求底座。调度器随 FastAPI `lifespan` 启动，依赖长驻进程；Serverless 部署下的限制见 [部署与运行环境](../../docs/engineering/deployment.md)。
+**调度**：设置 `BACKGROUND_JOBS_ENABLED=true` 后，API 进程每 10 分钟检查一次，并用 Postgres advisory lock 保证多个 worker 或实例中只有一个执行：候选池为空或距上次同步超过 7 天时执行 `sync`（失败后 1 小时内不重试）；上海时间 00:05 之后当天还没有每日候选时执行 `publish`；每小时执行一次 `purge`，删除已过期的推荐快照、90 天前的行为事件和 120 天前的每日候选（之后的生成不再读取它们）。是否到期完全由数据库状态判断，所以进程重启或错过某次检查后，下一次检查会自动补上。默认关闭，本地开发和测试不会去请求底座。调度器随 FastAPI `lifespan` 启动，依赖长驻进程；Serverless 部署下的限制见 [部署与运行环境](../../docs/engineering/deployment.md)。
 
 **兜底快照**：输入是 `data/discovery/home-seed-300.json`，部署产物是 `apps/backend/app/data/home_discovery_snapshot.json` 和 `apps/web/public/paper-thumbnails/*.webp`，可以用 `python3 scripts/publish_home_discovery.py [--check]` 重新发布（需要种子中指向的原始图片）。2026-11-01 已用候选池数据为种子和快照补上了 `image_id`、`keywords` 和 `subjects`；种子里有 2 篇（标题为 "1 Introduction"、摘要被截断）会被规则 B 剔除。
 
@@ -160,7 +160,7 @@ uv run --locked --env-file .env alembic upgrade head
 会议更新统一由原有 `HomeFeedScheduler` 在常驻后端中执行，不使用独立的 Vercel Cron、Actions 或 HTTP 触发接口。
 
 - 配置 `CHAT_DATABASE_URL` 并按团队数据库变更流程执行迁移。
-- 设置 `CONFERENCE_SYNC_ENABLED=true`，启动后端；该开关与首页任务开关独立。
+- 设置统一开关 `BACKGROUND_JOBS_ENABLED=true`，启动常驻后端。
 - 每10分钟检查数据库状态，成功检查满23小时才访问上游；失败满1小时后由后续检查重试，失败保留旧快照。
 - 是否启用只由上述显式开关决定，不再根据 VERCEL 环境变量静默关闭；部署者须确保后端进程持续运行。临时Serverless环境不能据此验收定时任务。
 - 手动排查：`uv run --locked --env-file .env python -m app.services.conferences.cli sync --dry-run`。

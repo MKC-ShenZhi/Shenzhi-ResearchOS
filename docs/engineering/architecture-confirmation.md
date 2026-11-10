@@ -185,7 +185,7 @@ timezone-aware 时间逻辑负责，不与 Python 业务时钟强制合并。
 
 ### 3. 运行形态
 
-后端按**长驻进程**设计：FastAPI `lifespan` 负责启动时的运行状态恢复与首页调度器，Agent 运行归属保存在进程内存，Agent workspace 写本地磁盘。部署到 Serverless 等非长驻环境时，这些能力不保证可用。当前部署形态与约束见 [部署与运行环境](deployment.md)。
+后端按**长驻进程**设计。FastAPI `lifespan` 负责启动时的运行状态恢复与后台调度器，Agent 运行归属保存在进程内存，Agent workspace 写本地磁盘。部署到 Serverless 等非长驻环境时，这些能力不保证可用。当前部署形态与约束见 [部署与运行环境](deployment.md)。
 
 ---
 

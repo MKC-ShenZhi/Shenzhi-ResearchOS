@@ -3,7 +3,6 @@
 import asyncio
 import copy
 import io
-import os
 import tarfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -288,38 +287,6 @@ class CacheTests(unittest.IsolatedAsyncioTestCase):
             store.payload.return_value = {}
             with self.assertLogs("app.services.conferences.repository", "ERROR"):
                 self.assertIs(await cache.get(), good)
-
-
-class SchedulerTests(unittest.IsolatedAsyncioTestCase):
-    def test_conference_switch_is_explicit_and_independent(self):
-        from app.services.discovery_pool.scheduler import conference_sync_enabled, scheduler_enabled
-        with patch.dict(os.environ, {"CONFERENCE_SYNC_ENABLED": "true", "HOME_FEED_SCHEDULER_ENABLED": "false", "VERCEL": "1"}):
-            self.assertTrue(conference_sync_enabled())
-            self.assertTrue(scheduler_enabled())
-        with patch.dict(os.environ, {"CONFERENCE_SYNC_ENABLED": "false", "HOME_FEED_SCHEDULER_ENABLED": "true"}):
-            self.assertFalse(conference_sync_enabled())
-            self.assertTrue(scheduler_enabled())
-
-    async def test_conference_only_and_failure_isolated(self):
-        from app.services.discovery_pool.scheduler import HomeFeedScheduler
-
-        with patch.dict(
-            os.environ,
-            {"CONFERENCE_SYNC_ENABLED": "true", "HOME_FEED_SCHEDULER_ENABLED": "false"},
-        ):
-            with patch(
-                "app.services.discovery_pool.scheduler.ConferenceSync.run",
-                AsyncMock(return_value={"status": "updated"}),
-            ):
-                self.assertEqual(
-                    await HomeFeedScheduler().run_due(NOW), ["conferences"]
-                )
-            with patch(
-                "app.services.discovery_pool.scheduler.ConferenceSync.run",
-                AsyncMock(side_effect=RuntimeError("failed")),
-            ):
-                with self.assertLogs("app.services.discovery_pool.scheduler", "ERROR"):
-                    self.assertEqual(await HomeFeedScheduler().run_due(NOW), [])
 
 
 class DailyBudgetTests(unittest.IsolatedAsyncioTestCase):
