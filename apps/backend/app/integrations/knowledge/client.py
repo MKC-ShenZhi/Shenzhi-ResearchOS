@@ -119,6 +119,23 @@ class KnowledgeBaseClient:
         )
         return cast(UpstreamScholarResponse, body)
 
+    async def topic_tree(self) -> list[dict[str, Any]]:
+        body = await self._request_json(
+            'GET', '/api/v1/topics/tree',
+            validate=lambda value: isinstance(value.get('tree'), list),
+        )
+        return body['tree']
+
+    async def topic(self, topic_id: str) -> dict[str, Any]:
+        return await self._request_json('GET', f'/api/v1/topics/{quote(topic_id, safe="")}')
+
+    async def topic_papers(self, topic_id: str, *, limit: int, offset: int) -> dict[str, Any]:
+        return await self._request_json(
+            'GET', f'/api/v1/topics/{quote(topic_id, safe="")}/papers',
+            params={'limit': limit, 'offset': offset},
+            validate=lambda value: isinstance(value.get('items'), list),
+        )
+
     async def search_by_subject(
         self, subject: str, *, offset: int = 0, limit: int = 10
     ) -> UpstreamSearchResponse:

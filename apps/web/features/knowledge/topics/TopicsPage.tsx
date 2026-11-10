@@ -11,7 +11,8 @@ import { TopicResults } from "./topic-results";
 import { filterTopics, groupTopics, readTopicViewState, updateTopicViewParams } from "./topic-url-state";
 import { TopicEmptyState, TopicErrorState, TopicLoadingState } from "./topic-states";
 import { TopicSearch } from "./topic-search";
-import { selectFeaturedTopics } from "./topic-metadata";
+import { selectFeaturedTopics, TOPICS_QUERY_KEY } from "./topic-metadata";
+import { knowledgeQueryRetry } from "../retry";
 
 export function TopicsPage() {
   const router = useRouter();
@@ -21,7 +22,8 @@ export function TopicsPage() {
   const returnTo = useCurrentInternalPath();
   const state = readTopicViewState(new URLSearchParams(searchParams.toString()));
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["knowledge", "topics"],
+    queryKey: TOPICS_QUERY_KEY,
+    retry: knowledgeQueryRetry,
     queryFn: ({ signal }) => getKnowledgeClient().topics(signal),
     staleTime: 15 * 60_000,
     gcTime: 30 * 60_000,
@@ -45,14 +47,14 @@ export function TopicsPage() {
       <div className="mx-auto max-w-[1180px]">
         <header className="mb-7">
           <div className="mb-4"><TopicSearch value={state.query} onSearch={(query) => updateState({ query })} /></div>
-          <TopicCategoryTabs categories={data?.categories ?? []} value={state.category} onChange={(category) => updateState({ category })} />
+          <TopicCategoryTabs categories={data?.categories ?? []} total={data?.total} value={state.category} onChange={(category) => updateState({ category })} />
         </header>
         {isPending ? <TopicLoadingState /> : isError ? <TopicErrorState onRetry={() => void refetch()} /> : visibleTopics.length === 0 ? <TopicEmptyState onReset={() => updateState({ query: "", category: "" })} /> : state.category || state.query ? (
           <TopicResults key={JSON.stringify([state.query, state.category])} topics={visibleTopics} returnTo={returnTo} />
         ) : (
           <div className="space-y-10">
             {featuredTopics.length > 0 ? <section><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-ink">精选主题</h2><span className="text-sm text-muted">{data?.total ?? 0} 个主题</span></div><TopicGrid topics={featuredTopics} returnTo={returnTo} featured /></section> : null}
-            {groups.map(([category, categoryTopics], index) => <section key={category}><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-ink">{category}</h2><span className="text-sm text-muted">{categoryTopics.length} 个主题</span></div><TopicGrid topics={categoryTopics} returnTo={returnTo} carousel={categoryTopics.length > 3} deferred={index > 0} /></section>)}
+            {groups.map(([category, categoryTopics], index) => <section key={category}><div className="mb-3 flex items-center justify-between gap-4"><h2 className="text-2xl font-semibold tracking-tight text-ink">{categoryTopics[0].categoryName}</h2><span className="text-sm text-muted">{categoryTopics.length} 个主题</span></div><TopicGrid topics={categoryTopics} returnTo={returnTo} carousel={categoryTopics.length > 3} deferred={index > 0} /></section>)}
           </div>
         )}
       </div>

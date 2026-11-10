@@ -43,6 +43,10 @@ def load_topic_catalog() -> tuple[KnowledgeTopic, ...]:
             topic = KnowledgeTopic.model_validate(normalized)
         except ValidationError as error:
             raise TopicCatalogError('主题目录字段无效') from error
+        if not all(value.strip() for value in (
+            topic.description_zh, topic.description_en, topic.subject_query,
+        )):
+            raise TopicCatalogError('主题目录字段无效')
         if topic.id in seen_ids:
             raise TopicCatalogError('主题目录包含重复 ID')
         normalized_subject_query = topic.subject_query.strip().casefold()
@@ -55,6 +59,8 @@ def load_topic_catalog() -> tuple[KnowledgeTopic, ...]:
             topic.image_path,
         ):
             raise TopicCatalogError('主题目录图片路径无效')
+        if topic.author is None:
+            raise TopicCatalogError('主题目录作者 ID 无效')
         author_id = topic.author if isinstance(topic.author, str) else topic.author.id
         if author_id.strip().lower() != 'shenzhi':
             raise TopicCatalogError('主题目录作者 ID 无效')

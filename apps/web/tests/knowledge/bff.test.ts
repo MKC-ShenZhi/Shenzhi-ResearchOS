@@ -78,42 +78,37 @@ test("BFF search preserves real nullable imageId without parsing paper ids", asy
   });
 });
 
-test("BFF client requests Topic Catalog list and detail through stable routes", async () => {
+test("BFF client encodes the OpenAlex ID for detail and papers", async () => {
   const requests: string[] = [];
+  const topic = {
+    id: "openalex:topic:T10028",
+    category: "openalex:subfield:1702",
+    categoryName: "Artificial Intelligence",
+    author: null,
+  };
   await withFetch(async (input) => {
-    requests.push(String(input));
-    if (requests.length === 1) {
+    const path = String(input);
+    requests.push(path);
+    if (path.includes("/papers?")) {
+      return jsonResponse({ code: 0, data: { results: [], total: 12379, offset: 1001, limit: 10 } });
+    }
+    if (path.endsWith("/topics")) {
       return jsonResponse({ code: 0, data: {
-        items: [],
-        total: 0,
-        categories: [],
+        items: [topic], total: 1, categories: [{ id: topic.category, name: topic.categoryName, total: 1 }],
       } });
     }
-    return jsonResponse({ code: 0, data: {
-      id: "large-language-models",
-      imagePath: null,
-      nameZh: "大语言模型",
-      nameEn: "Large Language Models",
-      author: "shenzhi",
-      descriptionZh: "主题简介",
-      descriptionEn: "Topic description",
-      followersCount: 0,
-      category: "自然语言处理",
-      subjectQuery: "llm",
-      paperCount: 2225,
-      enabled: true,
-    } });
+    return jsonResponse({ code: 0, data: topic });
   }, async () => {
     const client = new BffKnowledgeClient();
-    const list = await client.topics();
-    const detail = await client.topic("large-language-models");
-    assert.equal(list.total, 0);
-    assert.equal(detail.subjectQuery, "llm");
+    assert.equal((await client.topics()).categories[0].id, topic.category);
+    assert.equal((await client.topic(topic.id)).id, topic.id);
+    assert.equal((await client.topicPapers(topic.id, 1001, 10)).offset, 1001);
   });
 
   assert.deepEqual(requests, [
     "/api/v1/knowledge/topics",
-    "/api/v1/knowledge/topics/large-language-models",
+    "/api/v1/knowledge/topics/openalex%3Atopic%3AT10028",
+    "/api/v1/knowledge/topics/openalex%3Atopic%3AT10028/papers?offset=1001&limit=10",
   ]);
 });
 

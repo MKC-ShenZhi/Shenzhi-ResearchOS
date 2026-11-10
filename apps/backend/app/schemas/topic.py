@@ -26,7 +26,7 @@ class KnowledgeCreator(KnowledgeModel):
 
 
 class KnowledgeTopic(KnowledgeModel):
-    @field_validator('id', 'name_zh', 'name_en', 'description_zh', 'description_en', 'category', 'subject_query')
+    @field_validator('id', 'name_zh', 'name_en', 'category')
     @classmethod
     def required_text(cls, value: str) -> str:
         if not value.strip():
@@ -51,9 +51,9 @@ class KnowledgeTopic(KnowledgeModel):
         validation_alias='nameEn',
         serialization_alias='nameEn',
     )
-    author: str | KnowledgeTopicAuthor
+    author: str | KnowledgeTopicAuthor | None = None
     description_zh: str = Field(
-        min_length=1,
+        default='',
         max_length=2000,
         validation_alias='descriptionZh',
         serialization_alias='descriptionZh',
@@ -65,7 +65,7 @@ class KnowledgeTopic(KnowledgeModel):
         serialization_alias='descriptionDetail',
     )
     description_en: str = Field(
-        min_length=1,
+        default='',
         max_length=2000,
         validation_alias='descriptionEn',
         serialization_alias='descriptionEn',
@@ -80,7 +80,7 @@ class KnowledgeTopic(KnowledgeModel):
     icon_key: str | None = Field(default=None, validation_alias='iconKey', serialization_alias='iconKey')
     category: str = Field(min_length=1, max_length=200)
     subject_query: str = Field(
-        min_length=1,
+        default='',
         max_length=500,
         validation_alias='subjectQuery',
         serialization_alias='subjectQuery',
@@ -98,3 +98,19 @@ class KnowledgeTopicListResponse(KnowledgeModel):
     total: int = Field(ge=0)
     categories: list[str] = Field(default_factory=list)
 
+
+
+class KnowledgeTopicCategory(KnowledgeModel):
+    id: str
+    name: str
+    total: int = Field(ge=0)
+
+
+class OpenAlexTopic(KnowledgeTopic):
+    category_name: str = Field(serialization_alias='categoryName')
+
+
+class OpenAlexTopicListResponse(KnowledgeModel):
+    items: list[OpenAlexTopic]
+    total: int = Field(ge=0)
+    categories: list[KnowledgeTopicCategory]

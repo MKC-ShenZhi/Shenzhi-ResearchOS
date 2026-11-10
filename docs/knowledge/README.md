@@ -50,7 +50,7 @@ External Knowledge Base
 | `apps/backend/app/api/paper_resource.py` | 仅按可信 `paperId` 提供同源 PDF Range 字节流 |
 | `apps/backend/app/services/knowledge/service.py` | Knowledge 业务服务边界 |
 | `apps/backend/app/services/knowledge/cache.py` | 论文详情的进程内 TTL 缓存（10 分钟，最多 1024 条），供详情、批量论文与推荐特征共用 |
-| `apps/backend/app/services/topics/` | Topic Catalog 加载校验（`catalog.py`）与主题/创作者查询（`registry.py`） |
+| `apps/backend/app/services/topics/` | OpenAlex 目录缓存和校验（`openalex.py`），以及历史主题/创作者元数据（`catalog.py`、`registry.py`） |
 | `apps/backend/app/services/library/` | 收藏、阅读历史、私有论文、点赞、主题关注、会议关注等账号级数据 |
 | `apps/backend/app/services/paper_resource/service.py` | PDF Provider 选择与资源用例编排 |
 | `apps/backend/app/integrations/paper_resource/` | OpenReview URL 适配及外部 HTTP 校验与读取 |
@@ -107,8 +107,9 @@ OPENREVIEW_PASSWORD=
 | 论文图谱 | `GET /api/v1/knowledge/graph?paperId=...&depth=1\|2` | `GET /api/kg/graph?paperId=...&depth=1\|2` |
 | 学者搜索 | `GET /api/v1/knowledge/scholars/search?q=...&limit=20&offset=0` | `GET /api/retrieval/scholars/search?q=...&limit=20&offset=0` |
 | 学者详情 | `GET /api/v1/knowledge/scholars/{scholarId}` | `GET /api/retrieval/scholars/{scholar_id}` |
-| Topic 目录 / 详情 / 创作者 | `GET /api/v1/knowledge/topics`、`GET /api/v1/knowledge/topics/{topicId}`、`GET /api/v1/knowledge/creators/{creatorId}` | 无（读取后端 `topic_catalog.json`） |
-| 主题关联论文 | `GET /api/v1/knowledge/subjects/search?subject=...&offset=0&limit=10` | `GET /api/retrieval/search/by-subject?subject=...&offset=0&limit=10` |
+| Topic 目录 / 详情 / 关联论文 | `GET /api/v1/knowledge/topics`、`GET /api/v1/knowledge/topics/{topicId}`、`GET /api/v1/knowledge/topics/{topicId}/papers` | 默认 `/api/v1/topics/tree`、`/api/v1/topics/{topicId}`、`/api/v1/topics/{topicId}/papers` |
+| 历史创作者资料 | `GET /api/v1/knowledge/creators/{creatorId}` | 后端历史目录 `topic_catalog.json` |
+| 论文主题词检索 | `GET /api/v1/knowledge/subjects/search?subject=...&offset=0&limit=10` | `GET /api/retrieval/search/by-subject?subject=...&offset=0&limit=10` |
 | Funding 候选检索 | `GET /api/v1/knowledge/fundings/search?q=...&limit=20&offset=0` | `GET /api/retrieval/fundings/search?q=...&limit=20&offset=0` |
 | Funding 关联论文 | `GET /api/v1/knowledge/funding/search?funding=...&topK=10` | `GET /api/retrieval/search/by-funding?funding=...&top_k=10` |
 | 批量论文摘要 | `POST /api/v1/papers/batch`（`paper_ids` 1–100） | 逐篇 `GET /api/kg/paper`（经详情缓存），未找到的论文跳过 |
@@ -215,7 +216,7 @@ Topic Catalog、分页上限、错误重试、数据核对与本地验收见
 | `/knowledge/scholars/[scholarId]` | 真实 Scholar Detail；空 optional section 隐藏 |
 | `/knowledge/scholars/graph` | 学者合作关系原型；上游尚无学者关系图谱 Contract，不进入产品导航 |
 | `/knowledge/topics` | Topic 广场：完整目录、精选与分类、关键词搜索 |
-| `/knowledge/topics/[topicId]` | Topic 详情：目录信息、关注按钮及按 `subjectQuery` 实时查询的关联论文；支持安全 `returnTo` |
+| `/knowledge/topics/[topicId]` | Topic 详情：目录信息、关注按钮及按 OpenAlex Topic ID 分页查询的关联论文；支持安全 `returnTo` |
 | `/knowledge/funding` | 项目基金库：浏览 Funding 候选；选择 Funding 后按名称查询关联论文；使用 `q` 与 opaque `funding` URL 参数恢复页面状态 |
 | `/knowledge/graph` | 侧栏「关系图谱」入口；页面使用静态示例数据（`features/knowledge/data-knowledge-graph.ts`）；真实论文图谱见 `/papers/[id]/graph` |
 | `/papers/[id]` | 统一论文详情与 PDF 阅读器；通过 Knowledge Client 加载真实详情 |

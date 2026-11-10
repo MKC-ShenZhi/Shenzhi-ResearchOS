@@ -72,17 +72,17 @@ export interface KnowledgeTopic {
   imagePath: string | null;
   nameZh: string;
   nameEn: string;
-  author: string | KnowledgeTopicAuthor;
+  author: string | KnowledgeTopicAuthor | null;
   descriptionZh: string;
   /** 详情页使用的完整介绍；缺省时回退到 descriptionZh。 */
   descriptionDetail?: string | null;
   descriptionEn: string;
   followersCount: number;
-  /** 服务端登录态可返回；匿名或旧接口缺省时由本地偏好补足。 */
+  /** 实时关注状态和人数由平台互动接口单独返回。 */
   isFollowing?: boolean;
-  /** 可选的分类图标 key，未提供时按 category 使用默认图标。 */
-  iconKey?: string | null;
+  /** OpenAlex Subfield ID。 */
   category: string;
+  categoryName: string;
   subjectQuery: string;
   paperCount: number;
   enabled: boolean;
@@ -104,10 +104,16 @@ export interface KnowledgeCreator {
   isVerified: boolean;
 }
 
+export interface KnowledgeTopicCategory {
+  id: string;
+  name: string;
+  total: number;
+}
+
 export interface KnowledgeTopicListResponse {
   items: KnowledgeTopic[];
   total: number;
-  categories: string[];
+  categories: KnowledgeTopicCategory[];
 }
 
 export interface KnowledgeScholarSearchParams {

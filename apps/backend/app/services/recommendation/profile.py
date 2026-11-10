@@ -9,6 +9,8 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.core.database import session_scope
 from app.core.time import utc_now
+from app.integrations.knowledge.adapter import is_openalex_topic_id
+from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.models.collections import CollectionFolderRow, CollectionItemRow
 from app.models.interactions import PaperLikeRow, TopicFollowRow
 from app.models.reading_history import ReadingHistoryRow
@@ -21,6 +23,7 @@ from app.services.recommendation.config import (
     PROFILE_IMMEDIATE_EVENT_TYPES,
 )
 from app.services.recommendation.features import PaperFeatureService
+from app.services.topics.openalex import openalex_topics
 from app.services.topics.registry import TopicRegistry, TopicRegistryError
 
 
@@ -124,8 +127,12 @@ class UserProfileService:
         explicit_subjects: list[str] = []
         for topic_id in follows:
             try:
-                subject = self.topics.get_topic(topic_id).subject_query
-            except TopicRegistryError:
+                if is_openalex_topic_id(topic_id):
+                    topic = await openalex_topics.require_topic(topic_id)
+                    subject = topic.subject_query or topic.name_en
+                else:
+                    subject = self.topics.get_topic(topic_id).subject_query
+            except (TopicRegistryError, KnowledgeIntegrationError):
                 continue
             explicit_subjects.append(subject)
             long_topics[_token(subject)] += EVENT_WEIGHTS['topic_follow']

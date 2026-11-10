@@ -24,11 +24,12 @@ from app.schemas.knowledge import (
     RelatedPaperSearchRequest,
     ScholarSearchRequest,
 )
-from app.schemas.topic import KnowledgeTopicListResponse
+from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 from app.services.library.collections import CollectionService
 from app.services.library.reading_history import ReadingHistoryService
 from app.services.topics import TopicRegistry, TopicRegistryError
+from app.services.topics.openalex import openalex_topics
 from app.schemas.knowledge import PaperBatchRequest
 
 
@@ -221,13 +222,38 @@ async def topics(
     _credential: None = Depends(require_bff),
 ):
     try:
-        response: KnowledgeTopicListResponse = topic_registry.list_topics()
+        response = await openalex_topics.list_topics()
+    except KnowledgeIntegrationError as error:
+        return _error_payload(KnowledgeServiceError.from_integration_error(error), request)
     except Exception as error:
         return unknown_error(request, error)
     return ok(response.model_dump(mode='json', by_alias=True))
 
 
-@router.get('/topics/{topic_id:path}')
+def _topic_error(error: KnowledgeIntegrationError, request: Request) -> JSONResponse:
+    if error.status_code == 404:
+        return topic_not_found(request)
+    return _error_payload(KnowledgeServiceError.from_integration_error(error), request)
+
+
+@router.get('/topics/{topic_id}/papers')
+async def topic_papers(
+    topic_id: str,
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        response = await openalex_topics.papers(topic_id, limit=limit, offset=offset)
+    except KnowledgeIntegrationError as error:
+        return _topic_error(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/topics/{topic_id}')
 async def topic(
     topic_id: str,
     request: Request,
@@ -236,9 +262,9 @@ async def topic(
     if not topic_id.strip():
         return invalid_argument(request, 'topicId 不能为空')
     try:
-        response = topic_registry.get_topic(topic_id)
-    except TopicRegistryError:
-        return topic_not_found(request)
+        response = await openalex_topics.get_topic(topic_id)
+    except KnowledgeIntegrationError as error:
+        return _topic_error(error, request)
     except Exception as error:
         return unknown_error(request, error)
     return ok(response.model_dump(mode='json', by_alias=True))
