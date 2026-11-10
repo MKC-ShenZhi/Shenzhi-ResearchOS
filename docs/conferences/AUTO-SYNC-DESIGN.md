@@ -78,7 +78,7 @@ SHA 未变不下载；API缓存五分钟检查小版本列，版本未变不读�
 
 ## 触发与实际环境
 
-常驻后端复用 `HomeFeedScheduler`，会议 DDL 和首页数据任务由 `BACKGROUND_JOBS_ENABLED` 统一启停，各任务独立判断是否到期。
+常驻后端复用 `HomeFeedScheduler`，会议 DDL、首页数据任务和论文库会议目录由 `BACKGROUND_JOBS_ENABLED` 统一启停，各任务独立判断是否到期。
 
 最新dev部署文档仍将Vercel列为临时演示联调，正式服务器方式待负责人补充。会议记录中的裸机环境与文档记录不能代替实际验证。没有服务器访问权限时，不宣称已验证生产环境。Vercel Preview可检查构建/API，不能验收进程内任务每日自动执行。
 

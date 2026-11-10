@@ -1,8 +1,8 @@
 """In-process scheduling for the long-running backend's periodic jobs.
 
-Opt-in with ``BACKGROUND_JOBS_ENABLED=true``. Each tick checks conference
-deadlines independently of the home feed. For the home feed jobs below,
-only the holder of the Postgres advisory lock runs what is due:
+Opt-in with ``BACKGROUND_JOBS_ENABLED=true``. Each tick checks the knowledge
+conference directory and conference deadlines independently. For the home
+feed jobs below, only the holder of the Postgres advisory lock runs what is due:
 
 - ``sync`` when the pool year has no papers or was synced SYNC_INTERVAL ago;
 - ``publish`` when today's edition (Shanghai) is missing and it is past PUBLISH_AFTER;
@@ -33,6 +33,7 @@ from app.services.discovery_pool.sync import DiscoveryPoolSync
 from app.services.home_feed.config import pool_year
 from app.services.recommendation.maintenance import purge_expired
 from app.services.conferences.sync import ConferenceSync
+from app.services.knowledge.conference_directory import refresh_conference_directory
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,11 @@ class HomeFeedScheduler:
             return []
         now = now or utc_now()
         ran: list[str] = []
+        try:
+            if await refresh_conference_directory():
+                ran.append('knowledge_conferences')
+        except Exception:
+            logger.exception('Knowledge conference directory refresh failed; the existing snapshot is kept')
         try:
             result = await ConferenceSync().run(now=now)
             if result['status'] in {'updated', 'unchanged'}:

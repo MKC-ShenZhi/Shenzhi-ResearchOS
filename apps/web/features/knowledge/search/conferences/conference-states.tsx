@@ -1,10 +1,25 @@
 "use client";
 
-import { KnowledgeClientError } from "@/clients/knowledge";
+import { KnowledgeClientError, type KnowledgeConferenceListResponse } from "@/clients/knowledge";
 import { KnowledgeSearchError } from "../components/search-states";
 
-export function ConferenceError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  return <KnowledgeSearchError error={error instanceof KnowledgeClientError ? error : new KnowledgeClientError("UNKNOWN", "会议数据加载失败")} onRetry={onRetry} />;
+export function ConferenceError({ error, onRetry, directory = false }: { error: unknown; onRetry: () => void; directory?: boolean }) {
+  return <KnowledgeSearchError
+    error={error instanceof KnowledgeClientError ? error : new KnowledgeClientError("UNKNOWN", "会议数据加载失败")}
+    onRetry={onRetry}
+    title={directory ? "会议目录暂不可用" : undefined}
+    retryLabel={directory ? "重试" : undefined}
+  />;
+}
+
+export function ConferenceDirectoryNotice({ data }: { data?: KnowledgeConferenceListResponse }) {
+  if (!data?.snapshotStale || !data.snapshotUpdatedAt) return null;
+  const updatedAt = new Date(data.snapshotUpdatedAt);
+  return <p role="status" className="mb-3 text-sm text-muted">
+    数据更新暂有延迟。最后更新于 <time dateTime={data.snapshotUpdatedAt}>
+      {updatedAt.toLocaleString("zh-CN", { dateStyle: "medium", timeStyle: "short" })}
+    </time>。
+  </p>;
 }
 
 export function ConferenceEmpty({ children }: { children: React.ReactNode }) {

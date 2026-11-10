@@ -160,7 +160,7 @@ async def conferences(request: Request, _credential: None = Depends(require_bff)
         return _error_payload(error, request)
     except Exception as error:
         return unknown_error(request, error)
-    return ok(response.model_dump(mode='json', by_alias=True))
+    return ok(response.model_dump(mode='json', by_alias=True, exclude_none=True))
 
 
 @router.get('/papers')

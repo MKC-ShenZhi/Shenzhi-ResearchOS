@@ -39,11 +39,11 @@ class SchedulerStartupTests(unittest.IsolatedAsyncioTestCase):
                 await scheduler_module.stop_home_feed_scheduler(task)
 
         with patch.dict(os.environ, {'BACKGROUND_JOBS_ENABLED': 'false'}), patch.object(
-            scheduler_module.ConferenceSync, 'run', AsyncMock(),
-        ) as sync_deadlines:
+            scheduler_module, 'refresh_conference_directory', AsyncMock(),
+        ) as refresh:
             self.assertIsNone(scheduler_module.start_home_feed_scheduler())
             self.assertEqual(await HomeFeedScheduler().run_due(), [])
-            sync_deadlines.assert_not_awaited()
+            refresh.assert_not_awaited()
 
 
 @unittest.skipUnless(os.getenv('CHAT_DATABASE_URL'), 'CHAT_DATABASE_URL not set')
@@ -56,6 +56,9 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         from app.core.database import dispose_engine
         await dispose_engine()
         self.enterContext(patch.dict(os.environ, {'HOME_FEED_POOL_YEAR': self.YEAR, 'BACKGROUND_JOBS_ENABLED': 'true'}))
+        self.refresh_directory = self.enterContext(patch.object(
+            scheduler_module, 'refresh_conference_directory', AsyncMock(return_value=False),
+        ))
         self.sync_deadlines = self.enterContext(patch.object(
             scheduler_module.ConferenceSync, 'run', AsyncMock(return_value={'status': 'not-due'}),
         ))
@@ -72,17 +75,26 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_due_jobs_run_in_order_for_the_pool_year_and_shanghai_day(self):
+        self.refresh_directory.return_value = True
         self.sync_deadlines.return_value = {'status': 'updated'}
         scheduler = self.scheduler()
-        self.assertEqual(await scheduler.run_due(self.NOW), ['conferences', 'sync', 'publish', 'purge'])
+        self.assertEqual(await scheduler.run_due(self.NOW), ['knowledge_conferences', 'conferences', 'sync', 'publish', 'purge'])
+        self.refresh_directory.assert_awaited_once_with()
         self.sync_deadlines.assert_awaited_once_with(now=self.NOW)
         scheduler.sync.sync.assert_awaited_once_with(1903)
         self.assertEqual(scheduler.builder.publish.await_args.args[0].isoformat(), '2001-03-01')
 
-    async def test_failed_deadline_sync_does_not_block_home_jobs(self):
+    async def test_failed_directory_or_deadline_sync_does_not_block_other_jobs(self):
+        self.refresh_directory.side_effect = RuntimeError('knowledge base down')
+        self.sync_deadlines.return_value = {'status': 'updated'}
+        with self.assertLogs(scheduler_module.logger, 'ERROR'):
+            self.assertEqual(await self.scheduler().run_due(self.NOW), ['conferences', 'sync', 'publish', 'purge'])
+
+        self.refresh_directory.side_effect = None
+        self.refresh_directory.return_value = True
         self.sync_deadlines.side_effect = RuntimeError('GitHub down')
         with self.assertLogs(scheduler_module.logger, 'ERROR'):
-            self.assertEqual(await self.scheduler().run_due(self.NOW), ['sync', 'publish', 'purge'])
+            self.assertEqual(await self.scheduler().run_due(self.NOW), ['knowledge_conferences', 'sync', 'publish', 'purge'])
 
     async def test_publish_waits_until_just_after_shanghai_midnight(self):
         scheduler = self.scheduler()

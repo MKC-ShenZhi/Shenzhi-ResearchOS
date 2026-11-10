@@ -14,7 +14,7 @@ import { KnowledgeSearchSkeleton } from "../components/search-states";
 import { KnowledgeSearchPagination } from "../components/search-pagination";
 import { rememberSearchScroll, saveCurrentSearchScroll, useSearchScrollRestoration } from "../use-search-scroll-restoration";
 import { LibraryModeNav } from "./library-mode-nav";
-import { ConferenceEmpty, ConferenceError, ConferenceSkeleton } from "./conference-states";
+import { ConferenceDirectoryNotice, ConferenceEmpty, ConferenceError, ConferenceSkeleton } from "./conference-states";
 import { ConferenceCarousel } from "./conference-carousel";
 import { conferenceQueryOptions, paperBrowseQueryOptions } from "./conference-queries";
 import { PAPER_BROWSE_PAGE_SIZE, readPaperBrowseState, resolveConference, resolveConferenceYear } from "./conference-state";
@@ -46,8 +46,9 @@ export function ConferenceBrowser() {
         <h2 id="conference-navigation-title" className="text-base font-semibold text-ink">会议导览</h2>
         <SearchNavigationLink href="/knowledge/search/conferences" className="flex min-h-10 items-center gap-1 text-xs font-medium text-primary">更多会议 <ArrowUpRight className="size-3.5" /></SearchNavigationLink>
       </div>
+      <ConferenceDirectoryNotice data={conferences.data} />
       {conferences.isPending ? <ConferenceSkeleton compact /> : conferences.isError && !conferences.data ? (
-        <ConferenceError error={conferences.error} onRetry={() => void conferences.refetch()} />
+        <ConferenceError directory error={conferences.error} onRetry={() => void conferences.refetch()} />
       ) : items.length === 0 ? <ConferenceEmpty>暂无收录会议，请稍后再来。</ConferenceEmpty> : <>
         {conferences.isError && <p role="status" className="mb-3 text-sm text-muted">会议更新失败，正在展示缓存数据。<button className="ml-2 text-primary" onClick={() => void conferences.refetch()}>重试</button></p>}
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">

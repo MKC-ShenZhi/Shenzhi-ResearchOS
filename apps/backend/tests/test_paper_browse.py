@@ -2,7 +2,8 @@
 
 import copy
 import unittest
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 import httpx
 
@@ -10,6 +11,7 @@ from app.core.identity import require_bff
 from app.integrations.knowledge.adapter import KnowledgeAdapter
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.main import app
+from app.schemas.knowledge import ConferenceListResponse
 from app.services.knowledge.service import KnowledgeService
 
 
@@ -47,6 +49,9 @@ class PaperBrowseApiTests(unittest.IsolatedAsyncioTestCase):
         )))
         self.service_patch = patch('app.api.knowledge.service', self.service)
         self.service_patch.start()
+        self.load_directory = self.enterContext(patch(
+            'app.services.knowledge.service.load_conference_directory', AsyncMock(return_value=None),
+        ))
 
         async def allow_bff():
             return None
@@ -67,6 +72,30 @@ class PaperBrowseApiTests(unittest.IsolatedAsyncioTestCase):
             {'name': 'AAAI alias', 'paperCount': 2, 'years': [2021], 'yearCount': 1},
         ]})
         self.assertEqual(self.requests[0].url.path, '/api/papers/venues')
+
+    async def test_saved_directory_is_served_with_background_jobs_paused(self):
+        saved = ConferenceListResponse(
+            items=[{'name': 'AAAI', 'paper_count': 31, 'years': [2026], 'year_count': 1}],
+            snapshot_updated_at=datetime(2026, 11, 9, tzinfo=timezone.utc),
+            snapshot_stale=True,
+        )
+        self.load_directory.return_value = saved
+        with patch.dict('os.environ', {'BACKGROUND_JOBS_ENABLED': 'false'}):
+            response = await self.client.get('/api/v1/knowledge/conferences')
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()['data'], {
+                'items': [{'name': 'AAAI', 'paperCount': 31, 'years': [2026], 'yearCount': 1}],
+                'snapshotUpdatedAt': '2026-11-09T00:00:00Z',
+                'snapshotStale': True,
+            })
+        self.assertEqual(self.requests, [])
+
+    async def test_first_directory_request_uses_live_data_while_snapshot_is_missing(self):
+        with patch.dict('os.environ', {'BACKGROUND_JOBS_ENABLED': 'true'}):
+            response = await self.client.get('/api/v1/knowledge/conferences')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertNotIn('snapshotUpdatedAt', response.json()['data'])
+        self.assertEqual([request.url.path for request in self.requests], ['/api/papers/venues'])
 
     async def test_browse_without_keyword_uses_paper_id_and_matches_detail(self):
         response = await self.client.get('/api/v1/knowledge/papers', params={

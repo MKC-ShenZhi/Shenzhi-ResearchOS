@@ -14,7 +14,11 @@ FastAPI Knowledge Service → Knowledge Integration 链路。`/knowledge/papers`
 `data`：
 
 ```typescript
-{ items: Array<{ name: string; paperCount: number; years: number[]; yearCount: number }> }
+{
+  items: Array<{ name: string; paperCount: number; years: number[]; yearCount: number }>;
+  snapshotUpdatedAt?: string;
+  snapshotStale?: boolean;
+}
 ```
 
 Integration 调用 `GET /api/papers/venues`（顶层数组），将 `conference/count`
@@ -79,25 +83,41 @@ look-ahead 或结果窗口限制。复用既有论文 Adapter，以 `paper_id` �
 
 ## 缓存与异常
 
-复用 TanStack Query，无新增中间件或后端缓存体系：
+前端复用 TanStack Query：
 
 | 数据 | 新鲜期 | 内存保留期 |
 | --- | --- | --- |
 | 会议元数据（首页、目录共用 key） | 10 分钟 | 30 分钟 |
 | 会议论文（完整 conference/year/limit/offset key） | 2 分钟 | 5 分钟 |
 
-元数据不因窗口聚焦反复请求；筛选、排序、分页不请求元数据。刷新浏览器后重取，
+元数据不因窗口聚焦反复请求；筛选、排序、分页不请求元数据。正在显示快照的页面每 10 分钟重新读取快照，
+以更新延迟提示。刷新浏览器后重取，
 不将完整科研数据持久化到本地存储。论文请求消费 Query 的 AbortSignal；切换条件、
 模式或卸载取消不再订阅的请求，旧响应不能覆盖新结果。主动取消保留 AbortError。
 重试沿用 Knowledge 最多自动重试一次策略；首次失败显示重试入口，后台刷新失败
 保留同条件缓存并显示提示，绝不回退为 Mock 或成功空数组。
 
+### 常驻后端的会议目录快照
+
+会议导览与「更多会议」优先读取 PostgreSQL 中的同一份快照。启用 `BACKGROUND_JOBS_ENABLED=true` 后，
+后台调度器按 10 分钟节拍尝试刷新目录。多个实例和手动命令共用
+一个刷新窗口，刷新成功后原子替换目录并记录成功时间，失败保留上次成功结果。
+快照超过 24 小时后继续提供，页面提示更新延迟和最后更新时间。尚无快照或未配置业务数据库时，
+目录沿用实时查询，若查询失败则提供重试入口。暂停后台调度时仍可读取已保存的快照。
+
+正式部署先在 `apps/backend` 中迁移数据库，再设置 `BACKGROUND_JOBS_ENABLED=true` 并启动常驻后端。
+调度器启动后会检查并尝试同步首份目录。若需上线前准备好目录，可在迁移后运行下列同步命令，确认输出目录数量和更新时间。
+
+```bash
+uv run --locked --env-file .env alembic upgrade head
+uv run --locked --env-file .env python -m app.services.knowledge.conference_directory
+```
+
 ## 数据风险与待验收
 
 - 原始会议名可能包含别名、重复、异常名称；首版保留原名原记录。标题/年份
   依赖上游数据质量，例如当前 CVPR 数据包含 1964 年记录，产品不自行更正。
-- 元数据与论文查询是独立上游请求，更新间隙可能出现目录有年份但列表暂无数据；
-  前端显示真实空态。元数据最长有 10 分钟新鲜期。
+- 元数据与论文查询分别更新，可能出现目录有年份但列表暂无数据，前端显示真实空态。
 - 论文必须提供能用于详情接口的 `paper_id`。需要科研组持续保证所有记录一致，
   不能使用数据库自增 ID 补救。
 - 部分论文的既有缩略图资源缺失，沿用原卡片回退图；不影响真实列表和详情。

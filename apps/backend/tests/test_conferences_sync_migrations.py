@@ -7,7 +7,8 @@ from pathlib import Path
 import subprocess
 import sys
 import unittest
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, patch
 import asyncpg
 from sqlalchemy.engine import make_url
 
@@ -52,7 +53,7 @@ class ConferenceSyncMigrationTests(unittest.TestCase):
         # An environment may already have run the published conference branch.
         migrate("upgrade", "022_conference_snapshots")
         migrate("upgrade", "head")
-        self.assertEqual([tuple(row) for row in execute("SELECT version_num FROM alembic_version")], [("023_merge_conference_chat",)])
+        self.assertEqual([tuple(row) for row in execute("SELECT version_num FROM alembic_version")], [("024_knowledge_venue_snapshot",)])
         rows = execute(
             "SELECT user_id,conference_id FROM conference_follows ORDER BY user_id"
         )
@@ -103,3 +104,66 @@ class ConferenceSyncMigrationTests(unittest.TestCase):
         )
         migrate("upgrade", "head")
         self.assertEqual(execute("SELECT * FROM conference_snapshots"), [])
+        self.assertEqual(execute("SELECT * FROM knowledge_conference_snapshot"), [])
+        asyncio.run(self.check_knowledge_directory())
+
+    async def check_knowledge_directory(self):
+        from app.core.database import dispose_engine
+        from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
+        from app.schemas.knowledge import ConferenceListResponse
+        from app.services.knowledge import conference_directory as directory
+        from app.services.knowledge.service import KnowledgeService
+
+        now = datetime(2026, 11, 10, tzinfo=timezone.utc)
+        saved = ConferenceListResponse(items=[{
+            'name': 'AAAI', 'paper_count': 31, 'years': [2026], 'year_count': 1,
+        }])
+        fetch = AsyncMock(return_value=saved)
+        with patch.dict(os.environ, {'CHAT_DATABASE_URL': URL, 'BACKGROUND_JOBS_ENABLED': 'false'}), patch.object(
+            directory.KnowledgeAdapter, 'conferences', fetch,
+        ), patch.object(directory, 'utc_now', side_effect=lambda: now):
+            try:
+                self.assertIsNone(await directory.load_conference_directory())
+                results = await asyncio.gather(*(directory.refresh_conference_directory() for _ in range(2)))
+                self.assertCountEqual(results, [True, False])
+                fetch.assert_awaited_once()
+                self.assertFalse((await directory.load_conference_directory()).snapshot_stale)
+
+                now += timedelta(hours=24)
+                fetching = asyncio.Event()
+                upstream_failed = asyncio.Event()
+
+                async def slow_invalid_response():
+                    fetching.set()
+                    await upstream_failed.wait()
+                    raise KnowledgeIntegrationError.contract_violation()
+
+                fetch.side_effect = slow_invalid_response
+                in_flight = asyncio.create_task(directory.refresh_conference_directory())
+                try:
+                    await asyncio.wait_for(fetching.wait(), timeout=5)
+                    current = await asyncio.wait_for(directory.load_conference_directory(), timeout=5)
+                    self.assertEqual(current.items, saved.items)
+                finally:
+                    upstream_failed.set()
+                    with self.assertRaises(KnowledgeIntegrationError):
+                        await in_flight
+                self.assertFalse(await directory.refresh_conference_directory())
+                self.assertEqual(fetch.await_count, 2)
+                await dispose_engine()
+                stale = await directory.load_conference_directory()
+                self.assertEqual(stale.items, saved.items)
+                self.assertTrue(stale.snapshot_stale)
+                self.assertEqual(stale.snapshot_updated_at, now - timedelta(hours=24))
+                self.assertEqual(await KnowledgeService().conferences(), stale)
+                self.assertEqual(fetch.await_count, 2)
+
+                now += timedelta(minutes=10)
+                fetch.side_effect = None
+                self.assertTrue(await directory.refresh_conference_directory())
+                refreshed = await directory.load_conference_directory()
+                self.assertEqual(refreshed.items, saved.items)
+                self.assertFalse(refreshed.snapshot_stale)
+                self.assertEqual(refreshed.snapshot_updated_at, now)
+            finally:
+                await dispose_engine()

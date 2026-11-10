@@ -50,6 +50,8 @@ export interface KnowledgeConference {
 
 export interface KnowledgeConferenceListResponse {
   items: KnowledgeConference[];
+  snapshotUpdatedAt?: string;
+  snapshotStale?: boolean;
 }
 
 export interface KnowledgePaperBrowseParams {
