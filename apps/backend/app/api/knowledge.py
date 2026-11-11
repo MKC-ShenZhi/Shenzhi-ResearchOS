@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -116,6 +116,34 @@ def creator_not_found(request: Request) -> JSONResponse:
             request_id=request_id(request),
         ).model_dump(mode='json', by_alias=True),
     )
+
+
+@router.get('/nsfc-projects')
+async def nsfc_projects(
+    request: Request,
+    q: str = Query(default='', max_length=200),
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        response = await service.search_nsfc_projects(q.strip(), limit, offset)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/nsfc-projects/{award_number}')
+async def nsfc_project(
+    request: Request,
+    award_number: str = Path(min_length=1, max_length=24, pattern=r'^[A-Za-z0-9]+$'),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        response = await service.get_nsfc_project(award_number)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    return ok(response.model_dump(mode='json', by_alias=True))
 
 
 @router.post('/search')
