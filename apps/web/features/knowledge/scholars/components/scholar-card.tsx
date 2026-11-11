@@ -1,31 +1,70 @@
 import Link from "next/link";
-import { ArrowRight, FileText } from "lucide-react";
-import type { KnowledgeScholarSummary } from "@/clients/knowledge";
+import { ArrowUpRight } from "lucide-react";
 import { scholarHref } from "@/lib/navigation/scholar";
+import type { ScholarProfile } from "../types";
+import { scholarName } from "../presentation";
+import { Affiliations, ScholarAvatar, ScholarMetrics, ScholarTopics } from "./profile-parts";
 
-/** 仅展示 Scholar Search 真实返回的姓名与论文数量。 */
 export function ScholarCard({
   scholar,
   returnTo,
+  preview = false,
 }: {
-  scholar: KnowledgeScholarSummary;
+  scholar: ScholarProfile;
   returnTo: string;
+  preview?: boolean;
 }) {
   return (
     <Link
-      href={scholarHref(scholar.id, returnTo)}
-      className="group flex items-center gap-4 rounded-2xl bg-card p-5 shadow-card transition-shadow hover:shadow-pop"
+      href={scholarHref(scholar.scholar_id, returnTo)}
+      className="group flex min-w-0 flex-col rounded-xl border border-line bg-card p-5 transition-colors hover:border-primary/40 hover:bg-primary-soft/20 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
     >
-      <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
-        <FileText className="size-5" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <h2 className="truncate text-[15px] font-bold text-ink group-hover:text-primary">
-          {scholar.name}
-        </h2>
-        <p className="mt-1 text-xs text-muted">收录论文 {scholar.paperCount} 篇</p>
+      <div className="flex items-start gap-3.5">
+        <ScholarAvatar scholar={scholar} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="break-words text-xl font-semibold leading-7 tracking-tight text-ink transition-colors group-hover:text-primary">
+              {scholarName(scholar)}
+            </h2>
+            <ArrowUpRight
+              aria-hidden="true"
+              className="mt-1 size-4 shrink-0 text-faint transition-colors group-hover:text-primary"
+            />
+          </div>
+          {scholar.name_zh?.trim() && scholar.name_en?.trim() ? (
+            <p className="mt-0.5 break-words text-sm text-muted">
+              {scholar.name_en}
+            </p>
+          ) : null}
+        </div>
       </div>
-      <ArrowRight className="size-4 shrink-0 text-faint group-hover:text-primary" />
+      {preview ? (
+        <>
+          {scholar.affiliations?.length ? (
+            <div className="mt-3"><Affiliations scholar={scholar} compact /></div>
+          ) : null}
+          {scholar.topics?.length ? <ScholarTopics topics={scholar.topics.slice(0, 3)} /> : null}
+          <div className="mt-auto pt-4">
+            <div className="border-t border-line pt-3">
+              <ScholarMetrics scholar={scholar} compact preview />
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="mt-3">
+            <Affiliations scholar={scholar} compact />
+          </div>
+          <p className="mt-2.5 line-clamp-2 break-words text-sm leading-[1.65] text-ink-2">
+            {scholar.bio_zh?.trim() ||
+              scholar.bio_en?.trim() ||
+              "个人简介暂无数据。"}
+          </p>
+          <div className="mt-auto pt-3.5">
+            <ScholarMetrics scholar={scholar} compact />
+          </div>
+        </>
+      )}
     </Link>
   );
 }

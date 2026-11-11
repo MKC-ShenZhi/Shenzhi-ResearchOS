@@ -62,3 +62,5 @@ __pycache__/
 *.tar
 .superpowers/
 docs/superpowers/
+
+/apps/web/public/images/scholar-preview/

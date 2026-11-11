@@ -4,7 +4,7 @@ import { normalizeInternalReturnTo } from "./internal-return-to";
 export const SEARCH_RESTORATION_ROUTES: Readonly<Record<string, readonly string[]>> = {
   "/knowledge/search": ["mode", "conference", "year", "q", "page", "yearFrom", "yearTo", "venue", "author", "keyword", "subject"],
   "/knowledge/search/conferences": ["q", "year", "sort", "page"],
-  "/knowledge/scholars": ["q"],
+  "/knowledge/scholars": ["q", "page"],
   "/knowledge/topics": ["q", "category"],
   "/knowledge/funding": ["q", "funding"],
 };

@@ -2,6 +2,10 @@
 
 import { apiJson, ApiError } from "../backend/http";
 import { KnowledgeClientError, type KnowledgeClient } from "./client";
+import {
+  parseScholarContract, scholarProfileSchema, scholarProfilePageSchema,
+  scholarPapersPageSchema,
+} from "./scholar-profiles";
 import type {
   KnowledgeConferenceListResponse,
   KnowledgePaperBrowseParams,
@@ -72,6 +76,10 @@ function toKnowledgeError(error: unknown): KnowledgeClientError {
     return new KnowledgeClientError("TIMEOUT", "知识底座服务响应超时", {
       retryable: true,
     });
+  }
+
+  if (error instanceof TypeError) {
+    return KnowledgeClientError.unavailable("无法连接知识服务，请重试");
   }
 
   return new KnowledgeClientError(
@@ -195,6 +203,41 @@ export class BffKnowledgeClient implements KnowledgeClient {
         `/knowledge/paper?paperId=${encodeURIComponent(paperId)}`,
       );
     } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchScholarProfiles(query: string, limit = 20, offset = 0, signal?: AbortSignal) {
+    const params = new URLSearchParams({ q: query, limit: String(limit), offset: String(offset) });
+    try {
+      return parseScholarContract(scholarProfilePageSchema, await apiJson<unknown>(
+        `/knowledge/scholar-profiles/search?${params}`, { signal },
+      ));
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async scholarProfile(id: string, signal?: AbortSignal) {
+    try {
+      return parseScholarContract(scholarProfileSchema, await apiJson<unknown>(
+        `/knowledge/scholar-profiles/${encodeURIComponent(id)}`, { signal },
+      ));
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async scholarPapers(id: string, limit = 20, offset = 0, signal?: AbortSignal) {
+    try {
+      return parseScholarContract(scholarPapersPageSchema, await apiJson<unknown>(
+        `/knowledge/scholar-profile-papers?scholarId=${encodeURIComponent(id)}&limit=${limit}&offset=${offset}`,
+        { signal },
+      ));
+    } catch (error) {
+      if (isAbortError(error)) throw error;
       throw toKnowledgeError(error);
     }
   }

@@ -27,6 +27,9 @@ from app.schemas.knowledge import (
     PaperSummary,
     PaperGraph,
     ScholarDetail,
+    ScholarProfile,
+    ScholarProfilePage,
+    ScholarPapersPage,
     ScholarSearchRequest,
     ScholarSearchResponse,
 )
@@ -115,6 +118,28 @@ class KnowledgeService:
         )
         try:
             return await self.adapter.search_scholars(resolved_request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_scholar_profiles(self, request: ScholarSearchRequest) -> ScholarProfilePage:
+        # Product V2 queries preserve the user's name; legacy aliases belong to
+        # the retrieval contract and must not change this endpoint's recall.
+        try:
+            return await self.adapter.search_scholar_profiles(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def get_scholar_profile(self, scholar_id: str) -> ScholarProfile:
+        try:
+            return await self.adapter.scholar_profile(scholar_id)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def get_scholar_papers(
+        self, scholar_id: str, *, limit: int = 20, offset: int = 0
+    ) -> ScholarPapersPage:
+        try:
+            return await self.adapter.scholar_papers(scholar_id, limit=limit, offset=offset)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 

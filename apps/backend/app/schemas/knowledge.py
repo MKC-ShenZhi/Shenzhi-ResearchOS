@@ -580,3 +580,65 @@ class KnowledgeError(KnowledgeModel):
         validation_alias=AliasChoices('requestId', 'request_id'),
         serialization_alias='requestId',
     )
+
+
+# Product Scholar V2 is deliberately separate from retrieval ScholarSummary/Detail.
+class ScholarProfileAffiliation(KnowledgeModel):
+    institution: str | None = None
+    position: str | None = None
+
+
+class ScholarProfileMetrics(KnowledgeModel):
+    # Platform-linked papers, never OpenAlex works_count.
+    paper_count: int | None = Field(default=None, ge=0, strict=True)
+    citation_count: int | None = Field(default=None, ge=0, strict=True)
+
+
+class ScholarAnnualCitation(KnowledgeModel):
+    year: int = Field(ge=1, le=9999, strict=True)
+    count: int | None = Field(default=None, ge=0, strict=True)
+
+
+class ScholarCitationMeta(KnowledgeModel):
+    source: str | None = None
+    coverage: str | None = None
+    as_of: str | None = None
+
+
+class ScholarProfile(KnowledgeModel):
+    scholar_id: str = Field(min_length=1, strict=True)
+    name_zh: str | None = None
+    name_en: str | None = None
+    avatar_path: str | None = None
+    affiliations: list[ScholarProfileAffiliation] | None = None
+    bio_zh: str | None = None
+    bio_en: str | None = None
+    metrics: ScholarProfileMetrics | None = None
+    annual_citations: list[ScholarAnnualCitation] | None = None
+    updated_at: str | None = None
+    citation_meta: ScholarCitationMeta | None = None
+
+
+class ScholarProfilePage(KnowledgeModel):
+    items: list[ScholarProfile]
+    limit: int = Field(ge=1, le=100, strict=True)
+    offset: int = Field(ge=0, strict=True)
+    total: int | None = Field(default=None, ge=0, strict=True)
+    # Without an upstream total a full page means a possible next page.
+    has_more: bool
+
+
+class ScholarPublication(PaperDetail):
+    platform_detail: bool = False
+
+
+class ScholarPapersPage(KnowledgeModel):
+    items: list[ScholarPublication]
+    limit: int = Field(ge=1, le=100, strict=True)
+    offset: int = Field(ge=0, strict=True)
+    total: int = Field(ge=0, strict=True)
+
+
+class ScholarPapersRequest(KnowledgeModel):
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)

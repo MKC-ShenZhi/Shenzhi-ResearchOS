@@ -20,7 +20,7 @@ import type { PaperCardModel } from "@/types";
 export function PaperCardLayout({
   paper,
   index,
-  detailHref,
+  detailHref = "",
   onNavigate,
   behaviorSource,
   actions,
@@ -29,7 +29,7 @@ export function PaperCardLayout({
 }: {
   paper: PaperCardModel;
   index: number;
-  detailHref: string;
+  detailHref?: string;
   onNavigate?: () => void;
   behaviorSource: ComponentProps<typeof ExpandableAbstract>["source"];
   actions: ReactNode;
@@ -38,8 +38,8 @@ export function PaperCardLayout({
   deferOffscreen?: boolean;
 }) {
   const { session } = useAuth();
-  const userId = session?.user.id ?? "";
-  const status = usePaperReadStatus(paper.id);
+  const userId = detailHref ? session?.user.id ?? "" : "";
+  const status = usePaperReadStatus(paper.id, Boolean(detailHref));
   const cardNavigation = usePaperCardNavigation(detailHref, paper.title, onNavigate);
 
   return (
@@ -48,8 +48,8 @@ export function PaperCardLayout({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: (index % 12) * 0.03 }}
-      className={`@container relative rounded-2xl bg-card p-6 shadow-card [overflow-wrap:anywhere] has-[[data-collection-picker-open]]:z-40 ${deferOffscreen ? "[contain-intrinsic-size:auto_260px] [content-visibility:auto] has-[[data-collection-picker-open]]:[content-visibility:visible]" : ""} ${PAPER_CARD_INTERACTION_CLASS}`}
-      {...cardNavigation}
+      className={`@container relative rounded-2xl bg-card p-6 shadow-card [overflow-wrap:anywhere] has-[[data-collection-picker-open]]:z-40 ${deferOffscreen ? "[contain-intrinsic-size:auto_260px] [content-visibility:auto] has-[[data-collection-picker-open]]:[content-visibility:visible]" : ""} ${detailHref ? PAPER_CARD_INTERACTION_CLASS : ""}`}
+      {...(detailHref ? cardNavigation : {})}
     >
       <div className="grid grid-cols-1 items-start gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(200px,30cqw,280px)]">
         <div className="min-w-0">
@@ -65,14 +65,13 @@ export function PaperCardLayout({
           </div>
 
           {/* 标题 */}
-          <Link href={detailHref} onClick={onNavigate} className="group mt-2 block">
-            <h3
-              title={paper.title}
-              className="line-clamp-2 text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary"
-            >
-              {paper.title}
-            </h3>
-          </Link>
+          <h3 title={paper.title} className="mt-2 line-clamp-2 text-[17px] font-bold leading-snug text-ink">
+            {detailHref ? (
+              <Link href={detailHref} onClick={onNavigate} className="transition-colors hover:text-primary">
+                {paper.title}
+              </Link>
+            ) : paper.title}
+          </h3>
           {/* 摘要 */}
           <ExpandableAbstract
             abstract={paper.abstract}
