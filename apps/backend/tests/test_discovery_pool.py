@@ -18,6 +18,7 @@ from app.services.knowledge.service import KnowledgeServiceError
 # Far from any real pool year, so the persistence tests never touch synced data.
 YEAR = 1901
 ABSTRACT = 'A displayable abstract. ' * 12
+TOPIC = {'id': 'openalex:topic:T10028', 'nameZh': None, 'nameEn': 'Language models'}
 
 
 def paper(paper_id, **changes):
@@ -69,11 +70,13 @@ class PoolRuleTests(unittest.TestCase):
         self.assertEqual(pool_row(paper('p', authors=['MIT University']), 'V', YEAR), (None, 'authors'))
         self.assertEqual(pool_row(paper('p', title='1 Introduction'), 'V', YEAR), (None, 'title'))
         row, reason = pool_row(paper('p', title='  A   spaced   title  ', primary_subject=' model pruning ',
-                                     subjects=['RAG', 'CVPR.2024 - Accept', 'RAG']), 'Venue', YEAR)
+                                     subjects=['RAG', 'CVPR.2024 - Accept', 'RAG'],
+                                     topics=[TOPIC]), 'Venue', YEAR)
         self.assertIsNone(reason)
         self.assertEqual((row['title'], row['venue'], row['year']), ('A spaced title', 'Venue', YEAR))
         # Venue labels and duplicates are not topics; the main subject is kept for edition balance.
         self.assertEqual((row['subjects'], row['primary_subject']), (['RAG'], 'model pruning'))
+        self.assertEqual(row['topics'], [TOPIC])
 
 
 class PoolCollectTests(unittest.IsolatedAsyncioTestCase):
@@ -136,12 +139,13 @@ class PoolPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(await self._ids()), 10)
 
         # Updated metadata is applied, unseen papers removed, other years untouched.
-        renamed = [paper('p:0', title='Renamed paper')] + first[1:6] + [paper('p:new')]
+        renamed = [paper('p:0', title='Renamed paper', topics=[TOPIC])] + first[1:6] + [paper('p:new')]
         result = await DiscoveryPoolSync(FakeKnowledge({'A': renamed}), retry_delay=0).sync(YEAR)
         self.assertEqual((result.previous, result.accepted, result.removed), (10, 7, 4))
         self.assertEqual(await self._ids(), {f'p:{index}' for index in range(6)} | {'p:new'})
         async with session_scope() as session:
-            self.assertEqual((await session.get(DiscoveryPoolPaperRow, 'p:0')).title, 'Renamed paper')
+            row = await session.get(DiscoveryPoolPaperRow, 'p:0')
+            self.assertEqual((row.title, row.paper_fields()['topics']), ('Renamed paper', [TOPIC]))
 
         # Losing more than half at once looks like an outage: the pool is kept.
         with self.assertRaises(PoolSyncError):

@@ -50,7 +50,7 @@ class DiscoveryPoolMigrationTests(unittest.TestCase):
         self.assertEqual(asyncio.run(run(tables)), set(), 'Migration roundtrip requires an EMPTY test database')
         heads = alembic('heads')
         self.assertEqual(heads.count('(head)'), 1)
-        self.assertIn('018_discovery_pool (head)', heads)
+        self.assertIn('024_discovery_pool_topics (head)', heads)
         self.assertIn('017_conference_follows -> 018_discovery_pool', alembic('history'))
 
         alembic('upgrade', '017_conference_follows')
@@ -63,7 +63,7 @@ class DiscoveryPoolMigrationTests(unittest.TestCase):
             ))
         asyncio.run(run(seed))
 
-        alembic('upgrade', 'head')
+        alembic('upgrade', '023_merge_conference_chat')
 
         async def check_upgraded(connection):
             pk = await connection.run_sync(lambda conn: inspect(conn).get_pk_constraint('discovery_pool_papers'))
@@ -81,6 +81,25 @@ class DiscoveryPoolMigrationTests(unittest.TestCase):
 
         asyncio.run(run(check_upgraded))
 
+        alembic('upgrade', 'head')
+
+        async def check_topics(connection):
+            self.assertEqual(await connection.scalar(text(
+                "SELECT topics::text FROM discovery_pool_papers WHERE paper_id = 'paper:m'"
+            )), '[]')
+
+        asyncio.run(run(check_topics))
+        alembic('downgrade', '023_merge_conference_chat')
+
+        async def check_topics_downgraded(connection):
+            columns = await connection.run_sync(lambda conn: inspect(conn).get_columns('discovery_pool_papers'))
+            self.assertNotIn('topics', [column['name'] for column in columns])
+            self.assertEqual(await connection.scalar(text(
+                "SELECT count(*) FROM discovery_pool_papers WHERE paper_id = 'paper:m'"
+            )), 1)
+
+        asyncio.run(run(check_topics_downgraded))
+
         alembic('downgrade', '017_conference_follows')
         self.assertEqual(asyncio.run(run(tables)), baseline)
 
@@ -91,7 +110,7 @@ class DiscoveryPoolMigrationTests(unittest.TestCase):
         self.assertEqual(asyncio.run(run(sentinel)), 1)
 
         alembic('upgrade', 'head')
-        self.assertIn('018_discovery_pool (head)', alembic('current'))
+        self.assertIn('024_discovery_pool_topics (head)', alembic('current'))
 
 
 if __name__ == '__main__':

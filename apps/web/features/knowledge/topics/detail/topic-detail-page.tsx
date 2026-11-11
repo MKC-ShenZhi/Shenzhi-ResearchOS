@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { TopicFollowButton } from "@/features/knowledge/interactions/components/topic-follow-button";
 import { TopicFollowerCount } from "@/features/knowledge/interactions/components/topic-follower-count";
 import { TopicCover } from "../topic-cover";
+import { resolveTopicDescription } from "../topic-metadata";
 import { TopicRelatedPapers } from "./topic-related-papers";
 import { useTopicDetail } from "./use-topic-detail";
 import { topicSquareHref } from "../topic-url-state";
@@ -32,7 +33,7 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
     );
   }
 
-  if (isError && !topic) {
+  if (isError) {
     const notFound =
       error instanceof KnowledgeClientError && error.code === "NOT_FOUND";
 
@@ -44,7 +45,7 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
           </h1>
           <p className="mt-3 text-sm leading-6 text-muted">
             {notFound
-              ? "该主题可能已下线，或者链接中的主题编号不正确。"
+              ? "该主题页面暂不可用。主题可能尚未启用、已下线，或链接中的主题编号不正确。"
               : "暂时无法取得主题信息，请稍后重新尝试。"}
           </p>
           <div className="mt-6 flex justify-center gap-3">
@@ -68,10 +69,7 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
 
   if (!topic) return null;
 
-  const description =
-    topic.descriptionDetail?.trim() ||
-    topic.descriptionZh.trim() ||
-    topic.descriptionEn.trim();
+  const description = resolveTopicDescription(topic);
 
   return (
     <main className="min-h-screen bg-background px-4 py-7 sm:px-6 lg:px-8">
@@ -98,8 +96,9 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary/5 px-2.5 py-1 text-xs text-muted">
                 <Tag className="size-3 shrink-0" />
-                {topic.category}
+                {topic.categoryName}
               </span>
+              <span className="text-xs text-muted">目录统计 {topic.paperCount.toLocaleString()} 篇</span>
               <TopicFollowerCount topicId={topic.id} />
               <TopicFollowButton topicId={topic.id} className="h-7" />
             </div>
@@ -107,15 +106,17 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
           <p className="col-span-2 line-clamp-3 min-w-0 whitespace-pre-line text-sm leading-6 text-muted [overflow-wrap:anywhere] md:col-span-1 md:mt-3 md:text-[15px]" title={description}>
             {description}
           </p>
-          <p className="col-span-2 min-w-0 text-xs leading-5 text-muted [overflow-wrap:anywhere] md:col-span-1 md:mt-3 md:text-[13px]">
-            创建者：{typeof topic.author === "string" ? topic.author : topic.author.name}
-          </p>
+          {topic.author && (
+            <p className="col-span-2 min-w-0 text-xs leading-5 text-muted [overflow-wrap:anywhere] md:col-span-1 md:mt-3 md:text-[13px]">
+              创建者：{typeof topic.author === "string" ? topic.author : topic.author.name}
+            </p>
+          )}
         </article>
 
         <TopicRelatedPapers
           key={topic.id}
           topicId={topic.id}
-          subjectQuery={topic.subjectQuery}
+          topicName={topic.nameZh}
         />
       </div>
     </main>

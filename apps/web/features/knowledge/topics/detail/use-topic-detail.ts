@@ -6,12 +6,10 @@ import {
     type KnowledgeTopic,
     type KnowledgeTopicListResponse,
 } from "@/clients/knowledge";
-import { findTopicMetadata, toTopicMetadata } from "../topic-metadata";
-
-const TOPICS_QUERY_KEY = ["knowledge", "topics"] as const;
+import { TOPICS_QUERY_KEY } from "../topic-metadata";
 
 export function topicDetailQueryKey(topicId: string) {
-    return ["knowledge", "topic", topicId] as const;
+    return ["knowledge", "openalex-topic", topicId] as const;
 }
 
 export function useTopicDetail(topicId: string) {
@@ -19,13 +17,12 @@ export function useTopicDetail(topicId: string) {
     const topicList =
         queryClient.getQueryData<KnowledgeTopicListResponse>(TOPICS_QUERY_KEY);
     const cachedTopic = topicList
-        ? findTopicMetadata(topicList.items, topicId)
+        ? topicList.items.find((topic) => topic.id === topicId)
         : undefined;
 
     return useQuery<KnowledgeTopic>({
         queryKey: topicDetailQueryKey(topicId),
-        queryFn: async ({ signal }) =>
-            toTopicMetadata(await getKnowledgeClient().topic(topicId, signal)),
+        queryFn: ({ signal }) => getKnowledgeClient().topic(topicId, signal),
         placeholderData: cachedTopic,
         enabled: Boolean(topicId),
     });

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import math
 import asyncio
 import os
@@ -12,6 +14,7 @@ from urllib.parse import quote
 from pydantic import ValidationError
 
 from app.integrations.knowledge.client import KnowledgeBaseClient
+from app.schemas.topic import KnowledgeTopicCategory, OpenAlexTopic, OpenAlexTopicListResponse
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.integrations.knowledge.schemas import UpstreamSearchPayload
 from app.schemas.knowledge import (
@@ -267,6 +270,7 @@ def map_search_result(
         primary_subject=_optional_string(item.get('primary_subject')),
         keywords=_string_list(item.get('keywords')),
         subjects=_string_list(item.get('subjects')),
+        topics=item.get('topics'),
         score=_optional_number(item.get('score')),
         rank=_optional_int(item.get('rank')),
         provenance=_provenance(paper_id, retrieved_at),
@@ -396,6 +400,7 @@ def map_paper_detail(
         # remain null rather than being presented as fabricated zeroes.
         keywords=_string_list(item.get('keywords')),
         subjects=_string_list(item.get('subjects')),
+        topics=item.get('topics'),
         citation_count=_optional_int(next((item[key] for key in (
             'citationCount', 'citation_count', 'citeCount', 'cite_count'
         ) if key in item), None)),
@@ -532,6 +537,37 @@ def overview_graph_preview(graph: PaperGraph, *, related_limit: int = 6) -> Over
     )
 
 
+def is_openalex_topic_id(topic_id: str) -> bool:
+    return re.fullmatch(r'openalex:topic:T[0-9]+', topic_id) is not None
+
+
+def _topic_children(node: dict[str, Any], level: str) -> list[dict[str, Any]]:
+    children = node.get('children')
+    if not isinstance(children, list) or any(
+        not isinstance(child, dict) or child.get('level') != level for child in children
+    ):
+        raise KnowledgeIntegrationError.contract_violation()
+    return children
+
+
+def _map_topic(node: dict[str, Any], category: str, category_name: str) -> OpenAlexTopic:
+    name_zh = _optional_string(node.get('nameZh'))
+    name_en = _optional_string(node.get('nameEn'))
+    if not (name_zh or name_en):
+        raise KnowledgeIntegrationError.contract_violation()
+    return _contract_model(lambda: OpenAlexTopic(
+        id=_required_string(node, 'id'),
+        name_zh=name_zh or name_en,
+        name_en=name_en or name_zh,
+        description_zh=_optional_string(node.get('descriptionZh')) or '',
+        description_en=_optional_string(node.get('descriptionEn')) or '',
+        category=category,
+        category_name=category_name,
+        subject_query=_optional_string(node.get('subjectQuery')) or '',
+        paper_count=_required_int(node, 'paperCount'),
+    ))
+
+
 class KnowledgeAdapter:
     """Translate upstream Knowledge calls into the ShenZhi domain contract."""
 
@@ -570,6 +606,12 @@ class KnowledgeAdapter:
         body = await self.client.browse_papers(
             request.conference, request.year, limit=request.limit, offset=request.offset,
         )
+        return self._map_paper_page(body, limit=request.limit, offset=request.offset)
+
+    @staticmethod
+    def _map_paper_page(
+        body: Any, *, limit: int, offset: int,
+    ) -> PaperBrowseResponse:
         if not isinstance(body, dict) or not isinstance(body.get('items'), list):
             raise KnowledgeIntegrationError.contract_violation()
         response = _contract_model(lambda: PaperBrowseResponse(
@@ -578,7 +620,7 @@ class KnowledgeAdapter:
             limit=_required_int(body, 'limit'),
             offset=_required_int(body, 'offset'),
         ))
-        if (response.limit != request.limit or response.offset != request.offset
+        if (response.limit != limit or response.offset != offset
                 or len(response.results) > response.limit):
             raise KnowledgeIntegrationError.contract_violation()
         return response
@@ -899,6 +941,47 @@ class KnowledgeAdapter:
         if detail.id != scholar_id:
             raise KnowledgeIntegrationError.contract_violation()
         return detail
+
+    async def topic_catalog(self) -> OpenAlexTopicListResponse:
+        tree = await self.client.topic_tree()
+        items: list[OpenAlexTopic] = []
+        categories: list[KnowledgeTopicCategory] = []
+        seen_topics: set[str] = set()
+        seen_categories: set[str] = set()
+        for domain in _topic_children({'children': tree}, 'domain'):
+            for field in _topic_children(domain, 'field'):
+                for subfield in _topic_children(field, 'subfield'):
+                    category = _required_string(subfield, 'id')
+                    if category in seen_categories:
+                        raise KnowledgeIntegrationError.contract_violation()
+                    seen_categories.add(category)
+                    name = _first_optional_string(subfield, 'nameZh', 'nameEn') or category
+                    total = 0
+                    for node in _topic_children(subfield, 'topic'):
+                        if node.get('enabled') is not True or node.get('children'):
+                            continue
+                        topic_id = _required_string(node, 'id')
+                        if (not is_openalex_topic_id(topic_id) or topic_id in seen_topics
+                                or node.get('parentId') != category):
+                            raise KnowledgeIntegrationError.contract_violation()
+                        seen_topics.add(topic_id)
+                        items.append(_map_topic(node, category, name))
+                        total += 1
+                    if total:
+                        categories.append(KnowledgeTopicCategory(id=category, name=name, total=total))
+        return OpenAlexTopicListResponse(items=items, categories=categories, total=len(items))
+
+    async def topic(self, catalog_topic: OpenAlexTopic) -> OpenAlexTopic:
+        node = await self.client.topic(catalog_topic.id)
+        if node.get('id') != catalog_topic.id or node.get('level') != 'topic':
+            raise KnowledgeIntegrationError.contract_violation()
+        if node.get('enabled') is not True:
+            raise KnowledgeIntegrationError.not_found()
+        return _map_topic(node, catalog_topic.category, catalog_topic.category_name)
+
+    async def topic_papers(self, topic_id: str, *, limit: int, offset: int) -> PaperBrowseResponse:
+        body = await self.client.topic_papers(topic_id, limit=limit, offset=offset)
+        return self._map_paper_page(body, limit=limit, offset=offset)
 
     async def search_by_subject(
         self, subject: str, *, offset: int = 0, limit: int = 10

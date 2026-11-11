@@ -34,7 +34,7 @@ Backend 中 `BehaviorEventService` 负责事件校验后的幂等写入；`Paper
 
 登录 Feed 中，个人推荐作为 `personal` 数据源（排序与多样性处理后最多 100 篇），与匿名首页相同的 `daily`、`trending` 数据源一起交给 `app/services/home_feed/composer.py` 组装：每屏 12 张按个人 6、每日 4、热门 2 的配额分配，某个数据源用完后，空位按其余数据源的权重比例分配，同一篇论文只出现一次；实时数据源合计不足 36 篇时追加兜底快照。详见 [后端 README · 首页论文数据源](../../apps/backend/README.md#首页论文数据源)。共享数据源不可用时只返回个人推荐，全部为空时前端第一页退回全局发现。第一页直接使用当天匿名列表（去掉已点赞、已收藏），个人推荐在请求第二页时才召回并组装、追加到同一份快照，前端在第一页显示后立即预取第二页；快照只存 ID 与归因，每页从候选池解析内容（详见后端 README）。快照中每篇论文的 `sources` 字段：个人推荐为召回来源，其他为数据源名（`daily` / `trending` / `fallback`）。
 
-排序有效特征权重：主题 0.40、关键词 0.25、显式关注 0.20、已发布平台热度 0.10、论文年份时效 0.05；缺失特征不参与分母。关键词检索命中可作为该次兴趣查询的证据，即使知识底座没有返回完全相同的关键词标签；该信号按上游结果位置有界衰减，并使用“与你近期搜索的方向相关”理由。没有个人匹配的候选分数封顶为 0.15，避免仅凭时效超过相关论文。冷启动没有个人召回时，Feed 即为当天全站列表。主题多样性只在替代候选分数至少达到当前候选的 80% 时调整，避免引入明显不相关论文。推荐理由由实际匹配特征决定，不暴露行为明细；没有个人匹配或平台热度时 `reason` 为 `null`。按产品决定，首页卡片**不展示**推荐理由（避免让用户感到被分析），`reason` 仅随快照保存，用于归因与效果分析。卡片底部的 Topic 与知识检索卡片一致：优先展示关键词，否则主题，最多 5 个；`daily` / `trending` 论文的关键词与主题来自候选池，兜底快照论文使用快照自带的 `keywords` / `subjects`，召回论文取检索结果。分数是排序信号，不是喜欢概率。
+排序有效特征权重：主题 0.40、关键词 0.25、显式关注 0.20、已发布平台热度 0.10、论文年份时效 0.05；缺失特征不参与分母。关键词检索命中可作为该次兴趣查询的证据，即使知识底座没有返回完全相同的关键词标签；该信号按上游结果位置有界衰减，并使用“与你近期搜索的方向相关”理由。没有个人匹配的候选分数封顶为 0.15，避免仅凭时效超过相关论文。冷启动没有个人召回时，Feed 即为当天全站列表。主题多样性只在替代候选分数至少达到当前候选的 80% 时调整，避免引入明显不相关论文。推荐理由由实际匹配特征决定，不暴露行为明细；没有个人匹配或平台热度时 `reason` 为 `null`。按产品决定，首页卡片**不展示**推荐理由（避免让用户感到被分析），`reason` 仅随快照保存，用于归因与效果分析。首页与知识检索卡片共用结构化 `topics`，按上游顺序展示最多 5 个，并以完整 ID 跳转主题详情。每日候选和热门来自候选池，个人召回来自检索，兜底使用随包快照自带数据。历史条目缺失 `topics` 时显示无标签的卡片。分数是排序信号，不是喜欢概率。
 
 `GET /api/v1/recommendations/papers?limit=12&cursor=...` 返回论文基础信息、理由、来源、位置、请求 ID、下一页游标、总数和算法版本。首次请求保存一小时用户私有快照（此时只含第一页，`has_more` 为真，`total` 为当前已确定的条数，第二页请求后才是整份列表的条数）；游标请求验证拥有者与过期时间：格式错误返回 400，快照不存在、已过期或属于他人统一返回 `20001/409`（与统计快照游标一致，表示不可重试、需从第一页重新开始）。`POST /api/v1/behavior-events/batch` 只接受登录用户受控事件；推荐曝光和点击携带推荐请求 ID 与位置。前端 Feed 的查询缓存按当前用户 ID 隔离，匿名用户继续使用全局发现列表。
 
@@ -42,7 +42,7 @@ Backend 中 `BehaviorEventService` 负责事件校验后的幂等写入；`Paper
 
 | 接口 | 输入 | `data` 核心字段 |
 | --- | --- | --- |
-| `GET /api/v1/recommendations/papers` | `limit` 1–48，`cursor` 可选 | `items`（每篇含 `id/title/abstract/authors/year/venue/pdf_url/thumbnail_url/image_id/keywords/subjects/source/reason/sources/request_id/rank`；`reason` 可为 `null`；各数据源论文都携带 `image_id`，`thumbnail_url` 只有兜底快照论文非空，Web 优先使用该静态图）、`next_cursor`、`has_more`、`request_id`、`total`、`algorithm_version` |
+| `GET /api/v1/recommendations/papers` | `limit` 1–48，`cursor` 可选 | `items`（每篇含 `id/title/abstract/authors/year/venue/pdf_url/thumbnail_url/image_id/keywords/subjects/topics/source/reason/sources/request_id/rank`；`reason` 可为 `null`；各数据源论文都携带 `image_id`，`thumbnail_url` 只有兜底快照论文非空，Web 优先使用该静态图）、`next_cursor`、`has_more`、`request_id`、`total`、`algorithm_version` |
 | `GET /api/v1/recommendations/me/profile` | 无 | `long_topics`、`short_topics`、`long_keywords`、`short_keywords`、`explicit_subjects`、`has_history`、`computed_at`、`algorithm_version` |
 | `POST /api/v1/behavior-events/batch` | `{events:[...]}`，每批 1–20 条；事件含 UUID `event_id`、类型、来源和对象，推荐事件另含 `request_id/rank`，搜索事件可含 UUID `query_id` | `inserted`（幂等后实际新增条数） |
 

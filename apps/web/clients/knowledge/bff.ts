@@ -149,6 +149,19 @@ export class BffKnowledgeClient implements KnowledgeClient {
     }
   }
 
+  async topicPapers(topicId: string, offset: number, limit: number, signal?: AbortSignal): Promise<KnowledgePaperBrowseResponse> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    try {
+      return await apiJson<KnowledgePaperBrowseResponse>(
+        '/knowledge/topics/' + encodeURIComponent(topicId) + '/papers?' + query.toString(),
+        { signal },
+      );
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
   async creator(creatorId: string): Promise<KnowledgeCreator> {
     try {
       return await apiJson<KnowledgeCreator>(

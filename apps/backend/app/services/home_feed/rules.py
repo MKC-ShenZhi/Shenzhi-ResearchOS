@@ -86,4 +86,5 @@ def admit(raw: Mapping[str, Any], *, year: int | None = None) -> tuple[Discovery
         venue=venue.strip() if isinstance(venue, str) and venue.strip() else None,
         pdf_url=raw.get('pdf_url') or None, thumbnail_url=thumbnail_url, image_id=image_id,
         keywords=display_topics(raw.get('keywords')), subjects=display_topics(raw.get('subjects')),
+        topics=raw.get('topics'),
     ), None

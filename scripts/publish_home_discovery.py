@@ -99,10 +99,11 @@ def build_snapshot(source: Path) -> tuple[dict[str, Any], list[tuple[Path, str]]
             'venue': compact_text(raw.get('venue')) or None,
             'pdf_url': compact_text(raw.get('pdf_url')) or None,
             'thumbnail_url': f'/paper-thumbnails/{asset_name}',
-            # Optional knowledge metadata (card topics, image path), copied from the seed when present.
+            # Optional knowledge metadata copied from the seed when present.
             'image_id': compact_text(raw.get('image_id')) or None,
             'keywords': string_list(raw.get('keywords')),
             'subjects': string_list(raw.get('subjects')),
+            **({'topics': raw['topics']} if isinstance(raw.get('topics'), list) else {}),
             'priority': priority,
         })
 
