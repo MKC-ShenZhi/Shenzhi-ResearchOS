@@ -66,7 +66,11 @@ class AgentSessionRepository(Protocol):
                          idempotency_fingerprint: str | None = None) -> tuple[AgentTurn, bool]: ...
     async def finish_turn(self, session_id: str, owner: str, turn_id: str,
                           payload: dict[str, Any], *, worker_id: str | None = None) -> AgentTurn: ...
+    async def update_turn_settings(self, session_id: str, owner: str, turn_id: str,
+                                   settings: dict[str, Any], *, worker_id: str) -> AgentTurn: ...
     async def renew_turn(self, turn_id: str, worker_id: str) -> bool | None: ...
+    async def claim_turn_projection(self, session_id: str, owner: str, turn_id: str,
+                                    worker_id: str) -> bool: ...
     async def import_legacy(self, owner: str, payload: dict[str, Any]) -> AgentSession: ...
     async def claimable_session_ids(self, source_owner: str) -> list[str]: ...
     async def claim_anonymous_sessions(
@@ -191,11 +195,31 @@ class MemoryAgentSessionRepository:
             session.updated_at = turn.completed_at
             return turn
 
+    async def update_turn_settings(self, session_id: str, owner: str, turn_id: str,
+                                   settings: dict[str, Any], *, worker_id: str) -> AgentTurn:
+        async with self._lock:
+            session = await self.get(session_id, owner)
+            turn = next((item for item in session.turns if item.id == turn_id), None)
+            if turn is None or turn.status != 'running' or turn.worker_id != worker_id:
+                raise BusinessError(20004, 'Agent 轮次不存在或已经结束', 404)
+            turn.settings = dict(settings)
+            return turn
+
     async def renew_turn(self, turn_id: str, worker_id: str) -> bool:
         return any(
             turn.id == turn_id and turn.status == 'running' and turn.worker_id == worker_id
             for session in self.sessions.values() for turn in session.turns
         )
+
+    async def claim_turn_projection(self, session_id: str, owner: str, turn_id: str,
+                                    worker_id: str) -> bool:
+        async with self._lock:
+            session = await self.get(session_id, owner)
+            turn = next((item for item in session.turns if item.id == turn_id), None)
+            if turn is None or turn.status != 'running':
+                return False
+            turn.worker_id = worker_id
+            return True
 
     async def import_legacy(self, owner: str, payload: dict[str, Any]) -> AgentSession:
         import_key = str(payload['import_key'])

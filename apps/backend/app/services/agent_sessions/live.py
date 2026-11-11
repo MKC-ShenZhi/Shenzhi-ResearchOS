@@ -1,4 +1,4 @@
-"""Single-process run ownership and replay, independent of HTTP subscribers."""
+"""Ephemeral per-process SSE subscriber buffer; Agent Gateway remains authoritative."""
 from __future__ import annotations
 
 import asyncio

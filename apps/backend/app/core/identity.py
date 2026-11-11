@@ -84,6 +84,16 @@ def require_stats_service(request: Request) -> None:
         raise BusinessError(10001, '无效的统计服务凭据', 401)
 
 
+def require_agent_service(request: Request) -> None:
+    """Authenticate the isolated Agent service for Backend-owned capabilities."""
+    token = os.getenv('AGENT_SERVICE_TOKEN', '').strip()
+    if not token:
+        raise BusinessError(10002, 'Agent 服务凭据未配置', 503)
+    supplied = request.headers.get('authorization', '')
+    if not secrets.compare_digest(supplied, f'Bearer {token}'):
+        raise BusinessError(10001, '无效的 Agent 服务凭据', 401)
+
+
 def request_owner(request: Request) -> str:
     """Owner string (`user:` / `anon:`) used by Agent sessions and uploads."""
     identity = request_identity(request)

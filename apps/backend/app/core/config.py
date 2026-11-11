@@ -1,20 +1,11 @@
 """Server-only provider settings. Keys never appear in the public config."""
 import math
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 
 DEFAULT_OPENREVIEW_API_BASE_URL = 'https://api2.openreview.net'
-
-
-@dataclass(frozen=True)
-class ModelConfig:
-    key: str = field(repr=False)
-    base_url: str
-    model: str
-    models: tuple[str, ...]
-    provider: str
 
 
 @dataclass(frozen=True)

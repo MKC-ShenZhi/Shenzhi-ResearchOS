@@ -1,6 +1,7 @@
 """Agent HTTP 入口：产品会话、SSE run、运行配置、Web 工作区与产物文件。"""
 import json
 import logging
+import asyncio
 from pathlib import PurePosixPath
 from typing import Literal
 from urllib.parse import quote
@@ -9,73 +10,151 @@ from fastapi import APIRouter, Depends, Header, Query, Request, Response, Upload
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
+from agent_contracts import (
+    KnowledgeGraphQueryWire, KnowledgePaperDetailWire, KnowledgePaperGraphWire,
+    KnowledgeSearchRequestWire, KnowledgeSearchResponseWire,
+)
 
 from app.api._support.upload_reader import read_upload
 from app.core.config import MAX_FILES, UPLOAD_ACCEPT
 from app.core.errors import BusinessError
 from app.core.idempotency import request_fingerprint, validate_idempotency_key
-from app.core.identity import request_owner, require_bff
+from app.core.identity import request_owner, require_agent_service, require_bff
 from app.core.responses import ok
-from app.integrations.llm.resolver import load_registry
-from app.services.agent import service as agent_service
-from app.services.agent import export as agent_export
 from app.schemas.agent import (
     AgentRunBody, AgentSessionCreate, AgentSessionRun, AgentSessionUpdate,
     LegacyAgentSessionImport, SteerBody,
 )
 from app.services.agent_sessions.repository import agent_session_repository
 from app.services.agent_sessions.live import LiveRun, get_live, subscribe
-from app.services.agent_sessions.service import get_session_detail, start_session_run
+from app.services.agent_sessions.service import (
+    get_session_detail, resume_session_run, start_session_run,
+)
+from app.services.agent_sessions import export as agent_export
+from app.services.agent_gateway.client import agent_gateway
+from app.services.agent_attachments import resolve_agent_attachments
 from app.services.agent_uploads import agent_upload_store
 from app.services.uploads.parser import parse_document
+from app.schemas.knowledge import KnowledgeSearchRequest
 
 router = APIRouter(prefix='/api/v1/agent', tags=['agent'])
 logger = logging.getLogger(__name__)
 
 
+@router.post('/internal/knowledge/search', dependencies=[Depends(require_agent_service)])
+async def agent_knowledge_search(body: KnowledgeSearchRequestWire):
+    """Agent-only adapter; Knowledge models and upstream credentials stay in Backend."""
+    from app.api.knowledge import service as knowledge_service
+
+    request = KnowledgeSearchRequest.model_validate(body.model_dump(mode='json', by_alias=True))
+    result = await knowledge_service.search(request)
+    return KnowledgeSearchResponseWire.model_validate(
+        result.model_dump(mode='json', by_alias=True),
+    ).model_dump(mode='json', by_alias=True)
+
+
+@router.get('/internal/knowledge/papers/{paper_id:path}',
+            dependencies=[Depends(require_agent_service)])
+async def agent_knowledge_paper(paper_id: str):
+    from app.api.knowledge import service as knowledge_service
+
+    result = await knowledge_service.get_paper(paper_id)
+    return KnowledgePaperDetailWire.model_validate(
+        result.model_dump(mode='json', by_alias=True),
+    ).model_dump(mode='json', by_alias=True)
+
+
+@router.get('/internal/knowledge/graph/{paper_id:path}',
+            dependencies=[Depends(require_agent_service)])
+async def agent_knowledge_graph(paper_id: str, depth: int = Query(default=1, ge=1, le=3)):
+    from app.api.knowledge import service as knowledge_service
+
+    query = KnowledgeGraphQueryWire(depth=depth)
+    result = await knowledge_service.get_graph(paper_id, depth=query.depth)
+    return KnowledgePaperGraphWire.model_validate(
+        result.model_dump(mode='json', by_alias=True),
+    ).model_dump(mode='json', by_alias=True)
+
+
 @router.get('/config')
-def config(_credential: None = Depends(require_bff)):
+async def config(_credential: None = Depends(require_bff)):
     """运行配置：可选模型、技能清单、附件限制。"""
-    registry = load_registry()
-    store = agent_service.default_store()
-    skills = [{'name': skill.name, 'description': skill.description}
-              for name in store.names()
-              for skill in [store.get(name)]
-              if skill and not skill.disable_model_invocation]
+    config = await agent_gateway.config()
     return ok({
-        'models': registry.public_models('agent'),
-        'default_model': registry.public_default('agent'),
-        'skills': skills,
+        'models': config.get('models', []),
+        'default_model': config.get('default_model'),
+        'skills': config.get('skills', []),
         'upload': {'max_size_mb': 20, 'max_files': MAX_FILES, 'accept': UPLOAD_ACCEPT},
     })
 
 
 @router.post('/run')
 async def run(body: AgentRunBody, owner: str = Depends(request_owner)):
-    runtime = agent_service.build_run_runtime(
-        owner=owner, model=body.model, mode=body.mode,
-        workspace_id=body.workspace_id,
-        forced_skills=body.skills, session_id=body.session_id, allow_shell=False)
-    history = agent_service.decode_history(body.history)
-    attachments, warnings, files = await agent_service.resolve_attachments(body.attachments, owner)
-    meta = {'warnings': warnings} if warnings else None
-
-    async def cleanup(_result):
+    attachment_text, warnings, files = await resolve_agent_attachments(body.attachments, owner)
+    task = await agent_gateway.submit({
+        'owner_id': owner, 'prompt': body.prompt + attachment_text,
+        'session_id': body.session_id, 'mode': body.mode, 'model': body.model,
+        'workspace_id': body.workspace_id,
+        'skills': body.skills, 'history': body.history,
+    })
+    if files:
         try:
             await agent_upload_store.consume(owner, list(files))
         except Exception:
-            logger.exception('Failed to delete consumed Agent attachment text')
-
-    async def generate():
-        async for name, data in agent_service.run_events(runtime, body.prompt + attachments,
-                                                         history, meta=meta, owner=owner,
-                                                         session_id=body.session_id,
-                                                         on_complete=cleanup):
-            yield f'event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'
-
-    return StreamingResponse(generate(), media_type='text/event-stream',
+            logger.exception('Failed to consume Agent attachments after submit')
+    return StreamingResponse(_agent_task_stream(owner, task, warnings), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache, no-transform',
                                       'X-Accel-Buffering': 'no'})
+
+
+async def _agent_task_stream(owner: str, task: dict, warnings: list[str]):
+    task_id = task['task_id']
+    run_id = task['current_run_id']
+    after_seq = 0
+    if warnings:
+        yield f"event: meta\ndata: {json.dumps({'warnings': warnings}, ensure_ascii=False)}\n\n"
+    yield f"event: run_start\ndata: {json.dumps({'run_id': run_id}, ensure_ascii=False)}\n\n"
+    heartbeat_at = asyncio.get_running_loop().time()
+    while True:
+        events = await agent_gateway.events(run_id, owner, after_seq)
+        for event in events:
+            after_seq = max(after_seq, int(event['seq']))
+            event_id = f"id: {after_seq}\n"
+            yield (f"{event_id}event: {event['name']}\n"
+                   f"data: {json.dumps(event['data'], ensure_ascii=False)}\n\n")
+        run = await agent_gateway.run(run_id, owner)
+        task_state = await agent_gateway.task(task_id, owner)
+        current_run_id = task_state.get('current_run_id')
+        report = run.get('report')
+        if report and current_run_id and current_run_id != run_id:
+            run_id, after_seq = current_run_id, 0
+            yield f"event: run_start\ndata: {json.dumps({'run_id': run_id}, ensure_ascii=False)}\n\n"
+            continue
+        if report:
+            result_data = report.get('result') or {}
+            status = {'completed': 'done', 'failed': 'failed', 'cancelled': 'stopped',
+                      'timed_out': 'timeout', 'awaiting_input': 'awaiting_input'}.get(
+                          report.get('status'), 'failed')
+            result = {
+                'status': status, 'stop_reason': result_data.get('stop_reason') or 'error',
+                'final_text': result_data.get('final_text', ''),
+                'output': result_data.get('output'), 'question': result_data.get('question'),
+                'turns': result_data.get('turns', 0),
+                'duration_ms': result_data.get('duration_ms', 0),
+                'prompt_tokens': result_data.get('prompt_tokens', 0),
+                'completion_tokens': result_data.get('completion_tokens', 0),
+                'truncated': result_data.get('truncated', False),
+                'error': ({'code': report.get('error_code'),
+                           'message': report.get('error_message')}
+                          if report.get('error_code') else None),
+            }
+            yield f"event: result\ndata: {json.dumps(result, ensure_ascii=False)}\n\n"
+            return
+        now = asyncio.get_running_loop().time()
+        if now - heartbeat_at >= 15:
+            yield ': ping\n\n'
+            heartbeat_at = now
+        await asyncio.sleep(0.5)
 
 
 @router.post('/uploads')
@@ -96,17 +175,16 @@ async def steer(run_id: str, body: SteerBody, owner: str = Depends(request_owner
     """运行中插话：下一模型请求前注入（不打断当前工具批）。"""
     if not body.text.strip():
         raise BusinessError(20001, '插话内容不能为空')
-    if not agent_service.steer_run(run_id, body.text.strip(), owner):
-        raise BusinessError(20004, '该运行已结束或不存在', 404)
+    await agent_gateway.steer(run_id, owner, body.text.strip())
     return ok({'injected': True})
 
 
 @router.post('/run/{run_id}/stop')
 async def stop(run_id: str, owner: str = Depends(request_owner)):
     """Cleanly stop the active run so its partial result remains recoverable."""
-    if not agent_service.stop_run(run_id, owner):
-        raise BusinessError(20004, '该运行已结束或不存在', 404)
-    return ok({'stopping': True})
+    run = await agent_gateway.run(run_id, owner)
+    task = await agent_gateway.cancel(run['task_id'], owner)
+    return ok({'stopping': task.get('cancel_requested', False)})
 
 
 @router.post('/sessions')
@@ -199,7 +277,7 @@ async def attach_agent_session_run(
 ):
     live = get_live(session_id, owner)
     if live is None:
-        raise BusinessError(20004, '当前没有运行中的任务', 404)
+        live = await resume_session_run(session_id, owner)
     return session_run_stream(live, after)
 
 
@@ -211,7 +289,7 @@ async def session_file(session_id: str, path: str, download: bool = False,
     # session has been deleted.  The existence/owner check is deliberately at
     # the HTTP boundary, before resolving the physical path.
     await agent_session_repository.get(session_id, owner)
-    content, media_type = agent_service.read_session_file(owner, session_id, path)
+    content, media_type = await agent_gateway.read_session_file(owner, session_id, path)
     filename = PurePosixPath(path).name or 'file'
     disposition = 'attachment' if download else 'inline'
     return Response(
@@ -240,7 +318,7 @@ async def session_asset(session_id: str, path: str, owner: str = Depends(request
     只放行内联样式（图形本身的 fill/stroke/<style> 需要）；其余图片类型无活动内容，不加 CSP。
     """
     await agent_session_repository.get(session_id, owner)
-    content, media_type = agent_service.read_session_file(owner, session_id, path)
+    content, media_type = await agent_gateway.read_session_file(owner, session_id, path)
     filename = PurePosixPath(path).name or 'asset'
     headers = {
         # Deletion must take effect for a previously copied URL as well; a
@@ -273,7 +351,7 @@ def export_session(body: ExportBody, _credential: None = Depends(require_bff)):
 
 @router.post('/workspace')
 async def create_workspace(owner: str = Depends(request_owner)):
-    return ok(agent_service.create_workspace(owner))
+    return ok(await agent_gateway.create_workspace(owner))
 
 
 @router.post('/workspace/{workspace_id}/files')
@@ -286,4 +364,4 @@ async def upload_workspace_file(workspace_id: str, request: Request,
     if not isinstance(upload, UploadFile) or not relative_path:
         raise BusinessError(20001, '需要 file 与 path 字段')
     data = await upload.read()
-    return ok(agent_service.write_workspace_file(workspace_id, owner, relative_path, data))
+    return ok(await agent_gateway.write_workspace_file(workspace_id, owner, relative_path, data))
