@@ -3,6 +3,8 @@ import json
 import os
 import tempfile
 import unittest
+from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import patch
 
 import httpx
@@ -11,9 +13,18 @@ from agent_app.errors import BusinessError
 from agent_app.integrations.llm.resolver import AUTODL_DEFAULT_MODELS, load_registry
 from agent_app.integrations.llm.agent_stream import OpenAICompatProvider, ModelRequest, TextDelta, ToolCallEvent
 from agent_app.execution.runtime import AgentRuntime
+from agent_app.application.composition import default_runtime
 
 ENV = {'DASHSCOPE_API_KEY': 'dash-secret', 'DEEPSEEK_API_KEY': 'deep-secret',
        'ZHIPU_API_KEY': 'glm-secret', 'ZHIPU_MODEL': 'glm-4-plus'}
+
+
+@contextmanager
+def json_catalog(data):
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / 'catalog.json'
+        path.write_text(json.dumps(data), encoding='utf-8')
+        yield str(path)
 
 
 def sse(delta, finish='stop'):
@@ -47,15 +58,13 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         # All built-ins passed T5 without extensions. A deployment may explicitly
         # declare a tested strategy; both supported parameter shapes must survive.
         for strategy, value in [('enable_thinking', False), ('thinking', {'type': 'disabled'})]:
-            with self.subTest(strategy=strategy), tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
-                json.dump({'models': [{
+            with self.subTest(strategy=strategy), json_catalog({'models': [{
                     'id': 'autodl/Kimi-K2.5', 'provider_id': 'autodl', 'upstream_model': 'Kimi-K2.5',
                     'label': 'Kimi', 'capabilities': {'tool_calling': True, 'thinking': strategy},
                     'request_params': {strategy: value},
-                }]}, file)
-                file.flush()
+                }]}) as catalog_path:
                 with patch.dict(os.environ, {'AUTODL_API_KEY': 'autodl-private',
-                                             'AI_MODEL_REGISTRY_FILE': file.name}, clear=True):
+                                             'AI_MODEL_REGISTRY_FILE': catalog_path}, clear=True):
                     registry = load_registry()
                 seen = []
 
@@ -103,15 +112,13 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(seen[0]['tool_choice'], 'auto')
 
     async def test_fourth_provider_and_duplicate_upstream_without_business_changes(self):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
-            json.dump({'providers': [{'id': 'fourth', 'base_url': 'https://fourth.example/v1', 'api_key_env': 'FOURTH_KEY'}],
+        with json_catalog({'providers': [{'id': 'fourth', 'base_url': 'https://fourth.example/v1', 'api_key_env': 'FOURTH_KEY'}],
                        'models': [{'id': 'fourth/deepseek-chat', 'provider_id': 'fourth', 'upstream_model': 'deepseek-chat',
                                    'brand': 'deepseek', 'label': 'Fourth DeepSeek', 'capabilities': {'tool_calling': True}}],
-                       'aliases': {'historical-id': 'fourth/deepseek-chat'}}, file)
-            file.flush()
-            with patch.dict(os.environ, {**ENV, 'AI_MODEL_REGISTRY_FILE': file.name, 'FOURTH_KEY': 'fourth-secret'}, clear=True):
+                       'aliases': {'historical-id': 'fourth/deepseek-chat'}}) as catalog_path:
+            with patch.dict(os.environ, {**ENV, 'AI_MODEL_REGISTRY_FILE': catalog_path, 'FOURTH_KEY': 'fourth-secret'}, clear=True):
                 registry = load_registry()
-                runtime = AgentRuntime(model='historical-id')
+                runtime = default_runtime(model='historical-id')
                 self.assertEqual(runtime.model, 'fourth/deepseek-chat')
             seen = []
             def handler(request):
@@ -141,18 +148,16 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ, {**ENV, 'AI_ALLOWED_MODELS': 'deepseek-r1'}, clear=True):
             for model in ['missing', 'deepseek-r1']:
                 with self.subTest(model=model), self.assertRaises(BusinessError):
-                    AgentRuntime(model=model)
+                    default_runtime(model=model)
 
     async def test_new_glm_version_uses_explicit_capabilities_and_vendor_strategy(self):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
-            json.dump({'models': [{'id': 'zhipu/future-glm', 'provider_id': 'zhipu',
+        with json_catalog({'models': [{'id': 'zhipu/future-glm', 'provider_id': 'zhipu',
                                    'upstream_model': 'future-glm', 'label': 'GLM Custom', 'brand': 'zhipu',
                                    'capabilities': {'tool_calling': True, 'temperature': False,
                                                     'thinking': 'thinking', 'max_output_tokens': 777},
-                                   'request_params': {'thinking': {'type': 'disabled'}}}]}, file)
-            file.flush()
+                                   'request_params': {'thinking': {'type': 'disabled'}}}]}) as catalog_path:
             with patch.dict(os.environ, {**ENV, 'ZHIPU_MODEL': 'future-glm',
-                                         'AI_MODEL_REGISTRY_FILE': file.name}, clear=True):
+                                         'AI_MODEL_REGISTRY_FILE': catalog_path}, clear=True):
                 registry = load_registry()
             seen = []
             def handler(request):

@@ -73,8 +73,7 @@ def build_runtime(*, runtime_factory: Callable[..., AgentRuntime] = default_runt
                 else mount_workspace(workspace_id, owner).root)
         workspace = Workspace(root)
         tools.extend(build_workspace_tools(workspace, allow_shell=allow_shell))
-        if workspace_id:
-            mount_workspace_into(root, workspace_id, owner)
+        mounted_files = mount_workspace_into(root, workspace_id, owner) if workspace_id else 0
         after_tool_call = sync_loaded_skill_scripts(store, root)
         if not fast:
             tools.extend((chart_tool(workspace_root=root, session_id=session_id),
@@ -87,7 +86,8 @@ def build_runtime(*, runtime_factory: Callable[..., AgentRuntime] = default_runt
             capabilities += '；Web 安全策略已关闭任意 shell 执行'
         sections.append(
             f'工作区已就绪（{capabilities}）。中间状态与成果都写成工作区文件，完成后交付并给出文件路径。'
-            '\n技能脚本在装载该技能后同步到 <技能名>/scripts/（在工作区根下执行）。'
+            + (f'\n已挂载上传工作区的 {mounted_files} 个文件。' if workspace_id else '')
+            + '\n技能脚本在装载该技能后同步到 <技能名>/scripts/（在工作区根下执行）。'
             + (f'\n\n{project_context}' if project_context else '')
         )
     if forced_skills:

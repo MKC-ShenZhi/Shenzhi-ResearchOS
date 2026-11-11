@@ -109,11 +109,60 @@ class TaskSubmissionWire(WireModel):
             raise ValueError('value must not be blank')
         return value
 
+    @field_validator('history')
+    @classmethod
+    def valid_history(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return validate_history(value)
+
     @model_validator(mode='after')
     def linked_session_turn(self):
         if (self.session_id is None) != (self.turn_id is None):
             raise ValueError('session_id and turn_id must be provided together')
         return self
+
+
+def validate_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Validate the durable Agent transcript shape before it crosses a service boundary."""
+    stop_reasons = {
+        'stop', 'length', 'tool_calls', 'max_turns', 'error', 'cancelled',
+        'timeout', 'awaiting_input',
+    }
+    for index, message in enumerate(history):
+        if not isinstance(message, dict):
+            raise ValueError(f'history[{index}] must be an object')
+        kind = message.get('kind')
+        if kind == 'user':
+            if not isinstance(message.get('text'), str):
+                raise ValueError(f'history[{index}].text must be a string')
+        elif kind == 'assistant':
+            for field in ('content', 'reasoning'):
+                if field in message and not isinstance(message[field], str):
+                    raise ValueError(f'history[{index}].{field} must be a string')
+            reason = message.get('stop_reason', 'stop')
+            if not isinstance(reason, str) or reason not in stop_reasons:
+                raise ValueError(f'history[{index}].stop_reason is invalid')
+            calls = message.get('tool_calls', [])
+            if not isinstance(calls, list):
+                raise ValueError(f'history[{index}].tool_calls must be a list')
+            for call_index, call in enumerate(calls):
+                if (not isinstance(call, dict)
+                        or not isinstance(call.get('call_id'), str)
+                        or not isinstance(call.get('name'), str)
+                        or not isinstance(call.get('arguments', {}), (dict, str))):
+                    raise ValueError(f'history[{index}].tool_calls[{call_index}] is invalid')
+            usage = message.get('usage_tokens', 0)
+            if isinstance(usage, bool) or not isinstance(usage, int) or usage < 0:
+                raise ValueError(f'history[{index}].usage_tokens must be a non-negative integer')
+        elif kind == 'tool':
+            if any(not isinstance(message.get(field), str)
+                   for field in ('call_id', 'name', 'content')):
+                raise ValueError(f'history[{index}] tool result is invalid')
+            if any(field in message and not isinstance(message[field], bool)
+                   for field in ('is_error', 'pinned')):
+                raise ValueError(f'history[{index}] tool result flags must be booleans')
+        else:
+            raise ValueError(f'history[{index}].kind is invalid')
+    return history
 
 
 class TaskRecordWire(WireModel):

@@ -112,7 +112,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_single_turn_stream_and_result(self):
         provider = FakeProvider([[TextDelta('你'), TextDelta('好'), Finish(StopReason.STOP)]])
-        runtime = AgentRuntime(provider=provider, system='测试')
+        runtime = AgentRuntime(provider=provider, system='测试', model='deepseek/deepseek-chat')
         events = []
         result = await runtime.run('hi', on_event=events.append)
         self.assertEqual(result.status, 'done')

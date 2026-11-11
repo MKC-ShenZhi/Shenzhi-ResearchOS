@@ -1,7 +1,8 @@
 """抓取单个 URL 的正文（移植 SZDR `src/tools/fetch-url.tool.ts`）。
 
 与 `read_paper` 的分工：这是**通用网页正文**通道（官方文档、博客、项目页、公告），
-`read_paper` 专走 PDF 全文。两者共用 `netguard` 的出网安全网关（逐跳 SSRF 校验 + 字节上限）。
+`read_paper` 专走 PDF 全文。两者共用 `integrations.public_web.security` 的出网安全网关
+（逐跳 SSRF 校验 + 字节上限）。
 """
 from __future__ import annotations
 

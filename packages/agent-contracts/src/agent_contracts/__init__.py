@@ -17,7 +17,7 @@ from .wire import (
     TaskSubmissionWire, UsageReportWire, WorkspaceClaimCommitResponseWire,
     WorkspaceClaimPrepareResponseWire, WorkspaceClaimRequestWire,
     WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
-    WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire,
+    WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire, validate_history,
 )
 
 __all__ = [
@@ -36,4 +36,5 @@ __all__ = [
     'WorkspaceClaimPrepareResponseWire', 'WorkspaceClaimRequestWire',
     'WorkspaceCreateRequestWire', 'WorkspaceCreateResponseWire',
     'WorkspaceFileWriteRequestWire', 'WorkspaceFileWriteResponseWire',
+    'validate_history',
 ]

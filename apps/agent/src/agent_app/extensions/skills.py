@@ -368,7 +368,7 @@ def read_skill_tool(store: SkillStore) -> Tool:
 # 不需要重启进程）；配置只列白名单且签名（目录内容）才是缓存键，两者任一变化都重载。
 _store_cache: dict[tuple, SkillStore] = {}
 
-_AGENT_ROOT = Path(__file__).resolve().parents[2]  # apps/agent
+_AGENT_ROOT = Path(__file__).resolve().parents[3]  # apps/agent
 BUILTIN_SKILLS_DIR = _AGENT_ROOT / 'skills'
 VENDOR_SKILLS_DIR = _AGENT_ROOT / 'skills_vendor'
 

@@ -90,10 +90,10 @@ class FakeAgentGateway:
     async def run(self, run_id, owner):
         plan = self.runs[run_id]
         if plan['gate'] is not None and not plan['gate'].is_set():
-            return {'report': None}
+            return {'task_id': plan['task_id'], 'report': None}
         if plan['event_error'] and not plan['hide_report_once']:
             plan['hide_report_once'] = True
-            return {'report': None}
+            return {'task_id': plan['task_id'], 'report': None}
         result = {
             'stop_reason': ('cancelled' if plan['status'] == 'cancelled'
                             else 'error' if plan['status'] == 'failed' else 'stop'),

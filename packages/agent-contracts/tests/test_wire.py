@@ -27,6 +27,17 @@ def test_task_submission_requires_session_and_turn_together() -> None:
         TaskSubmissionWire(owner_id='u1', prompt='research', session_id='ses-1')
 
 
+def test_task_submission_rejects_malformed_history_messages() -> None:
+    with pytest.raises(ValueError):
+        TaskSubmissionWire(owner_id='u1', prompt='research', history=[{'kind': 'bogus'}])
+    valid = TaskSubmissionWire(owner_id='u1', prompt='research', history=[
+        {'kind': 'user', 'text': 'previous'},
+        {'kind': 'assistant', 'content': 'answer', 'reasoning': '', 'tool_calls': [],
+         'stop_reason': 'stop', 'usage_tokens': 1},
+    ])
+    assert len(valid.history) == 2
+
+
 def test_wire_models_reject_unknown_fields_and_nonterminal_reports() -> None:
     with pytest.raises(ValueError):
         TaskSubmissionWire(owner_id='u1', prompt='research', unexpected=True)

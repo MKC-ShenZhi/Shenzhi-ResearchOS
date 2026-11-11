@@ -2,11 +2,21 @@ import json
 import os
 import tempfile
 import unittest
+from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import patch
 
 from agent_app.errors import BusinessError
 from agent_app.integrations.llm.registry import Capabilities, Catalog, ModelRegistry, RegistryConfigError
 from agent_app.integrations.llm.resolver import AUTODL_DEFAULT_MODELS, load_registry
+
+
+@contextmanager
+def json_catalog(data):
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / 'catalog.json'
+        path.write_text(json.dumps(data), encoding='utf-8')
+        yield str(path)
 
 
 class RegistryTests(unittest.TestCase):
@@ -131,19 +141,17 @@ class RegistryTests(unittest.TestCase):
                 ModelRegistry(Catalog.model_validate(data), {})
 
     def test_custom_catalog_defaults_aliases_and_disabled(self):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
-            json.dump({'providers': [{'id': 'fourth', 'base_url': 'https://fourth.example/v1', 'api_key_env': 'FOURTH_KEY'}],
+        with json_catalog({'providers': [{'id': 'fourth', 'base_url': 'https://fourth.example/v1', 'api_key_env': 'FOURTH_KEY'}],
                        'models': [{'id': 'fourth/m', 'provider_id': 'fourth', 'upstream_model': 'm',
                                    'label': 'Fourth', 'capabilities': {'tool_calling': True}},
                                   {'id': 'disabled', 'provider_id': 'fourth', 'upstream_model': 'm',
                                    'label': 'Disabled', 'enabled': False}],
-                       'aliases': {'old-session-model': 'fourth/m'}, 'defaults': {'chat': 'fourth/m'}}, file)
-            file.flush()
-            registry = self.load({'AI_MODEL_REGISTRY_FILE': file.name, 'FOURTH_KEY': 'secret'})
+                       'aliases': {'old-session-model': 'fourth/m'}, 'defaults': {'chat': 'fourth/m'}}) as catalog_path:
+            registry = self.load({'AI_MODEL_REGISTRY_FILE': catalog_path, 'FOURTH_KEY': 'secret'})
             self.assertEqual(registry.resolve_model('old-session-model').spec.id, 'fourth/m')
             with self.assertRaisesRegex(BusinessError, '禁用'):
                 registry.resolve_model('disabled')
-            registry = self.load({'AI_MODEL_REGISTRY_FILE': file.name, 'AI_DEFAULT_MODEL': 'deepseek-chat'})
+            registry = self.load({'AI_MODEL_REGISTRY_FILE': catalog_path, 'AI_DEFAULT_MODEL': 'deepseek-chat'})
             self.assertEqual(registry.default_model().id, 'deepseek/deepseek-chat')
 
     def test_invalid_default_and_url_are_configuration_errors(self):
@@ -182,19 +190,15 @@ class RegistryTests(unittest.TestCase):
             {'providers': [provider], 'models': [{**model, 'capabilities': {'thinking': 'none'},
                                                   'request_params': {'enable_thinking': True}}]},
         ]:
-            with self.subTest(data=data), tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
-                json.dump(data, file)
-                file.flush()
+            with self.subTest(data=data), json_catalog(data) as catalog_path:
                 with self.assertRaises(RegistryConfigError) as error:
-                    self.load({'AI_MODEL_REGISTRY_FILE': file.name})
+                    self.load({'AI_MODEL_REGISTRY_FILE': catalog_path})
                 self.assertNotIn('PRIVATE_INPUT', str(error.exception))
 
     def test_fourth_provider_alone_can_supply_default_without_old_keys(self):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
-            json.dump({'providers': [{'id': 'fourth', 'base_url': 'https://fourth.example', 'api_key_env': 'FOURTH_KEY'}],
-                       'models': [{'id': 'fourth/m', 'provider_id': 'fourth', 'upstream_model': 'm', 'label': 'M',
-                                   'capabilities': {'tool_calling': True}}]}, file)
-            file.flush()
-            registry = self.load({'AI_MODEL_REGISTRY_FILE': file.name, 'FOURTH_KEY': 'key'})
+        with json_catalog({'providers': [{'id': 'fourth', 'base_url': 'https://fourth.example', 'api_key_env': 'FOURTH_KEY'}],
+                           'models': [{'id': 'fourth/m', 'provider_id': 'fourth', 'upstream_model': 'm', 'label': 'M',
+                                       'capabilities': {'tool_calling': True}}]}) as catalog_path:
+            registry = self.load({'AI_MODEL_REGISTRY_FILE': catalog_path, 'FOURTH_KEY': 'key'})
             self.assertEqual(registry.default_model('chat').id, 'fourth/m')
             self.assertEqual(registry.default_model('agent').id, 'fourth/m')

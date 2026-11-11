@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from agent_contracts import (
     KnowledgeGraphQueryWire, KnowledgePaperDetailWire, KnowledgePaperGraphWire,
-    KnowledgeSearchRequestWire, KnowledgeSearchResponseWire,
+    KnowledgeSearchRequestWire, KnowledgeSearchResponseWire, validate_history,
 )
 
 from app.api._support.upload_reader import read_upload
@@ -90,6 +90,10 @@ async def config(_credential: None = Depends(require_bff)):
 
 @router.post('/run')
 async def run(body: AgentRunBody, owner: str = Depends(request_owner)):
+    try:
+        validate_history(body.history)
+    except ValueError as exc:
+        raise BusinessError(20001, '历史消息格式无效', 400) from exc
     attachment_text, warnings, files = await resolve_agent_attachments(body.attachments, owner)
     task = await agent_gateway.submit({
         'owner_id': owner, 'prompt': body.prompt + attachment_text,

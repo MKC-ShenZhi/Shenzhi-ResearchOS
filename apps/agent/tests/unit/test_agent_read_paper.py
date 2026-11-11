@@ -14,6 +14,7 @@ from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 from agent_app.capabilities.fetch_url import fetch_url_tool
 from agent_app.capabilities.read_paper import _paginate, read_paper_tool
 from agent_app.execution.types import ToolCall
+from agent_app.integrations.public_web import security
 
 
 class StubKnowledgeService:
@@ -71,7 +72,7 @@ class FetchConcurrencyTests(unittest.IsolatedAsyncioTestCase):
 
         addresses = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP,
                       '', ('1.1.1.1', 443))]
-        with patch('agent_app.netguard.socket.getaddrinfo', return_value=addresses):
+        with patch.object(security.socket, 'getaddrinfo', return_value=addresses):
             output, _ = await asyncio.gather(invoke(), ticker())
         self.assertIn('Research evidence', json.loads(output)['text'])
         self.assertGreaterEqual(ticks, 3)

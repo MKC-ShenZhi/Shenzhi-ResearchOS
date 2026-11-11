@@ -243,11 +243,11 @@ class RuntimeSkillTests(unittest.IsolatedAsyncioTestCase):
     def test_skill_tools_registered_and_conflict(self):
         make_skill(self.first, 'with-tools', tools_py=TOOLS_PY)
         store = SkillStore.load([SkillRoot(self.first, executable=True)])
-        runtime = AgentRuntime(skills=store)
+        runtime = AgentRuntime(provider=FakeProvider([]), skills=store)
         self.assertIn('skill_hello', runtime.registry.tools)
         self.assertIn('read_skill', runtime.registry.tools)
         with self.assertRaises(ValueError):  # 技能工具与业务工具重名 → 启动即失败
-            AgentRuntime(tools=[make_echo(name='skill_hello')], skills=store)
+            AgentRuntime(provider=FakeProvider([]), tools=[make_echo(name='skill_hello')], skills=store)
 
     async def test_skill_name_misdirected_as_tool(self):
         """模型把技能名当工具直接调 → 返回引导文本（非错误，不阻断任何后续动作）。"""
