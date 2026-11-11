@@ -29,7 +29,7 @@ function toPaperCardModel(hit: KnowledgePaperHit): PaperCardModel {
     authors: formatPaperAuthors(hit.authors),
     title: hit.title,
     abstract: hit.abstract ?? "",
-    tags: pickPaperTopics(hit.keywords, hit.subjects),
+    topics: pickPaperTopics(hit.topics),
     thumbnailUrl: getPaperThumbnailUrl(hit.imageId),
   };
 }

@@ -65,17 +65,31 @@ test("BFF client unwraps the Search success envelope and preserves the request c
   }]);
 });
 
-test("BFF search preserves real nullable imageId without parsing paper ids", async () => {
+test("BFF search preserves imageId and structured topics alongside legacy metadata", async () => {
   const results = ["/images/ASPLOS_2026/10.1145_3779212.3790216_minimal.jpg", null]
     .map((imageId) => ({
       id: "paper:opaque-identifier", imageId, title: "Paper", abstract: null,
-      authors: [], year: null, venue: null, keywords: [], subjects: [],
+      authors: [], year: null, venue: null, keywords: ["legacy"], subjects: ["subject"],
+      ...(imageId ? { topics: [{ id: "openalex:topic:T10028", nameZh: "语言模型", nameEn: "Language models" }] } : {}),
       score: null, rank: null, provenance: null,
     }));
   await withFetch(async () => jsonResponse({ code: 0, data: { results } }), async () => {
     const response = await new BffKnowledgeClient().search(SEARCH_PARAMS);
     assert.deepEqual(response.results, results);
   });
+});
+
+test("Topic detail exposes a 404 as the existing unavailable state", async () => {
+  await withFetch(async () => jsonResponse({
+    code: "NOT_FOUND", message: "Topic missing", retryable: false, requestId: null,
+  }, 404), async () => {
+    await assert.rejects(new BffKnowledgeClient().topic("openalex:topic:T10181"),
+      (error) => error instanceof KnowledgeClientError && error.code === "NOT_FOUND");
+  });
+  const detail = readFileSync("features/knowledge/topics/detail/topic-detail-page.tsx", "utf8");
+  assert.match(detail, /error\.code === "NOT_FOUND"/);
+  assert.match(detail, /该主题页面暂不可用/);
+  assert.match(detail, /href=\{squareHref\}[\s\S]*返回主题广场/);
 });
 
 test("BFF client encodes the OpenAlex ID for detail and papers", async () => {

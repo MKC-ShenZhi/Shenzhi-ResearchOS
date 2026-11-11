@@ -45,7 +45,7 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
           </h1>
           <p className="mt-3 text-sm leading-6 text-muted">
             {notFound
-              ? "该主题可能来自旧版主题库、已下线，或链接中的主题编号不正确。"
+              ? "该主题页面暂不可用。主题可能尚未启用、已下线，或链接中的主题编号不正确。"
               : "暂时无法取得主题信息，请稍后重新尝试。"}
           </p>
           <div className="mt-6 flex justify-center gap-3">

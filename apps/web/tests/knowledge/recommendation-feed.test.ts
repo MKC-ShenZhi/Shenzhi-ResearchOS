@@ -15,6 +15,7 @@ const paper = {
   authors: ["Author"], year: 2026, venue: "ACL",
   pdf_url: null, thumbnail_url: null,
 };
+const topic = { id: "openalex:topic:T10028", nameZh: null, nameEn: "Language models" };
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(status === 200
@@ -30,7 +31,7 @@ test("authenticated home feed preserves recommendation attribution and nullable 
   globalThis.fetch = async (input) => {
     requested.push(String(input));
     return json({
-      items: [{ ...paper, year: null, reason: "与你关注的主题相匹配",
+      items: [{ ...paper, year: null, topics: [topic], reason: "与你关注的主题相匹配",
         sources: ["followed_topic"], request_id: "request-1", rank: 1 }],
       next_cursor: "request-1:1", has_more: true,
       request_id: "request-1", total: 2, algorithm_version: "content-v1",
@@ -41,6 +42,7 @@ test("authenticated home feed preserves recommendation attribution and nullable 
     assert.equal(page.items[0].date, "年份未知");
     assert.equal(page.items[0].recommendationRequestId, "request-1");
     assert.equal(page.items[0].recommendationRank, 1);
+    assert.deepEqual(page.items[0].topics, [topic]);
     // The reason stays server-side for analysis; cards never surface it.
     assert.equal("recommendationReason" in page.items[0], false);
     assert.equal(page.nextCursor, "request-1:1");
@@ -101,17 +103,17 @@ test("recommendation failure falls back to the existing discovery cursor", async
   }
 });
 
-test("anonymous home feed only requests discovery", async () => {
+test("anonymous home feed only requests discovery and preserves structured topics", async () => {
   const original = globalThis.fetch;
   const requested: string[] = [];
   globalThis.fetch = async (input) => {
     requested.push(String(input));
-    return json({ items: [paper], next_cursor: null, has_more: false,
-      list_id: "home:global", total: 1 });
+    return json({ items: [{ ...paper, topics: [topic] }, { ...paper, id: "legacy", keywords: ["old"] }],
+      next_cursor: null, has_more: false, list_id: "home:global", total: 2 });
   };
   try {
     const page = await fetchHomeFeedPage(null, null);
-    assert.equal(page.items.length, 1);
+    assert.deepEqual(page.items.map((item) => item.topics), [[topic], []]);
     assert.equal(requested.length, 1);
     assert.match(requested[0], /\/discovery\/papers/);
   } finally {

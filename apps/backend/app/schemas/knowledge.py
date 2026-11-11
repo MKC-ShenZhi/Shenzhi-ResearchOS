@@ -9,9 +9,9 @@ new knowledge-base entity types can be introduced without a backend release.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 
 
 class KnowledgeModel(BaseModel):
@@ -113,6 +113,38 @@ class KnowledgeSearchRequest(KnowledgeModel):
         return self
 
 
+class PaperTopic(KnowledgeModel):
+    id: str
+    name_zh: str | None = Field(alias='nameZh')
+    name_en: str = Field(alias='nameEn')
+
+
+def _normalize_paper_topics(value: Any) -> list[PaperTopic]:
+    """Keep the first named entry per ID, in upstream order."""
+    topics: list[PaperTopic] = []
+    seen: set[str] = set()
+    for item in value if isinstance(value, list) else []:
+        if isinstance(item, PaperTopic):
+            item = item.model_dump()
+        if not isinstance(item, dict):
+            continue
+        raw_id = item.get('id')
+        topic_id = raw_id.strip() if isinstance(raw_id, str) else ''
+        if not topic_id or topic_id in seen or topic_id in {'.', '..'}:
+            continue
+        raw_zh = item.get('nameZh', item.get('name_zh'))
+        raw_en = item.get('nameEn', item.get('name_en'))
+        name_zh = raw_zh.strip() if isinstance(raw_zh, str) else ''
+        name_en = raw_en.strip() if isinstance(raw_en, str) else ''
+        if name_zh or name_en:
+            seen.add(topic_id)
+            topics.append(PaperTopic(id=topic_id, name_zh=name_zh or None, name_en=name_en))
+    return topics
+
+
+PaperTopics = Annotated[list[PaperTopic], BeforeValidator(_normalize_paper_topics)]
+
+
 class PaperSearchResult(KnowledgeModel):
     id: str
     image_id: str | None = Field(
@@ -127,6 +159,7 @@ class PaperSearchResult(KnowledgeModel):
     venue: str | None = None
     keywords: list[str] = Field(default_factory=list)
     subjects: list[str] = Field(default_factory=list)
+    topics: PaperTopics = Field(default_factory=list)
     # Browse-only main subject; kept internal (home-pool diversity), not part of the public contract.
     primary_subject: str | None = Field(default=None, exclude=True)
     score: float | None = None
@@ -295,6 +328,7 @@ class PaperDetail(KnowledgeModel):
     )
     keywords: list[str] = Field(default_factory=list)
     subjects: list[str] = Field(default_factory=list)
+    topics: PaperTopics = Field(default_factory=list)
     citation_count: int | None = Field(
         default=None,
         validation_alias=AliasChoices('citationCount', 'citation_count'),

@@ -266,6 +266,7 @@ def map_search_result(
         primary_subject=_optional_string(item.get('primary_subject')),
         keywords=_string_list(item.get('keywords')),
         subjects=_string_list(item.get('subjects')),
+        topics=item.get('topics'),
         score=_optional_number(item.get('score')),
         rank=_optional_int(item.get('rank')),
         provenance=_provenance(paper_id, retrieved_at),
@@ -369,6 +370,7 @@ def map_paper_detail(
         # remain null rather than being presented as fabricated zeroes.
         keywords=_string_list(item.get('keywords')),
         subjects=_string_list(item.get('subjects')),
+        topics=item.get('topics'),
         citation_count=_optional_int(next((item[key] for key in (
             'citationCount', 'citation_count', 'citeCount', 'cite_count'
         ) if key in item), None)),
@@ -536,16 +538,6 @@ def _map_topic(node: dict[str, Any], category: str, category_name: str) -> OpenA
     ))
 
 
-def _map_topic_paper(item: dict[str, Any]) -> PaperSearchResult:
-    paper = map_search_result(item)
-    if not paper.subjects and isinstance(item.get('topics'), list):
-        paper.subjects = [
-            name for topic in item['topics'] if isinstance(topic, dict)
-            if (name := _first_optional_string(topic, 'nameZh', 'nameEn')) is not None
-        ]
-    return paper
-
-
 class KnowledgeAdapter:
     """Translate upstream Knowledge calls into the ShenZhi domain contract."""
 
@@ -589,12 +581,11 @@ class KnowledgeAdapter:
     @staticmethod
     def _map_paper_page(
         body: Any, *, limit: int, offset: int,
-        mapper: Callable[[dict[str, Any]], PaperSearchResult] = map_search_result,
     ) -> PaperBrowseResponse:
         if not isinstance(body, dict) or not isinstance(body.get('items'), list):
             raise KnowledgeIntegrationError.contract_violation()
         response = _contract_model(lambda: PaperBrowseResponse(
-            results=[mapper(item) for item in body['items']],
+            results=[map_search_result(item) for item in body['items']],
             total=_required_int(body, 'total'),
             limit=_required_int(body, 'limit'),
             offset=_required_int(body, 'offset'),
@@ -924,7 +915,7 @@ class KnowledgeAdapter:
 
     async def topic_papers(self, topic_id: str, *, limit: int, offset: int) -> PaperBrowseResponse:
         body = await self.client.topic_papers(topic_id, limit=limit, offset=offset)
-        return self._map_paper_page(body, limit=limit, offset=offset, mapper=_map_topic_paper)
+        return self._map_paper_page(body, limit=limit, offset=offset)
 
     async def search_by_subject(
         self, subject: str, *, offset: int = 0, limit: int = 10

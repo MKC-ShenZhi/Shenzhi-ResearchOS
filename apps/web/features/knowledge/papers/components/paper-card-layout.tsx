@@ -11,6 +11,7 @@ import { PAPER_CARD_INTERACTION_CLASS, usePaperCardNavigation } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { PaperReadBadge } from "@/features/knowledge/papers/components/paper-read-badge";
 import { usePaperReadStatus } from "@/features/knowledge/papers/use-paper-read-status";
+import { topicHref } from "@/features/knowledge/topics/topic-url-state";
 import type { PaperCardModel } from "@/types";
 
 /**
@@ -91,17 +92,22 @@ export function PaperCardLayout({
 
         {/* 底部：Topic + 操作 */}
         <div className="col-span-full flex flex-wrap items-center justify-between gap-3">
-          {/* Topic 固定一行：放不下的整枚隐藏，不撑高卡片 */}
-          {paper.tags.length > 0 && (
-            <div
-              className="flex h-5 min-w-0 flex-1 basis-48 flex-wrap gap-x-4 overflow-hidden"
-              title={paper.tags.map((tag) => `#${tag}`).join("  ")}
-            >
-              {paper.tags.map((tag) => (
-                <span key={tag} className="max-w-full truncate text-[13px] leading-5 text-muted">
-                  #{tag}
-                </span>
-              ))}
+          {paper.topics.length > 0 && (
+            <div className="flex min-w-0 flex-1 basis-48 flex-wrap gap-x-4 gap-y-1">
+              {paper.topics.map((topic) => {
+                const name = topic.nameZh || topic.nameEn;
+                return (
+                  <Link
+                    key={topic.id}
+                    href={topicHref(topic.id)}
+                    prefetch={false}
+                    title={name}
+                    className="max-w-full truncate rounded-sm text-[13px] leading-5 text-muted hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                  >
+                    #{name}
+                  </Link>
+                );
+              })}
             </div>
           )}
           <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">

@@ -143,7 +143,10 @@ class TopicApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((page['offset'], page['limit'], page['total']), (1001, 2, 12379))
         self.assertEqual(page['results'][0]['id'], 'paper:stable:123')
         self.assertEqual(page['results'][0]['venue'], 'NAACL')
-        self.assertEqual(page['results'][0]['subjects'], [TOPIC['nameEn']])
+        self.assertEqual(page['results'][0]['subjects'], [])
+        self.assertEqual(page['results'][0]['topics'], [
+            {'id': TOPIC_ID, 'nameZh': None, 'nameEn': TOPIC['nameEn']},
+        ])
         self.assertEqual([url.raw_path.decode() for url in self.requests], [
             '/api/v1/topics/tree', f'/api/v1/topics/{TOPIC_SEGMENT}',
             f'/api/v1/topics/{TOPIC_SEGMENT}/papers?limit=2&offset=1001',

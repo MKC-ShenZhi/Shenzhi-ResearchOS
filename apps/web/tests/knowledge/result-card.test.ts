@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { pickPaperTopics } from "../../features/knowledge/papers/paper-card-model.js";
+import { topicHref, topicIdFromRouteParam } from "../../features/knowledge/topics/topic-url-state.js";
 
 const RESULT_CARD_SOURCE = readFileSync(
   "features/knowledge/search/components/result-card.tsx",
@@ -33,4 +35,24 @@ test("Knowledge result card shares the home card layout and display rules", () =
 
 test("Knowledge search keeps rank in its data contract", () => {
   assert.match(KNOWLEDGE_TYPES_SOURCE, /rank:\s*number \| null/);
+});
+
+test("paper cards use distinct named topics and link by their full encoded ID", () => {
+  const topic = { id: "openalex:topic:T10028", nameZh: "语言模型", nameEn: "Language models" };
+  const english = { id: "openalex:topic:T10181", nameZh: null, nameEn: "Computer vision" };
+  assert.deepEqual(pickPaperTopics([
+    { ...topic, nameZh: " ", nameEn: " " }, { ...topic, id: "" },
+    topic, { ...topic, nameZh: "重复" }, english,
+  ]), [topic, english]);
+  assert.deepEqual(pickPaperTopics(undefined), []);
+  assert.deepEqual(pickPaperTopics([]), []);
+
+  const href = topicHref(topic.id);
+  assert.equal(href, "/knowledge/topics/openalex%3Atopic%3AT10028");
+  assert.equal(topicIdFromRouteParam(href.split("/").at(-1)!), topic.id);
+  assert.match(RESULT_CARD_SOURCE, /topics: pickPaperTopics\(hit\.topics\)/);
+  assert.doesNotMatch(RESULT_CARD_SOURCE, /hit\.(keywords|subjects)/);
+  assert.match(CARD_LAYOUT_SOURCE, /paper\.topics\.length > 0/);
+  assert.match(CARD_LAYOUT_SOURCE, /topic\.nameZh \|\| topic\.nameEn/);
+  assert.match(CARD_LAYOUT_SOURCE, /<Link\s+key=\{topic\.id\}\s+href=\{topicHref\(topic\.id\)\}\s+prefetch=\{false\}[^>]*>\s*#\{name\}/);
 });

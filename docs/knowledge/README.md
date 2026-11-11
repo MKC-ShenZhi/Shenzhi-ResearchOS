@@ -169,8 +169,9 @@ Search 请求使用 `query`、`topK`、`offset`、`yearFrom`、`yearTo`、`venue
 - `id`、`paperId`、`rootId` 都是 opaque string，禁止按 `paper:`、`AAAI:` 等
   内部格式解析。
 - `Search result id === Detail request paperId === Graph request paperId === Graph.rootId`。
-- `abstract`、`venue`、`year` 可为 `null`；`authors`、`keywords`、`subjects`
+- `abstract`、`venue`、`year` 可为 `null`；`authors`、`keywords`、`subjects`、`topics`
   缺省为空数组。
+- 论文列表与详情中的 `topics` 保留底座 Topic 的完整 `id`、`nameZh`（可为 `null`）、`nameEn`，按 ID 去重并保留原顺序。共用论文卡片只展示该字段的前五项，优先用中文名，并按完整 ID 跳转。未启用或找不到的主题进入现有详情不可用状态。
 - `citationCount`、`referenceCount` 为 `null` 表示外部未提供，不能静默转成 `0`。
 - 外部数字字段允许 number 或 numeric string：`"2021" → 2021`、`"42" → 42`、
   `"0.87" → 0.87`；空字符串变为 `null`，非法数字、非有限值和非法 integer

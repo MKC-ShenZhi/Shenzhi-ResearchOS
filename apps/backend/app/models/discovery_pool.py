@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Index, Integer, Text
+from sqlalchemy import DateTime, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,6 +23,7 @@ class DiscoveryPoolPaperRow(Base):
     image_id: Mapped[str] = mapped_column(Text, nullable=False)
     subjects: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     keywords: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    topics: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     # Upstream main subject; the daily edition spreads it like venues.
     primary_subject: Mapped[str | None] = mapped_column(Text, nullable=True)
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -32,7 +33,7 @@ class DiscoveryPoolPaperRow(Base):
         return {
             'id': self.paper_id, 'title': self.title, 'abstract': self.abstract, 'authors': self.authors,
             'year': self.year, 'venue': self.venue, 'image_id': self.image_id,
-            'keywords': self.keywords, 'subjects': self.subjects,
+            'keywords': self.keywords, 'subjects': self.subjects, 'topics': self.topics,
         }
 
     __table_args__ = (

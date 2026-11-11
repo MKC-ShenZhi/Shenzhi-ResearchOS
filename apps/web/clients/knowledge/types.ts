@@ -3,7 +3,7 @@
  *
  * 契约来源：知识底座科研组 Contract（同学调研确认）。
  * 稳定依赖字段：
- *   Search   → id / imageId / title / abstract / authors / year / venue / keywords / subjects / score / rank
+ *   Search   → id / imageId / title / abstract / authors / year / venue / keywords / subjects / topics / score / rank
  *   Detail   → 同上 + doi / pdfUrl / citationCount / referenceCount
  *   Graph    → rootId / nodes[{id,kind,label,properties}] / edges[{sourceId,targetId,relation,description,weight}]
  *
@@ -172,6 +172,12 @@ export interface KnowledgeFundingSearchResponse {
 }
 
 /** 搜索结果单条（论文） */
+export interface PaperTopic {
+  id: string;
+  nameZh: string | null;
+  nameEn: string;
+}
+
 export interface KnowledgePaperHit {
   id: string;
   /** 上游真实图片标识；null 表示未提供，不从论文 id 推断。 */
@@ -183,6 +189,7 @@ export interface KnowledgePaperHit {
   venue: string | null;
   keywords: string[];
   subjects: string[];
+  topics?: PaperTopic[];
   /** 相关性得分（非百分比） */
   score: number | null;
   rank: number | null;
@@ -203,6 +210,7 @@ export interface KnowledgePaperDetail {
 
   keywords: string[];
   subjects: string[];
+  topics?: PaperTopic[];
 
   /** null = 上游未提供，禁止显示为 0 */
   citationCount: number | null;
