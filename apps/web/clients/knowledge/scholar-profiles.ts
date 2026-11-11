@@ -2,10 +2,24 @@ import { z } from "zod";
 import { KnowledgeClientError } from "./client";
 
 const count = z.number().int().nonnegative().nullable().optional();
+const scholarEmploymentSchema = z.object({
+  organization: z.string().nullable(),
+  role_title: z.string().nullable(),
+  department: z.string().nullable(),
+  start_date: z.string().nullable(),
+  end_date: z.string().nullable(),
+});
+
+const scholarExternalIdsSchema = z.object({
+  orcid: z.string().regex(/^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$/).nullable(),
+});
+
 /** ShenZhi product contract, never an OpenAlex response. */
 export const scholarProfileSchema = z.object({
   scholar_id: z.string().trim().min(1),
   name_zh: z.string().nullable().optional(),
+  aliases: z.array(z.string()).optional(),
+  topics: z.array(z.string()).optional(),
   name_en: z.string().nullable().optional(),
   avatar_path: z.string().nullable().optional(),
   affiliations: z.array(z.object({
@@ -14,7 +28,15 @@ export const scholarProfileSchema = z.object({
   })).nullable().optional(),
   bio_zh: z.string().nullable().optional(),
   bio_en: z.string().nullable().optional(),
-  metrics: z.object({ paper_count: count, citation_count: count }).nullable().optional(),
+  employment: z.array(scholarEmploymentSchema).optional(),
+  external_ids: scholarExternalIdsSchema.optional(),
+  metrics: z.object({
+    paper_count: count,
+    source_work_count: count,
+    citation_count: count,
+    h_index: count,
+    i10_index: count,
+  }).nullable().optional(),
   annual_citations: z.array(z.object({
     year: z.number().int().min(1).max(9999), count,
   })).nullable().optional(),

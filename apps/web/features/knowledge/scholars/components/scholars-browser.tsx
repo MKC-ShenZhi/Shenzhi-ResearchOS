@@ -46,7 +46,7 @@ export function ScholarsBrowser() {
     const normalized = value.trim();
     if (!normalized) clearRestoration();
     else next.set("q", normalized);
-    if (normalized && nextPage > 1) next.set("page", String(nextPage));
+    if (nextPage > 1 && (normalized || provider.supportsBrowse)) next.set("page", String(nextPage));
     const serialized = next.toString();
     router.push(`/knowledge/scholars${serialized ? `?${serialized}` : ""}`, {
       scroll: false,
@@ -90,13 +90,13 @@ export function ScholarsBrowser() {
           className="ml-2 size-5 shrink-0 text-muted sm:ml-3"
         />
         <label className="min-w-0 flex-1">
-          <span className="sr-only">搜索学者姓名</span>
+          <span className="sr-only">{provider.isPreview ? "搜索姓名或机构" : "搜索学者姓名"}</span>
           <input
             type="search"
             maxLength={200}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索中文或英文姓名"
+            placeholder={provider.isPreview ? "搜索姓名、别名或机构" : "搜索中文或英文姓名"}
             className="h-10 w-full min-w-0 bg-transparent text-sm text-ink outline-none placeholder:text-faint [&::-webkit-search-cancel-button]:hidden"
           />
         </label>
@@ -135,11 +135,11 @@ export function ScholarsBrowser() {
         <div className="rounded-2xl border border-dashed border-line bg-card/50 px-5 py-16 text-center">
           <Search className="mx-auto size-7 text-faint" />
           <p className="mt-4 break-words text-sm font-medium text-ink">
-            未找到与「{committedQuery}」匹配的学者
+            {committedQuery ? `未找到与「${committedQuery}」匹配的学者` : "这一页暂无学者"}
           </p>
-          <p className="mt-2 text-sm text-muted">请尝试完整姓名或英文姓名</p>
+          <p className="mt-2 text-sm text-muted">{committedQuery ? "请尝试其他关键词" : "请返回上一页"}</p>
           <Button variant="outline" className="mt-5" onClick={clear}>
-            清空搜索
+            {committedQuery ? "清空搜索" : "返回第一页"}
           </Button>
         </div>
       ) : (
@@ -149,6 +149,7 @@ export function ScholarsBrowser() {
               key={scholar.scholar_id}
               scholar={scholar}
               returnTo={returnTo}
+              preview={provider.isPreview}
             />
           ))}
         </div>
@@ -161,7 +162,7 @@ export function ScholarsBrowser() {
         </nav>
       ) : null}
       <p className="mt-6 text-center text-xs leading-6 text-muted">
-        {provider.isDemo ? "人物、机构与学术统计均为虚构演示内容，未经知识底座验证。" : "数据来自知识底座；检索可能包含姓名片段匹配，请核对学者身份。未提供字段显示暂无数据。"}
+        {provider.isPreview ? "本地学者数据预览" : provider.isDemo ? "人物、机构与学术统计均为虚构演示内容，未经知识底座验证。" : "数据来自知识底座；检索可能包含姓名片段匹配，请核对学者身份。未提供字段显示暂无数据。"}
       </p>
     </div>
   );

@@ -3,14 +3,16 @@ import { ArrowUpRight } from "lucide-react";
 import { scholarHref } from "@/lib/navigation/scholar";
 import type { ScholarProfile } from "../types";
 import { scholarName } from "../presentation";
-import { Affiliations, ScholarAvatar, ScholarMetrics } from "./profile-parts";
+import { Affiliations, ScholarAvatar, ScholarMetrics, ScholarTopics } from "./profile-parts";
 
 export function ScholarCard({
   scholar,
   returnTo,
+  preview = false,
 }: {
   scholar: ScholarProfile;
   returnTo: string;
+  preview?: boolean;
 }) {
   return (
     <Link
@@ -36,17 +38,33 @@ export function ScholarCard({
           ) : null}
         </div>
       </div>
-      <div className="mt-3">
-        <Affiliations scholar={scholar} compact />
-      </div>
-      <p className="mt-2.5 line-clamp-2 break-words text-sm leading-[1.65] text-ink-2">
-        {scholar.bio_zh?.trim() ||
-          scholar.bio_en?.trim() ||
-          "个人简介暂无数据。"}
-      </p>
-      <div className="mt-auto pt-3.5">
-        <ScholarMetrics scholar={scholar} compact />
-      </div>
+      {preview ? (
+        <>
+          {scholar.affiliations?.length ? (
+            <div className="mt-3"><Affiliations scholar={scholar} compact /></div>
+          ) : null}
+          {scholar.topics?.length ? <ScholarTopics topics={scholar.topics.slice(0, 3)} /> : null}
+          <div className="mt-auto pt-4">
+            <div className="border-t border-line pt-3">
+              <ScholarMetrics scholar={scholar} compact preview />
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="mt-3">
+            <Affiliations scholar={scholar} compact />
+          </div>
+          <p className="mt-2.5 line-clamp-2 break-words text-sm leading-[1.65] text-ink-2">
+            {scholar.bio_zh?.trim() ||
+              scholar.bio_en?.trim() ||
+              "个人简介暂无数据。"}
+          </p>
+          <div className="mt-auto pt-3.5">
+            <ScholarMetrics scholar={scholar} compact />
+          </div>
+        </>
+      )}
     </Link>
   );
 }

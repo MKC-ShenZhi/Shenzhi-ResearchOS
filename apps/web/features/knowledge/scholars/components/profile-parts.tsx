@@ -93,24 +93,46 @@ export function Affiliations({
   );
 }
 
+export function ScholarTopics({ topics }: { topics: string[] }) {
+  return (
+    <ul aria-label="研究主题" className="mt-3 flex flex-wrap gap-2">
+      {topics.map((topic) => (
+        <li key={topic} className="max-w-full break-words rounded-md bg-primary-soft px-2.5 py-1 text-xs text-primary">
+          {topic}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function ScholarMetrics({
   scholar,
   compact = false,
+  preview = false,
+  sidebar = false,
 }: {
   scholar: ScholarProfile;
   compact?: boolean;
+  preview?: boolean;
+  sidebar?: boolean;
 }) {
+  const metrics = scholar.metrics;
+  const items = [
+    { label: preview ? "收录作品" : "平台关联论文", value: preview ? metrics?.source_work_count : metrics?.paper_count },
+    { label: "总引用次数", value: metrics?.citation_count },
+    ...(preview ? [
+      { label: "h 指数", value: metrics?.h_index },
+      { label: "i10 指数", value: metrics?.i10_index },
+    ] : []),
+  ];
+
   return (
     <dl
       className={cn(
-        "flex flex-wrap",
-        compact ? "gap-x-6 gap-y-2" : "gap-x-10 gap-y-4 sm:gap-x-12",
+        sidebar ? "grid grid-cols-2 gap-x-4 gap-y-3" : "flex flex-wrap gap-x-6 gap-y-2",
       )}
     >
-      {[
-        { label: "平台关联论文", value: scholar.metrics?.paper_count },
-        { label: "总引用次数", value: scholar.metrics?.citation_count },
-      ].map(({ label, value }) => {
+      {items.map(({ label, value }) => {
         const formatted = formatScholarMetric(value);
         return (
           <div
@@ -123,7 +145,7 @@ export function ScholarMetrics({
             <dd
               className={cn(
                 "break-words font-semibold tabular-nums tracking-tight text-ink",
-                compact ? "text-base" : "mt-1 text-[28px] leading-9",
+                compact ? "text-base" : "mt-0.5 text-xl leading-7",
                 formatted === "暂无数据" && "text-sm font-normal text-muted",
               )}
             >

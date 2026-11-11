@@ -22,15 +22,17 @@ export function PaperCard({
   paper,
   index,
   layout = "feed",
+  preview = false,
 }: {
   paper: FeedPaper;
   index: number;
   layout?: "feed" | "explore";
+  preview?: boolean;
 }) {
   const returnTo = useCurrentInternalPath();
   const { likedPapers, toggleLike } = useUserPreferences();
   const liked = !!likedPapers[paper.id];
-  const status = usePaperReadStatus(paper.id);
+  const status = usePaperReadStatus(paper.id, !preview);
   const detailHref = paperHref(paper.id, { mode: "create", source: returnTo });
   const cardNavigation = usePaperCardNavigation(detailHref, paper.title);
 
@@ -39,8 +41,8 @@ export function PaperCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: (index % 12) * 0.03 }}
-      className={`@container rounded-2xl bg-card p-6 shadow-card [overflow-wrap:anywhere] [contain-intrinsic-size:auto_260px] [content-visibility:auto] ${PAPER_CARD_INTERACTION_CLASS}`}
-      {...cardNavigation}
+      className={`@container rounded-2xl bg-card p-6 shadow-card [overflow-wrap:anywhere] [contain-intrinsic-size:auto_260px] [content-visibility:auto] ${preview ? "" : PAPER_CARD_INTERACTION_CLASS}`}
+      {...(preview ? {} : cardNavigation)}
     >
       <div className={layout === "feed" ? "grid grid-cols-1 items-start gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(200px,30cqw,280px)]" : "grid grid-cols-1 gap-y-4"}>
         <div className="min-w-0">
@@ -56,25 +58,25 @@ export function PaperCard({
           </div>
 
           {/* 标题 */}
-          <Link href={detailHref} className="group mt-2 block">
-            <h3 className="line-clamp-2 text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
-              {paper.title}
-            </h3>
-          </Link>
+          <h3 className="mt-2 line-clamp-2 text-[17px] font-bold leading-snug text-ink">
+            {preview ? paper.title : (
+              <Link href={detailHref} className="transition-colors hover:text-primary">{paper.title}</Link>
+            )}
+          </h3>
           {/* 摘要 */}
           <p className="mt-3 line-clamp-4 text-sm leading-relaxed text-muted">
             {paper.abstract}
           </p>
 
           {/* AI 解读入口 */}
-          <Link
+          {!preview ? <Link
             href={detailHref}
             className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
           >
             <Plus className="size-3.5" />
             {paper.aiLink}
             <ArrowRight className="size-3.5" />
-          </Link>
+          </Link> : null}
         </div>
 
         {layout === "feed" && (
@@ -90,7 +92,7 @@ export function PaperCard({
         )}
 
         {/* 底部操作行 */}
-        <div className="col-span-full flex flex-wrap items-center justify-between gap-3">
+        {!preview ? <div className="col-span-full flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex flex-wrap gap-x-4 gap-y-1">
             {paper.tags.map((tag) => (
               <span key={tag} className="text-[13px] text-muted">
@@ -120,7 +122,7 @@ export function PaperCard({
               </Link>
             )}
           </div>
-        </div>
+        </div> : null}
       </div>
     </motion.article>
   );

@@ -10,6 +10,7 @@ export interface ScholarProfileDetail {
 export interface ScholarProvider {
   cacheKey: string;
   isDemo: boolean;
+  isPreview?: boolean;
   supportsBrowse: boolean;
   search(query: string, signal?: AbortSignal, page?: { limit: number; offset: number }): Promise<ScholarProfilePage>;
   detail(id: string, signal?: AbortSignal): Promise<ScholarProfileDetail | null>;

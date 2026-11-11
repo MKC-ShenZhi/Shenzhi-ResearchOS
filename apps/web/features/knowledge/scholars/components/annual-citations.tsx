@@ -12,11 +12,11 @@ export function AnnualCitations({
   const max = Math.max(1, ...citations.map((item) => item.count));
   return (
     <section
-      className="min-w-0 lg:border-l lg:border-line lg:pl-10"
+      className="min-w-0"
       aria-labelledby="citations-title"
     >
       <div className="flex items-center justify-between gap-2">
-        <h2 id="citations-title" className="text-lg font-semibold text-ink">
+        <h2 id="citations-title" className="text-sm font-semibold text-ink">
           年度引用
         </h2>
         <span className="text-xs tabular-nums text-muted">
@@ -37,15 +37,15 @@ export function AnnualCitations({
               <div className="border-t border-line/60" />
               <div className="border-t border-line/60" />
             </div>
-            <div className="relative flex gap-3 px-1 sm:gap-6">
+            <div className="relative flex gap-1.5 px-0.5">
               {citations.map(({ year, count }) => (
                 <div key={year} className="min-w-0 flex-1 text-center">
                   <div className="flex h-36 flex-col justify-end">
-                    <span className="mb-2 text-xs font-medium tabular-nums text-ink-2">
+                    <span className="mb-2 text-[11px] font-medium tabular-nums text-ink-2">
                       {count.toLocaleString("en-US")}
                     </span>
                     <div
-                      className="mx-auto w-full max-w-10 rounded-t-sm bg-primary/70"
+                      className="mx-auto w-full max-w-5 rounded-t-sm bg-primary/70"
                       style={{ height: `${(count / max) * 120}px` }}
                       aria-hidden="true"
                     />
@@ -75,7 +75,7 @@ export function AnnualCitations({
             </tbody>
           </table>
           <p className="mt-3 text-xs leading-5 text-muted">
-            展示最近五个有统计的年份；缺失年份不补零，空值不视为零。
+            最近五个有统计的年份
           </p>
         </>
       ) : (

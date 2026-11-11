@@ -66,3 +66,5 @@ docs/dev/.feishu-auth-qr.png
 *.tar
 .superpowers/
 docs/superpowers/
+
+/apps/web/public/images/scholar-preview/
