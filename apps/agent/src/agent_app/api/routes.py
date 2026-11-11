@@ -21,7 +21,8 @@ from agent_app.extensions.workspace import (
 from agent_contracts import (
     AgentConfigWire, BudgetLimits, ExecutionReport, PlatformEvent, RunStatus,
     RunSteerRequestWire, RunSteerResponseWire, SessionFileReadResponseWire,
-    TaskSubmission, WorkspaceClaimCommitResponseWire,
+    TaskSubmission, WorkerHeartbeatRequestWire, WorkerHeartbeatResponseWire,
+    WorkspaceClaimCommitResponseWire,
     WorkspaceClaimPrepareResponseWire, WorkspaceClaimRequestWire,
     WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
     WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire,
@@ -203,10 +204,12 @@ async def claim(body: ClaimBody, session: AsyncSession = Depends(get_session)):
 
 
 @router.post('/runs/{run_id}/heartbeat')
-async def heartbeat(run_id: str, worker_id: str, lease_token: int,
-                    session: AsyncSession = Depends(get_session)):
-    active, cancel_requested = await repository.heartbeat(session, run_id, worker_id, lease_token)
-    return {'active': active, 'cancel_requested': cancel_requested}
+async def heartbeat(run_id: str, body: WorkerHeartbeatRequestWire,
+                    session: AsyncSession = Depends(get_session)) -> WorkerHeartbeatResponseWire:
+    active, cancel_requested = await repository.heartbeat(
+        session, run_id, body.worker_id, body.lease_token,
+    )
+    return WorkerHeartbeatResponseWire(active=active, cancel_requested=cancel_requested)
 
 
 @router.post('/runs/{run_id}/events')

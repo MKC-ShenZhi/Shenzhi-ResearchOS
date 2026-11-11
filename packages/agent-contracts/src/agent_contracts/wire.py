@@ -226,6 +226,16 @@ class EventIngestWire(PlatformEventWire):
     lease_token: int = Field(gt=0)
 
 
+class WorkerHeartbeatRequestWire(WireModel):
+    worker_id: str = Field(min_length=1, max_length=255)
+    lease_token: int = Field(gt=0)
+
+
+class WorkerHeartbeatResponseWire(WireModel):
+    active: bool
+    cancel_requested: bool
+
+
 class ReportIngestWire(ExecutionReportWire):
     worker_id: str
     lease_token: int = Field(gt=0)

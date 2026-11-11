@@ -17,6 +17,7 @@ from .wire import (
     TaskSubmissionWire, UsageReportWire, WorkspaceClaimCommitResponseWire,
     WorkspaceClaimPrepareResponseWire, WorkspaceClaimRequestWire,
     WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
+    WorkerHeartbeatRequestWire, WorkerHeartbeatResponseWire,
     WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire, validate_history,
 )
 
@@ -25,7 +26,7 @@ __all__ = [
     'RunRecord', 'RunStatus', 'TaskRecord', 'TaskStatus', 'TaskSubmission', 'UsageReport',
     'BudgetLimitsWire', 'ExecutionReportWire', 'PlatformEventWire', 'RunRecordWire',
     'TaskRecordWire', 'TaskSubmissionWire', 'UsageReportWire', 'EventIngestWire',
-    'ReportIngestWire',
+    'ReportIngestWire', 'WorkerHeartbeatRequestWire', 'WorkerHeartbeatResponseWire',
     'KnowledgeGraphEdgeWire', 'KnowledgeGraphNodeWire', 'KnowledgeGraphQueryWire',
     'KnowledgePaperDetailWire',
     'KnowledgePaperGraphWire', 'KnowledgePaperResultWire', 'KnowledgeProvenanceWire',

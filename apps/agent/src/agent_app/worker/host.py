@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
+from agent_contracts import WorkerHeartbeatRequestWire, WorkerHeartbeatResponseWire
 
 from agent_app.application.composition import build_runtime
 from agent_app.application.policies import run_deadline_s, tool_call_budget
@@ -20,12 +21,12 @@ logger = logging.getLogger('agent.worker')
 
 
 class AgentControlClient:
-    def __init__(self) -> None:
+    def __init__(self, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
         base = os.getenv('AGENT_INTERNAL_URL', 'http://127.0.0.1:8101').rstrip('/')
         token = os.getenv('AGENT_SERVICE_TOKEN', '').strip()
         if not token:
             raise RuntimeError('AGENT_SERVICE_TOKEN is required by Agent Worker')
-        self.client = httpx.AsyncClient(base_url=base, timeout=20,
+        self.client = httpx.AsyncClient(base_url=base, timeout=20, transport=transport,
                                         headers={'Authorization': f'Bearer {token}'})
 
     async def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -40,6 +41,14 @@ class AgentControlClient:
 
     async def claim(self, worker_id: str):
         return await self.post('/internal/v1/worker/claim', {'worker_id': worker_id})
+
+    async def heartbeat(self, run_id: str, worker_id: str,
+                        lease_token: int) -> WorkerHeartbeatResponseWire:
+        request = WorkerHeartbeatRequestWire(worker_id=worker_id, lease_token=lease_token)
+        response = await self.post(
+            f'/internal/v1/runs/{run_id}/heartbeat', request.model_dump(mode='json'),
+        )
+        return WorkerHeartbeatResponseWire.model_validate(response)
 
     async def close(self) -> None:
         await self.client.aclose()
@@ -109,19 +118,14 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
             if stop.is_set():
                 return
             try:
-                state = await control.post(
-                    f'/internal/v1/runs/{run_id}/heartbeat',
-                    {'worker_id': worker_id, 'lease_token': token},
-                )
+                state = await control.heartbeat(run_id, worker_id, token)
             except Exception:
                 logger.exception('Agent Worker heartbeat failed run_id=%s', run_id)
                 stop.set()
                 return
-            if not state.get('active'):
+            if not state.active or state.cancel_requested:
                 stop.set()
                 return
-            if state.get('cancel_requested'):
-                stop.set()
 
     async def receive_controls() -> None:
         after_seq = 0

@@ -97,9 +97,12 @@ async def submit(session: AsyncSession, submission: TaskSubmission) -> TaskRecor
         history=submission.history,
     )
     session.add(task)
+    # Flush each parent before adding its FK-dependent row, without committing.
+    await session.flush()
     session.add(RunRow(run_id=run_id, task_id=task_id, attempt=1,
                        status=RunStatus.PENDING.value, request_json=_request_dict(request),
                        created_at=now, lease_token=0))
+    await session.flush()
     session.add(OutboxRow(run_id=run_id, created_at=now, available_at=now,
                           delivery_attempts=0))
     await session.commit()
@@ -278,6 +281,7 @@ async def record_report(session: AsyncSession, report: ExecutionReport,
                            attempt=run.attempt + 1, status=RunStatus.PENDING.value,
                            request_json=_request_dict(next_request), created_at=now,
                            lease_token=0))
+        await session.flush()
         session.add(OutboxRow(run_id=next_run_id, created_at=now,
                               available_at=available, delivery_attempts=0))
     else:
