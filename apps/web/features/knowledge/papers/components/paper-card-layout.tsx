@@ -57,7 +57,7 @@ export function PaperCardLayout({
           {/* 元信息行 */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
             <span className="text-faint">{paper.date}</span>
-            {paper.venue && <Badge variant={paper.venueTone}>{paper.venue}</Badge>}
+            {paper.venue && <Badge variant="plain">{paper.venue}</Badge>}
             {status && <PaperReadBadge status={status} />}
             <span className="flex min-w-0 items-center gap-1.5 text-muted">
               <Users className="size-3.5 shrink-0 text-faint" />

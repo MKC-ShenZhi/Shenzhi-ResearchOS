@@ -94,10 +94,10 @@ export const ConferenceCard = memo(function ConferenceCard({
             {conference.title} <span className="font-semibold text-muted">{edition.year}</span>
           </h3>
           <div className="flex flex-wrap justify-end gap-2">
-            {rank.ccf && <Badge variant="green">CCF {rank.ccf}</Badge>}
-            {rank.core && <Badge variant="violet">CORE {rank.core}</Badge>}
-            {rank.thcpl && <Badge variant="amber">TH-CPL {rank.thcpl}</Badge>}
-            {!rank.ccf && <Badge variant="gray">非 CCF</Badge>}
+            {rank.ccf && <Badge variant="plain">CCF {rank.ccf}</Badge>}
+            {rank.core && <Badge variant="plain">CORE {rank.core}</Badge>}
+            {rank.thcpl && <Badge variant="plain">TH-CPL {rank.thcpl}</Badge>}
+            {!rank.ccf && <Badge variant="plain">非 CCF</Badge>}
           </div>
         </div>
 
@@ -115,7 +115,7 @@ export const ConferenceCard = memo(function ConferenceCard({
         )}
 
         {conference.source_removed ? (
-          <div className="mt-4 rounded-xl bg-panel px-5 py-4 text-sm text-muted">
+          <div className="mt-4 rounded-xl border border-line px-5 py-4 text-sm text-muted">
             <p className="font-medium text-ink-2">暂无最新会议数据</p>
             <p className="mt-1 leading-relaxed">目前保留最后一次资料，截稿信息请以会议官网为准。</p>
           </div>
@@ -131,7 +131,7 @@ export const ConferenceCard = memo(function ConferenceCard({
         {!conference.source_removed && edition.milestones.length > 1 && (
           <ol className="mt-3 flex flex-wrap gap-2" aria-label={`${conference.title} ${edition.year} 时间线`}>
             {timeline.passedCount > 0 && (
-              <li className="flex min-h-8 w-full items-center rounded-lg bg-chip px-5 py-2 text-xs text-faint">
+              <li className="flex min-h-8 w-full items-center px-5 py-2 text-xs text-faint">
                 已截止 {timeline.passedCount} 轮
               </li>
             )}
@@ -139,8 +139,8 @@ export const ConferenceCard = memo(function ConferenceCard({
               <li
                 key={edition.milestones.indexOf(milestone)}
                 className={cn(
-                  "grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 rounded-lg px-5 py-2 text-xs sm:grid-cols-[4rem_minmax(0,1fr)_auto]",
-                  milestone === next ? "bg-primary-soft text-primary" : "bg-chip text-muted",
+                  "grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 px-5 py-2 text-xs sm:grid-cols-[4rem_minmax(0,1fr)_auto]",
+                  milestone === next ? "text-primary" : "text-muted",
                 )}
               >
                 <span className="whitespace-nowrap font-medium">{milestoneLabel(milestone)}</span>
@@ -149,7 +149,7 @@ export const ConferenceCard = memo(function ConferenceCard({
               </li>
             ))}
             {timeline.hiddenUpcomingCount > 0 && (
-              <li className="flex min-h-8 w-full items-center rounded-lg bg-chip px-5 py-2 text-xs text-faint">
+              <li className="flex min-h-8 w-full items-center px-5 py-2 text-xs text-faint">
                 另有 {timeline.hiddenUpcomingCount} 轮
               </li>
             )}

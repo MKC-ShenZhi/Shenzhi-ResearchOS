@@ -2,15 +2,6 @@ import type { PaperCardModel } from "../../../types";
 import type { KnowledgePaperHit, PaperTopic } from "../../../clients/knowledge/types";
 import { getPaperThumbnailUrl } from "../../../lib/paper-thumbnail";
 
-const VENUE_TONES: PaperCardModel["venueTone"][] = ["violet", "amber", "green"];
-
-/** 按论文 ID 取色，同一篇论文在首页与检索中颜色一致。 */
-export function paperVenueTone(id: string): PaperCardModel["venueTone"] {
-  let hash = 0;
-  for (const character of id) hash = (hash + character.charCodeAt(0)) % VENUE_TONES.length;
-  return VENUE_TONES[hash];
-}
-
 export function formatPaperYear(year: number | null): string {
   return year === null ? "年份未知" : String(year);
 }
@@ -43,7 +34,6 @@ export function toPaperCardModel(
     id: paper.id,
     date: formatPaperYear(paper.year),
     venue: paper.venue,
-    venueTone: paperVenueTone(paper.id),
     authors: formatPaperAuthors(paper.authors),
     title: paper.title,
     abstract: paper.abstract ?? "",

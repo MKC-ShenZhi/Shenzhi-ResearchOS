@@ -24,7 +24,7 @@ const URGENCY_STYLE: Record<Exclude<DeadlineUrgency, "passed">, { label: string;
     digits: "text-[#D97706] dark:text-[#f0c94e]",
   },
   month: { label: "30 天内", pill: "bg-success-soft text-[#059669] dark:text-success", digits: "text-ink" },
-  later: { label: "进行中", pill: "bg-chip text-muted", digits: "text-ink" },
+  later: { label: "进行中", pill: "text-muted", digits: "text-ink" },
 };
 
 function pad(value: number) {
@@ -51,7 +51,7 @@ export function DeadlineCountdown({
     const values = [left.days, left.hours, left.minutes, left.seconds];
 
     return (
-      <div className="mt-4 grid grid-cols-1 items-center gap-4 rounded-xl bg-panel px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+      <div className="mt-4 grid grid-cols-1 items-center gap-4 rounded-xl border border-line px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="flex min-w-0 flex-col gap-1 text-xs font-medium text-primary">
             {milestoneLabel(next)}
@@ -103,7 +103,7 @@ export function DeadlineCountdown({
   );
 
   return (
-    <div className="mt-4 flex items-center justify-between gap-4 rounded-xl bg-panel px-5 py-4">
+    <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line px-5 py-4">
       <div className="flex flex-col gap-1">
         <span className="text-sm font-medium text-ink-2">
           {tbd ? "截稿时间待公布" : "本届投稿已截止"}
@@ -114,7 +114,7 @@ export function DeadlineCountdown({
             : `${lastAt ? `最后截止于 ${formatInstant(lastAt)}，` : ""}下一届时间公布后更新`}
         </span>
       </div>
-      <span className="rounded-full bg-chip px-3 py-1 text-xs font-medium text-muted">
+      <span className="shrink-0 px-3 py-1 text-xs font-medium text-muted">
         {tbd ? "待公布" : "已截止"}
       </span>
     </div>

@@ -11,7 +11,6 @@ import { getPaperThumbnailUrl } from "../../../lib/paper-thumbnail";
 import {
   formatPaperAuthors,
   formatPaperYear,
-  paperVenueTone,
   pickPaperTopics,
 } from "../../knowledge/papers/paper-card-model";
 import { fetchRecommendationPapers } from "../../../clients/backend/recommendations";
@@ -23,7 +22,6 @@ export function mapDiscoveryPaper(item: Omit<DiscoveryPaperDto, "year"> & { year
     id: item.id,
     date: formatPaperYear(item.year),
     venue: item.venue?.trim() || "预印本",
-    venueTone: paperVenueTone(item.id),
     authors: formatPaperAuthors(item.authors),
     title: item.title,
     abstract: item.abstract,
