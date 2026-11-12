@@ -47,17 +47,24 @@ export function ScholarsBrowser() {
     data?.pages.flatMap((batch) => batch.items.map((scholar) => [scholar.scholar_id, scholar] as const)),
   );
   const total = data?.pages[0]?.total;
+  const shouldLoadSecondBatch = !committedQuery && data?.pages.length === 1;
 
   useEffect(() => {
+    if (!hasNextPage || isFetching || isFetchNextPageError) return;
+    if (shouldLoadSecondBatch) {
+      void fetchNextPage({ cancelRefetch: false });
+      return;
+    }
+
     const target = loadMoreRef.current;
-    if (!target || !hasNextPage || isFetching || isFetchNextPageError) return;
+    if (!target) return;
 
     const observer = new IntersectionObserver(([entry]) => {
       if (entry?.isIntersecting) void fetchNextPage({ cancelRefetch: false });
     }, { rootMargin: "0px 0px 160px" });
     observer.observe(target);
     return () => observer.disconnect();
-  }, [fetchNextPage, hasNextPage, isFetching, isFetchNextPageError]);
+  }, [fetchNextPage, hasNextPage, isFetching, isFetchNextPageError, shouldLoadSecondBatch]);
 
   function navigate(value: string) {
     const next = new URLSearchParams();

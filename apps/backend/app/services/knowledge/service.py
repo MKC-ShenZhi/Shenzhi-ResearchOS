@@ -10,7 +10,9 @@ from app.integrations.knowledge.nsfc_projects import NsfcProjectsAdapter
 from app.schemas.nsfc_project import ProjectDetail, ProjectList
 from app.services.knowledge.cache import (
     PaperDetailTTLCache,
+    ScholarBrowseCache,
     shared_paper_detail_cache,
+    shared_scholar_browse_cache,
 )
 from app.schemas.knowledge import (
     ConferenceListResponse,
@@ -84,6 +86,7 @@ class KnowledgeService:
         adapter: KnowledgeAdapter | None = None,
         *,
         paper_detail_cache: PaperDetailTTLCache | None = None,
+        scholar_browse_cache: ScholarBrowseCache | None = None,
     ):
         self.adapter = adapter or KnowledgeAdapter()
         self.nsfc_projects = NsfcProjectsAdapter()
@@ -91,6 +94,9 @@ class KnowledgeService:
         # remain isolated unless their caller explicitly supplies a cache.
         self.paper_detail_cache = paper_detail_cache or (
             shared_paper_detail_cache if adapter is None else None
+        )
+        self.scholar_browse_cache = scholar_browse_cache or (
+            shared_scholar_browse_cache if adapter is None else None
         )
 
     async def search(self, request: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
@@ -151,10 +157,20 @@ class KnowledgeService:
             raise KnowledgeServiceError.from_integration_error(error) from error
 
     async def browse_scholar_profiles(self, *, limit: int, offset: int) -> ScholarProfilePage:
+        cache = self.scholar_browse_cache
+        key = (limit, offset)
+        if cache is not None:
+            cached = cache.get(key)
+            if cached is not None:
+                return cached
+
         try:
-            return await self.adapter.browse_scholar_profiles(limit=limit, offset=offset)
+            page = await self.adapter.browse_scholar_profiles(limit=limit, offset=offset)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
+        if cache is not None:
+            cache.set(key, page)
+        return page
 
     async def get_scholar_avatar(self, path: str) -> tuple[bytes, str]:
         try:

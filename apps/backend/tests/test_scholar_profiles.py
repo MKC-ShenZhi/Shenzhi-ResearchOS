@@ -1,7 +1,7 @@
 """Product Scholar V2 contract tests; fixtures do not imply live upstream acceptance."""
 import unittest
 from copy import deepcopy
-from unittest.mock import patch
+from unittest.mock import AsyncMock, call, patch
 from urllib.parse import quote
 
 import httpx
@@ -13,6 +13,7 @@ from app.integrations.knowledge.adapter import KnowledgeAdapter, map_scholar_pro
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.schemas.knowledge import ScholarSearchRequest
+from app.services.knowledge.cache import ScholarBrowseCache
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 
 ID = 'author:legacy/何?name=%252F/papers'
@@ -97,6 +98,25 @@ class FixtureClient:
 
 
 class ProductAdapterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_repeated_browse_reuses_each_page_until_expiry(self):
+        now = 0.0
+        cache = ScholarBrowseCache(ttl_seconds=300, max_entries=128, clock=lambda: now)
+        client = FixtureClient()
+        client.browse_scholar_profiles = AsyncMock(wraps=client.browse_scholar_profiles)
+        service = KnowledgeService(KnowledgeAdapter(client), scholar_browse_cache=cache)
+
+        for _ in range(2):
+            for limit, offset in ((1, 0), (1, 1), (2, 0)):
+                page = await service.browse_scholar_profiles(limit=limit, offset=offset)
+                self.assertEqual((page.limit, page.offset), (limit, offset))
+        self.assertEqual(client.browse_scholar_profiles.await_args_list, [
+            call(limit=1, offset=0), call(limit=1, offset=1), call(limit=2, offset=0),
+        ])
+
+        now = 300.0
+        await service.browse_scholar_profiles(limit=1, offset=0)
+        self.assertEqual(client.browse_scholar_profiles.await_count, 4)
+
     async def test_pagination_without_total_and_query_without_legacy_alias(self):
         client = FixtureClient()
         service = KnowledgeService(KnowledgeAdapter(client))
