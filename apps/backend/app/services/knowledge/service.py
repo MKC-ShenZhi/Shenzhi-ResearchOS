@@ -6,6 +6,8 @@ import asyncio
 
 from app.integrations.knowledge.adapter import KnowledgeAdapter, paper_summary
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
+from app.integrations.knowledge.nsfc_projects import NsfcProjectsAdapter
+from app.schemas.nsfc_project import ProjectDetail, ProjectList
 from app.services.knowledge.cache import (
     PaperDetailTTLCache,
     shared_paper_detail_cache,
@@ -84,6 +86,7 @@ class KnowledgeService:
         paper_detail_cache: PaperDetailTTLCache | None = None,
     ):
         self.adapter = adapter or KnowledgeAdapter()
+        self.nsfc_projects = NsfcProjectsAdapter()
         # Default production services share one process-local cache. Injected adapters
         # remain isolated unless their caller explicitly supplies a cache.
         self.paper_detail_cache = paper_detail_cache or (
@@ -93,6 +96,18 @@ class KnowledgeService:
     async def search(self, request: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
         try:
             return await self.adapter.search(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_nsfc_projects(self, q: str, limit: int, offset: int, *, keyword: str = '') -> ProjectList:
+        try:
+            return await self.nsfc_projects.search_projects(q, limit, offset, keyword=keyword)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def get_nsfc_project(self, award_number: str) -> ProjectDetail:
+        try:
+            return await self.nsfc_projects.get_project(award_number.upper())
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 

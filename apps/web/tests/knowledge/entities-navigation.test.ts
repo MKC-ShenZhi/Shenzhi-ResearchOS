@@ -99,7 +99,7 @@ test("Funding page uses candidate search without legacy entity fields", () => {
 });
 
 test("Funding page uses the project-funding name and URL-backed selection state", () => {
-  assert.match(fundingBrowser, /项目基金库/);
+  assert.match(fundingPage, /项目基金库/);
   assert.match(sidebar, /label: "项目基金库"/);
   assert.match(dashboard, /title: "项目基金库"/);
   assert.match(fundingBrowser, /useSearchParams/);
