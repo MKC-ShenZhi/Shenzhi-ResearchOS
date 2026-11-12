@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { useId, useState } from "react";
 import { ApiError } from "@/clients/backend/http";
 import { getNsfcProject } from "@/clients/knowledge/nsfc-projects";
 import { nsfcDirectoryHref } from "./navigation";
@@ -15,6 +16,32 @@ function SourceLink({ href, label }: { href: string; label: string }) {
   );
 }
 
+function ParticipantNames({ names }: { names: string[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const namesId = useId();
+  const previewLimit = 3;
+  const remaining = names.length - previewLimit;
+  const visibleNames = expanded ? names : names.slice(0, previewLimit);
+
+  return (
+    <>
+      <span id={namesId}>{visibleNames.join("、") || "暂无"}</span>
+      {remaining > 0 && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={namesId}
+          aria-label={expanded ? "收起参与人员" : `展开其余 ${remaining} 位参与人员`}
+          className="ml-1 inline-flex min-h-7 items-center rounded-md px-1.5 text-sm font-medium text-primary hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-primary"
+          onClick={() => setExpanded((open) => !open)}
+        >
+          {expanded ? "收起" : "…"}
+        </button>
+      )}
+    </>
+  );
+}
+
 export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: string; backHref: string }) {
   const { data, isPending, error, refetch } = useQuery({
     queryKey: ["knowledge", "nsfc-project", awardNumber],
@@ -22,6 +49,8 @@ export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: stri
     retry: false,
   });
   const missing = error instanceof ApiError && error.status === 404;
+  const leads = data?.members.filter((member) => member.role === "PI").map((member) => member.name) ?? [];
+  const participants = data?.members.filter((member) => member.role !== "PI").map((member) => member.name) ?? [];
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-8">
@@ -40,34 +69,52 @@ export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: stri
           <header className="space-y-4">
             {data.snapshot && <p className="text-xs font-medium text-muted">国自然结项项目样本</p>}
             <h1 className="text-3xl font-bold leading-tight tracking-tight text-ink">{data.name}</h1>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-4 rounded-xl border border-line bg-card p-4 text-sm sm:grid-cols-4 sm:p-5">
-              <div>
-                <dt className="text-xs text-muted">批准号</dt>
-                <dd className="mt-1.5 font-medium tabular-nums text-ink">{data.awardNumber}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted">项目类型</dt>
-                <dd className="mt-1.5 font-medium text-ink">{data.program || "未收录"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted">批准年份</dt>
-                <dd className="mt-1.5 font-medium text-ink">{data.awardYear} 年</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted">项目状态</dt>
-                <dd className="mt-1">
-                  <span className="inline-block rounded-full bg-primary-soft px-2.5 py-0.5 font-medium text-primary">
-                    {data.status || "未收录"}
-                  </span>
-                </dd>
-              </div>
-              {data.startDate && data.endDate && (
-                <div className="col-span-full border-t border-line pt-3">
-                  <dt className="text-xs text-muted">项目执行期</dt>
-                  <dd className="mt-1.5 font-medium tabular-nums text-ink">{data.startDate} 至 {data.endDate}</dd>
+            <div className="rounded-xl border border-line bg-card p-4 text-sm sm:p-5">
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div>
+                  <dt className="text-xs text-muted">批准号</dt>
+                  <dd className="mt-1.5 font-medium tabular-nums text-ink">{data.awardNumber}</dd>
                 </div>
-              )}
-            </dl>
+                <div>
+                  <dt className="text-xs text-muted">项目类型</dt>
+                  <dd className="mt-1.5 font-medium text-ink">{data.program || "未收录"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">批准年份</dt>
+                  <dd className="mt-1.5 font-medium text-ink">{data.awardYear} 年</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">项目状态</dt>
+                  <dd className="mt-1">
+                    <span className="inline-block rounded-full bg-primary-soft px-2.5 py-0.5 font-medium text-primary">
+                      {data.status || "未收录"}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
+              <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-line pt-4 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)]">
+                <div>
+                  <dt className="text-xs text-muted">项目执行期</dt>
+                  <dd className="mt-1.5 font-medium tabular-nums text-ink">
+                    {data.startDate && data.endDate ? `${data.startDate} 至 ${data.endDate}` : "暂无"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">依托单位</dt>
+                  <dd className="mt-1.5 break-words font-medium text-ink">{data.institutions.join("、") || "暂无"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">项目负责人</dt>
+                  <dd className="mt-1.5 break-words font-medium text-ink">{leads.join("、") || "暂无"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">参与人员</dt>
+                  <dd className="mt-1.5 break-words text-ink">
+                    <ParticipantNames key={data.awardNumber} names={participants} />
+                  </dd>
+                </div>
+              </dl>
+            </div>
             {data.sourceUrl && <SourceLink href={data.sourceUrl} label="基金委项目详情" />}
           </header>
           <section className="space-y-3">
@@ -91,14 +138,6 @@ export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: stri
                 </ul>
               </div>
             )}
-          </section>
-          <section className="space-y-4 rounded-xl border border-line p-5">
-            <h2 className="text-xl font-semibold text-ink">项目关系</h2>
-            <dl className="grid gap-4 sm:grid-cols-3">
-              <div><dt className="text-sm text-muted">依托单位</dt><dd className="mt-1 text-ink">{data.institutions.join("、") || "暂无记录"}</dd></div>
-              <div><dt className="text-sm text-muted">项目负责人</dt><dd className="mt-1 text-ink">{data.members.filter((member) => member.role === "PI").map((member) => member.name).join("、") || "暂无记录"}</dd></div>
-              <div><dt className="text-sm text-muted">参与人员</dt><dd className="mt-1 text-ink">{data.members.filter((member) => member.role !== "PI").map((member) => member.name).join("、") || "暂无记录"}</dd></div>
-            </dl>
           </section>
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-ink">成果论文（{data.papers.length}）</h2>
