@@ -47,7 +47,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         # All built-ins passed T5 without extensions. A deployment may explicitly
         # declare a tested strategy; both supported parameter shapes must survive.
         for strategy, value in [('enable_thinking', False), ('thinking', {'type': 'disabled'})]:
-            with self.subTest(strategy=strategy), tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
+            with self.subTest(strategy=strategy), tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete_on_close=False) as file:
                 json.dump({'models': [{
                     'id': 'autodl/Kimi-K2.5', 'provider_id': 'autodl', 'upstream_model': 'Kimi-K2.5',
                     'label': 'Kimi', 'capabilities': {'tool_calling': True, 'thinking': strategy},
@@ -103,7 +103,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(seen[0]['tool_choice'], 'auto')
 
     async def test_fourth_provider_and_duplicate_upstream_without_business_changes(self):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete_on_close=False) as file:
             json.dump({'providers': [{'id': 'fourth', 'base_url': 'https://fourth.example/v1', 'api_key_env': 'FOURTH_KEY'}],
                        'models': [{'id': 'fourth/deepseek-chat', 'provider_id': 'fourth', 'upstream_model': 'deepseek-chat',
                                    'brand': 'deepseek', 'label': 'Fourth DeepSeek', 'capabilities': {'tool_calling': True}}],
@@ -144,7 +144,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
                     AgentRuntime(model=model)
 
     async def test_new_glm_version_uses_explicit_capabilities_and_vendor_strategy(self):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete_on_close=False) as file:
             json.dump({'models': [{'id': 'zhipu/future-glm', 'provider_id': 'zhipu',
                                    'upstream_model': 'future-glm', 'label': 'GLM Custom', 'brand': 'zhipu',
                                    'capabilities': {'tool_calling': True, 'temperature': False,

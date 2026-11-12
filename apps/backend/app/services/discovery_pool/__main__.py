@@ -1,6 +1,6 @@
 """Maintain the home-feed paper pool and its daily editions.
 
-Usage (the API process runs both on schedule when HOME_FEED_SCHEDULER_ENABLED=true;
+Usage (the API process runs both on schedule when BACKGROUND_JOBS_ENABLED=true;
 these commands are for manual runs and inspection):
 
     uv run --env-file .env python -m app.services.discovery_pool sync [--year 2026] [--dry-run]

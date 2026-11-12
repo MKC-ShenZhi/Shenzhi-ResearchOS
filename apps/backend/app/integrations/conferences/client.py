@@ -59,7 +59,7 @@ def conference_files(archive: bytes) -> dict[str, bytes]:
             relative = "/".join(parts[1:])
             selected = relative == "conference/types.yml" or (
                 len(parts) == 4
-                and parts[1] == "conference"
+                and parts[1] in {"conference", "accept_rates"}
                 and relative.endswith(".yml")
             )
             if not selected:

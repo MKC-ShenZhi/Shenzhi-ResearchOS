@@ -43,7 +43,6 @@ interface NavItem {
   href: string;
   label: string;
   icon: typeof Compass;
-  badge?: string;
   disabled?: boolean;
   /** 前缀匹配(用于详情页保持高亮) */
   matchPrefix?: string;
@@ -52,7 +51,7 @@ interface NavItem {
 }
 
 const RESEARCH_NAV: NavItem[] = [
-  { href: "/", label: "发现", icon: Compass, badge: "新" },
+  { href: "/", label: "发现", icon: Compass },
   { href: "/agents", label: "深知 AI", icon: Sparkles },
   {
     href: "/submit",
@@ -98,11 +97,6 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
       <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
       {!collapsed && (
         <span className="flex-1 text-[15px] font-medium">{item.label}</span>
-      )}
-      {!collapsed && item.badge && (
-        <span className="rounded-full bg-brand-gold px-1.5 py-0.5 text-[10px] font-semibold leading-none text-ink">
-          {item.badge}
-        </span>
       )}
       {item.indicator?.(collapsed)}
     </>

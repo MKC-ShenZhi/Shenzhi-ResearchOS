@@ -26,7 +26,7 @@ conference_snapshots（数据库当前快照；打包 JSON 兜底）
 
 后端优先读取数据库 `conference_snapshots` 当前快照，数据库无可用资料时使用随后端打包的快照。运行时请求不访问 GitHub；缓存每 5 分钟检查数据库版本，变化后重新加载，数据库异常时保留最近一次已校验目录。活动页面每 5 分钟重新请求会议、分类及关注数据；仅设置 staleTime 不等同于定时刷新。
 
-长驻后端设置 `CONFERENCE_SYNC_ENABLED=true` 后复用现有 `HomeFeedScheduler`，每 10 分钟检查是否到期；成功检查距今满 23 小时才获取上游最新提交。SHA 未变只更新检查时间；有变化则从 `ccfddl/ccf-deadlines` 下载该 SHA 的压缩包，读取 `conference/types.yml` 和 `conference/*/*.yml`，校验后原子替换当前快照。失败保留旧数据，至少 1 小时后重试。首页调度开关与会议开关独立。
+长驻后端设置 `BACKGROUND_JOBS_ENABLED=true` 后，统一调度器每 10 分钟检查会议 DDL 是否到期。成功检查距今满 23 小时才获取上游最新提交。SHA 和快照生成规则均未变时只更新检查时间；否则从 `ccfddl/ccf-deadlines` 下载该 SHA 的压缩包，读取 `conference/types.yml`、`conference/*/*.yml` 和 `accept_rates/*/*.yml`，校验后原子替换当前快照。旧版快照在下一次到期检查时重建，即使上游 SHA 未变。失败保留旧数据，至少 1 小时后重试。
 
 上线前先运行迁移（原会议 021/022 与 dev 的 Chat 清理迁移经 023 合并迁移汇合），再启用任务。生产服务器必须能访问 `api.github.com` 和 `codeload.github.com`。进程内调度不适用于无法保证持续运行的 Serverless 实例。共享 IP 限流时可选配置仅后端使用的 `CONFERENCE_GITHUB_TOKEN`。
 
@@ -42,7 +42,7 @@ uv run --locked python -m app.services.conferences.cli publish --source /path/to
 # 解压目录则显式提供 --revision <40位SHA> --commit-date YYYY-MM-DD
 ```
 
-共用清洗模块为 `app/services/conferences/source.py`；不新增依赖。TBD / 空串归一为未公布，等级 N / 空值归一为 null，修正 abstract deadline 键名，显式忽略 rebuttal_deadline / decision_deadline，其他未知时间轴字段拒绝。快照保存官方当地时间和时区，不在采集阶段换算 UTC。
+共用清洗模块为 `app/services/conferences/source.py`；不新增依赖。TBD / 空串归一为未公布，等级 N / 空值归一为 null，修正 abstract deadline 键名，保留可选的 `rebuttal_deadline` / `decision_deadline`，其他未知时间轴字段拒绝。历史录用率优先按上游分类和文件路径关联，路径不匹配时只允许唯一同名会议关联。快照保存官方当地时间和时区，不在采集阶段换算 UTC。
 
 保护规则：完整 schema 和目录校验；会议数量不得比当前资料减少超过 10%；已关注的上游移除项保留最后资料并标记，不阻断其他会议更新。校验失败记录日志且不替换 payload。下载与解压声明大小均受限，不解压至磁盘。数据库只保留当前一份，避免历史快照无限增长；已知分类变化由 021_conference_follow_ids 迁移保住关注，后续变化需核查。
 
@@ -58,7 +58,7 @@ uv run --locked python -m app.services.conferences.cli publish --source /path/to
 - **筛选**：`category`、`ccf`、`core`、`thcpl`、`status` 均可重复传参；同一等级体系内为“或”，跨体系为“且”；`N` 表示未被该体系收录；
   `q` 匹配简称、全称与 dblp key。未知方向返回 422。
 
-前端只负责展示相关的时间计算：每秒走动的倒计时、紧急程度（24 小时 / 7 天 / 30 天）、页面停留期间从摘要截止滚动到全文截稿。
+卡片时间轴合并投稿截止和已知的作者回复、最终录用通知、会议开始节点。倒计时默认指向最近的未来节点，悬停或键盘聚焦节点时预览该节点，离开后恢复。点击卡片的非操作区域展开详情，同时只展开一张卡片。会议开始按会期首日 08:00 和届次时区推算，无法解析时留空；历史录用率在详情按年份显示并附来源。
 
 ## 关注截稿（站内跟踪）
 
@@ -75,7 +75,7 @@ uv run --locked python -m app.services.conferences.cli publish --source /path/to
 
 ## 已知边界
 
-- 数据无 Rebuttal / 录用通知 / 定稿时间，原型中的这些标签页未实现。
+- 录用通知不包含定稿截止时间。会议开始为推算时刻，历史录用率只反映对应年份和来源口径。
 - `/submit/journals`（期刊）仍为静态原型，保持“功能暂未上线”。
 - closed 且最后截稿超过 365 天的会议显示“待更新”，通过新增 needs_update 字段表示，不改变原状态和筛选规则。
 - 资料量随上游变化，默认只请求未截止的会议；数据规模显著增长时再引入分页。
@@ -101,4 +101,5 @@ uv run --locked python -m app.services.conferences.cli publish --source /path/to
 - `GET /api/v1/conferences`：列表、等级/方向/状态筛选、搜索；followed=true只返回当前用户关注。
 - `GET /api/v1/conferences/categories`：方向目录。
 - `PUT /api/v1/conferences/{id}/follow`：新增关注，已移除目标拒绝；`DELETE`取消关注，即使上游已移除也允许。
-- 新增响应字段 `source_removed` 区分保留资料；原有status枚举不扩展，不把它当会议停办结论。
+- 列表响应新增可选资料：`edition.events`（作者回复、最终录用通知、会议开始）和 `accept_rates`（历史录用率）。`edition.milestones` 和 `next_milestone` 仍只表示投稿节点，沿用原有投稿状态、筛选、关注提醒和日历导出。
+- 响应字段 `source_removed` 区分保留资料；原有status枚举不扩展，不把它当会议停办结论。

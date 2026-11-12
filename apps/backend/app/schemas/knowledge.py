@@ -187,6 +187,8 @@ class ConferenceSummary(KnowledgeModel):
 
 class ConferenceListResponse(KnowledgeModel):
     items: list[ConferenceSummary]
+    snapshot_updated_at: datetime | None = Field(default=None, serialization_alias='snapshotUpdatedAt')
+    snapshot_stale: bool | None = Field(default=None, serialization_alias='snapshotStale')
 
 
 class PaperBrowseRequest(KnowledgeModel):

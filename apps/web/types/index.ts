@@ -6,7 +6,6 @@ export interface PaperCardModel {
   date: string;
   /** 为空时不展示会议标签。 */
   venue: string | null;
-  venueTone: "violet" | "amber" | "green";
   authors: string;
   title: string;
   abstract: string;

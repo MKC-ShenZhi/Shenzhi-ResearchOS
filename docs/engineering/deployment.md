@@ -62,7 +62,7 @@ Vercel Postgres (Neon):Auth 表与业务表共存于同一库
 ### 限制与已知事项
 
 1. **Serverless 与进程内运行时不匹配**。后端按长驻进程设计,以下能力在 Vercel 上不保证可用:
-   - `lifespan` 不保证执行:启动时的 `recover()`(中断流式消息、Agent 运行的状态修复)与首页调度器(`HOME_FEED_SCHEDULER_ENABLED`)可能不运行;仓库未配置 Vercel Cron,候选池同步与每日候选生成需手动执行(见 [apps/backend/README.md](../../apps/backend/README.md))。
+   - `lifespan` 不保证执行，启动时的 `recover()` 与进程内后台调度器可能不运行。Vercel 演示环境保持 `BACKGROUND_JOBS_ENABLED=false`。手动维护命令见 [后端 README](../../apps/backend/README.md)。
    - 函数单次执行上限 300s;Agent 的 deep / idea / doubt 模式运行时限为 900s(`services/agent/policies.py`)。
    - Agent 运行归属保存在单进程内存(`services/agent_sessions/live.py`),重连、steer、stop 请求可能落到其他实例。
    - Agent workspace 写本地磁盘(`apps/backend/workspace/`),Serverless 下不持久。
@@ -92,6 +92,8 @@ Vercel Postgres (Neon):Auth 表与业务表共存于同一库
 | 系统 | Ubuntu 22.04.5 LTS(虚拟机) |
 
 服务器地址与登录方式不入库,向服务器负责人获取。
+
+完成数据库迁移后，正式常驻后端设置 `BACKGROUND_JOBS_ENABLED=true`，统一启动首页数据任务、会议 DDL 同步和论文库会议目录同步。此开关默认关闭。已有部署升级时，用它替换原来的 `HOME_FEED_SCHEDULER_ENABLED` 和 `CONFERENCE_SYNC_ENABLED`。论文库首份目录可在上线前提前同步，见 [会议目录快照](../knowledge/PAPER-LIBRARY-V2.md#常驻后端的会议目录快照)。
 
 ---
 

@@ -3,7 +3,6 @@
 import asyncio
 import copy
 import io
-import os
 import tarfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -33,10 +32,16 @@ def files():
   confs:
     - year: 2027
       timezone: AoE
+      date: July 2-4, 2027 and June 20-22, 2027
       timeline:
         - deadline: 2026-12-01 23:59:59
           rebuttal_deadline: 2027-01-01 00:00:00
-          decision_deadline: TBD
+          decision_deadline: 2027-02-01 00:00:00
+""",
+        "accept_rates/AI/demo.yml": b"""- title: DEMO
+  accept_rates:
+    - {year: 2025, rate: 0.25, submitted: 400, accepted: 100, source: "https://example.com/report"}
+    - {year: 2026, str: "20%"}
 """,
     }
 
@@ -56,13 +61,34 @@ def archive(name="repo/conference/AI/demo.yml", kind=tarfile.REGTYPE):
 
 
 class SourceTests(unittest.TestCase):
-    def test_safe_yaml_timestamp_and_ignored_fields(self):
+    def test_new_fields_reach_api_without_changing_submission_milestones(self):
         result = payload()
         self.assertEqual(result["source"]["revision"], SHA)
-        timeline = result["conferences"][0]["editions"][0]["timeline"][0]
-        self.assertEqual(timeline["deadline"], "2026-12-01 23:59:59")
-        self.assertEqual(set(timeline), {"abstract_deadline", "deadline", "comment"})
+        catalog = catalog_from_snapshot(ConferenceSnapshotFile.model_validate(result))
+        item = ConferenceDeadlineService(lambda: catalog, lambda: NOW).deadlines().items[0]
+        self.assertEqual([point.kind for point in item.edition.milestones], ["full"])
+        self.assertEqual(item.next_milestone.local, "2026-12-01 23:59:59")
+        self.assertEqual(
+            [(event.kind, event.at.isoformat(), event.is_derived) for event in item.edition.events],
+            [
+                ("rebuttal", "2027-01-01T12:00:00+00:00", False),
+                ("decision", "2027-02-01T12:00:00+00:00", False),
+                ("opening", "2027-06-20T20:00:00+00:00", True),
+            ],
+        )
+        self.assertEqual([(row.year, row.rate) for row in item.accept_rates], [(2026, None), (2025, 0.25)])
+        self.assertEqual(item.accept_rates[1].source, "https://example.com/report")
         self.assertEqual(result, payload())
+
+    def test_missing_or_unannounced_dates_do_not_create_events(self):
+        source = files()
+        source["conference/AI/demo.yml"] = source["conference/AI/demo.yml"].replace(
+            b"July 2-4, 2027 and June 20-22, 2027", b"July 2027"
+        ).replace(b"2027-02-01 00:00:00", b"TBD")
+        catalog = catalog_from_snapshot(ConferenceSnapshotFile.model_validate(
+            snapshot_from_files(source, SHA, "2026-11-03")
+        ))
+        self.assertEqual([point.kind for point in catalog.records[0].editions[0].events], ["rebuttal"])
 
     def test_unknown_key_invalid_date_timezone_and_category_fail(self):
         for old, new in [
@@ -88,6 +114,7 @@ class SourceTests(unittest.TestCase):
 
     def test_archive_selection_and_unsafe_paths_links_size(self):
         self.assertEqual(conference_files(archive()), {"conference/AI/demo.yml": b"x"})
+        self.assertEqual(conference_files(archive("repo/accept_rates/AI/demo.yml")), {"accept_rates/AI/demo.yml": b"x"})
         self.assertEqual(conference_files(archive("repo/elsewhere/demo.yml")), {})
         for name, kind in [
             ("repo/../conference/AI/demo.yml", tarfile.REGTYPE),
@@ -165,6 +192,17 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
         job.client.download.assert_not_awaited()
         job.store.save.assert_not_awaited()
         job.store.checked.assert_awaited_once_with(NOW)
+
+    async def test_older_format_rebuilds_even_when_upstream_sha_has_not_changed(self):
+        old = {**payload(), "snapshot_id": "ccfddl-legacy"}
+        job = self.make(SimpleNamespace(
+            snapshot_id=old["snapshot_id"], upstream_sha=SHA, checked_at=None, attempted_at=None,
+        ))
+        job.store.payload = AsyncMock(return_value=old)
+        result = await job.sync(now=NOW)
+        self.assertEqual(result["status"], "updated")
+        job.client.download.assert_awaited_once_with(SHA)
+        self.assertTrue(job.store.save.await_args.args[0]["conferences"][0]["accept_rates"])
 
     async def test_changed_writes_only_after_validation_and_dry_run_does_not_write(
         self,
@@ -290,42 +328,10 @@ class CacheTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(await cache.get(), good)
 
 
-class SchedulerTests(unittest.IsolatedAsyncioTestCase):
-    def test_conference_switch_is_explicit_and_independent(self):
-        from app.services.discovery_pool.scheduler import conference_sync_enabled, scheduler_enabled
-        with patch.dict(os.environ, {"CONFERENCE_SYNC_ENABLED": "true", "HOME_FEED_SCHEDULER_ENABLED": "false", "VERCEL": "1"}):
-            self.assertTrue(conference_sync_enabled())
-            self.assertTrue(scheduler_enabled())
-        with patch.dict(os.environ, {"CONFERENCE_SYNC_ENABLED": "false", "HOME_FEED_SCHEDULER_ENABLED": "true"}):
-            self.assertFalse(conference_sync_enabled())
-            self.assertTrue(scheduler_enabled())
-
-    async def test_conference_only_and_failure_isolated(self):
-        from app.services.discovery_pool.scheduler import HomeFeedScheduler
-
-        with patch.dict(
-            os.environ,
-            {"CONFERENCE_SYNC_ENABLED": "true", "HOME_FEED_SCHEDULER_ENABLED": "false"},
-        ):
-            with patch(
-                "app.services.discovery_pool.scheduler.ConferenceSync.run",
-                AsyncMock(return_value={"status": "updated"}),
-            ):
-                self.assertEqual(
-                    await HomeFeedScheduler().run_due(NOW), ["conferences"]
-                )
-            with patch(
-                "app.services.discovery_pool.scheduler.ConferenceSync.run",
-                AsyncMock(side_effect=RuntimeError("failed")),
-            ):
-                with self.assertLogs("app.services.discovery_pool.scheduler", "ERROR"):
-                    self.assertEqual(await HomeFeedScheduler().run_due(NOW), [])
-
-
 class DailyBudgetTests(unittest.IsolatedAsyncioTestCase):
     async def test_sync_checks_before_24_hour_display_budget(self):
         state = SimpleNamespace(
-            snapshot_id="test", upstream_sha=SHA, checked_at=NOW, attempted_at=NOW
+            snapshot_id=payload()["snapshot_id"], upstream_sha=SHA, checked_at=NOW, attempted_at=NOW
         )
         store = SimpleNamespace(
             state=AsyncMock(return_value=state),

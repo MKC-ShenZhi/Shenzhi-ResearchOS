@@ -48,7 +48,8 @@ export function ConferenceFollowButton({
   return (
     <>
       <Button
-        variant={following ? "soft" : "default"}
+        variant="outline"
+        className="bg-transparent hover:border-primary/50 hover:bg-transparent aria-pressed:border-primary/50 aria-pressed:text-primary"
         size="sm"
         aria-pressed={following}
         disabled={isAuthPending || resolving || (conference.source_removed && !following)}

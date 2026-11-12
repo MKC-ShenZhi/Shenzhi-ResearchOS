@@ -6,7 +6,6 @@ export const feedPapers: FeedPaper[] = [
     id: "ultralong-1m",
     date: "2026-07-25",
     venue: "ICML 2026 · Oral",
-    venueTone: "violet",
     authors: "Wei-Lin Chiang · Zhuohan Li · et al. (UC Berkeley)",
     title:
       "UltraLong-1M: 一个面向百万级 Token 推理的自回归 Transformer 长程记忆机制",
@@ -21,7 +20,6 @@ export const feedPapers: FeedPaper[] = [
     id: "sana-video-2",
     date: "2026-07-24",
     venue: "arXiv · cs.CV",
-    venueTone: "amber",
     authors: "Junsong Chen · Jincheng Yu · Yitong Li (NVIDIA)",
     title:
       "SANA-Video 2.0: 基于混合线性注意力与残差机制的高效视频扩散 Transformer",
@@ -36,7 +34,6 @@ export const feedPapers: FeedPaper[] = [
     id: "arex",
     date: "2026-07-23",
     venue: "ICLR 2026",
-    venueTone: "green",
     authors: "Yifei Ming · Sumanth Dathathri · et al. (Stanford)",
     title: "AREX: 面向深度研究的递归自我进化智能体",
     abstract:

@@ -97,7 +97,7 @@ export function ScholarTopics({ topics }: { topics: string[] }) {
   return (
     <ul aria-label="研究主题" className="mt-3 flex flex-wrap gap-2">
       {topics.map((topic) => (
-        <li key={topic} className="max-w-full break-words rounded-md bg-primary-soft px-2.5 py-1 text-xs text-primary">
+        <li key={topic} className="max-w-full break-words rounded-md border border-line px-2.5 py-1 text-xs text-primary">
           {topic}
         </li>
       ))}

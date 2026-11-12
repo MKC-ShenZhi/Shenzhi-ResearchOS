@@ -15,6 +15,7 @@ from app.services.knowledge.cache import (
     shared_project_first_page_cache,
     shared_scholar_browse_cache,
 )
+from app.services.knowledge.conference_directory import load_conference_directory
 from app.schemas.knowledge import (
     ConferenceListResponse,
     PaperBrowseRequest,
@@ -127,6 +128,9 @@ class KnowledgeService:
             raise KnowledgeServiceError.from_integration_error(error) from error
 
     async def conferences(self) -> ConferenceListResponse:
+        snapshot = await load_conference_directory()
+        if snapshot is not None:
+            return snapshot
         try:
             return await self.adapter.conferences()
         except KnowledgeIntegrationError as error:

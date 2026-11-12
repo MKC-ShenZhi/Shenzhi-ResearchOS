@@ -56,6 +56,10 @@ export function ConferenceBrowser() {
   const now = useNow(60_000);
   const [focusId, setFocusId] = useState(initialFocusId);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const toggleDetails = useCallback((id: string) => {
+    setExpandedId((current) => current === id ? null : id);
+  }, []);
   // 目标会议不在当前筛选结果中时，放宽一次筛选再找
   const focusRelaxed = useRef(false);
 
@@ -200,14 +204,18 @@ export function ConferenceBrowser() {
                 key={conference.id}
                 conference={conference}
                 categoryName={categoryNames.get(conference.category)}
-                // Closed / TBD cannot change as time moves forward: freeze their clock.
-                now={conference.status === "open" ? now : deadlines.dataUpdatedAt}
+                // Keep ticking for future events after submissions close.
+                now={conference.status === "open" || conference.edition.events?.some(
+                  (event) => Date.parse(event.at) > deadlines.dataUpdatedAt,
+                ) ? now : deadlines.dataUpdatedAt}
                 // 追加的批次按批内序号错落入场，不累积延迟
                 index={index % RENDER_BATCH}
                 animateLayout={index < RENDER_BATCH}
                 following={followed.ids.has(conference.id)}
                 followResolving={followed.isResolving}
                 highlighted={highlightId === conference.id}
+                expanded={expandedId === conference.id}
+                onToggleDetails={toggleDetails}
               />
             ))}
             {data && data.items.length === 0 && (

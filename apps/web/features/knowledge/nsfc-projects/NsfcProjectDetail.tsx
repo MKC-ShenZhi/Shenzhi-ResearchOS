@@ -84,11 +84,7 @@ export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: stri
                 </div>
                 <div>
                   <dt className="text-xs text-muted">项目状态</dt>
-                  <dd className="mt-1">
-                    <span className="inline-block rounded-full bg-primary-soft px-2.5 py-0.5 font-medium text-primary">
-                      {data.status || "未收录"}
-                    </span>
-                  </dd>
+                  <dd className="mt-1.5 font-medium text-ink">{data.status || "未收录"}</dd>
                 </div>
               </dl>
               <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-line pt-4 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)]">
@@ -128,7 +124,7 @@ export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: stri
                       <Link
                         href={nsfcDirectoryHref("", topic)}
                         aria-label={`按研究关键词筛选：${topic}`}
-                        className="inline-block break-words rounded-full border border-primary/20 bg-primary-soft px-3 py-1 text-sm text-primary hover:border-primary/50 hover:underline"
+                        className="inline-block break-words rounded-full border border-primary/20 px-3 py-1 text-sm text-primary hover:border-primary/50 hover:underline"
                       >
                         {topic}
                       </Link>

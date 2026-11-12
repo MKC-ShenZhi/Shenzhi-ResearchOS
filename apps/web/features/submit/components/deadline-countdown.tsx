@@ -1,8 +1,7 @@
 "use client";
 
-import { Fragment } from "react";
-import { cn } from "@/lib/utils";
-import type { ConferenceDeadlineDto } from "@/clients/backend/conferences";
+import type { ConferenceTimelinePoint } from "@/clients/backend/conferences";
+import { useNow } from "@/features/submit/hooks/use-now";
 import {
   deadlineUrgency,
   formatInstant,
@@ -10,119 +9,70 @@ import {
   milestoneLabel,
   remainingUntil,
   upcomingMilestone,
-  type DeadlineUrgency,
 } from "@/features/submit/lib/deadline-time";
-import { useNow } from "@/features/submit/hooks/use-now";
+import { cn } from "@/lib/utils";
 
-const UNITS = ["天", "小时", "分钟", "秒"] as const;
+const UNITS = ["天", "小时", "分", "秒"] as const;
 
-const URGENCY_STYLE: Record<Exclude<DeadlineUrgency, "passed">, { label: string; pill: string; digits: string }> = {
-  day: { label: "24 小时内", pill: "bg-danger-soft text-danger", digits: "text-danger" },
-  week: {
-    label: "本周截止",
-    pill: "bg-[#FEF3C7] text-[#B45309] dark:bg-[#3a2f10] dark:text-[#f0c94e]",
-    digits: "text-[#D97706] dark:text-[#f0c94e]",
-  },
-  month: { label: "30 天内", pill: "bg-success-soft text-[#059669] dark:text-success", digits: "text-ink" },
-  later: { label: "进行中", pill: "bg-chip text-muted", digits: "text-ink" },
-};
-
-function pad(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-/** 截稿面板 —— 进行中显示实时倒计时；待公布 / 已截止给出明确状态，不伪造时间 */
 export function DeadlineCountdown({
-  conference,
-  now,
+  points,
+  preview,
+  timezone,
+  fallback,
 }: {
-  conference: ConferenceDeadlineDto;
-  now: number;
+  points: readonly ConferenceTimelinePoint[];
+  preview: ConferenceTimelinePoint | null;
+  timezone: string;
+  fallback: string;
 }) {
-  const next = conference.status === "open"
-    ? upcomingMilestone(conference.edition.milestones, now)
-    : null;
+  // Keep the shared seconds clock local to the readout.
+  const now = useNow(1000);
+  const target = preview ?? upcomingMilestone(points, now);
+  if (!target?.at) return <p className="text-sm font-medium text-muted sm:col-start-2 sm:row-start-1 sm:row-span-2 sm:text-right">{fallback}</p>;
 
-  if (next) {
-    const nextAt = Date.parse(next.at);
-    const urgency = deadlineUrgency(nextAt, now) as Exclude<DeadlineUrgency, "passed">;
-    const style = URGENCY_STYLE[urgency];
-    const left = remainingUntil(nextAt, now);
-    const values = [left.days, left.hours, left.minutes, left.seconds];
-
-    return (
-      <div className="mt-4 grid grid-cols-1 items-center gap-4 rounded-xl bg-panel px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="flex min-w-0 flex-col gap-1 text-xs font-medium text-primary">
-            {milestoneLabel(next)}
-            {next.comment && <span className="break-words font-normal leading-relaxed text-primary/80">{next.comment}</span>}
-          </span>
-          <span className="text-[13px] text-ink-2">{formatInstant(next.at)}</span>
-          {next.local && (
-            <span className="text-xs text-faint">
-              官方时间 {formatOfficialTime(next.local, conference.edition.timezone)}
-            </span>
-          )}
-        </div>
-
-        <div
-          className="grid justify-self-center grid-cols-[2.5rem_0.625rem_2.5rem_0.625rem_2.5rem_0.625rem_2.5rem] items-start sm:grid-cols-[3rem_1rem_3rem_1rem_3rem_1rem_3rem]"
-          role="timer"
-          aria-label={`距${milestoneLabel(next)}还有 ${left.days} 天 ${left.hours} 小时 ${left.minutes} 分钟`}
-        >
-          {values.map((value, i) => (
-            <Fragment key={UNITS[i]}>
-              <div className="flex flex-col items-center gap-0.5">
-                <span className={cn("text-[28px] font-bold leading-none tabular-nums", style.digits)}>
-                  {pad(value)}
-                </span>
-                <span className="text-[11px] text-faint">{UNITS[i]}</span>
-              </div>
-              {i < 3 && (
-                <span className={cn("text-center text-xl font-bold leading-[28px]", style.digits)} aria-hidden>
-                  :
-                </span>
-              )}
-            </Fragment>
-          ))}
-        </div>
-
-        <span className={cn("w-20 justify-self-end whitespace-nowrap rounded-full px-3 py-1 text-center text-xs font-medium", style.pill)}>
-          {style.label}
-        </span>
-      </div>
-    );
-  }
-
-  // `open` with no upcoming milestone left means it closed while the page stayed open.
-  const tbd = conference.status === "tbd";
-  const lastAt = conference.edition.milestones.reduce<string | null>(
-    (latest, milestone) =>
-      milestone.at && (!latest || Date.parse(milestone.at) > Date.parse(latest)) ? milestone.at : latest,
-    null,
-  );
+  const at = Date.parse(target.at);
+  const urgency = deadlineUrgency(at, now);
+  const { days, hours, minutes, seconds } = remainingUntil(at, now);
+  const derived = "is_derived" in target && target.is_derived;
+  const label = milestoneLabel(target);
 
   return (
-    <div className="mt-4 flex items-center justify-between gap-4 rounded-xl bg-panel px-5 py-4">
-      <div className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-ink-2">
-          {tbd ? "截稿时间待公布" : "本届投稿已截止"}
-        </span>
-        <span className="text-[13px] text-muted">
-          {tbd
-            ? "组织方尚未公布具体日期，请关注会议官网"
-            : `${lastAt ? `最后截止于 ${formatInstant(lastAt)}，` : ""}下一届时间公布后更新`}
-        </span>
+    <>
+      {target.comment && (
+        <p className="min-w-0 wrap-break-word px-1 text-xs leading-relaxed text-muted sm:col-start-1 sm:row-start-2 sm:self-start">
+          <span className="mr-1 font-medium text-ink-2">备注</span>
+          {target.comment}
+        </p>
+      )}
+      <div className="min-w-0 space-y-1 sm:col-start-2 sm:row-start-1 sm:row-span-2 sm:text-right">
+        <p className="text-xs leading-relaxed text-ink-2">
+          <span className="font-medium text-primary">{label}{derived ? "（推算）" : ""}</span>
+          {" · "}{formatInstant(target.at)}
+        </p>
+        {target.local && (
+          <p className="text-xs leading-relaxed text-muted">
+            {derived ? "推算时间" : "官方时间"} {formatOfficialTime(target.local, timezone)}
+          </p>
+        )}
+        {urgency === "passed" ? (
+          <p className="text-sm font-semibold text-muted">已过该时间点</p>
+        ) : (
+          <div
+            role="timer"
+            aria-label={`距${label}还有 ${days} 天 ${hours} 小时 ${minutes} 分钟 ${seconds} 秒`}
+            className={cn(
+              "flex flex-wrap items-baseline gap-x-2 text-[22px] font-bold leading-none tabular-nums sm:justify-end",
+              urgency === "day" ? "text-danger" : urgency === "week" ? "text-[#B45309] dark:text-[#f0c94e]" : "text-ink",
+            )}
+          >
+            {[days, hours, minutes, seconds].map((value, index) => (
+              <span aria-hidden key={UNITS[index]} className="whitespace-nowrap">
+                {String(value).padStart(2, "0")} <span className="text-[11px] font-normal text-muted">{UNITS[index]}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
-      <span className="rounded-full bg-chip px-3 py-1 text-xs font-medium text-muted">
-        {tbd ? "待公布" : "已截止"}
-      </span>
-    </div>
+    </>
   );
-}
-
-/** 进行中的会议每秒走动：只有倒计时这一小块订阅秒级时钟，卡片本身不随之重渲染 */
-export function LiveDeadlineCountdown({ conference }: { conference: ConferenceDeadlineDto }) {
-  const now = useNow(1000);
-  return <DeadlineCountdown conference={conference} now={now} />;
 }

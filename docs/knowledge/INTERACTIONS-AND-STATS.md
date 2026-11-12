@@ -100,9 +100,8 @@ uv run --env-file .env python -m app.services.stats               # 上海时区
 - 同日重跑会删除当日旧行并整体替换；失败时事务回滚，上一次完整发布继续对外可见，
   `failure_reason` 只记录最近一次尝试的错误类型。
 - CLI 只生成运行时上海时区的当天快照。源表只保存当前有效关系，不能用当前人数回填过去日期并称作历史统计。
-- 快照调度不在仓库内实现：API 进程内的首页调度器（`app/services/discovery_pool/scheduler.py`，
-  `HOME_FEED_SCHEDULER_ENABLED`）只执行候选池 `sync`、每日候选 `publish` 与过期数据 `purge`，
-  不生成统计快照。部署侧需用 cron / systemd timer / 平台调度器每日调用一次 CLI；仓库不预设已有 Cron 配置。
+- 统计快照由部署侧通过 cron、systemd timer 或平台调度器每日调用一次 CLI。
+  `BACKGROUND_JOBS_ENABLED` 控制 API 进程内的后台调度器，统计快照仍由上述 CLI 独立生成。
 - 快照的站内消费方：首页 `trending` 数据源（`app/services/home_feed/trending.py`）读取列表日期之前
   （不含当天）最新一次完整发布，按点赞数 + 收藏人数排序候选池论文；个人推荐排序中的“平台热度”
   特征也来自已发布快照。从未运行 `python -m app.services.stats` 时 `trending` 始终为空，其配额由其他

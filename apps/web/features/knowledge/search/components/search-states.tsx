@@ -48,9 +48,13 @@ export function KnowledgeSearchEmpty({ query }: { query: string }) {
 export function KnowledgeSearchError({
   error,
   onRetry,
+  title,
+  retryLabel = "重新检索",
 }: {
   error: KnowledgeClientError;
   onRetry: () => void;
+  title?: string;
+  retryLabel?: string;
 }) {
   const unavailable = ["UPSTREAM_UNAVAILABLE", "TIMEOUT", "RATE_LIMITED"].includes(error.code);
   return (
@@ -64,12 +68,12 @@ export function KnowledgeSearchError({
         {unavailable ? <WifiOff className="size-6" /> : <AlertTriangle className="size-6" />}
       </span>
       <p className="mt-4 text-sm font-medium text-ink-2">
-        {unavailable ? "知识底座服务暂不可用" : "检索失败"}
+        {title ?? (unavailable ? "知识底座服务暂不可用" : "检索失败")}
       </p>
-      <p className="mt-2 max-w-sm text-xs leading-relaxed text-faint">{error.message}</p>
+      {error.message !== title && <p className="mt-2 max-w-sm text-xs leading-relaxed text-faint">{error.message}</p>}
       <Button size="sm" variant="outline" className="mt-5" onClick={onRetry}>
         <RotateCw className="size-3.5" />
-        重新检索
+        {retryLabel}
       </Button>
     </div>
   );

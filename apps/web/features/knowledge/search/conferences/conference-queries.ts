@@ -11,6 +11,7 @@ export function conferenceQueryOptions(client: KnowledgeClient = getKnowledgeCli
     staleTime: 10 * 60_000,
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
+    refetchInterval: (query) => query.state.data?.snapshotUpdatedAt ? 10 * 60_000 : false,
     retry: knowledgeQueryRetry,
   });
 }

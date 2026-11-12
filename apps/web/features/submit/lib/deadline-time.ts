@@ -1,4 +1,4 @@
-import type { ConferenceMilestoneDto } from "../../../clients/backend/conferences";
+import type { ConferenceEditionDto, ConferenceMilestoneDto, ConferenceTimelinePoint } from "../../../clients/backend/conferences";
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -60,33 +60,25 @@ export function upcomingMilestone<T extends Pick<ConferenceMilestoneDto, "at">>(
   return best;
 }
 
-export interface CompactTimeline<T> {
-  passedCount: number;
-  visible: T[];
-  hiddenUpcomingCount: number;
+/** The card previews all known events, while calendar and follow actions use submission milestones only. */
+export function timelinePoints(edition: ConferenceEditionDto): ConferenceTimelinePoint[] {
+  const dated = (point: ConferenceTimelinePoint) => point.at ? Date.parse(point.at) : Infinity;
+  return [...edition.milestones, ...(edition.events ?? [])].sort((a, b) => dated(a) - dated(b));
 }
 
-/**
- * Rolling-deadline venues (e.g. VLDB: monthly) publish a dozen rounds per edition.
- * Collapse passed rounds into a count, show the next `maxUpcoming` dated rounds, keep TBD.
- */
-export function compactTimeline<T extends Pick<ConferenceMilestoneDto, "at">>(
-  milestones: readonly T[],
-  nowMs: number,
-  maxUpcoming = 4,
-): CompactTimeline<T> {
-  const passed = milestones.filter((item) => item.at !== null && Date.parse(item.at) <= nowMs);
-  const upcoming = milestones.filter((item) => item.at !== null && Date.parse(item.at) > nowMs);
-  const tbd = milestones.filter((item) => item.at === null);
+export function milestoneLabel(milestone: Pick<ConferenceTimelinePoint, "kind">): string {
   return {
-    passedCount: passed.length,
-    visible: [...upcoming.slice(0, maxUpcoming), ...tbd],
-    hiddenUpcomingCount: Math.max(0, upcoming.length - maxUpcoming),
-  };
+    abstract: "摘要截止",
+    full: "全文截稿",
+    rebuttal: "作者回复截止",
+    decision: "最终录用通知",
+    opening: "会议开始",
+  }[milestone.kind];
 }
 
-export function milestoneLabel(milestone: Pick<ConferenceMilestoneDto, "kind">): string {
-  return milestone.kind === "abstract" ? "摘要截止" : "全文截稿";
+export function formatTimelineDate(iso: string): string {
+  const p = parts(new Date(iso), undefined);
+  return `${p.month}/${p.day}`;
 }
 
 // Constructing Intl formatters is costly and countdowns re-render every second.

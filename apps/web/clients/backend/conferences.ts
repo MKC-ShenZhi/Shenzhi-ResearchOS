@@ -22,6 +22,25 @@ export interface ConferenceMilestoneDto {
   comment: string | null;
 }
 
+export interface ConferenceEventDto {
+  kind: "rebuttal" | "decision" | "opening";
+  at: string;
+  local: string;
+  comment: string | null;
+  is_derived: boolean;
+}
+
+export type ConferenceTimelinePoint = ConferenceMilestoneDto | ConferenceEventDto;
+
+export interface ConferenceAcceptanceRateDto {
+  year: number;
+  submitted: number | null;
+  accepted: number | null;
+  rate: number | null;
+  str: string | null;
+  source: string | null;
+}
+
 export interface ConferenceEditionDto {
   year: number;
   link: string | null;
@@ -29,6 +48,7 @@ export interface ConferenceEditionDto {
   date: string | null;
   place: string | null;
   milestones: ConferenceMilestoneDto[];
+  events?: ConferenceEventDto[];
 }
 
 export interface ConferenceDeadlineDto {
@@ -45,6 +65,7 @@ export interface ConferenceDeadlineDto {
   edition_count: number;
   needs_update?: boolean;
   source_removed?: boolean;
+  accept_rates?: ConferenceAcceptanceRateDto[];
 }
 
 export interface ConferenceDeadlineListDto {

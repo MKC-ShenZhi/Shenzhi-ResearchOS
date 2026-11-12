@@ -50,7 +50,7 @@ class DiscoveryPoolMigrationTests(unittest.TestCase):
         self.assertEqual(asyncio.run(run(tables)), set(), 'Migration roundtrip requires an EMPTY test database')
         heads = alembic('heads')
         self.assertEqual(heads.count('(head)'), 1)
-        self.assertIn('024_discovery_pool_topics (head)', heads)
+        self.assertIn('026_home_scheduler_state (head)', heads)
         self.assertIn('017_conference_follows -> 018_discovery_pool', alembic('history'))
 
         alembic('upgrade', '017_conference_follows')
@@ -110,7 +110,7 @@ class DiscoveryPoolMigrationTests(unittest.TestCase):
         self.assertEqual(asyncio.run(run(sentinel)), 1)
 
         alembic('upgrade', 'head')
-        self.assertIn('024_discovery_pool_topics (head)', alembic('current'))
+        self.assertIn('026_home_scheduler_state (head)', alembic('current'))
 
 
 if __name__ == '__main__':
