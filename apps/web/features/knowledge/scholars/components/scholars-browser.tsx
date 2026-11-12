@@ -183,7 +183,7 @@ export function ScholarsBrowser() {
         </div>
       ) : null}
       <p className="mt-6 text-center text-xs leading-6 text-muted">
-        {provider.isPreview ? "本地学者数据预览" : provider.isDemo ? "人物、机构与学术统计均为虚构演示内容，未经知识底座验证。" : "数据来自知识底座；检索可能包含姓名片段匹配，请核对学者身份。未提供字段显示暂无数据。"}
+        {provider.isDemo ? "人物、机构与学术统计均为虚构演示内容，未经知识底座验证。" : "数据来自知识底座；检索可能包含姓名片段匹配，请核对学者身份。未提供字段显示暂无数据。"}
       </p>
     </div>
   );

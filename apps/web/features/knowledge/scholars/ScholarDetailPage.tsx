@@ -13,7 +13,6 @@ import { scholarName } from "./presentation";
 import { ScholarBiography } from "./components/scholar-biography";
 import { AnnualCitations } from "./components/annual-citations";
 import { ScholarEmployment } from "./components/scholar-employment";
-import { ScholarFeaturedPapers } from "./components/scholar-featured-papers";
 import { ScholarPublications } from "./components/scholar-publications";
 import {
   Affiliations,
@@ -96,16 +95,14 @@ export function ScholarDetailPage({
       ) : isError ? (
         <div className="mt-8"><ScholarError onRetry={() => void refetch()} /></div>
       ) : scholar ? (
-        <ScholarProfileSections scholar={scholar} preview={provider.isPreview} />
+        <ScholarProfileSections scholar={scholar} />
       ) : null}
       {/* Keep publications mounted while profile loading/error state changes. */}
-      {!provider.isPreview ? (
-        <div className="pt-8">
-          <ScholarPublications key={scholarId} scholarId={scholarId} />
-        </div>
-      ) : null}
+      <div className="pt-8">
+        <ScholarPublications key={scholarId} scholarId={scholarId} />
+      </div>
       {scholar ? <footer className="mt-8 border-t border-line pt-5 text-xs leading-6 text-muted">
-        <p>{provider.isPreview ? "学术指标与年度引用来自本地采集快照。" : provider.isDemo ? "人物、机构与学术统计均为虚构演示内容，未经知识底座验证。" : "学者资料来自知识底座。机构关系不代表当前任职；未提供的履历和指标不作推断。"}</p>
+        <p>{provider.isDemo ? "人物、机构与学术统计均为虚构演示内容，未经知识底座验证。" : "学者资料来自知识底座。机构关系不代表当前任职；未提供的履历和指标不作推断。"}</p>
         {scholar.citation_meta ? <p>引用来源：{scholar.citation_meta.source || "暂无数据"}；覆盖范围：{scholar.citation_meta.coverage || "暂无数据"}；统计截至：{scholar.citation_meta.as_of || "暂无数据"}</p> : null}
         {updatedAt ? (
           <p>
@@ -123,7 +120,7 @@ export function ScholarDetailPage({
 }
 
 
-function ScholarProfileSections({ scholar, preview = false }: { scholar: ScholarProfile; preview?: boolean }) {
+function ScholarProfileSections({ scholar }: { scholar: ScholarProfile }) {
   return (
     <>
       <header className="mt-8 flex items-start gap-5 sm:gap-7">
@@ -167,12 +164,9 @@ function ScholarProfileSections({ scholar, preview = false }: { scholar: Scholar
             <AnnualCitations data={scholar.annual_citations} />
           </div>
         </aside>
-        {scholar.employment?.length || preview ? (
+        {scholar.employment?.length ? (
           <div className="min-w-0 @min-[800px]:col-start-1">
-            {scholar.employment?.length ? (
-              <ScholarEmployment key={`employment-${scholar.scholar_id}`} entries={scholar.employment} />
-            ) : null}
-            {preview ? <ScholarFeaturedPapers key={`featured-papers-${scholar.scholar_id}`} /> : null}
+            <ScholarEmployment key={`employment-${scholar.scholar_id}`} entries={scholar.employment} />
           </div>
         ) : null}
       </div>

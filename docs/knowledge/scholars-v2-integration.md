@@ -16,6 +16,6 @@
 
 学者关联论文与论文检索复用论文卡片。论文响应沿用已有主题字段，并可附带底座提供的 `imageId`，缩略图使用现有论文图片规则。卡片保留 DOI 和 PDF 来源，内部详情入口由 `platform_detail` 控制。
 
-删除 `NEXT_PUBLIC_SCHOLAR_PREVIEW` 或设为 `0` 后重启 Web 开发进程。生产模式需要重新构建 Web。FastAPI 使用 `KNOWLEDGE_BASE_API_URL`，Web 服务端使用 `BUSINESS_BACKEND_URL` 及现有 BFF 凭据。设置 `NEXT_PUBLIC_SCHOLAR_PREVIEW=1` 可继续使用本地快照和公共精选论文。
+学者库在开发和生产环境均通过知识底座 API 读取数据。FastAPI 使用 `KNOWLEDGE_BASE_API_URL`，Web 服务端使用 `BUSINESS_BACKEND_URL` 及现有 BFF 凭据。
 
 联调记录：[2026-10-20 初次接入](../dev/records/knowledge/SCHOLAR-V2-INITIAL-INTEGRATION-2026-10-20.md)、[2026-11-12 底座接口复测](../dev/records/knowledge/SCHOLAR-API-VALIDATION-2026-11-12.md)。
