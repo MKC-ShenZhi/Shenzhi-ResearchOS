@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from hashlib import sha256
 from io import BytesIO
@@ -12,7 +12,8 @@ import json
 import math
 from pathlib import Path
 import re
-from tempfile import gettempdir
+from tempfile import NamedTemporaryFile, gettempdir
+from urllib.error import HTTPError
 from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -27,6 +28,8 @@ LANE_GUTTER = "#d9e2d9"
 # One continuous Figure on each clipped outer lane, three in each inner lane.
 LANE_WEIGHTS = ((1,), (1.17, 1.03, .80), (.86, 1.18, .96), (1,))
 LANE_COUNT = len(LANE_WEIGHTS)
+REQUIRED_FIGURES = sum(map(len, LANE_WEIGHTS))
+OUTPUT_DIR = Path(__file__).resolve().parents[2] / "apps/web/public/topic-covers"
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -35,7 +38,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def read_url(url, mime, maximum):
-    with build_opener(NoRedirect()).open(Request(url, headers={"Accept": mime}), timeout=15) as response:
+    with build_opener(NoRedirect()).open(Request(url, headers={"Accept": mime}), timeout=40) as response:
         if not response.headers.get_content_type().startswith(mime.split("*")[0]):
             raise ValueError("Unexpected content type")
         data = response.read(maximum + 1)
@@ -122,7 +125,7 @@ def load_figure(origin, paper, cache):
             payload = local.read_bytes()
         else:
             payload = read_url(origin + path, "image/*", 12_000_000)
-            local.write_bytes(payload)
+            write_atomically(local, payload)
         image, reason = decode_figure(payload)
         if image is None:
             return None, reason
@@ -135,6 +138,8 @@ def load_figure(origin, paper, cache):
             "sha256": sha256(payload).hexdigest(), "trimmed_size": list(image.size),
         }
         return Figure(source, image, signature), None
+    except HTTPError as error:
+        return None, f"image_http_{error.code}"
     except (OSError, ValueError) as error:
         return None, f"unusable_{type(error).__name__}"
 
@@ -170,14 +175,17 @@ def collect(origin, topic_id, cache, goal, max_pages, excluded):
                     seen_papers.add(paper_id)
                     seen_images.add(image_id)
                     eligible.append(paper)
-            # executor.map retains API order, regardless of download completion order.
-            for figure, reason in downloads.map(lambda p: load_figure(origin, p, cache), eligible):
-                if figure is None:
-                    skipped[reason] += 1
-                elif any((figure.signature ^ previous.signature).bit_count() <= 4 for previous in figures):
-                    skipped["duplicate_figure"] += 1
-                else:
-                    figures.append(figure)
+            for start in range(0, len(eligible), 6):
+                # Retain API order while limiting downloads once enough candidates are available.
+                for figure, reason in downloads.map(lambda p: load_figure(origin, p, cache), eligible[start:start+6]):
+                    if figure is None:
+                        skipped[reason] += 1
+                    elif any((figure.signature ^ previous.signature).bit_count() <= 4 for previous in figures):
+                        skipped["duplicate_figure"] += 1
+                    else:
+                        figures.append(figure)
+                if len(figures) >= goal:
+                    break
             print(f"{topic_id}: scanned {scanned}/{total}, accepted {len(figures)}", flush=True)
             offset += len(papers)
             if len(figures) >= goal or not papers or offset >= total:
@@ -227,9 +235,15 @@ def rounded(image, radius):
     return result
 
 
-def save_cover(image, output):
+def write_atomically(output, data):
     output.parent.mkdir(parents=True, exist_ok=True)
-    image.save(output, "WEBP", quality=91, method=5)
+    with NamedTemporaryFile(dir=output.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+    try:
+        temporary.write_bytes(data)
+        temporary.replace(output)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def visible_lane_span(corners, top, bottom):
@@ -295,19 +309,58 @@ def diagonal_strips(figures):
     }
 
 
+def cover_filename(topic_id):
+    match = re.fullmatch(r"openalex:topic:(T[0-9]+)", topic_id)
+    if not match:
+        raise ValueError(f"Invalid OpenAlex Topic ID: {topic_id!r}")
+    return f"{match[1]}.webp"
+
+
+def catalog_topics(origin):
+    data = json.loads(read_url(f"{origin}/api/v1/knowledge/topics", "application/json", 8_000_000))["data"]
+    topic_ids = [item["id"] for item in data["items"]]
+    names = {cover_filename(topic_id) for topic_id in topic_ids}
+    if not topic_ids or len(topic_ids) != len(names) or len(topic_ids) != data["total"]:
+        raise ValueError("Topic catalog is empty, incomplete, or contains duplicate IDs")
+    return topic_ids
+
+
+def generate_topic(args, origin, topic_id, excluded):
+    output = args.output_dir / cover_filename(topic_id)
+    if args.skip_existing and output.is_file():
+        try:
+            with Image.open(output) as existing:
+                if existing.format == "WEBP" and existing.size == (W, H):
+                    existing.load()
+                    return "existing"
+        except OSError:
+            pass
+    figures, skipped = collect(origin, topic_id, args.cache, args.candidates, args.max_pages, excluded)
+    if len(figures) < REQUIRED_FIGURES:
+        raise ValueError(f"Found only {len(figures)} of {REQUIRED_FIGURES} required figures (skipped: {dict(skipped)})")
+    cover, layout = diagonal_strips(figures)
+    data = BytesIO()
+    cover.save(data, "WEBP", quality=91, method=5)
+    write_atomically(output, data.getvalue())
+    sources = "\n".join(f"  lane {tile['lane']}: {tile['paper_id']} {tile['image_id']}" for tile in layout["tiles"])
+    print(f"{topic_id} -> {output}\n{sources}", flush=True)
+    return "generated"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--topic", required=True, help="OpenAlex Topic ID, e.g. openalex:topic:T10028")
+    scope = parser.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--topic", help="OpenAlex Topic ID, e.g. openalex:topic:T10028")
+    scope.add_argument("--all", action="store_true", help="Generate covers for the current Topic catalog")
     parser.add_argument("--origin", default="http://localhost:3000")
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR)
     parser.add_argument("--cache", type=Path, default=Path(gettempdir()) / "shenzhi-topic-cover-cache")
-    parser.add_argument("--candidates", type=int, default=32, choices=range(8, 41), metavar="8–40")
+    parser.add_argument("--candidates", type=int, default=32, choices=range(REQUIRED_FIGURES, 41), metavar="8–40")
     parser.add_argument("--max-pages", type=int, default=12)
+    parser.add_argument("--jobs", type=int, default=4, choices=range(1, 9), metavar="1–8")
+    parser.add_argument("--skip-existing", action="store_true", help="Keep existing valid covers")
     args = parser.parse_args()
 
-    match = re.fullmatch(r"openalex:topic:(T[0-9]+)", args.topic)
-    if not match:
-        parser.error("--topic must be an OpenAlex Topic ID such as openalex:topic:T10028")
     origin = args.origin.rstrip("/")
     try:
         parsed = urlsplit(origin)
@@ -319,20 +372,27 @@ def main():
         parser.error("Provide an HTTP(S) origin without credentials or a path, and at least one page")
 
     try:
+        topic_ids = catalog_topics(origin) if args.all else [args.topic]
+        if not args.all:
+            cover_filename(args.topic)
         excluded = json.loads(Path(__file__).with_name("excluded-images.json").read_text(encoding="utf-8"))
         args.cache.mkdir(parents=True, exist_ok=True)
-        figures, skipped = collect(origin, args.topic, args.cache, args.candidates, args.max_pages, excluded)
-        required = sum(map(len, LANE_WEIGHTS))
-        if len(figures) < required:
-            raise ValueError(f"Found only {len(figures)} of {required} required figures (skipped: {dict(skipped)})")
-        cover, layout = diagonal_strips(figures)
-        output = args.output_dir / f"{match[1]}.webp"
-        save_cover(cover, output)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, TypeError, KeyError) as exc:
         parser.exit(1, f"{exc}\n")
-    print(f"{args.topic} -> {output}")
-    for tile in layout["tiles"]:
-        print(f"  lane {tile['lane']}: {tile['paper_id']} {tile['image_id']}")
+
+    print(f"Catalog selection: {len(topic_ids)} Topics", flush=True)
+    counts = Counter()
+    with ThreadPoolExecutor(max_workers=args.jobs) as workers:
+        pending = {workers.submit(generate_topic, args, origin, topic_id, excluded): topic_id for topic_id in topic_ids}
+        for future in as_completed(pending):
+            try:
+                counts[future.result()] += 1
+            except (OSError, ValueError) as exc:
+                counts["failed"] += 1
+                print(f"FAILED {pending[future]}: {exc}", flush=True)
+    print(f"Total {len(topic_ids)}, generated {counts['generated']}, existing {counts['existing']}, failed {counts['failed']}")
+    if counts["failed"]:
+        parser.exit(1)
 
 
 if __name__ == "__main__":

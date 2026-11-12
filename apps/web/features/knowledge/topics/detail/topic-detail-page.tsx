@@ -84,7 +84,7 @@ export function TopicDetailPage({ topicId, returnTo }: { topicId: string; return
 
         <article className="mt-5 grid grid-cols-[96px_minmax(0,1fr)] gap-x-4 gap-y-3 rounded-2xl border border-line bg-card p-4 sm:p-5 md:grid-cols-[240px_minmax(0,1fr)] md:gap-x-6 md:gap-y-0">
           <div className="relative aspect-[4/3] self-start overflow-hidden rounded-xl bg-muted md:row-span-3">
-            <TopicCover key={topic.imagePath} imagePath={topic.imagePath} name={topic.nameZh} sizes="(min-width: 768px) 240px, 96px" eager />
+            <TopicCover key={topic.id} topicId={topic.id} name={topic.nameZh} eager />
           </div>
           <div className="min-w-0 [overflow-wrap:anywhere]">
             <h1 className="text-2xl font-semibold leading-tight tracking-tight text-ink md:text-[30px]">

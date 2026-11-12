@@ -46,7 +46,7 @@ export function TopicCard({
   return (
     <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-card shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-pop">
       <Link href={href} className="relative block aspect-[3.6/1] overflow-hidden bg-chip" aria-label={`查看主题：${topic.nameZh}`}>
-        <TopicCover key={topic.imagePath} imagePath={topic.imagePath} name={topic.nameZh} sizes={featured ? "(max-width: 768px) 100vw, 50vw" : "(max-width: 768px) 100vw, 33vw"} eager={featured} className="transition duration-500 group-hover:scale-[1.03]" />
+        <TopicCover key={topic.id} topicId={topic.id} name={topic.nameZh} eager={featured} className="transition duration-500 group-hover:scale-[1.03]" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" />
         <div className="absolute bottom-3 left-4 flex size-11 items-center justify-center rounded-xl border border-line bg-card/90 text-primary shadow-sm backdrop-blur"><Network className="size-5" strokeWidth={1.8} aria-hidden="true" /></div>
       </Link>

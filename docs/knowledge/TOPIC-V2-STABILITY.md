@@ -7,7 +7,7 @@
 - `GET /api/v1/knowledge/topics` 返回 `items`、`total` 和 `categories`。分类对象含 `id`、`name`、`total`。主题的 `category` 为 Subfield ID，`categoryName` 为显示名称。
 - `GET /api/v1/knowledge/topics/{topicId}` 在目录校验后读取底座详情。原样使用完整 OpenAlex Topic ID，URL 中按单个路径段编码。旧 ID、父级节点及未开放主题返回 404。
 - 每个 FastAPI 进程共享一份 5 分钟目录缓存，并合并并发刷新。失败后可以重试。旧 `topic_catalog.json` 仅供历史元数据消费者使用，广场和主题详情不读取该文件。
-- 封面使用卡片和详情共用的 `TopicCover` 默认视觉，卡片保留通用主题图标。底座暂未提供创作者和独立详细介绍，界面隐藏空的创作者字段，使用真实简介。论文目录统计来自底座。
+- 主题卡片和详情页通过 `TopicCover` 根据 OpenAlex Topic ID 加载同一张静态 WebP，缺图时显示默认渐变。主题卡片保留通用主题图标。底座暂未提供创作者和独立详细介绍，界面隐藏空的创作者字段，使用真实简介。论文目录统计来自底座。
 
 ## 广场交互
 
@@ -31,6 +31,6 @@
 
 ## 生成主题封面
 
-[A1 封面生成工具](../../tools/topic-cover/README.md)经 ShenZhi Web 的主题关联论文接口和图片代理取图，将 8 张论文配图拼成四条斜向条带，输出 `1440 × 400` 的 WebP。工具独立运行，生成的文件尚未接入主题卡片。
+[A1 封面生成工具](../../tools/topic-cover/README.md)经 ShenZhi Web 的主题关联论文接口和图片代理取图，将 8 张论文配图拼成四条斜向条带。工具批量输出 `1440 × 400` 的 WebP 到 `apps/web/public/topic-covers/`，主题卡片和详情页直接使用这些静态文件。
 
 旧版验收记录见 [Topic V2 历史验收](../dev/records/knowledge/TOPIC-V2-validation.md)。
