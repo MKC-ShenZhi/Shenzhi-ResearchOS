@@ -220,8 +220,8 @@ Topic Catalog、分页上限、错误重试、数据核对与本地验收见
 | `/knowledge/scholars/graph` | 学者合作关系原型；上游尚无学者关系图谱 Contract，不进入产品导航 |
 | `/knowledge/topics` | Topic 广场：完整目录、精选与分类、关键词搜索 |
 | `/knowledge/topics/[topicId]` | Topic 详情：目录信息、关注按钮及按 `subjectQuery` 实时查询的关联论文；支持安全 `returnTo` |
-| `/knowledge/funding` | 项目基金库：浏览 Funding 候选；选择 Funding 后按名称查询关联论文；使用 `q` 与 opaque `funding` URL 参数恢复页面状态 |
-| `/knowledge/nsfc-projects` | 从主题库进入国自然项目目录，按批准号、项目名、主题、负责人或依托单位检索；点击结果进入项目详情及关系 |
+| `/knowledge/funding` | 项目基金库：默认按批准号、项目名、主题、负责人或依托单位检索国自然项目；「基金与关联论文」使用 `q` 与 opaque `funding` 恢复基金浏览状态 |
+| `/knowledge/nsfc-projects/[awardNumber]` | 国自然项目详情及关系；旧目录 URL `/knowledge/nsfc-projects` 跳转至基金库并保留查询及页码 |
 | `/knowledge/graph` | 侧栏「关系图谱」入口；页面使用静态示例数据（`features/knowledge/data-knowledge-graph.ts`）；真实论文图谱见 `/papers/[id]/graph` |
 | `/papers/[id]` | 统一论文详情与 PDF 阅读器；通过 Knowledge Client 加载真实详情 |
 | `/papers/[id]/graph` | fullGraph（保留异构节点/边）、References/Citations 筛选、节点详情 |

@@ -1,6 +1,6 @@
 # 国自然项目接入
 
-主题库的「浏览国自然项目」入口通过 Next.js BFF、FastAPI Knowledge Service 和 NSFC Adapter 请求底座。批准号是项目主键，详情将单项目图谱投影为依托单位、人员和成果论文。
+项目基金库（`/knowledge/funding`）默认展示国自然项目目录，经 Next.js BFF、FastAPI Knowledge Service 和 NSFC Adapter 请求底座。批准号是项目主键，详情将单项目图谱投影为依托单位、人员和成果论文。返回基金库时保留项目搜索词与页码；「基金与关联论文」页签提供基金候选和关联论文查询。
 
 ## 数据源
 

@@ -5,6 +5,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { ApiError } from "@/clients/backend/http";
 import { getNsfcProject } from "@/clients/knowledge/nsfc-projects";
+import { nsfcDirectoryHref } from "./navigation";
 
 function SourceLink({ href, label }: { href: string; label: string }) {
   return (
@@ -25,7 +26,7 @@ export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: stri
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-8">
       <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-muted hover:text-primary">
-        <ArrowLeft size={16} aria-hidden="true" /> 返回国自然项目
+        <ArrowLeft size={16} aria-hidden="true" /> 返回项目基金库
       </Link>
       {isPending && <p role="status" className="text-sm text-muted">正在加载项目详情…</p>}
       {error && (
@@ -50,7 +51,7 @@ export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: stri
                 {[...new Set(data.topics)].map((topic) => (
                   <li key={topic}>
                     <Link
-                      href={`/knowledge/nsfc-projects?${new URLSearchParams({ q: topic })}`}
+                      href={nsfcDirectoryHref(topic)}
                       className="inline-block rounded-full border border-line px-3 py-1 text-sm text-ink hover:text-primary"
                     >
                       {topic}

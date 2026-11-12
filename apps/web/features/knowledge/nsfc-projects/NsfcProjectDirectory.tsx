@@ -1,29 +1,26 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Search } from "lucide-react";
+import { ArrowRight, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { searchNsfcProjects } from "@/clients/knowledge/nsfc-projects";
+import { nsfcDirectoryHref } from "./navigation";
 
-const directory = "/knowledge/nsfc-projects";
 const pageSize = 20;
-
-function pageUrl(query: string, page = 1, path = directory) {
-  const params = new URLSearchParams();
-  if (query) params.set("q", query);
-  if (page > 1) params.set("page", String(page));
-  return params.size ? `${path}?${params}` : path;
-}
 
 export function NsfcProjectDirectory() {
   const router = useRouter();
   const params = useSearchParams();
-  const query = (params.get("q") ?? "").slice(0, 200).trim();
+  const query = (params.get("projectQuery") ?? "").slice(0, 200).trim();
   const requestedPage = Number(params.get("page") ?? 1);
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 && requestedPage <= 100_000
     ? requestedPage : 1;
   const offset = (page - 1) * pageSize;
+  const detailParams = new URLSearchParams();
+  if (query) detailParams.set("q", query);
+  if (page > 1) detailParams.set("page", String(page));
+  const detailQuery = detailParams.size ? `?${detailParams}` : "";
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["knowledge", "nsfc-projects", query, page],
     queryFn: ({ signal }) => searchNsfcProjects(query, pageSize, offset, signal),
@@ -31,14 +28,7 @@ export function NsfcProjectDirectory() {
   });
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-8">
-      <Link href="/knowledge/topics" className="inline-flex items-center gap-2 text-sm text-muted hover:text-primary">
-        <ArrowLeft size={16} aria-hidden="true" /> 主题库
-      </Link>
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight text-ink">国自然项目</h1>
-        {data?.snapshot && <p className="mt-2 text-sm text-muted">国自然结项项目样本</p>}
-      </header>
+    <div className="space-y-5">
       <form
         role="search"
         key={query}
@@ -46,7 +36,7 @@ export function NsfcProjectDirectory() {
         onSubmit={(event) => {
           event.preventDefault();
           const value = String(new FormData(event.currentTarget).get("q") ?? "").trim();
-          router.push(pageUrl(value));
+          router.push(nsfcDirectoryHref(value));
         }}
       >
         <input
@@ -70,11 +60,13 @@ export function NsfcProjectDirectory() {
       )}
       {data && (
         <section aria-label="项目结果" className="space-y-3">
-          <p className="text-sm text-muted">{data.total} 个项目</p>
+          <p className="text-sm text-muted">
+            {data.total} 个项目{data.snapshot ? " · 国自然结项样本" : ""}
+          </p>
           {data.items.length === 0 && (
             <p className="rounded-xl border border-line p-5 text-sm text-muted">
               {data.total ? "本页没有项目。" : "没有找到匹配的项目。"}{" "}
-              <Link href={pageUrl(data.total ? query : "")} className="text-primary underline">
+              <Link href={nsfcDirectoryHref(data.total ? query : "")} className="text-primary underline">
                 {data.total ? "返回第一页" : "查看全部"}
               </Link>
             </p>
@@ -83,7 +75,7 @@ export function NsfcProjectDirectory() {
             {data.items.map((project) => (
               <li key={project.awardNumber}>
                 <Link
-                  href={pageUrl(query, page, `${directory}/${encodeURIComponent(project.awardNumber)}`)}
+                  href={`/knowledge/nsfc-projects/${encodeURIComponent(project.awardNumber)}${detailQuery}`}
                   className="group flex items-center justify-between gap-4 px-5 py-4 hover:bg-primary-soft"
                 >
                   <div className="min-w-0">
@@ -98,13 +90,13 @@ export function NsfcProjectDirectory() {
           </ul>
           {data.items.length > 0 && data.total > pageSize && (
             <nav aria-label="项目分页" className="flex items-center gap-5 text-sm">
-              {page > 1 && <Link className="text-primary" href={pageUrl(query, page - 1)}>上一页</Link>}
+              {page > 1 && <Link className="text-primary" href={nsfcDirectoryHref(query, page - 1)}>上一页</Link>}
               <span className="text-muted">第 {page} / {Math.ceil(data.total / pageSize)} 页</span>
-              {offset + pageSize < data.total && <Link className="text-primary" href={pageUrl(query, page + 1)}>下一页</Link>}
+              {offset + pageSize < data.total && <Link className="text-primary" href={nsfcDirectoryHref(query, page + 1)}>下一页</Link>}
             </nav>
           )}
         </section>
       )}
-    </main>
+    </div>
   );
 }

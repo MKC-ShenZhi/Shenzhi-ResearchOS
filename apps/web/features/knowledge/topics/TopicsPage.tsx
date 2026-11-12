@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getKnowledgeClient } from "@/clients/knowledge";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
@@ -45,12 +44,6 @@ export function TopicsPage() {
     <main className="min-h-screen bg-background px-4 py-7 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1180px]">
         <header className="mb-7">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <h1 className="text-2xl font-semibold tracking-tight text-ink">主题库</h1>
-            <Link href="/knowledge/nsfc-projects" className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-primary hover:bg-primary-soft">
-              浏览国自然项目
-            </Link>
-          </div>
           <div className="mb-4"><TopicSearch value={state.query} onSearch={(query) => updateState({ query })} /></div>
           <TopicCategoryTabs categories={data?.categories ?? []} value={state.category} onChange={(category) => updateState({ category })} />
         </header>
