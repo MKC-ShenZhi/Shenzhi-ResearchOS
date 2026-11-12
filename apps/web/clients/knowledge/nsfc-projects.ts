@@ -1,6 +1,6 @@
 import { apiJson } from "../backend/http";
 
-interface ProjectSummary {
+export interface ProjectSummary {
   awardNumber: string;
   name: string;
   awardYear: number;
@@ -8,6 +8,9 @@ interface ProjectSummary {
   program: string;
   institutions: string[];
   topics: string[];
+  summary?: string;
+  principalInvestigators?: string[];
+  paperCount?: number | null;
 }
 
 interface ProjectList {
@@ -17,7 +20,6 @@ interface ProjectList {
 }
 
 interface ProjectDetail extends ProjectSummary {
-  summary: string;
   startDate: string;
   endDate: string;
   sourceUrl: string | null;
@@ -28,8 +30,9 @@ interface ProjectDetail extends ProjectSummary {
 
 const endpoint = "/knowledge/nsfc-projects";
 
-export function searchNsfcProjects(q: string, limit: number, offset: number, signal?: AbortSignal) {
+export function searchNsfcProjects(q: string, limit: number, offset: number, keyword: string, signal?: AbortSignal) {
   const params = new URLSearchParams({ q, limit: String(limit), offset: String(offset) });
+  if (keyword) params.set("keyword", keyword);
   return apiJson<ProjectList>(`${endpoint}?${params}`, { signal });
 }
 

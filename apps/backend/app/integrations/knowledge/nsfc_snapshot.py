@@ -36,12 +36,18 @@ def catalog():
 @snapshot_api.get('/api/retrieval/nsfc-projects')
 def search_projects(
     q: Annotated[str, Query(max_length=200)] = '',
+    keyword: Annotated[str, Query(max_length=200)] = '',
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ):
     terms = q.casefold().split()
+    exact_keyword = keyword.strip().casefold()
     results = []
     for project, _ in catalog().values():
+        if exact_keyword and not any(
+            topic.strip().casefold() == exact_keyword for topic in project['research_topics']
+        ):
+            continue
         text = ' '.join([
             project['award_number'], project['name'], project['summary'],
             *project['research_topics'],

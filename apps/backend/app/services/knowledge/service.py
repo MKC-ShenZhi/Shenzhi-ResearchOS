@@ -96,9 +96,9 @@ class KnowledgeService:
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 
-    async def search_nsfc_projects(self, q: str, limit: int, offset: int) -> ProjectList:
+    async def search_nsfc_projects(self, q: str, limit: int, offset: int, *, keyword: str = '') -> ProjectList:
         try:
-            return await self.nsfc_projects.search_projects(q, limit, offset)
+            return await self.nsfc_projects.search_projects(q, limit, offset, keyword=keyword)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 

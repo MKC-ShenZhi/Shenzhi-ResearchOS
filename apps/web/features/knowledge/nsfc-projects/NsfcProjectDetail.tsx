@@ -37,28 +37,59 @@ export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: stri
       )}
       {data && (
         <article className="space-y-7">
-          <header className="space-y-3 border-b border-line pb-6">
-            <p className="text-sm text-muted">{[data.awardNumber, data.program, data.status, data.snapshot ? "结项项目样本" : ""].filter(Boolean).join(" · ")}</p>
+          <header className="space-y-4">
+            {data.snapshot && <p className="text-xs font-medium text-muted">国自然结项项目样本</p>}
             <h1 className="text-3xl font-bold leading-tight tracking-tight text-ink">{data.name}</h1>
-            <p className="text-sm text-muted">批准年份 {data.awardYear}{data.startDate && data.endDate ? ` · 执行期 ${data.startDate} 至 ${data.endDate}` : ""}</p>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-4 rounded-xl border border-line bg-card p-4 text-sm sm:grid-cols-4 sm:p-5">
+              <div>
+                <dt className="text-xs text-muted">批准号</dt>
+                <dd className="mt-1.5 font-medium tabular-nums text-ink">{data.awardNumber}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">项目类型</dt>
+                <dd className="mt-1.5 font-medium text-ink">{data.program || "未收录"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">批准年份</dt>
+                <dd className="mt-1.5 font-medium text-ink">{data.awardYear} 年</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">项目状态</dt>
+                <dd className="mt-1">
+                  <span className="inline-block rounded-full bg-primary-soft px-2.5 py-0.5 font-medium text-primary">
+                    {data.status || "未收录"}
+                  </span>
+                </dd>
+              </div>
+              {data.startDate && data.endDate && (
+                <div className="col-span-full border-t border-line pt-3">
+                  <dt className="text-xs text-muted">项目执行期</dt>
+                  <dd className="mt-1.5 font-medium tabular-nums text-ink">{data.startDate} 至 {data.endDate}</dd>
+                </div>
+              )}
+            </dl>
             {data.sourceUrl && <SourceLink href={data.sourceUrl} label="基金委项目详情" />}
           </header>
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-ink">项目摘要</h2>
             <p className="whitespace-pre-line text-sm leading-7 text-ink">{data.summary || "暂无摘要"}</p>
             {data.topics.length > 0 && (
-              <ul aria-label="项目主题" className="flex flex-wrap gap-2">
-                {[...new Set(data.topics)].map((topic) => (
-                  <li key={topic}>
-                    <Link
-                      href={nsfcDirectoryHref(topic)}
-                      className="inline-block rounded-full border border-line px-3 py-1 text-sm text-ink hover:text-primary"
-                    >
-                      {topic}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-2 pt-2">
+                <h3 id="nsfc-keywords" className="text-sm font-medium text-ink">研究关键词</h3>
+                <ul aria-labelledby="nsfc-keywords" className="flex flex-wrap gap-2">
+                  {[...new Set(data.topics)].map((topic) => (
+                    <li key={topic} className="min-w-0">
+                      <Link
+                        href={nsfcDirectoryHref("", 1, topic)}
+                        aria-label={`按研究关键词筛选：${topic}`}
+                        className="inline-block break-words rounded-full border border-primary/20 bg-primary-soft px-3 py-1 text-sm text-primary hover:border-primary/50 hover:underline"
+                      >
+                        {topic}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </section>
           <section className="space-y-4 rounded-xl border border-line p-5">

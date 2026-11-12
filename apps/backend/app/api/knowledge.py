@@ -122,12 +122,13 @@ def creator_not_found(request: Request) -> JSONResponse:
 async def nsfc_projects(
     request: Request,
     q: str = Query(default='', max_length=200),
+    keyword: str = Query(default='', max_length=200),
     limit: int = Query(default=20, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
     _credential: None = Depends(require_bff),
 ):
     try:
-        response = await service.search_nsfc_projects(q.strip(), limit, offset)
+        response = await service.search_nsfc_projects(q.strip(), limit, offset, keyword=keyword.strip())
     except KnowledgeServiceError as error:
         return _error_payload(error, request)
     return ok(response.model_dump(mode='json', by_alias=True))

@@ -28,6 +28,7 @@ def _https_url(value: str | None) -> str | None:
 
 
 def _summary(project: dict[str, Any]) -> ProjectSummary:
+    output_papers = project.get('output_papers')
     return ProjectSummary(
         award_number=project['award_number'],
         name=project['name'],
@@ -36,6 +37,12 @@ def _summary(project: dict[str, Any]) -> ProjectSummary:
         program=(project.get('program_id') or '').removeprefix('program:'),
         institutions=[item['name'] for item in project['host_institutions']],
         topics=project.get('research_topics') or [],
+        summary=project.get('summary') or '',
+        principal_investigators=[
+            member['name'] for member in (project.get('principal_investigators') or [])
+            if member['role'] == 'PI'
+        ],
+        paper_count=len(set(output_papers)) if isinstance(output_papers, list) else None,
     )
 
 
@@ -46,9 +53,12 @@ class NsfcProjectsAdapter(KnowledgeBaseClient):
         transport = httpx.ASGITransport(app=snapshot_api, raise_app_exceptions=False) if self.snapshot else None
         super().__init__(base_url=base_url or 'http://nsfc-snapshot', transport=transport)
 
-    async def search_projects(self, q: str, limit: int, offset: int) -> ProjectList:
+    async def search_projects(self, q: str, limit: int, offset: int, *, keyword: str = '') -> ProjectList:
+        params = {'q': q, 'limit': limit, 'offset': offset}
+        if keyword:
+            params['keyword'] = keyword
         body = await self._request_json(
-            'GET', PROJECTS_PATH, params={'q': q, 'limit': limit, 'offset': offset},
+            'GET', PROJECTS_PATH, params=params,
             validate=lambda value: isinstance(value.get('items'), list),
         )
         try:
@@ -86,9 +96,10 @@ class NsfcProjectsAdapter(KnowledgeBaseClient):
                     'source_url': _https_url(paper['properties'].get('source_url')),
                 })
 
+            summary = _summary(project).model_dump()
+            summary['paper_count'] = len(papers)
             return ProjectDetail(
-                **_summary(project).model_dump(),
-                summary=project.get('summary') or '',
+                **summary,
                 start_date=project.get('start_date') or '',
                 end_date=project.get('end_date') or '',
                 source_url=_https_url(project.get('source_url')),

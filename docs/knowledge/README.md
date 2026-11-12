@@ -111,7 +111,7 @@ OPENREVIEW_PASSWORD=
 | 主题关联论文 | `GET /api/v1/knowledge/subjects/search?subject=...&offset=0&limit=10` | `GET /api/retrieval/search/by-subject?subject=...&offset=0&limit=10` |
 | Funding 候选检索 | `GET /api/v1/knowledge/fundings/search?q=...&limit=20&offset=0` | `GET /api/retrieval/fundings/search?q=...&limit=20&offset=0` |
 | Funding 关联论文 | `GET /api/v1/knowledge/funding/search?funding=...&topK=10` | `GET /api/retrieval/search/by-funding?funding=...&top_k=10` |
-| 国自然项目检索 | `GET /api/v1/knowledge/nsfc-projects?q=...&limit=20&offset=0` | `GET /api/retrieval/nsfc-projects?q=...&limit=20&offset=0` |
+| 国自然项目检索 | `GET /api/v1/knowledge/nsfc-projects?q=...&keyword=...&limit=20&offset=0` | `GET /api/retrieval/nsfc-projects?q=...&keyword=...&limit=20&offset=0` |
 | 国自然项目详情及关系 | `GET /api/v1/knowledge/nsfc-projects/{award_number}` | `GET /api/retrieval/nsfc-projects/{award_number}` |
 
 国自然项目的样本模式、正式底座切换和接口字段见 [国自然项目接入](NSFC-PROJECTS.md)。

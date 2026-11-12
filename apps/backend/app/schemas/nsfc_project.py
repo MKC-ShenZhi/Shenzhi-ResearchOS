@@ -18,6 +18,9 @@ class ProjectSummary(ProjectModel):
     program: str
     institutions: list[str]
     topics: list[str]
+    summary: str = ''
+    principal_investigators: list[str] = Field(default_factory=list)
+    paper_count: int | None = Field(default=None, ge=0)
 
 
 class ProjectList(ProjectModel):
@@ -38,7 +41,6 @@ class ProjectPaper(ProjectModel):
 
 
 class ProjectDetail(ProjectSummary):
-    summary: str
     start_date: str
     end_date: str
     source_url: str | None
