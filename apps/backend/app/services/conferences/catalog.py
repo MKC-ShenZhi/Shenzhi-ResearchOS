@@ -27,6 +27,7 @@ from app.schemas.conferences import (
     ConferenceDeadline,
     ConferenceDeadlineList,
     ConferenceEdition,
+    ConferenceEvent,
     ConferenceMilestone,
     ConferenceSnapshotFile,
     DeadlineStatus,
@@ -80,6 +81,7 @@ def to_utc(local: str, zone: tzinfo) -> datetime:
 def _edition(raw: SnapshotEdition) -> ConferenceEdition:
     zone = parse_timezone(raw.timezone)
     milestones: list[ConferenceMilestone] = []
+    events: list[ConferenceEvent] = []
     for entry in raw.timeline:
         for kind, local in (('abstract', entry.abstract_deadline), ('full', entry.deadline)):
             # An entry with no abstract round simply has no abstract milestone; a missing
@@ -92,6 +94,18 @@ def _edition(raw: SnapshotEdition) -> ConferenceEdition:
                 local=local,
                 comment=entry.comment,
             ))
+        for kind, local in (
+            ('rebuttal', entry.rebuttal_deadline),
+            ('decision', entry.decision_deadline),
+        ):
+            if local is not None:
+                events.append(ConferenceEvent(
+                    kind=kind, at=to_utc(local, zone), local=local, comment=entry.comment,
+                ))
+    if raw.opening is not None:
+        events.append(ConferenceEvent(
+            kind='opening', at=to_utc(raw.opening, zone), local=raw.opening, is_derived=raw.opening_is_derived,
+        ))
     milestones.sort(key=lambda item: (item.at is None, item.at or datetime.min.replace(tzinfo=timezone.utc)))
     return ConferenceEdition(
         year=raw.year,
@@ -100,6 +114,7 @@ def _edition(raw: SnapshotEdition) -> ConferenceEdition:
         date=raw.date,
         place=raw.place,
         milestones=milestones,
+        events=sorted(events, key=lambda event: event.at),
     )
 
 
@@ -201,6 +216,7 @@ def evaluate(record: ConferenceRecord, now: datetime) -> ConferenceDeadline:
         edition=edition,
         edition_count=len(record.editions),
         needs_update=status == 'closed' and bool(dated) and now - max(dated) > timedelta(days=365),
+        accept_rates=conference.accept_rates,
     )
 
 

@@ -11,7 +11,7 @@ from app.integrations.conferences.client import ConferenceGitHubClient
 from app.services.conferences import load_conference_catalog, catalog_from_snapshot
 from app.schemas.conferences import ConferenceSnapshotFile
 from app.services.conferences.repository import ConferenceSnapshotStore
-from app.services.conferences.source import snapshot_from_files
+from app.services.conferences.source import SNAPSHOT_ID_PREFIX, snapshot_from_files
 
 logger = logging.getLogger(__name__)
 LOCK_KEY = 7_402_118_032
@@ -63,7 +63,12 @@ class ConferenceSync:
             # Durable even when network/validation fails or this process is restarted.
             await self.store.attempt(now)
         sha, commit_date = await self.client.latest()
-        if state and state.snapshot_id and state.upstream_sha == sha:
+        if (
+            state
+            and state.snapshot_id
+            and state.snapshot_id.startswith(SNAPSHOT_ID_PREFIX)
+            and state.upstream_sha == sha
+        ):
             if not dry_run:
                 await self.store.checked(now)
             return {"status": "unchanged", "sha": sha}
