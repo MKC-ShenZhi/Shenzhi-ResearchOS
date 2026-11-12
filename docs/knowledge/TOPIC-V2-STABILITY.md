@@ -29,4 +29,8 @@
 - 历史关注以原 ID 保存。旧记录可在个人列表中显示为下架主题并取消关注。两套 ID 各自统计，未进行名称匹配或数据迁移。
 - 卡片和详情使用 `TopicFollowButton` 与 `TopicFollowerCount` 读取平台互动数据。微批查询、账号隔离、鉴权和写后缓存失效规则见 [收藏人数、论文点赞与主题关注](INTERACTIONS-AND-STATS.md)。
 
+## 生成主题封面
+
+[A1 封面生成工具](../../tools/topic-cover/README.md)经 ShenZhi Web 的主题关联论文接口和图片代理取图，将 8 张论文配图拼成四条斜向条带，输出 `1440 × 400` 的 WebP。工具独立运行，生成的文件尚未接入主题卡片。
+
 旧版验收记录见 [Topic V2 历史验收](../dev/records/knowledge/TOPIC-V2-validation.md)。
