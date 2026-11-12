@@ -84,7 +84,7 @@ test("Knowledge dashboard uses the real overview client and preserves capability
 
 test("formal Scholar and Funding paths no longer import prototype entity data", () => {
   assert.doesNotMatch(scholarBrowser, /data-scholars/);
-  assert.match(scholarBrowser, /searchScholars/);
+  assert.match(scholarBrowser, /provider.search\(committedQuery, signal,/);
   assert.doesNotMatch(fundingPage, /data-funding|RelatedPaperSearch/);
   assert.match(fundingPage, /FundingBrowser/);
 });
@@ -99,7 +99,7 @@ test("Funding page uses candidate search without legacy entity fields", () => {
 });
 
 test("Funding page uses the project-funding name and URL-backed selection state", () => {
-  assert.match(fundingBrowser, /项目基金库/);
+  assert.match(fundingPage, /项目基金库/);
   assert.match(sidebar, /label: "项目基金库"/);
   assert.match(dashboard, /title: "项目基金库"/);
   assert.match(fundingBrowser, /useSearchParams/);

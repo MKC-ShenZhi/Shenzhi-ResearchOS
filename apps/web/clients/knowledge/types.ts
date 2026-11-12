@@ -3,7 +3,7 @@
  *
  * 契约来源：知识底座科研组 Contract（同学调研确认）。
  * 稳定依赖字段：
- *   Search   → id / imageId / title / abstract / authors / year / venue / keywords / subjects / score / rank
+ *   Search   → id / imageId / title / abstract / authors / year / venue / keywords / subjects / topics / score / rank
  *   Detail   → 同上 + doi / pdfUrl / citationCount / referenceCount
  *   Graph    → rootId / nodes[{id,kind,label,properties}] / edges[{sourceId,targetId,relation,description,weight}]
  *
@@ -72,17 +72,17 @@ export interface KnowledgeTopic {
   imagePath: string | null;
   nameZh: string;
   nameEn: string;
-  author: string | KnowledgeTopicAuthor;
+  author: string | KnowledgeTopicAuthor | null;
   descriptionZh: string;
   /** 详情页使用的完整介绍；缺省时回退到 descriptionZh。 */
   descriptionDetail?: string | null;
   descriptionEn: string;
   followersCount: number;
-  /** 服务端登录态可返回；匿名或旧接口缺省时由本地偏好补足。 */
+  /** 实时关注状态和人数由平台互动接口单独返回。 */
   isFollowing?: boolean;
-  /** 可选的分类图标 key，未提供时按 category 使用默认图标。 */
-  iconKey?: string | null;
+  /** OpenAlex Subfield ID。 */
   category: string;
+  categoryName: string;
   subjectQuery: string;
   paperCount: number;
   enabled: boolean;
@@ -104,10 +104,16 @@ export interface KnowledgeCreator {
   isVerified: boolean;
 }
 
+export interface KnowledgeTopicCategory {
+  id: string;
+  name: string;
+  total: number;
+}
+
 export interface KnowledgeTopicListResponse {
   items: KnowledgeTopic[];
   total: number;
-  categories: string[];
+  categories: KnowledgeTopicCategory[];
 }
 
 export interface KnowledgeScholarSearchParams {
@@ -166,6 +172,12 @@ export interface KnowledgeFundingSearchResponse {
 }
 
 /** 搜索结果单条（论文） */
+export interface PaperTopic {
+  id: string;
+  nameZh: string | null;
+  nameEn: string;
+}
+
 export interface KnowledgePaperHit {
   id: string;
   /** 上游真实图片标识；null 表示未提供，不从论文 id 推断。 */
@@ -177,6 +189,7 @@ export interface KnowledgePaperHit {
   venue: string | null;
   keywords: string[];
   subjects: string[];
+  topics?: PaperTopic[];
   /** 相关性得分（非百分比） */
   score: number | null;
   rank: number | null;
@@ -197,6 +210,7 @@ export interface KnowledgePaperDetail {
 
   keywords: string[];
   subjects: string[];
+  topics?: PaperTopic[];
 
   /** null = 上游未提供，禁止显示为 0 */
   citationCount: number | null;

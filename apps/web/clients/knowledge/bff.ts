@@ -2,6 +2,10 @@
 
 import { apiJson, ApiError } from "../backend/http";
 import { KnowledgeClientError, type KnowledgeClient } from "./client";
+import {
+  parseScholarContract, scholarProfileSchema, scholarProfilePageSchema,
+  scholarPapersPageSchema,
+} from "./scholar-profiles";
 import type {
   KnowledgeConferenceListResponse,
   KnowledgePaperBrowseParams,
@@ -74,6 +78,10 @@ function toKnowledgeError(error: unknown): KnowledgeClientError {
     });
   }
 
+  if (error instanceof TypeError) {
+    return KnowledgeClientError.unavailable("无法连接知识服务，请重试");
+  }
+
   return new KnowledgeClientError(
     "UNKNOWN",
     "知识底座服务异常",
@@ -141,6 +149,19 @@ export class BffKnowledgeClient implements KnowledgeClient {
     }
   }
 
+  async topicPapers(topicId: string, offset: number, limit: number, signal?: AbortSignal): Promise<KnowledgePaperBrowseResponse> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    try {
+      return await apiJson<KnowledgePaperBrowseResponse>(
+        '/knowledge/topics/' + encodeURIComponent(topicId) + '/papers?' + query.toString(),
+        { signal },
+      );
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
   async creator(creatorId: string): Promise<KnowledgeCreator> {
     try {
       return await apiJson<KnowledgeCreator>(
@@ -195,6 +216,50 @@ export class BffKnowledgeClient implements KnowledgeClient {
         `/knowledge/paper?paperId=${encodeURIComponent(paperId)}`,
       );
     } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchScholarProfiles(query: string, limit = 20, offset = 0, signal?: AbortSignal) {
+    const params = new URLSearchParams({ q: query, limit: String(limit), offset: String(offset) });
+    return this.scholarProfilePage(`/knowledge/scholar-profiles/search?${params}`, signal);
+  }
+
+  async browseScholarProfiles(limit = 20, offset = 0, signal?: AbortSignal) {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    return this.scholarProfilePage(`/knowledge/scholar-profiles?${params}`, signal);
+  }
+
+  private async scholarProfilePage(path: string, signal?: AbortSignal) {
+    try {
+      return parseScholarContract(scholarProfilePageSchema, await apiJson<unknown>(
+        path, { signal },
+      ));
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async scholarProfile(id: string, signal?: AbortSignal) {
+    try {
+      return parseScholarContract(scholarProfileSchema, await apiJson<unknown>(
+        `/knowledge/scholar-profiles/${encodeURIComponent(id)}`, { signal },
+      ));
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async scholarPapers(id: string, limit = 20, offset = 0, signal?: AbortSignal) {
+    try {
+      return parseScholarContract(scholarPapersPageSchema, await apiJson<unknown>(
+        `/knowledge/scholar-profile-papers?scholarId=${encodeURIComponent(id)}&limit=${limit}&offset=${offset}`,
+        { signal },
+      ));
+    } catch (error) {
+      if (isAbortError(error)) throw error;
       throw toKnowledgeError(error);
     }
   }

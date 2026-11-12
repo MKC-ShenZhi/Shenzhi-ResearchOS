@@ -1,4 +1,4 @@
-"""Account-level topic follows; the JSON catalog stays the source of truth."""
+"""Account-level follows validated against the active OpenAlex Topic directory."""
 from __future__ import annotations
 
 from sqlalchemy import delete, func, select
@@ -9,18 +9,24 @@ from app.core.database import session_scope
 from app.core.errors import BusinessError
 from app.models.interactions import TopicFollowRow
 from app.schemas.interactions import TopicFollowItem, TopicFollowListResponse
-from app.services.topics.registry import TopicRegistry, TopicRegistryError
+from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
+from app.services.topics.openalex import OpenAlexTopicRegistry, openalex_topics
 from app.services.recommendation.behavior import BehaviorEventService
 
 
 class TopicFollowService:
     """Only enabled catalog topics can be followed; retries are idempotent."""
 
-    def __init__(self, registry: TopicRegistry | None = None):
-        self.registry = registry or TopicRegistry()
+    def __init__(self, registry: OpenAlexTopicRegistry | None = None):
+        self.registry = registry or openalex_topics
 
     async def follow(self, user_id: str, topic_id: str) -> int:
-        require_followable_topic(self.registry, topic_id)
+        try:
+            await self.registry.require_topic(topic_id)
+        except KnowledgeIntegrationError as error:
+            if error.status_code == 404:
+                raise BusinessError(40401, '未找到对应主题', 404) from error
+            raise BusinessError(20004, '主题目录暂时不可用，请稍后重试', error.status_code) from error
         async with session_scope() as session:
             inserted = await session.scalar(
                 insert(TopicFollowRow)
@@ -91,11 +97,3 @@ class TopicFollowService:
         return int(await session.scalar(
             select(func.count(func.distinct(TopicFollowRow.user_id))).where(TopicFollowRow.topic_id == topic_id)
         ) or 0)
-
-
-def require_followable_topic(registry: TopicRegistry, topic_id: str) -> None:
-    """Raise the stable 404 contract when the catalog cannot serve this topic."""
-    try:
-        registry.get_topic(topic_id)
-    except TopicRegistryError as error:
-        raise BusinessError(40401, '未找到对应主题', 404) from error

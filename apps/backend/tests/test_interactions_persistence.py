@@ -4,7 +4,7 @@ import asyncio
 import os
 import unittest
 import uuid
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import delete, select
 
@@ -18,6 +18,8 @@ from app.services.library.paper_likes import PaperLikeService
 from app.services.library.topic_follows import TopicFollowService
 from app.schemas.knowledge import PaperSummary, Provenance
 from app.services.user.account_deletion import AccountDeletionService
+from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
+from app.services.topics.openalex import OpenAlexTopicRegistry
 
 
 @unittest.skipUnless(os.getenv('CHAT_DATABASE_URL'), 'CHAT_DATABASE_URL not set')
@@ -30,7 +32,16 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.user_b = f'interaction-b-{uuid.uuid4()}'
         self.paper_id = f'paper:count:{uuid.uuid4()}'
         self.like_paper_id = f'paper:like:{uuid.uuid4()}'
-        self.topic_id = 'deep-learning'
+        self.topic_id = 'openalex:topic:T10028'
+        registry = OpenAlexTopicRegistry()
+
+        async def require_topic(topic_id):
+            if topic_id != self.topic_id:
+                raise KnowledgeIntegrationError.not_found()
+
+        self.enterContext(patch.object(registry, 'require_topic', side_effect=require_topic))
+        self.enterContext(patch('app.services.library.topic_follows.openalex_topics', registry))
+        self.enterContext(patch('app.api.interactions.follows', TopicFollowService(registry)))
         await self._cleanup()
         # 主题来自真实目录，本地库可能已有真实关注者；断言只看本测试新增的关注。
         self.topic_base = (await TopicFollowService().follower_counts([self.topic_id])).get(self.topic_id, 0)
@@ -115,6 +126,10 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await likes.unlike(self.user_a, self.like_paper_id), 1)
         self.assertEqual(await likes.unlike(self.user_a, self.like_paper_id), 1)
 
+        legacy_id = 'deep-learning'
+        async with session_scope() as db:
+            db.add(TopicFollowRow(user_id=self.user_a, topic_id=legacy_id))
+
         self.assertEqual(await follows.follow(self.user_a, self.topic_id), self.topic_base + 1)
         self.assertEqual(await follows.follow(self.user_a, self.topic_id), self.topic_base + 1)
         self.assertEqual(await follows.follow(self.user_b, self.topic_id), self.topic_base + 2)
@@ -124,6 +139,9 @@ class InteractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await follows.unfollow(self.user_a, self.topic_id), self.topic_base + 1)
         # Unfollowing never validates the catalog, so stale ids can always be released.
         self.assertEqual(await follows.unfollow(self.user_b, 'removed-from-catalog'), 0)
+        self.assertEqual(
+            await follows.followed_topic_ids(self.user_a, [self.topic_id, legacy_id]), {legacy_id},
+        )
 
         with self.assertRaises(BusinessError) as caught:
             await follows.follow(self.user_a, 'missing-topic')

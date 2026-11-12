@@ -51,7 +51,7 @@ class ConferenceSyncMigrationTests(unittest.TestCase):
         )
         # An environment may already have run the published conference branch.
         migrate("upgrade", "022_conference_snapshots")
-        migrate("upgrade", "head")
+        migrate("upgrade", "023_merge_conference_chat")
         self.assertEqual([tuple(row) for row in execute("SELECT version_num FROM alembic_version")], [("023_merge_conference_chat",)])
         rows = execute(
             "SELECT user_id,conference_id FROM conference_follows ORDER BY user_id"

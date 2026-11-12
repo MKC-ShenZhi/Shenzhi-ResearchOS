@@ -11,16 +11,17 @@ import { PAPER_CARD_INTERACTION_CLASS, usePaperCardNavigation } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { PaperReadBadge } from "@/features/knowledge/papers/components/paper-read-badge";
 import { usePaperReadStatus } from "@/features/knowledge/papers/use-paper-read-status";
+import { topicHref } from "@/features/knowledge/topics/topic-url-state";
 import type { PaperCardModel } from "@/types";
 
 /**
- * 首页与检索共用的论文卡片版式。数据转换、埋点与底部操作由各场景自己提供：
+ * 首页、检索和学者成果共用的论文卡片版式。数据转换、埋点与底部操作由各场景自己提供：
  * `onNavigate` 在进入详情前触发，`actions` 放在底部右侧。
  */
 export function PaperCardLayout({
   paper,
   index,
-  detailHref,
+  detailHref = "",
   onNavigate,
   behaviorSource,
   actions,
@@ -29,17 +30,17 @@ export function PaperCardLayout({
 }: {
   paper: PaperCardModel;
   index: number;
-  detailHref: string;
+  detailHref?: string;
   onNavigate?: () => void;
-  behaviorSource: ComponentProps<typeof ExpandableAbstract>["source"];
+  behaviorSource?: ComponentProps<typeof ExpandableAbstract>["source"];
   actions: ReactNode;
   articleRef?: Ref<HTMLElement>;
   /** 长列表中跳过屏幕外卡片的渲染。 */
   deferOffscreen?: boolean;
 }) {
   const { session } = useAuth();
-  const userId = session?.user.id ?? "";
-  const status = usePaperReadStatus(paper.id);
+  const userId = detailHref ? session?.user.id ?? "" : "";
+  const status = usePaperReadStatus(paper.id, Boolean(detailHref));
   const cardNavigation = usePaperCardNavigation(detailHref, paper.title, onNavigate);
 
   return (
@@ -48,8 +49,8 @@ export function PaperCardLayout({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: (index % 12) * 0.03 }}
-      className={`@container relative rounded-2xl bg-card p-6 shadow-card [overflow-wrap:anywhere] has-[[data-collection-picker-open]]:z-40 ${deferOffscreen ? "[contain-intrinsic-size:auto_260px] [content-visibility:auto] has-[[data-collection-picker-open]]:[content-visibility:visible]" : ""} ${PAPER_CARD_INTERACTION_CLASS}`}
-      {...cardNavigation}
+      className={`@container relative rounded-2xl bg-card p-6 shadow-card [overflow-wrap:anywhere] has-[[data-collection-picker-open]]:z-40 ${deferOffscreen ? "[contain-intrinsic-size:auto_260px] [content-visibility:auto] has-[[data-collection-picker-open]]:[content-visibility:visible]" : ""} ${detailHref ? PAPER_CARD_INTERACTION_CLASS : ""}`}
+      {...(detailHref ? cardNavigation : {})}
     >
       <div className="grid grid-cols-1 items-start gap-x-6 gap-y-4 @min-[600px]:grid-cols-[minmax(0,1fr)_clamp(200px,30cqw,280px)]">
         <div className="min-w-0">
@@ -65,14 +66,13 @@ export function PaperCardLayout({
           </div>
 
           {/* 标题 */}
-          <Link href={detailHref} onClick={onNavigate} className="group mt-2 block">
-            <h3
-              title={paper.title}
-              className="line-clamp-2 text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary"
-            >
-              {paper.title}
-            </h3>
-          </Link>
+          <h3 title={paper.title} className="mt-2 line-clamp-2 text-[17px] font-bold leading-snug text-ink">
+            {detailHref ? (
+              <Link href={detailHref} onClick={onNavigate} className="transition-colors hover:text-primary">
+                {paper.title}
+              </Link>
+            ) : paper.title}
+          </h3>
           {/* 摘要 */}
           <ExpandableAbstract
             abstract={paper.abstract}
@@ -91,17 +91,22 @@ export function PaperCardLayout({
 
         {/* 底部：Topic + 操作 */}
         <div className="col-span-full flex flex-wrap items-center justify-between gap-3">
-          {/* Topic 固定一行：放不下的整枚隐藏，不撑高卡片 */}
-          {paper.tags.length > 0 && (
-            <div
-              className="flex h-5 min-w-0 flex-1 basis-48 flex-wrap gap-x-4 overflow-hidden"
-              title={paper.tags.map((tag) => `#${tag}`).join("  ")}
-            >
-              {paper.tags.map((tag) => (
-                <span key={tag} className="max-w-full truncate text-[13px] leading-5 text-muted">
-                  #{tag}
-                </span>
-              ))}
+          {paper.topics.length > 0 && (
+            <div className="flex min-w-0 flex-1 basis-48 flex-wrap gap-x-4 gap-y-1">
+              {paper.topics.map((topic) => {
+                const name = topic.nameZh || topic.nameEn;
+                return (
+                  <Link
+                    key={topic.id}
+                    href={topicHref(topic.id)}
+                    prefetch={false}
+                    title={name}
+                    className="max-w-full truncate rounded-sm text-[13px] leading-5 text-muted hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                  >
+                    #{name}
+                  </Link>
+                );
+              })}
             </div>
           )}
           <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">

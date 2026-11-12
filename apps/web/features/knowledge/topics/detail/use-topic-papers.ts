@@ -2,13 +2,12 @@
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { getKnowledgeClient } from "@/clients/knowledge";
-import { topicPaperLimitReached, topicPaperQueryOptions } from "./topic-paper-query";
+import { topicPaperQueryOptions } from "./topic-paper-query";
 
-export function useTopicPapers(topicId: string, subjectQuery: string) {
+export function useTopicPapers(topicId: string) {
   const query = useInfiniteQuery(topicPaperQueryOptions(
     topicId,
-    subjectQuery,
-    (...args) => getKnowledgeClient().searchBySubject(...args),
+    (...args) => getKnowledgeClient().topicPapers(...args),
   ));
   const pages = query.data?.pages ?? [];
   const lastPage = pages.at(-1);
@@ -19,6 +18,5 @@ export function useTopicPapers(topicId: string, subjectQuery: string) {
     ...query,
     papers,
     total: lastPage?.total ?? 0,
-    limitReached: lastPage ? topicPaperLimitReached(lastPage, query.data!.pageParams.at(-1)!) : false,
   };
 }

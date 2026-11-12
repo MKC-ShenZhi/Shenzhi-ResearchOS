@@ -1,3 +1,31 @@
 "use client";
 
-export function TopicCategoryTabs({ categories, value, onChange }: { categories: string[]; value: string; onChange: (value: string) => void }) { return <div className="flex w-full max-w-full justify-start gap-2 overflow-x-auto pb-1" role="tablist" aria-label="主题分类">{["全部", ...categories].map((category) => { const selected = value === (category === "全部" ? "" : category); return <button key={category} type="button" role="tab" aria-selected={selected} onClick={() => onChange(category === "全部" ? "" : category)} className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition ${selected ? "border-primary/20 bg-primary text-primary-foreground shadow-sm" : "border-line bg-card text-muted hover:border-primary/30 hover:text-ink"}`}>{category}</button>; })}</div>; }
+import type { KnowledgeTopicCategory } from "@/clients/knowledge";
+
+export function TopicCategoryTabs({ categories, value, onChange }: {
+  categories: KnowledgeTopicCategory[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const tabs = [{ id: "", name: "全部" }, ...categories];
+
+  return (
+    <div className="flex w-full flex-wrap gap-1.5" role="tablist" aria-label="主题分类">
+      {tabs.map(({ id, name }) => {
+        const selected = value === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            onClick={() => onChange(id)}
+            className={`max-w-full wrap-break-word rounded-full border px-2.5 py-1 text-xs font-medium transition ${selected ? "border-primary/20 bg-primary text-primary-foreground shadow-sm" : "border-line bg-card text-muted hover:border-primary/30 hover:text-ink"}`}
+          >
+            {name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}

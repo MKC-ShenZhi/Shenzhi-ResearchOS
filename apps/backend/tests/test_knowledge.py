@@ -137,6 +137,19 @@ class KnowledgeMappingTests(unittest.TestCase):
         with self.assertRaises(KnowledgeIntegrationError):
             map_search_result({**missing, 'image_id': 123})
 
+    def test_paper_topics_keep_only_named_unique_ids_without_changing_metadata(self):
+        topic = {'id': 'openalex:topic:T10028', 'nameZh': '语言模型', 'nameEn': 'Language models'}
+        english = {'id': 'openalex:topic:T10181', 'nameEn': 'Computer vision'}
+        for mapper, raw in ((map_search_result, SEARCH_RESPONSE['results'][0]),
+                            (map_paper_detail, DETAIL_RESPONSE)):
+            self.assertEqual(mapper(raw).topics, [])
+            result = mapper({**raw, 'keywords': ['keyword'], 'subjects': ['subject'], 'topics': [
+                'legacy', {'id': ' ', 'nameEn': 'Invalid'}, {'id': topic['id'], 'nameEn': ' '},
+                {**topic, 'enabled': False}, english, {**topic, 'nameZh': 'Duplicate'},
+            ]})
+            self.assertEqual(result.model_dump(by_alias=True)['topics'], [topic, {**english, 'nameZh': None}])
+            self.assertEqual((result.keywords, result.subjects), (['keyword'], ['subject']))
+
     def test_detail_mapping_turns_empty_strings_and_unknown_counts_into_null(self):
         detail = map_paper_detail(DETAIL_RESPONSE, retrieved_at=self.retrieved_at)
         self.assertEqual(detail.id, PAPER_ID)
