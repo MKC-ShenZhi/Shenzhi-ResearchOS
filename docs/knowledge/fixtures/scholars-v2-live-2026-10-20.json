@@ -1,0 +1,1260 @@
+{
+  "observed_date": "2026-10-20",
+  "kind": "real GET response excerpts; not test or demo fixtures",
+  "results": {
+    "browse_missing": {
+      "path": "/api/v1/scholars/search?limit=2&offset=0",
+      "status": 400,
+      "seconds": 0.61,
+      "body": {
+        "message": "q is required"
+      }
+    },
+    "browse_empty": {
+      "path": "/api/v1/scholars/search?q=&limit=2&offset=0",
+      "status": 400,
+      "seconds": 2.44,
+      "body": {
+        "message": "q is required"
+      }
+    },
+    "browse_page2": {
+      "path": "/api/v1/scholars/search?q=&limit=2&offset=2",
+      "status": 400,
+      "seconds": 0.62,
+      "body": {
+        "message": "q is required"
+      }
+    },
+    "english": {
+      "path": "/api/v1/scholars/search?q=Marcel&limit=2&offset=2",
+      "status": 200,
+      "seconds": 2.43,
+      "body": {
+        "items": [
+          {
+            "scholar_id": "openalex:A5000001602",
+            "name_zh": null,
+            "name_en": "Marcela Silvina Dangelo",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 0,
+              "citation_count": 0
+            }
+          },
+          {
+            "scholar_id": "author:legacy:f1ce255aceabf63b1c578466",
+            "name_zh": null,
+            "name_en": "Marcel Binz",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 9,
+              "citation_count": null
+            }
+          }
+        ],
+        "limit": 2,
+        "offset": 2
+      }
+    },
+    "hinton": {
+      "path": "/api/v1/scholars/search?q=Geoffrey%20Hinton&limit=2",
+      "status": 200,
+      "seconds": 2.44,
+      "body": {
+        "items": [
+          {
+            "scholar_id": "author:legacy:e7abe78ba2df3b30be3f6183",
+            "name_zh": null,
+            "name_en": "Geoffrey Zweig",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 26,
+              "citation_count": null
+            }
+          },
+          {
+            "scholar_id": "author:legacy:d1381dc0b07a0347ebb834d5",
+            "name_zh": null,
+            "name_en": "Geoffrey Hinton",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 7,
+              "citation_count": null
+            }
+          }
+        ],
+        "limit": 2,
+        "offset": 0
+      }
+    },
+    "chinese": {
+      "path": "/api/v1/scholars/search?q=%E4%BD%95%E6%81%BA%E6%98%8E&limit=2",
+      "status": 200,
+      "seconds": 1.83,
+      "body": {
+        "items": [
+          {
+            "scholar_id": "author:legacy:dc8d05c0600c58d65eadbb1c",
+            "name_zh": null,
+            "name_en": "何 良华",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 1,
+              "citation_count": null
+            }
+          }
+        ],
+        "limit": 2,
+        "offset": 0
+      }
+    },
+    "english_he": {
+      "path": "/api/v1/scholars/search?q=Kaiming%20He&limit=2",
+      "status": 200,
+      "seconds": 2.42,
+      "body": {
+        "items": [
+          {
+            "scholar_id": "author:derived:he_wang:68598a629f0a2055",
+            "name_zh": null,
+            "name_en": "He Wang",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 68,
+              "citation_count": null
+            }
+          },
+          {
+            "scholar_id": "author:derived:liang_he:7c299b37a32b3e10",
+            "name_zh": null,
+            "name_en": "Liang He",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 65,
+              "citation_count": null
+            }
+          }
+        ],
+        "limit": 2,
+        "offset": 0
+      }
+    },
+    "empty": {
+      "path": "/api/v1/scholars/search?q=zzzzScholarsNoSuchPerson987&limit=2",
+      "status": 200,
+      "seconds": 0.62,
+      "body": {
+        "items": [],
+        "limit": 2,
+        "offset": 0
+      }
+    },
+    "invalid": {
+      "path": "/api/v1/scholars/search?q=Marcel&limit=-1&offset=-1",
+      "status": 400,
+      "seconds": 0.61,
+      "body": {
+        "message": "Failed to search product scholars",
+        "error": "Invalid pagination"
+      }
+    },
+    "detail": {
+      "path": "/api/v1/scholars/openalex%3AA5000001524",
+      "status": 200,
+      "seconds": 3.17,
+      "body": {
+        "scholar_id": "openalex:A5000001524",
+        "name_zh": null,
+        "name_en": "Marcela Degrangemtsac",
+        "avatar_path": null,
+        "affiliations": [],
+        "bio_zh": null,
+        "bio_en": null,
+        "metrics": {
+          "paper_count": 0,
+          "citation_count": 0
+        },
+        "annual_citations": [],
+        "updated_at": "2026-10-05T12:30:24",
+        "citation_meta": {
+          "source": "OpenAlex",
+          "coverage": "OpenAlex author record and works",
+          "as_of": null
+        }
+      }
+    },
+    "papers": {
+      "path": "/api/v1/scholars/openalex%3AA5000001524/papers?limit=2&offset=0",
+      "status": 200,
+      "seconds": 2.04,
+      "body": {
+        "items": [],
+        "total": 0,
+        "limit": 2,
+        "offset": 0
+      }
+    },
+    "missing_detail": {
+      "path": "/api/v1/scholars/openalex%3ANOTEXIST",
+      "status": 404,
+      "seconds": 2.5,
+      "body": {
+        "message": "Scholar not found"
+      }
+    },
+    "legacy": {
+      "path": "/api/retrieval/scholars/search?q=Marcel&limit=2&offset=0",
+      "status": 200,
+      "seconds": 0.64,
+      "body": {
+        "results": [
+          {
+            "scholar_id": "author:legacy:706867c1cd3d524922b44f19",
+            "name": "Marcel Kockmann",
+            "paper_count": 11,
+            "score": 3.7905774116516113
+          },
+          {
+            "scholar_id": "author:derived:sebastien_marcel:c93a64dd9924adb9",
+            "name": "Sébastien Marcel",
+            "paper_count": 10,
+            "score": 3.7905774116516113
+          }
+        ],
+        "query": "Marcel"
+      }
+    },
+    "marcel_all": {
+      "path": "/api/v1/scholars/search?q=Marcel&limit=100&offset=0",
+      "status": 200,
+      "seconds": 5.83,
+      "body": {
+        "items": [
+          {
+            "scholar_id": "openalex:A5000001524",
+            "name_zh": null,
+            "name_en": "Marcela Degrangemtsac",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 0,
+              "citation_count": 0
+            }
+          },
+          {
+            "scholar_id": "openalex:A5000000482",
+            "name_zh": null,
+            "name_en": "Marcela Ortiz",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 0,
+              "citation_count": 0
+            }
+          },
+          {
+            "scholar_id": "openalex:A5000001602",
+            "name_zh": null,
+            "name_en": "Marcela Silvina Dangelo",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 0,
+              "citation_count": 0
+            }
+          },
+          {
+            "scholar_id": "author:legacy:706867c1cd3d524922b44f19",
+            "name_zh": null,
+            "name_en": "Marcel Kockmann",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 11,
+              "citation_count": null
+            }
+          }
+        ],
+        "limit": 100,
+        "offset": 0
+      },
+      "observed_items_count": 61,
+      "excerpt": true
+    },
+    "a_page1": {
+      "path": "/api/v1/scholars/search?q=a&limit=20&offset=0",
+      "error": "timed out",
+      "seconds": 18.29
+    },
+    "a_page2": {
+      "path": "/api/v1/scholars/search?q=a&limit=20&offset=20",
+      "error": "timed out",
+      "seconds": 18.31
+    },
+    "he_all": {
+      "path": "/api/v1/scholars/search?q=Kaiming%20He&limit=100&offset=0",
+      "status": 200,
+      "seconds": 1.25,
+      "body": {
+        "items": [
+          {
+            "scholar_id": "author:derived:he_wang:68598a629f0a2055",
+            "name_zh": null,
+            "name_en": "He Wang",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 68,
+              "citation_count": null
+            }
+          },
+          {
+            "scholar_id": "author:derived:liang_he:7c299b37a32b3e10",
+            "name_zh": null,
+            "name_en": "Liang He",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 65,
+              "citation_count": null
+            }
+          },
+          {
+            "scholar_id": "author:xiaodong_he",
+            "name_zh": null,
+            "name_en": "Xiaodong He",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 65,
+              "citation_count": null
+            }
+          },
+          {
+            "scholar_id": "author:derived:ran_he:c8b6f63a0e924c36",
+            "name_zh": null,
+            "name_en": "Ran He",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 62,
+              "citation_count": null
+            }
+          }
+        ],
+        "limit": 100,
+        "offset": 0
+      },
+      "observed_items_count": 100,
+      "excerpt": true,
+      "additional_observed_matches": [
+        {
+          "rank_in_response": 79,
+          "item": {
+            "scholar_id": "author:legacy:a3a064dec606544f98491242",
+            "name_zh": null,
+            "name_en": "Kaiming He",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 11,
+              "citation_count": null
+            }
+          }
+        }
+      ]
+    },
+    "legacy_detail": {
+      "path": "/api/v1/scholars/author%3Alegacy%3A706867c1cd3d524922b44f19",
+      "error": "timed out",
+      "seconds": 18.32
+    },
+    "legacy_papers": {
+      "path": "/api/v1/scholars/author%3Alegacy%3A706867c1cd3d524922b44f19/papers?limit=2&offset=0",
+      "error": "timed out",
+      "seconds": 18.26
+    },
+    "legacy_papers2": {
+      "path": "/api/v1/scholars/author%3Alegacy%3A706867c1cd3d524922b44f19/papers?limit=2&offset=2",
+      "error": "timed out",
+      "seconds": 18.33
+    },
+    "legacy_browse": {
+      "path": "/api/retrieval/scholars/search?limit=2&offset=0",
+      "status": 200,
+      "seconds": 2.5,
+      "body": {
+        "results": [
+          {
+            "scholar_id": "author:yang_liu",
+            "name": "Yang Liu",
+            "paper_count": 515
+          },
+          {
+            "scholar_id": "author:derived:min_zhang:cf306616ec024b8a",
+            "name": "Min Zhang",
+            "paper_count": 278
+          }
+        ],
+        "query": ""
+      }
+    },
+    "marcel_detail": {
+      "path": "/api/v1/scholars/author%3Alegacy%3A706867c1cd3d524922b44f19",
+      "error": "timed out",
+      "seconds": 18.32
+    },
+    "marcel_papers": {
+      "path": "/api/v1/scholars/author%3Alegacy%3A706867c1cd3d524922b44f19/papers?limit=2&offset=0",
+      "status": 200,
+      "seconds": 3.75,
+      "body": {
+        "items": [
+          {
+            "id": 85646,
+            "paper_id": "paper:alam17b_interspeech_2017_isca:81a0a1497158",
+            "arxiv_id": "alam17b@interspeech_2017@ISCA",
+            "source": "",
+            "conference": "INTERSPEECH",
+            "year": 2017,
+            "subjects": [
+              "bernoulli",
+              "crim",
+              "domain",
+              "classifier",
+              "backend",
+              "INTERSPEECH.2017 - Others",
+              "vector",
+              "extractor",
+              "speaker",
+              "mismatch",
+              "sre16"
+            ],
+            "primary_subject": "bernoulli",
+            "track": "bernoulli",
+            "title": "Speaker Verification Under Adverse Conditions Using i-Vector Adaptation and Neural Networks",
+            "authors": [
+              "Jahangir Alam",
+              "Marcel Kockmann",
+              "Gautam Bhattacharya",
+              "Patrick Kenny"
+            ],
+            "abstract": "[omitted from evidence excerpt]",
+            "pdf_url": "https://www.isca-archive.org/interspeech_2017/alam17b_interspeech.pdf",
+            "keywords": [],
+            "type": "",
+            "editor": [],
+            "booktitle": "",
+            "pages": "",
+            "publisher": "",
+            "doi": "10.21437/INTERSPEECH.2017-1240",
+            "biburl": "",
+            "bibsource": "",
+            "source_file": "",
+            "funding": [],
+            "image_id": null,
+            "published_at": null,
+            "citation_count": null,
+            "cover_path": null,
+            "record_type": "canonical",
+            "external": false
+          },
+          {
+            "id": 116471,
+            "paper_id": "paper:kenny15_interspeech_2015_isca:537ca57daa2e",
+            "arxiv_id": "kenny15@interspeech_2015@ISCA",
+            "source": "",
+            "conference": "INTERSPEECH",
+            "year": 2015,
+            "subjects": [
+              "verification",
+              "enrollment",
+              "rsr2015",
+              "baum",
+              "feature",
+              "INTERSPEECH.2015 - Others",
+              "factors",
+              "backend",
+              "vector",
+              "welch",
+              "speaker"
+            ],
+            "primary_subject": "verification",
+            "track": "verification",
+            "title": "An i-vector backend for speaker verification",
+            "authors": [
+              "Marcel Kockmann",
+              "Md. Jahangir Alam",
+              "Patrick Kenny",
+              "Themos Stafylakis"
+            ],
+            "abstract": "[omitted from evidence excerpt]",
+            "pdf_url": "https://www.isca-archive.org/interspeech_2015/kenny15_interspeech.pdf",
+            "keywords": [],
+            "type": "",
+            "editor": [],
+            "booktitle": "",
+            "pages": "",
+            "publisher": "",
+            "doi": "",
+            "biburl": "",
+            "bibsource": "",
+            "source_file": "",
+            "funding": [],
+            "image_id": null,
+            "published_at": null,
+            "citation_count": null,
+            "cover_path": null,
+            "record_type": "canonical",
+            "external": false
+          }
+        ],
+        "total": 11,
+        "limit": 2,
+        "offset": 0
+      }
+    },
+    "marcel_papers2": {
+      "path": "/api/v1/scholars/author%3Alegacy%3A706867c1cd3d524922b44f19/papers?limit=2&offset=2",
+      "status": 200,
+      "seconds": 2.44,
+      "body": {
+        "items": [
+          {
+            "id": 119324,
+            "paper_id": "paper:lee15_interspeech_2015_isca:b8649e17d0b5",
+            "arxiv_id": "lee15@interspeech_2015@ISCA",
+            "source": "",
+            "conference": "INTERSPEECH",
+            "year": 2015,
+            "subjects": [
+              "recognition",
+              "native",
+              "speakers",
+              "phonetic",
+              "INTERSPEECH.2015 - Others",
+              "mobile",
+              "reddots",
+              "collection",
+              "speaker",
+              "recruited",
+              "recording"
+            ],
+            "primary_subject": "recognition",
+            "track": "recognition",
+            "title": "The reddots data collection for speaker recognition",
+            "authors": [
+              "Bin Ma",
+              "Anthony Larcher",
+              "Hagai Aronowitz",
+              "Carlos Vaquero",
+              "Javier Perez",
+              "Albert Swart",
+              "Marcel Kockmann",
+              "Niko Brümmer",
+              "Md. Jahangir Alam",
+              "Guangsen Wang",
+              "Patrick Kenny",
+              "Kong Aik Lee",
+              "David van Leeuwen",
+              "Themos Stafylakis",
+              "Haizhou Li"
+            ],
+            "abstract": "[omitted from evidence excerpt]",
+            "pdf_url": "https://www.isca-archive.org/interspeech_2015/lee15_interspeech.pdf",
+            "keywords": [],
+            "type": "",
+            "editor": [],
+            "booktitle": "",
+            "pages": "",
+            "publisher": "",
+            "doi": "",
+            "biburl": "",
+            "bibsource": "",
+            "source_file": "",
+            "funding": [],
+            "image_id": null,
+            "published_at": null,
+            "citation_count": null,
+            "cover_path": null,
+            "record_type": "canonical",
+            "external": false
+          },
+          {
+            "id": 143216,
+            "paper_id": "paper:stafylakis15_interspeech_2015_isca:1b781d0ab67d",
+            "arxiv_id": "stafylakis15@interspeech_2015@ISCA",
+            "source": "",
+            "conference": "INTERSPEECH",
+            "year": 2015,
+            "subjects": [
+              "rsr2015",
+              "digit",
+              "INTERSPEECH.2015 - Others",
+              "digits",
+              "factor",
+              "ubm",
+              "jfa",
+              "joint",
+              "speaker",
+              "strings",
+              "fusion"
+            ],
+            "primary_subject": "rsr2015",
+            "track": "rsr2015",
+            "title": "JFA for speaker recognition with random digit strings",
+            "authors": [
+              "Marcel Kockmann",
+              "Md. Jahangir Alam",
+              "Patrick Kenny",
+              "Themos Stafylakis"
+            ],
+            "abstract": "[omitted from evidence excerpt]",
+            "pdf_url": "https://www.isca-archive.org/interspeech_2015/stafylakis15_interspeech.pdf",
+            "keywords": [],
+            "type": "",
+            "editor": [],
+            "booktitle": "",
+            "pages": "",
+            "publisher": "",
+            "doi": "10.21437/INTERSPEECH.2015-82",
+            "biburl": "",
+            "bibsource": "",
+            "source_file": "",
+            "funding": [],
+            "image_id": null,
+            "published_at": null,
+            "citation_count": null,
+            "cover_path": null,
+            "record_type": "canonical",
+            "external": false
+          }
+        ],
+        "total": 11,
+        "limit": 2,
+        "offset": 2
+      }
+    },
+    "openalex_detail2": {
+      "path": "/api/v1/scholars/openalex%3AA5000000482",
+      "status": 200,
+      "seconds": 2.23,
+      "body": {
+        "scholar_id": "openalex:A5000000482",
+        "name_zh": null,
+        "name_en": "Marcela Ortiz",
+        "avatar_path": null,
+        "affiliations": [],
+        "bio_zh": null,
+        "bio_en": null,
+        "metrics": {
+          "paper_count": 0,
+          "citation_count": 0
+        },
+        "annual_citations": [],
+        "updated_at": "2026-10-05T12:30:24",
+        "citation_meta": {
+          "source": "OpenAlex",
+          "coverage": "OpenAlex author record and works",
+          "as_of": null
+        }
+      }
+    },
+    "marcel_detail_retry": {
+      "path": "/api/v1/scholars/author:legacy:706867c1cd3d524922b44f19",
+      "status": 200,
+      "seconds": 2.42,
+      "body": {
+        "scholar_id": "author:legacy:706867c1cd3d524922b44f19",
+        "name_zh": null,
+        "name_en": "Marcel Kockmann",
+        "avatar_path": null,
+        "affiliations": [],
+        "bio_zh": null,
+        "bio_en": null,
+        "metrics": {
+          "paper_count": 11,
+          "citation_count": null
+        },
+        "annual_citations": [],
+        "updated_at": null,
+        "citation_meta": {
+          "source": null,
+          "coverage": null,
+          "as_of": null
+        }
+      }
+    },
+    "hinton_detail": {
+      "path": "/api/v1/scholars/author:legacy:d1381dc0b07a0347ebb834d5",
+      "status": 200,
+      "seconds": 4.28,
+      "body": {
+        "scholar_id": "author:legacy:d1381dc0b07a0347ebb834d5",
+        "name_zh": null,
+        "name_en": "Geoffrey Hinton",
+        "avatar_path": null,
+        "affiliations": [],
+        "bio_zh": null,
+        "bio_en": null,
+        "metrics": {
+          "paper_count": 7,
+          "citation_count": null
+        },
+        "annual_citations": [],
+        "updated_at": null,
+        "citation_meta": {
+          "source": null,
+          "coverage": null,
+          "as_of": null
+        }
+      }
+    },
+    "platform_paper": {
+      "path": "/api/kg/paper?paperId=paper%3Aalam17b_interspeech_2017_isca%3A81a0a1497158",
+      "status": 200,
+      "seconds": 1.87,
+      "body": {
+        "paper_id": "paper:alam17b_interspeech_2017_isca:81a0a1497158",
+        "title": "Speaker Verification Under Adverse Conditions Using i-Vector Adaptation and Neural Networks",
+        "authors": [
+          "Jahangir Alam",
+          "Patrick Kenny",
+          "Gautam Bhattacharya",
+          "Marcel Kockmann"
+        ],
+        "year": 2017,
+        "venue": "INTERSPEECH",
+        "abstract": "[omitted from evidence excerpt]",
+        "doi": "10.21437/INTERSPEECH.2017-1240",
+        "pdf_url": "https://www.isca-archive.org/interspeech_2017/alam17b_interspeech.pdf",
+        "record_type": "canonical"
+      }
+    },
+    "legacy_browse_page2": {
+      "path": "/api/retrieval/scholars/search?limit=2&offset=2",
+      "status": 200,
+      "seconds": 1.15,
+      "body": {
+        "results": [
+          {
+            "scholar_id": "author:derived:haizhou_li:f87e0eb49474b312",
+            "name": "Haizhou Li",
+            "paper_count": 267
+          },
+          {
+            "scholar_id": "author:derived:jie_zhou:1fc382369bb75efb",
+            "name": "Jie Zhou",
+            "paper_count": 244
+          }
+        ],
+        "query": ""
+      }
+    },
+    "recheck_missing_query": {
+      "path": "/api/v1/scholars/search?limit=2&offset=0",
+      "status": 400,
+      "seconds": 0.592,
+      "body": {
+        "message": "q is required"
+      }
+    },
+    "recheck_empty_query": {
+      "path": "/api/v1/scholars/search?q=&limit=2&offset=0",
+      "status": 400,
+      "seconds": 0.644,
+      "body": {
+        "message": "q is required"
+      }
+    },
+    "recheck_search": {
+      "path": "/api/v1/scholars/search?q=Marcel&limit=20&offset=0",
+      "status": 200,
+      "seconds": 6.152,
+      "body": {
+        "items": [
+          {
+            "scholar_id": "openalex:A5000001524",
+            "name_zh": null,
+            "name_en": "Marcela Degrangemtsac",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 0,
+              "citation_count": 0
+            }
+          },
+          {
+            "scholar_id": "openalex:A5000000482",
+            "name_zh": null,
+            "name_en": "Marcela Ortiz",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 0,
+              "citation_count": 0
+            }
+          },
+          {
+            "scholar_id": "openalex:A5000001602",
+            "name_zh": null,
+            "name_en": "Marcela Silvina Dangelo",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 0,
+              "citation_count": 0
+            }
+          },
+          {
+            "scholar_id": "author:legacy:706867c1cd3d524922b44f19",
+            "name_zh": null,
+            "name_en": "Marcel Kockmann",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 11,
+              "citation_count": null
+            }
+          }
+        ],
+        "limit": 20,
+        "offset": 0
+      },
+      "observed_items_count": 20,
+      "excerpt": true
+    },
+    "recheck_search_next": {
+      "path": "/api/v1/scholars/search?q=Marcel&limit=20&offset=20",
+      "status": 200,
+      "seconds": 0.573,
+      "body": {
+        "items": [
+          {
+            "scholar_id": "author:legacy:d732212e0ad6646b34bae529",
+            "name_zh": null,
+            "name_en": "Marcel Geppert",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 2,
+              "citation_count": null
+            }
+          },
+          {
+            "scholar_id": "author:legacy:b976e4d4de68da39d51721d8",
+            "name_zh": null,
+            "name_en": "Marcel Hallgarten",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 2,
+              "citation_count": null
+            }
+          },
+          {
+            "scholar_id": "author:legacy:6afee4a44d7c2d0e22a02674",
+            "name_zh": null,
+            "name_en": "Marcel Hussing",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 2,
+              "citation_count": null
+            }
+          },
+          {
+            "scholar_id": "author:legacy:11d9c749b346433390850a02",
+            "name_zh": null,
+            "name_en": "Marcel Rühle",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 2,
+              "citation_count": null
+            }
+          }
+        ],
+        "limit": 20,
+        "offset": 20
+      },
+      "observed_items_count": 20,
+      "excerpt": true
+    },
+    "recheck_chinese": {
+      "path": "/api/v1/scholars/search?q=%E4%BD%95%E6%81%BA%E6%98%8E&limit=20&offset=0",
+      "status": 200,
+      "seconds": 0.559,
+      "body": {
+        "items": [
+          {
+            "scholar_id": "author:legacy:dc8d05c0600c58d65eadbb1c",
+            "name_zh": null,
+            "name_en": "何 良华",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 1,
+              "citation_count": null
+            }
+          }
+        ],
+        "limit": 20,
+        "offset": 0
+      },
+      "observed_items_count": 1
+    },
+    "recheck_english": {
+      "path": "/api/v1/scholars/search?q=Kaiming+He&limit=20&offset=0",
+      "status": 200,
+      "seconds": 0.615,
+      "body": {
+        "items": [
+          {
+            "scholar_id": "author:derived:he_wang:68598a629f0a2055",
+            "name_zh": null,
+            "name_en": "He Wang",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 68,
+              "citation_count": null
+            }
+          },
+          {
+            "scholar_id": "author:derived:liang_he:7c299b37a32b3e10",
+            "name_zh": null,
+            "name_en": "Liang He",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 65,
+              "citation_count": null
+            }
+          },
+          {
+            "scholar_id": "author:xiaodong_he",
+            "name_zh": null,
+            "name_en": "Xiaodong He",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 65,
+              "citation_count": null
+            }
+          },
+          {
+            "scholar_id": "author:derived:ran_he:c8b6f63a0e924c36",
+            "name_zh": null,
+            "name_en": "Ran He",
+            "avatar_path": null,
+            "metrics": {
+              "paper_count": 62,
+              "citation_count": null
+            }
+          }
+        ],
+        "limit": 20,
+        "offset": 0
+      },
+      "observed_items_count": 20,
+      "excerpt": true
+    },
+    "recheck_no_matches": {
+      "path": "/api/v1/scholars/search?q=zzzzScholarsNoSuchPerson987&limit=2&offset=0",
+      "status": 200,
+      "seconds": 0.537,
+      "body": {
+        "items": [],
+        "limit": 2,
+        "offset": 0
+      },
+      "observed_items_count": 0
+    },
+    "recheck_invalid_pagination": {
+      "path": "/api/v1/scholars/search?q=Marcel&limit=-1&offset=-1",
+      "status": 400,
+      "seconds": 0.55,
+      "body": {
+        "message": "Failed to search product scholars",
+        "error": "Invalid pagination"
+      }
+    },
+    "recheck_profile": {
+      "path": "/api/v1/scholars/author%3Alegacy%3A706867c1cd3d524922b44f19",
+      "status": 200,
+      "seconds": 2.419,
+      "body": {
+        "scholar_id": "author:legacy:706867c1cd3d524922b44f19",
+        "name_zh": null,
+        "name_en": "Marcel Kockmann",
+        "avatar_path": null,
+        "affiliations": [],
+        "bio_zh": null,
+        "bio_en": null,
+        "metrics": {
+          "paper_count": 11,
+          "citation_count": null
+        },
+        "annual_citations": [],
+        "updated_at": null,
+        "citation_meta": {
+          "source": null,
+          "coverage": null,
+          "as_of": null
+        }
+      }
+    },
+    "recheck_papers": {
+      "path": "/api/v1/scholars/author%3Alegacy%3A706867c1cd3d524922b44f19/papers?limit=2&offset=0",
+      "status": 200,
+      "seconds": 2.136,
+      "body": {
+        "items": [
+          {
+            "id": 85646,
+            "paper_id": "paper:alam17b_interspeech_2017_isca:81a0a1497158",
+            "arxiv_id": "alam17b@interspeech_2017@ISCA",
+            "source": "",
+            "conference": "INTERSPEECH",
+            "year": 2017,
+            "subjects": [
+              "bernoulli",
+              "crim",
+              "domain",
+              "classifier",
+              "backend",
+              "INTERSPEECH.2017 - Others",
+              "vector",
+              "extractor",
+              "speaker",
+              "mismatch",
+              "sre16"
+            ],
+            "primary_subject": "bernoulli",
+            "track": "bernoulli",
+            "title": "Speaker Verification Under Adverse Conditions Using i-Vector Adaptation and Neural Networks",
+            "authors": [
+              "Jahangir Alam",
+              "Marcel Kockmann",
+              "Gautam Bhattacharya",
+              "Patrick Kenny"
+            ],
+            "abstract": "[omitted from evidence excerpt]",
+            "pdf_url": "https://www.isca-archive.org/interspeech_2017/alam17b_interspeech.pdf",
+            "keywords": [],
+            "type": "",
+            "editor": [],
+            "booktitle": "",
+            "pages": "",
+            "publisher": "",
+            "doi": "10.21437/INTERSPEECH.2017-1240",
+            "biburl": "",
+            "bibsource": "",
+            "source_file": "",
+            "funding": [],
+            "image_id": null,
+            "published_at": null,
+            "citation_count": null,
+            "cover_path": null,
+            "record_type": "canonical",
+            "external": false
+          },
+          {
+            "id": 116471,
+            "paper_id": "paper:kenny15_interspeech_2015_isca:537ca57daa2e",
+            "arxiv_id": "kenny15@interspeech_2015@ISCA",
+            "source": "",
+            "conference": "INTERSPEECH",
+            "year": 2015,
+            "subjects": [
+              "verification",
+              "enrollment",
+              "rsr2015",
+              "baum",
+              "feature",
+              "INTERSPEECH.2015 - Others",
+              "factors",
+              "backend",
+              "vector",
+              "welch",
+              "speaker"
+            ],
+            "primary_subject": "verification",
+            "track": "verification",
+            "title": "An i-vector backend for speaker verification",
+            "authors": [
+              "Marcel Kockmann",
+              "Md. Jahangir Alam",
+              "Patrick Kenny",
+              "Themos Stafylakis"
+            ],
+            "abstract": "[omitted from evidence excerpt]",
+            "pdf_url": "https://www.isca-archive.org/interspeech_2015/kenny15_interspeech.pdf",
+            "keywords": [],
+            "type": "",
+            "editor": [],
+            "booktitle": "",
+            "pages": "",
+            "publisher": "",
+            "doi": "",
+            "biburl": "",
+            "bibsource": "",
+            "source_file": "",
+            "funding": [],
+            "image_id": null,
+            "published_at": null,
+            "citation_count": null,
+            "cover_path": null,
+            "record_type": "canonical",
+            "external": false
+          }
+        ],
+        "total": 11,
+        "limit": 2,
+        "offset": 0
+      },
+      "observed_items_count": 2
+    },
+    "recheck_papers_next": {
+      "path": "/api/v1/scholars/author%3Alegacy%3A706867c1cd3d524922b44f19/papers?limit=2&offset=2",
+      "status": 200,
+      "seconds": 2.084,
+      "body": {
+        "items": [
+          {
+            "id": 119324,
+            "paper_id": "paper:lee15_interspeech_2015_isca:b8649e17d0b5",
+            "arxiv_id": "lee15@interspeech_2015@ISCA",
+            "source": "",
+            "conference": "INTERSPEECH",
+            "year": 2015,
+            "subjects": [
+              "recognition",
+              "native",
+              "speakers",
+              "phonetic",
+              "INTERSPEECH.2015 - Others",
+              "mobile",
+              "reddots",
+              "collection",
+              "speaker",
+              "recruited",
+              "recording"
+            ],
+            "primary_subject": "recognition",
+            "track": "recognition",
+            "title": "The reddots data collection for speaker recognition",
+            "authors": [
+              "Bin Ma",
+              "Anthony Larcher",
+              "Hagai Aronowitz",
+              "Carlos Vaquero",
+              "Javier Perez",
+              "Albert Swart",
+              "Marcel Kockmann",
+              "Niko Brümmer",
+              "Md. Jahangir Alam",
+              "Guangsen Wang",
+              "Patrick Kenny",
+              "Kong Aik Lee",
+              "David van Leeuwen",
+              "Themos Stafylakis",
+              "Haizhou Li"
+            ],
+            "abstract": "[omitted from evidence excerpt]",
+            "pdf_url": "https://www.isca-archive.org/interspeech_2015/lee15_interspeech.pdf",
+            "keywords": [],
+            "type": "",
+            "editor": [],
+            "booktitle": "",
+            "pages": "",
+            "publisher": "",
+            "doi": "",
+            "biburl": "",
+            "bibsource": "",
+            "source_file": "",
+            "funding": [],
+            "image_id": null,
+            "published_at": null,
+            "citation_count": null,
+            "cover_path": null,
+            "record_type": "canonical",
+            "external": false
+          },
+          {
+            "id": 143216,
+            "paper_id": "paper:stafylakis15_interspeech_2015_isca:1b781d0ab67d",
+            "arxiv_id": "stafylakis15@interspeech_2015@ISCA",
+            "source": "",
+            "conference": "INTERSPEECH",
+            "year": 2015,
+            "subjects": [
+              "rsr2015",
+              "digit",
+              "INTERSPEECH.2015 - Others",
+              "digits",
+              "factor",
+              "ubm",
+              "jfa",
+              "joint",
+              "speaker",
+              "strings",
+              "fusion"
+            ],
+            "primary_subject": "rsr2015",
+            "track": "rsr2015",
+            "title": "JFA for speaker recognition with random digit strings",
+            "authors": [
+              "Marcel Kockmann",
+              "Md. Jahangir Alam",
+              "Patrick Kenny",
+              "Themos Stafylakis"
+            ],
+            "abstract": "[omitted from evidence excerpt]",
+            "pdf_url": "https://www.isca-archive.org/interspeech_2015/stafylakis15_interspeech.pdf",
+            "keywords": [],
+            "type": "",
+            "editor": [],
+            "booktitle": "",
+            "pages": "",
+            "publisher": "",
+            "doi": "10.21437/INTERSPEECH.2015-82",
+            "biburl": "",
+            "bibsource": "",
+            "source_file": "",
+            "funding": [],
+            "image_id": null,
+            "published_at": null,
+            "citation_count": null,
+            "cover_path": null,
+            "record_type": "canonical",
+            "external": false
+          }
+        ],
+        "total": 11,
+        "limit": 2,
+        "offset": 2
+      },
+      "observed_items_count": 2
+    },
+    "recheck_missing_profile": {
+      "path": "/api/v1/scholars/openalex%3ANOTEXIST",
+      "status": 404,
+      "seconds": 0.664,
+      "body": {
+        "message": "Scholar not found"
+      }
+    },
+    "recheck_legacy_browse": {
+      "path": "/api/retrieval/scholars/search?limit=2&offset=0",
+      "status": 200,
+      "seconds": 1.163,
+      "body": {
+        "results": [
+          {
+            "scholar_id": "author:yang_liu",
+            "name": "Yang Liu",
+            "paper_count": 515
+          },
+          {
+            "scholar_id": "author:derived:min_zhang:cf306616ec024b8a",
+            "name": "Min Zhang",
+            "paper_count": 278
+          }
+        ],
+        "query": ""
+      }
+    }
+  },
+  "recheck_observed_at": "2026-10-20T14:53:15.759295+00:00",
+  "external_source_check": {
+    "url": "https://www.isca-archive.org/interspeech_2017/alam17b_interspeech.pdf",
+    "method": "GET",
+    "requested_range": "bytes=0-0",
+    "status": 200,
+    "content_type": "application/pdf",
+    "response_date": "Tue, 20 Oct 2026 15:00:51 GMT",
+    "note": "body discarded; server returned 200 rather than partial content"
+  }
+}

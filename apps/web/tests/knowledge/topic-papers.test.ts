@@ -2,17 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 import { KnowledgeClientError } from "../../clients/knowledge/client";
-import type { KnowledgeClient, KnowledgeSubjectSearchResponse } from "../../clients/knowledge";
+import type { KnowledgeClient, KnowledgePaperBrowseResponse } from "../../clients/knowledge";
 import {
   canAutoLoadTopicPapers,
   nextTopicPaperOffset,
-  topicPaperLimitReached,
   topicPaperQueryOptions,
 } from "../../features/knowledge/topics/detail/topic-paper-query";
 
-function page(offset: number, count: number, total: number): KnowledgeSubjectSearchResponse {
+function page(offset: number, count: number, total: number): KnowledgePaperBrowseResponse {
   return {
     total,
+    offset,
+    limit: 10,
     results: Array.from({ length: count }, (_, index) => ({
       id: `paper-${offset + index}`, imageId: null, title: `Paper ${offset + index}`, abstract: null,
       authors: [], year: null, venue: null, keywords: [], subjects: [], score: null,
@@ -21,46 +22,44 @@ function page(offset: number, count: number, total: number): KnowledgeSubjectSea
   };
 }
 
-function harness(search: KnowledgeClient["searchBySubject"]) {
+function harness(search: KnowledgeClient["topicPapers"]) {
   const client = new QueryClient();
   const observer = new InfiniteQueryObserver(client, {
-    ...topicPaperQueryOptions("topic", "subject", search),
+    ...topicPaperQueryOptions("openalex:topic:T10028", search),
     enabled: false, retryDelay: 0, gcTime: Infinity,
   });
   const unsubscribe = observer.subscribe(() => {});
   return { observer, close: () => { unsubscribe(); client.clear(); } };
 }
 
-test("分页按实际返回条数递进，耗尽、空页和 1000 上限均终止", () => {
-  assert.equal(nextTopicPaperOffset(page(0, 7, 30), 0), 7);
-  assert.equal(nextTopicPaperOffset(page(7, 10, 30), 7), 17);
-  assert.equal(nextTopicPaperOffset(page(20, 10, 30), 20), undefined);
-  assert.equal(nextTopicPaperOffset(page(10, 0, 30), 10), undefined);
-  assert.equal(nextTopicPaperOffset(page(990, 10, 1500), 990), undefined);
-  assert.equal(topicPaperLimitReached(page(990, 10, 1500), 990), true);
-  assert.equal(topicPaperLimitReached(page(990, 10, 1000), 990), false);
+test("分页按实际返回条数递进，到总数或空页停止", () => {
+  assert.equal(nextTopicPaperOffset(page(0, 7, 30)), 7);
+  assert.equal(nextTopicPaperOffset(page(7, 10, 30)), 17);
+  assert.equal(nextTopicPaperOffset(page(20, 10, 30)), undefined);
+  assert.equal(nextTopicPaperOffset(page(10, 0, 30)), undefined);
+  assert.equal(nextTopicPaperOffset(page(1000, 10, 1500)), 1010);
 });
 
-test("真实 TanStack 分页只请求 offset 0 到 990，达到上限后不再请求", async (t) => {
+test("TanStack 分页传完整 Topic ID，超过 1000 继续直到末页", async (t) => {
   const offsets: number[] = [];
-  const { observer, close } = harness(async (_subject, offset = 0, limit = 10) => {
+  const total = 1023;
+  const { observer, close } = harness(async (id, offset, limit) => {
+    assert.equal(id, "openalex:topic:T10028");
     offsets.push(offset);
-    assert.ok(offset < 1000);
-    assert.ok(offset + limit <= 1000);
-    return page(offset, limit, 1500);
+    return page(offset, Math.min(limit, total - offset), total);
   });
   t.after(close);
   await observer.refetch();
   while (observer.getCurrentResult().hasNextPage) await observer.fetchNextPage();
   await observer.fetchNextPage();
-  assert.deepEqual(offsets, Array.from({ length: 100 }, (_, i) => i * 10));
-  assert.equal(observer.getCurrentResult().data?.pages.length, 100);
+  assert.deepEqual(offsets, Array.from({ length: 103 }, (_, i) => i * 10));
+  assert.equal(observer.getCurrentResult().data?.pages.at(-1)?.results.length, 3);
 });
 
 test("下一页失败保留数据并暂停自动加载，手动只重试失败的 offset", async (t) => {
   const offsets: number[] = [];
   let fail = true;
-  const { observer, close } = harness(async (_subject, offset = 0) => {
+  const { observer, close } = harness(async (_topicId, offset = 0) => {
     offsets.push(offset);
     if (offset === 10 && fail) throw new KnowledgeClientError("UNKNOWN", "失败", { retryable: false });
     return page(offset, 10, 20);
@@ -105,8 +104,8 @@ test("首次失败没有缓存，重新加载后恢复；可重试错误最多�
 
 test("重复下一页触发合并为一次请求，加载中不自动请求", async (t) => {
   const offsets: number[] = [];
-  let resolveNext!: (value: KnowledgeSubjectSearchResponse) => void;
-  const { observer, close } = harness(async (_subject, offset = 0) => {
+  let resolveNext!: (value: KnowledgePaperBrowseResponse) => void;
+  const { observer, close } = harness(async (_topicId, offset = 0) => {
     offsets.push(offset);
     if (offset === 10) return new Promise((resolve) => { resolveNext = resolve; });
     return page(0, 10, 20);
@@ -123,7 +122,7 @@ test("重复下一页触发合并为一次请求，加载中不自动请求", as
 });
 
 test("正常结果可自动加载；空的后续页停止，保留已有数据", async (t) => {
-  const { observer, close } = harness(async (_subject, offset = 0) => page(offset, offset ? 0 : 10, 30));
+  const { observer, close } = harness(async (_topicId, offset = 0) => page(offset, offset ? 0 : 10, 30));
   t.after(close);
   await observer.refetch();
   assert.equal(canAutoLoadTopicPapers(observer.getCurrentResult()), true);

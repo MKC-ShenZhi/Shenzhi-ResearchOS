@@ -1,6 +1,6 @@
 import type { KnowledgeTopic } from "@/clients/knowledge";
 
-const FEATURED_TOPIC_IDS = ["reinforcement-learning", "deep-learning"] as const;
+const FEATURED_TOPIC_IDS = ["openalex:topic:T10028", "openalex:topic:T11689"] as const;
 
 export function selectFeaturedTopics(topics: readonly KnowledgeTopic[]): KnowledgeTopic[] {
     return FEATURED_TOPIC_IDS.flatMap((id) => {
@@ -17,22 +17,4 @@ export function resolveTopicDescription(topic: KnowledgeTopic): string {
     return firstNonEmpty(topic.descriptionDetail, topic.descriptionZh, topic.descriptionEn);
 }
 
-export function resolveSubjectQuery(topic: KnowledgeTopic): string {
-    return firstNonEmpty(topic.subjectQuery, topic.nameEn, topic.nameZh);
-}
-
-export function toTopicMetadata(topic: KnowledgeTopic): KnowledgeTopic {
-    return {
-        ...topic,
-        descriptionDetail: resolveTopicDescription(topic) || null,
-        subjectQuery: resolveSubjectQuery(topic),
-    };
-}
-
-export function findTopicMetadata(
-    topics: readonly KnowledgeTopic[],
-    topicId: string,
-): KnowledgeTopic | undefined {
-    const topic = topics.find((item) => item.id === topicId);
-    return topic ? toTopicMetadata(topic) : undefined;
-}
+export const TOPICS_QUERY_KEY = ["knowledge", "openalex-topics"] as const;

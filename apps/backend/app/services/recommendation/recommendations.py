@@ -180,8 +180,11 @@ class CandidateRecallService:
                         # Knowledge image id; the web layer resolves it to the image proxy.
                         'image_id': paper.image_id,
                         'keywords': paper.keywords, 'subjects': paper.subjects,
+                        'topics': paper.topics,
                     }, subjects=paper.subjects, keywords=paper.keywords, sources=set())
                     candidates[paper.id] = entry
+                elif not entry.paper['topics']:
+                    entry.paper['topics'] = paper.topics
                 entry.sources.add(kind)
                 if kind == 'keyword':
                     # Retrieval for an interest query is evidence even when
@@ -373,6 +376,9 @@ class RecommendationService:
             item = {'id': paper.id, 'rank': rank, 'source': paper.source, 'reason': reason, 'sources': sources}
             if paper.source != 'fallback' and paper.id not in resolvable:
                 item['paper'] = paper.model_dump(mode='json', exclude={'source'})
+            elif paper.source == 'personal' and paper.topics:
+                # Live recall can have topics before the next offline pool sync.
+                item['topics'] = [topic.model_dump(mode='json', by_alias=True) for topic in paper.topics]
             items.append(item)
         return items
 
@@ -401,8 +407,11 @@ class RecommendationService:
                 paper = (fallback if item.get('source') == 'fallback' else papers).get(item['id'])
             if paper is None:
                 continue
+            fields = paper.model_dump(mode='json', by_alias=True)
+            if item.get('topics') and not fields['topics']:
+                fields['topics'] = item['topics']
             cards.append({
-                **paper.model_dump(mode='json'), 'source': item.get('source'),
+                **fields, 'source': item.get('source'),
                 'reason': item.get('reason'), 'sources': item.get('sources', []),
                 'request_id': str(request_id), 'rank': item['rank'],
             })

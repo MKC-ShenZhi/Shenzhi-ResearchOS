@@ -13,6 +13,11 @@ const COLLAPSED_AUTHOR_COUNT = 6;
 const ABSTRACT_LINK_CLASS =
   "[overflow-wrap:anywhere] text-primary underline decoration-primary/30 underline-offset-2 transition-colors hover:decoration-primary";
 
+class AbstractTextMacros {
+  // Some source abstracts use this symbol directly in prose.
+  static symbols = new Map([["sigma", "σ"]]);
+}
+
 function createAbstractLink(text: string, href: string) {
   const link = document.createElement("a");
   link.href = href;
@@ -180,14 +185,17 @@ function LatexAbstractContent({ abstract }: { abstract: string }) {
 
     try {
       const { source, links } = replaceAbstractLinks(abstract);
-      const generator = new HtmlGenerator({ hyphenate: false });
+      const generator = new HtmlGenerator({ hyphenate: false, CustomMacros: AbstractTextMacros });
       parse(source, { generator });
       container.replaceChildren(generator.domFragment());
       restoreAbstractLinks(container, links);
       container.hidden = false;
       fallback.hidden = true;
     } catch (error) {
-      console.error("Failed to render paper abstract with LaTeX.js.", error);
+      // LaTeX.js uses its own SyntaxError class for malformed source.
+      if (!(error instanceof Error && error.name === "SyntaxError")) {
+        console.error("Failed to render paper abstract with LaTeX.js.", error);
+      }
       container.replaceChildren();
       container.hidden = true;
       fallback.hidden = false;

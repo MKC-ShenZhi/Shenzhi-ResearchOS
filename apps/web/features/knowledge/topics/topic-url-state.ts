@@ -13,6 +13,14 @@ export function topicSquareHref(returnTo: unknown): string {
   return normalizeTopicReturnTo(returnTo) ?? TOPIC_SQUARE_PATH;
 }
 
+export function topicIdFromRouteParam(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function topicHref(id: string, returnTo?: string | null): string {
   return appendInternalReturnTo(
     `${TOPIC_SQUARE_PATH}/${encodeURIComponent(id)}`,
@@ -41,10 +49,8 @@ export function filterTopics(topics: KnowledgeTopic[], { query, category }: Topi
   return topics.filter((topic) => {
     if (category && topic.category !== category) return false;
     if (!normalizedQuery) return true;
-    const author = typeof topic.author === "string"
-      ? topic.author
-      : `${topic.author.id} ${topic.author.name}`;
-    return [topic.id, topic.subjectQuery, topic.category, topic.nameZh, topic.nameEn, topic.descriptionZh, topic.descriptionEn, author]
+    const author = typeof topic.author === "string" ? topic.author : topic.author?.name ?? "";
+    return [topic.id, topic.subjectQuery, topic.category, topic.categoryName, topic.nameZh, topic.nameEn, topic.descriptionZh, topic.descriptionEn, author]
       .join(" ")
       .normalize("NFKC")
       .toLocaleLowerCase()

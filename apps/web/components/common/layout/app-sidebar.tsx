@@ -74,7 +74,7 @@ const KNOWLEDGE_SUB_NAV = [
   { href: "/knowledge/search", label: "论文库" },
   { href: "/knowledge/scholars", label: "学者库" },
   { href: "/knowledge/topics", label: "主题库" },
-  { href: "/knowledge/funding", label: "项目基金库" },
+  { href: "/knowledge/funding", label: "项目基金库", detailPrefix: "/knowledge/nsfc-projects/" },
   { href: "/knowledge/graph", label: "关系图谱" },
 ];
 
@@ -186,7 +186,7 @@ function ExpandableNav({
   href: string;
   label: string;
   icon: typeof Compass;
-  subNav: { href: string; label: string }[];
+  subNav: { href: string; label: string; detailPrefix?: string }[];
   collapsed: boolean;
   /** 子栏目列表末尾的附加内容(如「新建项目」) */
   footer?: React.ReactNode;
@@ -305,7 +305,8 @@ function ExpandableNav({
       {open && (
         <div className="mt-0.5 flex flex-col gap-0.5 pl-6">
           {availableSubNav.map((sub) => {
-            const active = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
+            const active = pathname === sub.href || pathname.startsWith(`${sub.href}/`)
+              || (sub.detailPrefix !== undefined && pathname.startsWith(sub.detailPrefix));
             const NavigationLink = Object.hasOwn(SEARCH_RESTORATION_ROUTES, sub.href)
               ? SearchNavigationLink
               : FeatureNavigationLink;

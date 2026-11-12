@@ -52,8 +52,20 @@ class ConferenceSyncMigrationTests(unittest.TestCase):
         )
         # An environment may already have run the published conference branch.
         migrate("upgrade", "022_conference_snapshots")
-        migrate("upgrade", "head")
-        self.assertEqual([tuple(row) for row in execute("SELECT version_num FROM alembic_version")], [("024_knowledge_venue_snapshot",)])
+        migrate("upgrade", "023_merge_conference_chat")
+        self.assertEqual([tuple(row) for row in execute("SELECT version_num FROM alembic_version")], [("023_merge_conference_chat",)])
+        for prior_head in ("024_discovery_pool_topics", "024_knowledge_venue_snapshot"):
+            migrate("upgrade", prior_head)
+            migrate("upgrade", "head")
+            self.assertEqual(
+                [tuple(row) for row in execute("SELECT version_num FROM alembic_version")],
+                [("026_home_scheduler_state",)],
+            )
+            self.assertEqual(execute("SELECT topics FROM discovery_pool_papers LIMIT 0"), [])
+            self.assertEqual(execute("SELECT * FROM knowledge_conference_snapshot"), [])
+            with self.assertRaises(asyncpg.CheckViolationError):
+                execute("INSERT INTO knowledge_conference_snapshot(id,attempted_at) VALUES (2,now())")
+            migrate("downgrade", "023_merge_conference_chat")
         rows = execute(
             "SELECT user_id,conference_id FROM conference_follows ORDER BY user_id"
         )
@@ -108,7 +120,7 @@ class ConferenceSyncMigrationTests(unittest.TestCase):
         asyncio.run(self.check_knowledge_directory())
 
     async def check_knowledge_directory(self):
-        from app.core.database import dispose_engine
+        from app.core import database
         from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
         from app.schemas.knowledge import ConferenceListResponse
         from app.services.knowledge import conference_directory as directory
@@ -121,9 +133,22 @@ class ConferenceSyncMigrationTests(unittest.TestCase):
         fetch = AsyncMock(return_value=saved)
         with patch.dict(os.environ, {'CHAT_DATABASE_URL': URL, 'BACKGROUND_JOBS_ENABLED': 'false'}), patch.object(
             directory.KnowledgeAdapter, 'conferences', fetch,
-        ), patch.object(directory, 'utc_now', side_effect=lambda: now):
+        ), patch.object(directory, 'utc_now', side_effect=lambda: now), patch.object(
+            database, '_engine', None,
+        ), patch.object(database, '_session_factory', None):
             try:
                 self.assertIsNone(await directory.load_conference_directory())
+                with patch.object(directory, 'REFRESH_TIMEOUT_SECONDS', 0):
+                    # Force the adapter to yield so the timeout cancels the fetch.
+                    fetch.side_effect = asyncio.Event().wait
+                    with self.assertRaises(TimeoutError):
+                        await directory.refresh_conference_directory()
+                self.assertIsNone(await directory.load_conference_directory())
+                self.assertFalse(await directory.refresh_conference_directory())
+                fetch.assert_awaited_once()
+                now += timedelta(minutes=10)
+                fetch.side_effect = None
+                fetch.reset_mock()
                 results = await asyncio.gather(*(directory.refresh_conference_directory() for _ in range(2)))
                 self.assertCountEqual(results, [True, False])
                 fetch.assert_awaited_once()
@@ -150,7 +175,7 @@ class ConferenceSyncMigrationTests(unittest.TestCase):
                         await in_flight
                 self.assertFalse(await directory.refresh_conference_directory())
                 self.assertEqual(fetch.await_count, 2)
-                await dispose_engine()
+                await database.dispose_engine()
                 stale = await directory.load_conference_directory()
                 self.assertEqual(stale.items, saved.items)
                 self.assertTrue(stale.snapshot_stale)
@@ -166,4 +191,4 @@ class ConferenceSyncMigrationTests(unittest.TestCase):
                 self.assertFalse(refreshed.snapshot_stale)
                 self.assertEqual(refreshed.snapshot_updated_at, now)
             finally:
-                await dispose_engine()
+                await database.dispose_engine()

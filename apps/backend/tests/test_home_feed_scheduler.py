@@ -53,8 +53,13 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
     NOW = datetime(2001, 3, 1, 4, 0, tzinfo=timezone.utc)  # 12:00 in Shanghai
 
     async def asyncSetUp(self):
-        from app.core.database import dispose_engine
+        from sqlalchemy import delete
+
+        from app.core.database import dispose_engine, session_scope
+        from app.models.home_scheduler_state import HomeSchedulerStateRow
         await dispose_engine()
+        async with session_scope() as session:
+            await session.execute(delete(HomeSchedulerStateRow))
         self.enterContext(patch.dict(os.environ, {'HOME_FEED_POOL_YEAR': self.YEAR, 'BACKGROUND_JOBS_ENABLED': 'true'}))
         self.refresh_directory = self.enterContext(patch.object(
             scheduler_module, 'refresh_conference_directory', AsyncMock(return_value=False),
@@ -94,7 +99,7 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.refresh_directory.return_value = True
         self.sync_deadlines.side_effect = RuntimeError('GitHub down')
         with self.assertLogs(scheduler_module.logger, 'ERROR'):
-            self.assertEqual(await self.scheduler().run_due(self.NOW), ['knowledge_conferences', 'sync', 'publish', 'purge'])
+            self.assertEqual(await self.scheduler().run_due(self.NOW), ['knowledge_conferences', 'publish'])
 
     async def test_publish_waits_until_just_after_shanghai_midnight(self):
         scheduler = self.scheduler()
@@ -106,21 +111,23 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         scheduler = self.scheduler(sync=failing)
         with self.assertLogs(scheduler_module.logger, 'ERROR'):
             self.assertEqual(await scheduler.run_due(self.NOW), ['publish', 'purge'])
-        await scheduler.run_due(self.NOW + timedelta(minutes=30))
+        restarted = self.scheduler(sync=failing)
+        await restarted.run_due(self.NOW + timedelta(minutes=30))
         self.assertEqual(failing.await_count, 1)
         with self.assertLogs(scheduler_module.logger, 'ERROR'):
-            await scheduler.run_due(self.NOW + timedelta(hours=1))
+            await restarted.run_due(self.NOW + timedelta(hours=1))
         self.assertEqual(failing.await_count, 2)
 
     async def test_purge_runs_hourly_and_retries_after_a_failure(self):
         scheduler = self.scheduler()
         with patch.object(scheduler_module, 'purge_expired', AsyncMock(return_value=(0, 0))) as purge:
             await scheduler.run_due(self.NOW)
-            self.assertNotIn('purge', await scheduler.run_due(self.NOW + timedelta(minutes=50)))
+            self.assertNotIn('purge', await self.scheduler().run_due(self.NOW + timedelta(minutes=50)))
             self.assertIn('purge', await scheduler.run_due(self.NOW + timedelta(hours=1)))
         self.assertEqual(purge.await_count, 2)
         scheduler.builder.purge.assert_awaited_with(date(2001, 3, 1))
 
+    async def test_failed_purge_retries_on_next_tick(self):
         failing = self.scheduler()
         with patch.object(scheduler_module, 'purge_expired', AsyncMock(side_effect=RuntimeError('db'))):
             with self.assertLogs(scheduler_module.logger, 'ERROR'):

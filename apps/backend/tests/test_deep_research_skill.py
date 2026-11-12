@@ -143,7 +143,7 @@ class DeepResearchApiTests(unittest.IsolatedAsyncioTestCase):
             result = events[-1][1]
             self.assertEqual(result['status'], 'done')
             self.assertEqual(result['output']['report_path'], 'report.md')
-            self.assertEqual(result['output']['report'], '# 报告\n\n离线验收。\n')
+            self.assertEqual(result['output']['report'].replace('\r\n', '\n'), '# 报告\n\n离线验收。\n')
             self.assertIn('工作单元：证据槽', str(provider.requests[0].messages))
             report = agent_service.read_session_file(
                 f'anon:{OWNER_ID}', 'dr_skill_report', 'report.md')[0]

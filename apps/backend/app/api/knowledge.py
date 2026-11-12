@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Path, Query, Request
+from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 
 from app.core.identity import request_identity, require_bff
@@ -23,12 +23,14 @@ from app.schemas.knowledge import (
     PersonalRecentPaper,
     RelatedPaperSearchRequest,
     ScholarSearchRequest,
+    ScholarProfilePagination,
 )
-from app.schemas.topic import KnowledgeTopicListResponse
+from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 from app.services.library.collections import CollectionService
 from app.services.library.reading_history import ReadingHistoryService
 from app.services.topics import TopicRegistry, TopicRegistryError
+from app.services.topics.openalex import openalex_topics
 from app.schemas.knowledge import PaperBatchRequest
 
 
@@ -116,6 +118,37 @@ def creator_not_found(request: Request) -> JSONResponse:
             request_id=request_id(request),
         ).model_dump(mode='json', by_alias=True),
     )
+
+
+@router.get('/projects')
+@router.get('/nsfc-projects', include_in_schema=False)
+async def nsfc_projects(
+    request: Request,
+    q: str = Query(default='', max_length=200),
+    keyword: str = Query(default='', max_length=200),
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        response = await service.search_nsfc_projects(q.strip(), limit, offset, keyword=keyword.strip())
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/projects/{award_number}')
+@router.get('/nsfc-projects/{award_number}', include_in_schema=False)
+async def nsfc_project(
+    request: Request,
+    award_number: str = Path(min_length=1, max_length=24, pattern=r'^[A-Za-z0-9]+$'),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        response = await service.get_nsfc_project(award_number)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    return ok(response.model_dump(mode='json', by_alias=True))
 
 
 @router.post('/search')
@@ -221,13 +254,38 @@ async def topics(
     _credential: None = Depends(require_bff),
 ):
     try:
-        response: KnowledgeTopicListResponse = topic_registry.list_topics()
+        response = await openalex_topics.list_topics()
+    except KnowledgeIntegrationError as error:
+        return _error_payload(KnowledgeServiceError.from_integration_error(error), request)
     except Exception as error:
         return unknown_error(request, error)
     return ok(response.model_dump(mode='json', by_alias=True))
 
 
-@router.get('/topics/{topic_id:path}')
+def _topic_error(error: KnowledgeIntegrationError, request: Request) -> JSONResponse:
+    if error.status_code == 404:
+        return topic_not_found(request)
+    return _error_payload(KnowledgeServiceError.from_integration_error(error), request)
+
+
+@router.get('/topics/{topic_id}/papers')
+async def topic_papers(
+    topic_id: str,
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        response = await openalex_topics.papers(topic_id, limit=limit, offset=offset)
+    except KnowledgeIntegrationError as error:
+        return _topic_error(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/topics/{topic_id}')
 async def topic(
     topic_id: str,
     request: Request,
@@ -236,9 +294,9 @@ async def topic(
     if not topic_id.strip():
         return invalid_argument(request, 'topicId 不能为空')
     try:
-        response = topic_registry.get_topic(topic_id)
-    except TopicRegistryError:
-        return topic_not_found(request)
+        response = await openalex_topics.get_topic(topic_id)
+    except KnowledgeIntegrationError as error:
+        return _topic_error(error, request)
     except Exception as error:
         return unknown_error(request, error)
     return ok(response.model_dump(mode='json', by_alias=True))
@@ -274,6 +332,104 @@ async def overview_search(
 
     try:
         response = await service.mixed_search(search_request)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+# V2 paths cannot collide with the existing retrieval Scholar API or its cache.
+@router.get('/scholar-profiles')
+async def browse_scholar_profiles(
+    request: Request,
+    limit: str = Query(default='20'),
+    offset: str = Query(default='0'),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        params = ScholarProfilePagination(limit=int(limit), offset=int(offset))
+    except (ValidationError, ValueError):
+        return invalid_argument(request, '学者浏览分页参数不合法')
+    try:
+        response = await service.browse_scholar_profiles(limit=params.limit, offset=params.offset)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/scholar-profiles/search')
+async def search_scholar_profiles(
+    request: Request,
+    q: str | None = Query(default=None),
+    limit: str = Query(default='20'),
+    offset: str = Query(default='0'),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        params = ScholarSearchRequest(query=q, limit=int(limit), offset=int(offset))
+    except (ValidationError, TypeError, ValueError):
+        return invalid_argument(request, '学者检索参数不合法')
+    try:
+        response = await service.search_scholar_profiles(params)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/scholar-avatar')
+async def scholar_avatar(
+    request: Request,
+    path: str = Query(max_length=512),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        data, media_type = await service.get_scholar_avatar(path)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return Response(data, media_type=media_type, headers={'X-Content-Type-Options': 'nosniff'})
+
+
+# Query ID avoids ambiguity when an opaque ID itself ends in /papers.
+@router.get('/scholar-profile-papers')
+async def scholar_profile_papers(
+    request: Request,
+    scholar_id: str = Query(alias='scholarId'),
+    limit: str = Query(default='20'),
+    offset: str = Query(default='0'),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        params = ScholarProfilePagination(limit=int(limit), offset=int(offset))
+        if not scholar_id.strip():
+            raise ValueError('empty scholar ID')
+    except (ValidationError, TypeError, ValueError):
+        return invalid_argument(request, '学者论文分页参数不合法')
+    try:
+        response = await service.get_scholar_papers(scholar_id, limit=params.limit, offset=params.offset)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
+@router.get('/scholar-profiles/{scholar_id:path}')
+async def scholar_profile(
+    scholar_id: str,
+    request: Request,
+    _credential: None = Depends(require_bff),
+):
+    if not scholar_id.strip():
+        return invalid_argument(request, 'scholarId 不能为空')
+    try:
+        response = await service.get_scholar_profile(scholar_id)
     except KnowledgeServiceError as error:
         return _error_payload(error, request)
     except Exception as error:

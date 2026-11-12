@@ -54,7 +54,7 @@ class DropChatTablesMigrationTests(unittest.TestCase):
         self.assertEqual(asyncio.run(run(tables)), set(), 'Migration roundtrip requires an EMPTY test database')
         heads = alembic('heads')
         self.assertEqual(heads.count('(head)'), 1)
-        self.assertIn('021_drop_chat_tables (head)', heads)
+        self.assertIn('026_home_scheduler_state (head)', heads)
 
         alembic('upgrade', '020_snapshot_complete')
         before = asyncio.run(run(tables))
@@ -71,7 +71,7 @@ class DropChatTablesMigrationTests(unittest.TestCase):
             ))
         asyncio.run(run(seed))
 
-        alembic('upgrade', 'head')
+        alembic('upgrade', '021_drop_chat_tables')
         self.assertEqual(asyncio.run(run(tables)), before - {'chat_sessions', 'chat_messages'})
 
         async def agent_sentinel(connection):
@@ -92,7 +92,7 @@ class DropChatTablesMigrationTests(unittest.TestCase):
         alembic('downgrade', 'base')
         self.assertEqual(asyncio.run(run(tables)), {'alembic_version'})
         alembic('upgrade', 'head')
-        self.assertIn('021_drop_chat_tables (head)', alembic('current'))
+        self.assertIn('026_home_scheduler_state (head)', alembic('current'))
 
 
 if __name__ == '__main__':

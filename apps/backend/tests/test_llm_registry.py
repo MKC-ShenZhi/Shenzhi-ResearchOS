@@ -131,7 +131,7 @@ class RegistryTests(unittest.TestCase):
                 ModelRegistry(Catalog.model_validate(data), {})
 
     def test_custom_catalog_defaults_aliases_and_disabled(self):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete_on_close=False) as file:
             json.dump({'providers': [{'id': 'fourth', 'base_url': 'https://fourth.example/v1', 'api_key_env': 'FOURTH_KEY'}],
                        'models': [{'id': 'fourth/m', 'provider_id': 'fourth', 'upstream_model': 'm',
                                    'label': 'Fourth', 'capabilities': {'tool_calling': True}},
@@ -190,7 +190,7 @@ class RegistryTests(unittest.TestCase):
                 self.assertNotIn('PRIVATE_INPUT', str(error.exception))
 
     def test_fourth_provider_alone_can_supply_default_without_old_keys(self):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as file:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete_on_close=False) as file:
             json.dump({'providers': [{'id': 'fourth', 'base_url': 'https://fourth.example', 'api_key_env': 'FOURTH_KEY'}],
                        'models': [{'id': 'fourth/m', 'provider_id': 'fourth', 'upstream_model': 'm', 'label': 'M',
                                    'capabilities': {'tool_calling': True}}]}, file)

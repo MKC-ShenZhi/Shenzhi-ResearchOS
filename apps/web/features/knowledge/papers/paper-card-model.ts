@@ -1,4 +1,6 @@
 import type { PaperCardModel } from "../../../types";
+import type { KnowledgePaperHit, PaperTopic } from "../../../clients/knowledge/types";
+import { getPaperThumbnailUrl } from "../../../lib/paper-thumbnail";
 
 const VENUE_TONES: PaperCardModel["venueTone"][] = ["violet", "amber", "green"];
 
@@ -19,7 +21,33 @@ export function formatPaperAuthors(authors: string[]): string {
   return authors.length > 5 ? `${visible} 等` : visible;
 }
 
-/** 卡片 Topic：优先上游关键词，否则学科主题，最多 5 个。 */
-export function pickPaperTopics(keywords: string[] | undefined, subjects: string[] | undefined): string[] {
-  return (keywords?.length ? keywords : subjects ?? []).slice(0, 5);
+/** 按底座顺序取最多五个有名称的不同主题。 */
+export function pickPaperTopics(topics?: PaperTopic[]): PaperTopic[] {
+  const visible = new Map<string, PaperTopic>();
+  for (const topic of Array.isArray(topics) ? topics : []) {
+    const id = typeof topic?.id === "string" ? topic.id.trim() : "";
+    const nameZh = typeof topic?.nameZh === "string" ? topic.nameZh.trim() : "";
+    const nameEn = typeof topic?.nameEn === "string" ? topic.nameEn.trim() : "";
+    if (!id || id === "." || id === ".." || (!nameZh && !nameEn) || visible.has(id)) continue;
+    visible.set(id, { id, nameZh: nameZh || null, nameEn });
+    if (visible.size === 5) break;
+  }
+  return [...visible.values()];
+}
+
+export function toPaperCardModel(
+  paper: Pick<KnowledgePaperHit, "id" | "year" | "venue" | "authors" | "title" | "abstract" | "topics">
+    & Partial<Pick<KnowledgePaperHit, "imageId">>,
+): PaperCardModel {
+  return {
+    id: paper.id,
+    date: formatPaperYear(paper.year),
+    venue: paper.venue,
+    venueTone: paperVenueTone(paper.id),
+    authors: formatPaperAuthors(paper.authors),
+    title: paper.title,
+    abstract: paper.abstract ?? "",
+    topics: pickPaperTopics(paper.topics),
+    thumbnailUrl: getPaperThumbnailUrl(paper.imageId),
+  };
 }

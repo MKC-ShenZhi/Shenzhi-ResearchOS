@@ -4,8 +4,10 @@ import asyncio
 import logging
 from datetime import timedelta
 
+from pydantic import ValidationError
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.database import database_url, dispose_engine, session_scope
 from app.core.time import utc_now
@@ -17,24 +19,31 @@ from app.schemas.knowledge import ConferenceListResponse
 REFRESH_INTERVAL = timedelta(minutes=10)
 STALE_AFTER = timedelta(hours=24)
 REFRESH_TIMEOUT_SECONDS = 60
+READ_TIMEOUT_SECONDS = 3
 logger = logging.getLogger(__name__)
 
 
 async def load_conference_directory() -> ConferenceListResponse | None:
     if database_url() is None:
         return None
-    async with session_scope() as session:
-        row = await session.get(Snapshot, 1)
-        if row is None or row.updated_at is None:
-            return None
-        return ConferenceListResponse.model_validate({
-            'items': row.items,
-            'snapshot_updated_at': row.updated_at,
-            'snapshot_stale': utc_now() - row.updated_at >= STALE_AFTER,
-        })
+    try:
+        async with asyncio.timeout(READ_TIMEOUT_SECONDS), session_scope() as session:
+            row = await session.get(Snapshot, 1)
+            if row is None or row.updated_at is None:
+                return None
+            return ConferenceListResponse(
+                items=row.items,
+                snapshot_updated_at=row.updated_at,
+                snapshot_stale=utc_now() - row.updated_at >= STALE_AFTER,
+            )
+    except (SQLAlchemyError, OSError, TimeoutError, ValidationError):
+        logger.warning('Knowledge conference snapshot could not be read; using the live directory')
+        return None
 
 
 async def refresh_conference_directory() -> bool:
+    if database_url() is None:
+        return False
     started_at = utc_now()
     # Commit the claim before contacting upstream. All workers and the manual
     # command share the same ten-minute window, including after a failed fetch.

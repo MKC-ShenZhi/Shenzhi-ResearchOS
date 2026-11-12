@@ -14,6 +14,7 @@ import { usePaperLike } from "@/features/knowledge/interactions/use-paper-like";
 import { useRefreshPaperInteraction } from "@/features/knowledge/interactions/use-refresh-paper-interaction";
 import { useTopicFollow } from "@/features/knowledge/interactions/use-topic-follow";
 import { paperHref } from "@/lib/navigation/paper";
+import { TOPICS_QUERY_KEY } from "@/features/knowledge/topics/topic-metadata";
 import { topicHref } from "@/features/knowledge/topics/topic-url-state";
 import { useCollections } from "@/stores/collections";
 
@@ -49,8 +50,8 @@ export function SavedInteractions({ userId }: { userId: string | null }) {
     retry: false,
   });
   const topics = useQuery({
-    queryKey: ["knowledge", "topics"],
-    queryFn: () => getKnowledgeClient().topics(),
+    queryKey: TOPICS_QUERY_KEY,
+    queryFn: ({ signal }) => getKnowledgeClient().topics(signal),
     enabled: enabled && tab === "topics" && Boolean(follows.data?.items.length),
     staleTime: 15 * 60_000,
     retry: false,
@@ -66,7 +67,7 @@ export function SavedInteractions({ userId }: { userId: string | null }) {
   const topicById = new Map((topics.data?.items ?? []).map((item) => [item.id, item]));
   const visibleTopics = (follows.data?.items ?? []).filter((item) => {
     const topic = topicById.get(item.topic_id);
-    return `${topic?.nameZh ?? ""} ${topic?.nameEn ?? ""} ${topic?.category ?? ""}`.toLocaleLowerCase().includes(term);
+    return `${topic?.nameZh ?? ""} ${topic?.nameEn ?? ""} ${topic?.categoryName ?? ""} ${item.topic_id}`.toLocaleLowerCase().includes(term);
   });
   const page = tab === "likes" ? pages.likes : pages.collections;
   const pageCount = Math.max(1, Math.ceil((total ?? 0) / PAGE_SIZE));
@@ -173,7 +174,7 @@ function TopicRow({ topicId, topic, userId }: { topicId: string; topic: Knowledg
   return <div className="rounded-xl border border-line px-3 py-3 sm:px-4">
     <div className="flex items-center gap-3">
       <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><Shapes className="size-5" /></span>
-      <div className="min-w-0 flex-1">{topic ? <Link href={topicHref(topic.id)} className="block truncate text-sm font-semibold text-ink hover:text-primary hover:underline">{topic.nameZh}</Link> : <p className="text-sm font-semibold text-ink">已下架主题</p>}<p className="mt-1 truncate text-xs text-faint">{topic ? `${topic.category} · ${topic.descriptionZh}` : "主题暂不可查看"}</p></div>
+      <div className="min-w-0 flex-1">{topic ? <Link href={topicHref(topic.id)} className="block truncate text-sm font-semibold text-ink hover:text-primary hover:underline">{topic.nameZh}</Link> : <p className="text-sm font-semibold text-ink">已下架主题</p>}<p className="mt-1 truncate text-xs text-faint">{topic ? `${topic.categoryName} · ${topic.descriptionZh || topic.descriptionEn}` : "主题暂不可查看"}</p></div>
       <CancelButton action="关注" saving={isSaving} onClick={() => void cancel()} />
       {topic && <Link href={topicHref(topic.id)} className="shrink-0 text-xs font-medium text-primary hover:underline">查看主题 ›</Link>}
     </div>

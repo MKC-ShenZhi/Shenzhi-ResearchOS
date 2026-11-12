@@ -27,7 +27,7 @@ export function mapDiscoveryPaper(item: Omit<DiscoveryPaperDto, "year"> & { year
     authors: formatPaperAuthors(item.authors),
     title: item.title,
     abstract: item.abstract,
-    tags: pickPaperTopics(item.keywords, item.subjects),
+    topics: pickPaperTopics(item.topics),
     // Packaged fallback papers keep their static thumbnail; every other source uses the knowledge image.
     thumbnailUrl: item.thumbnail_url ?? getPaperThumbnailUrl(item.image_id),
   };

@@ -97,6 +97,23 @@ class PaperBrowseApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('snapshotUpdatedAt', response.json()['data'])
         self.assertEqual([request.url.path for request in self.requests], ['/api/papers/venues'])
 
+    async def test_directory_falls_back_to_live_data_when_database_is_unavailable(self):
+        from app.services.knowledge.conference_directory import load_conference_directory
+
+        self.load_directory.side_effect = load_conference_directory
+        with patch('app.services.knowledge.conference_directory.database_url', return_value='configured'), patch(
+            'app.services.knowledge.conference_directory.session_scope', side_effect=OSError('connection refused'),
+        ), self.assertLogs('app.services.knowledge.conference_directory', 'WARNING'):
+            response = await self.client.get('/api/v1/knowledge/conferences')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['data']['items'][0]['name'], 'AAAI')
+
+    async def test_first_directory_request_reports_upstream_failure_without_a_snapshot(self):
+        self.failure = 503
+        response = await self.client.get('/api/v1/knowledge/conferences')
+        self.assertEqual(response.status_code, 503)
+        self.assertTrue(response.json()['retryable'])
+
     async def test_browse_without_keyword_uses_paper_id_and_matches_detail(self):
         response = await self.client.get('/api/v1/knowledge/papers', params={
             'conference': 'AAAI', 'year': 2026, 'limit': 20, 'offset': 0,

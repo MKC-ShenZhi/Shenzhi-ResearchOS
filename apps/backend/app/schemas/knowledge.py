@@ -9,9 +9,9 @@ new knowledge-base entity types can be introduced without a backend release.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 
 
 class KnowledgeModel(BaseModel):
@@ -113,6 +113,38 @@ class KnowledgeSearchRequest(KnowledgeModel):
         return self
 
 
+class PaperTopic(KnowledgeModel):
+    id: str
+    name_zh: str | None = Field(alias='nameZh')
+    name_en: str = Field(alias='nameEn')
+
+
+def _normalize_paper_topics(value: Any) -> list[PaperTopic]:
+    """Keep the first named entry per ID, in upstream order."""
+    topics: list[PaperTopic] = []
+    seen: set[str] = set()
+    for item in value if isinstance(value, list) else []:
+        if isinstance(item, PaperTopic):
+            item = item.model_dump()
+        if not isinstance(item, dict):
+            continue
+        raw_id = item.get('id')
+        topic_id = raw_id.strip() if isinstance(raw_id, str) else ''
+        if not topic_id or topic_id in seen or topic_id in {'.', '..'}:
+            continue
+        raw_zh = item.get('nameZh', item.get('name_zh'))
+        raw_en = item.get('nameEn', item.get('name_en'))
+        name_zh = raw_zh.strip() if isinstance(raw_zh, str) else ''
+        name_en = raw_en.strip() if isinstance(raw_en, str) else ''
+        if name_zh or name_en:
+            seen.add(topic_id)
+            topics.append(PaperTopic(id=topic_id, name_zh=name_zh or None, name_en=name_en))
+    return topics
+
+
+PaperTopics = Annotated[list[PaperTopic], BeforeValidator(_normalize_paper_topics)]
+
+
 class PaperSearchResult(KnowledgeModel):
     id: str
     image_id: str | None = Field(
@@ -127,6 +159,7 @@ class PaperSearchResult(KnowledgeModel):
     venue: str | None = None
     keywords: list[str] = Field(default_factory=list)
     subjects: list[str] = Field(default_factory=list)
+    topics: PaperTopics = Field(default_factory=list)
     # Browse-only main subject; kept internal (home-pool diversity), not part of the public contract.
     primary_subject: str | None = Field(default=None, exclude=True)
     score: float | None = None
@@ -297,6 +330,7 @@ class PaperDetail(KnowledgeModel):
     )
     keywords: list[str] = Field(default_factory=list)
     subjects: list[str] = Field(default_factory=list)
+    topics: PaperTopics = Field(default_factory=list)
     citation_count: int | None = Field(
         default=None,
         validation_alias=AliasChoices('citationCount', 'citation_count'),
@@ -582,3 +616,84 @@ class KnowledgeError(KnowledgeModel):
         validation_alias=AliasChoices('requestId', 'request_id'),
         serialization_alias='requestId',
     )
+
+
+# Product Scholar V2 is deliberately separate from retrieval ScholarSummary/Detail.
+class ScholarProfileAffiliation(KnowledgeModel):
+    institution: str | None = None
+    position: str | None = None
+
+
+class ScholarProfileMetrics(KnowledgeModel):
+    # Platform-linked papers, never OpenAlex works_count.
+    paper_count: int | None = Field(default=None, ge=0, strict=True)
+    source_work_count: int | None = Field(default=None, ge=0, strict=True)
+    citation_count: int | None = Field(default=None, ge=0, strict=True)
+    h_index: int | None = Field(default=None, ge=0, strict=True)
+    i10_index: int | None = Field(default=None, ge=0, strict=True)
+
+
+class ScholarEmployment(KnowledgeModel):
+    organization: str | None = None
+    role_title: str | None = None
+    department: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+class ScholarExternalIds(KnowledgeModel):
+    orcid: str | None = Field(default=None, pattern=r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$')
+
+
+class ScholarAnnualCitation(KnowledgeModel):
+    year: int = Field(ge=1, le=9999, strict=True)
+    count: int | None = Field(default=None, ge=0, strict=True)
+
+
+class ScholarCitationMeta(KnowledgeModel):
+    source: str | None = None
+    coverage: str | None = None
+    as_of: str | None = None
+
+
+class ScholarProfile(KnowledgeModel):
+    scholar_id: str = Field(min_length=1, strict=True)
+    name_zh: str | None = None
+    name_en: str | None = None
+    avatar_path: str | None = None
+    affiliations: list[ScholarProfileAffiliation] | None = None
+    topics: list[str] = Field(default_factory=list)
+    bio_zh: str | None = None
+    bio_en: str | None = None
+    employment: list[ScholarEmployment] = Field(default_factory=list)
+    external_ids: ScholarExternalIds = Field(default_factory=ScholarExternalIds)
+    metrics: ScholarProfileMetrics | None = None
+    annual_citations: list[ScholarAnnualCitation] | None = None
+    updated_at: str | None = None
+    citation_meta: ScholarCitationMeta | None = None
+
+
+class ScholarProfilePage(KnowledgeModel):
+    items: list[ScholarProfile]
+    limit: int = Field(ge=1, le=100, strict=True)
+    offset: int = Field(ge=0, strict=True)
+    total: int | None = Field(default=None, ge=0, strict=True)
+    # Without an upstream total a full page means a possible next page.
+    has_more: bool
+
+
+class ScholarPublication(PaperDetail):
+    image_id: str | None = Field(default=None, serialization_alias='imageId')
+    platform_detail: bool = False
+
+
+class ScholarPapersPage(KnowledgeModel):
+    items: list[ScholarPublication]
+    limit: int = Field(ge=1, le=100, strict=True)
+    offset: int = Field(ge=0, strict=True)
+    total: int = Field(ge=0, strict=True)
+
+
+class ScholarProfilePagination(KnowledgeModel):
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
