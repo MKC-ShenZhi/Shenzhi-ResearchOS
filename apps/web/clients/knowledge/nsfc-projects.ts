@@ -16,7 +16,6 @@ export interface ProjectSummary {
 interface ProjectList {
   items: ProjectSummary[];
   total: number;
-  snapshot: boolean;
 }
 
 interface ProjectDetail extends ProjectSummary {
@@ -25,10 +24,9 @@ interface ProjectDetail extends ProjectSummary {
   sourceUrl: string | null;
   members: { name: string; role: string }[];
   papers: { id: string; title: string; sourceUrl: string | null }[];
-  snapshot: boolean;
 }
 
-const endpoint = "/knowledge/nsfc-projects";
+const endpoint = "/knowledge/projects";
 
 export function searchNsfcProjects(q: string, limit: number, offset: number, keyword: string, signal?: AbortSignal) {
   const params = new URLSearchParams({ q, limit: String(limit), offset: String(offset) });

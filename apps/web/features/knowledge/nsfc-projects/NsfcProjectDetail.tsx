@@ -44,7 +44,7 @@ function ParticipantNames({ names }: { names: string[] }) {
 
 export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: string; backHref: string }) {
   const { data, isPending, error, refetch } = useQuery({
-    queryKey: ["knowledge", "nsfc-project", awardNumber],
+    queryKey: ["knowledge", "project", awardNumber],
     queryFn: ({ signal }) => getNsfcProject(awardNumber, signal),
     retry: false,
   });
@@ -67,7 +67,6 @@ export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: stri
       {data && (
         <article className="space-y-7">
           <header className="space-y-4">
-            {data.snapshot && <p className="text-xs font-medium text-muted">国自然结项项目样本</p>}
             <h1 className="text-3xl font-bold leading-tight tracking-tight text-ink">{data.name}</h1>
             <div className="rounded-xl border border-line bg-card p-4 text-sm sm:p-5">
               <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -127,7 +126,7 @@ export function NsfcProjectDetail({ awardNumber, backHref }: { awardNumber: stri
                   {[...new Set(data.topics)].map((topic) => (
                     <li key={topic} className="min-w-0">
                       <Link
-                        href={nsfcDirectoryHref("", 1, topic)}
+                        href={nsfcDirectoryHref("", topic)}
                         aria-label={`按研究关键词筛选：${topic}`}
                         className="inline-block break-words rounded-full border border-primary/20 bg-primary-soft px-3 py-1 text-sm text-primary hover:border-primary/50 hover:underline"
                       >

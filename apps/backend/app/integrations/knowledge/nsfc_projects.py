@@ -1,18 +1,15 @@
 """HTTP client and adapter for the two NSFC project endpoints."""
 
-import os
 from typing import Any
 from urllib.parse import quote, urlsplit
 
-import httpx
 from pydantic import ValidationError
 
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
-from app.integrations.knowledge.nsfc_snapshot import snapshot_api
 from app.schemas.nsfc_project import ProjectDetail, ProjectList, ProjectSummary
 
-PROJECTS_PATH = '/api/retrieval/nsfc-projects'
+PROJECTS_PATH = '/api/retrieval/projects'
 
 
 def _https_url(value: str | None) -> str | None:
@@ -47,12 +44,6 @@ def _summary(project: dict[str, Any]) -> ProjectSummary:
 
 
 class NsfcProjectsAdapter(KnowledgeBaseClient):
-    def __init__(self):
-        base_url = os.getenv('NSFC_PROJECTS_API_URL', '').strip()
-        self.snapshot = not base_url
-        transport = httpx.ASGITransport(app=snapshot_api, raise_app_exceptions=False) if self.snapshot else None
-        super().__init__(base_url=base_url or 'http://nsfc-snapshot', transport=transport)
-
     async def search_projects(self, q: str, limit: int, offset: int, *, keyword: str = '') -> ProjectList:
         params = {'q': q, 'limit': limit, 'offset': offset}
         if keyword:
@@ -65,7 +56,6 @@ class NsfcProjectsAdapter(KnowledgeBaseClient):
             return ProjectList(
                 items=[_summary(item) for item in body['items']],
                 total=body['total'],
-                snapshot=self.snapshot,
             )
         except (KeyError, TypeError, AttributeError, ValidationError) as error:
             raise KnowledgeIntegrationError.contract_violation() from error
@@ -108,7 +98,6 @@ class NsfcProjectsAdapter(KnowledgeBaseClient):
                     for member in project['principal_investigators']
                 ],
                 papers=papers,
-                snapshot=self.snapshot,
             )
         except (KeyError, TypeError, AttributeError, ValidationError) as error:
             raise KnowledgeIntegrationError.contract_violation() from error

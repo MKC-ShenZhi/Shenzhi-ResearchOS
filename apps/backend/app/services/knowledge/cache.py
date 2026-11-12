@@ -8,6 +8,7 @@ from time import monotonic
 from typing import Generic, TypeVar
 
 from app.schemas.knowledge import PaperDetail, ScholarProfilePage
+from app.schemas.nsfc_project import ProjectList
 
 
 PAPER_DETAIL_TTL_SECONDS = 10 * 60
@@ -84,3 +85,5 @@ class PaperDetailTTLCache(KnowledgeTTLCache[str, PaperDetail]):
 shared_paper_detail_cache = PaperDetailTTLCache()
 ScholarBrowseCache = KnowledgeTTLCache[tuple[int, int], ScholarProfilePage]
 shared_scholar_browse_cache = ScholarBrowseCache(ttl_seconds=5 * 60, max_entries=128)
+ProjectFirstPageCache = KnowledgeTTLCache[int, ProjectList]
+shared_project_first_page_cache = ProjectFirstPageCache(ttl_seconds=5 * 60, max_entries=50)

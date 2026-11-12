@@ -6,13 +6,12 @@ export default async function Page({
   searchParams,
 }: {
   params: Promise<{ awardNumber: string }>;
-  searchParams: Promise<{ q?: string | string[]; page?: string | string[]; keyword?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; keyword?: string | string[] }>;
 }) {
-  const [{ awardNumber }, { q, page, keyword }] = await Promise.all([params, searchParams]);
+  const [{ awardNumber }, { q, keyword }] = await Promise.all([params, searchParams]);
   const backHref = nsfcDirectoryHref(
     typeof q === "string" ? q : "",
-    typeof page === "string" ? page : undefined,
     typeof keyword === "string" ? keyword : "",
   );
-  return <NsfcProjectDetail awardNumber={awardNumber} backHref={backHref} />;
+  return <NsfcProjectDetail awardNumber={awardNumber} backHref={`${backHref}#project-${encodeURIComponent(awardNumber.toUpperCase())}`} />;
 }

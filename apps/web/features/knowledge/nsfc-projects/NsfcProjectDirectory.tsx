@@ -1,9 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { searchNsfcProjects, type ProjectSummary } from "@/clients/knowledge/nsfc-projects";
 import { nsfcDirectoryHref } from "./navigation";
 
@@ -61,20 +62,41 @@ export function NsfcProjectDirectory() {
   const params = useSearchParams();
   const query = (params.get("projectQuery") ?? "").slice(0, 200).trim();
   const keyword = (params.get("keyword") ?? "").slice(0, 200).trim();
-  const requestedPage = Number(params.get("page") ?? 1);
-  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 && requestedPage <= 100_000
-    ? requestedPage : 1;
-  const offset = (page - 1) * pageSize;
   const detailParams = new URLSearchParams();
   if (query) detailParams.set("q", query);
   if (keyword) detailParams.set("keyword", keyword);
-  if (page > 1) detailParams.set("page", String(page));
   const detailQuery = detailParams.size ? `?${detailParams}` : "";
-  const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["knowledge", "nsfc-projects", query, keyword, page],
-    queryFn: ({ signal }) => searchNsfcProjects(query, pageSize, offset, keyword, signal),
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const {
+    data, isPending, isError, isFetching, isFetchingNextPage,
+    isFetchNextPageError, hasNextPage, fetchNextPage, refetch,
+  } = useInfiniteQuery({
+    queryKey: ["knowledge", "projects", query, keyword],
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) => searchNsfcProjects(query, pageSize, pageParam, keyword, signal),
+    getNextPageParam: (lastPage, _pages, offset) => {
+      const nextOffset = offset + lastPage.items.length;
+      return lastPage.items.length > 0 && nextOffset < lastPage.total ? nextOffset : undefined;
+    },
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   });
+  const projects = new Map(
+    data?.pages.flatMap((page) => page.items.map((project) => [project.awardNumber, project] as const)),
+  );
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasNextPage || isFetching || isFetchNextPageError || !window.IntersectionObserver) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) void fetchNextPage({ cancelRefetch: false });
+    }, { rootMargin: "0px 0px 240px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetching, isFetchNextPageError]);
 
   return (
     <div className="space-y-5">
@@ -85,7 +107,7 @@ export function NsfcProjectDirectory() {
         onSubmit={(event) => {
           event.preventDefault();
           const value = String(new FormData(event.currentTarget).get("q") ?? "").trim();
-          router.push(nsfcDirectoryHref(value, 1, keyword));
+          router.push(nsfcDirectoryHref(value, keyword));
         }}
       >
         <input
@@ -115,7 +137,7 @@ export function NsfcProjectDirectory() {
         </div>
       )}
       {isPending && <p role="status" className="text-sm text-muted">正在加载项目…</p>}
-      {isError && (
+      {isError && !data && (
         <p role="alert" className="text-sm text-muted">
           项目加载失败。 <button onClick={() => void refetch()} className="text-primary underline">重试</button>
         </p>
@@ -123,29 +145,29 @@ export function NsfcProjectDirectory() {
       {data && (
         <section aria-label="项目结果" className="space-y-3">
           <p className="text-sm text-muted">
-            {data.total} 个项目{data.snapshot ? " · 国自然结项样本" : ""}
+            {data.pages.at(-1)?.total} 个项目
           </p>
-          {data.items.length === 0 && (
+          {projects.size === 0 && (
             <p className="rounded-xl border border-line p-5 text-sm text-muted">
-              {data.total ? "本页没有项目。" : "没有找到匹配的项目。"}{" "}
-              <Link href={data.total ? nsfcDirectoryHref(query, 1, keyword) : nsfcDirectoryHref()} className="text-primary underline">
-                {data.total ? "返回第一页" : "查看全部"}
-              </Link>
+              没有找到匹配的项目。{" "}
+              {(query || keyword) && <Link href={nsfcDirectoryHref()} className="text-primary underline">查看全部</Link>}
             </p>
           )}
           <ul className="@container space-y-2.5">
-            {data.items.map((project) => (
-              <li key={project.awardNumber}>
+            {[...projects.values()].map((project) => (
+              <li key={project.awardNumber} id={`project-${project.awardNumber}`}>
                 <ProjectCard project={project} detailQuery={detailQuery} />
               </li>
             ))}
           </ul>
-          {data.items.length > 0 && data.total > pageSize && (
-            <nav aria-label="项目分页" className="flex items-center gap-5 text-sm">
-              {page > 1 && <Link className="text-primary" href={nsfcDirectoryHref(query, page - 1, keyword)}>上一页</Link>}
-              <span className="text-muted">第 {page} / {Math.ceil(data.total / pageSize)} 页</span>
-              {offset + pageSize < data.total && <Link className="text-primary" href={nsfcDirectoryHref(query, page + 1, keyword)}>下一页</Link>}
-            </nav>
+          {hasNextPage && (
+            <div ref={loadMoreRef} className="flex min-h-8 items-center justify-center text-sm" aria-live="polite">
+              {isFetchingNextPage ? <span className="text-muted">正在加载更多项目…</span> : (
+                <button type="button" disabled={isFetching} onClick={() => void fetchNextPage({ cancelRefetch: false })} className="text-primary underline disabled:opacity-50">
+                  {isFetchNextPageError ? "加载失败，点击重试" : "加载更多项目"}
+                </button>
+              )}
+            </div>
           )}
         </section>
       )}

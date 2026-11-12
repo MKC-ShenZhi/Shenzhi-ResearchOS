@@ -120,7 +120,8 @@ def creator_not_found(request: Request) -> JSONResponse:
     )
 
 
-@router.get('/nsfc-projects')
+@router.get('/projects')
+@router.get('/nsfc-projects', include_in_schema=False)
 async def nsfc_projects(
     request: Request,
     q: str = Query(default='', max_length=200),
@@ -136,7 +137,8 @@ async def nsfc_projects(
     return ok(response.model_dump(mode='json', by_alias=True))
 
 
-@router.get('/nsfc-projects/{award_number}')
+@router.get('/projects/{award_number}')
+@router.get('/nsfc-projects/{award_number}', include_in_schema=False)
 async def nsfc_project(
     request: Request,
     award_number: str = Path(min_length=1, max_length=24, pattern=r'^[A-Za-z0-9]+$'),

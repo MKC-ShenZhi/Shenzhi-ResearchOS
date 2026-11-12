@@ -12,6 +12,7 @@ from app.services.knowledge.cache import (
     PaperDetailTTLCache,
     ScholarBrowseCache,
     shared_paper_detail_cache,
+    shared_project_first_page_cache,
     shared_scholar_browse_cache,
 )
 from app.schemas.knowledge import (
@@ -106,10 +107,18 @@ class KnowledgeService:
             raise KnowledgeServiceError.from_integration_error(error) from error
 
     async def search_nsfc_projects(self, q: str, limit: int, offset: int, *, keyword: str = '') -> ProjectList:
+        cache = shared_project_first_page_cache if not (q or keyword or offset) else None
+        if cache is not None:
+            cached = cache.get(limit)
+            if cached is not None:
+                return cached
         try:
-            return await self.nsfc_projects.search_projects(q, limit, offset, keyword=keyword)
+            projects = await self.nsfc_projects.search_projects(q, limit, offset, keyword=keyword)
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
+        if cache is not None:
+            cache.set(limit, projects)
+        return projects
 
     async def get_nsfc_project(self, award_number: str) -> ProjectDetail:
         try:

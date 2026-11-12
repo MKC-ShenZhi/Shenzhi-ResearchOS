@@ -26,7 +26,6 @@ class ProjectSummary(ProjectModel):
 class ProjectList(ProjectModel):
     items: list[ProjectSummary]
     total: int = Field(ge=0)
-    snapshot: bool
 
 
 class ProjectMember(ProjectModel):
@@ -46,4 +45,3 @@ class ProjectDetail(ProjectSummary):
     source_url: str | None
     members: list[ProjectMember]
     papers: list[ProjectPaper]
-    snapshot: bool
