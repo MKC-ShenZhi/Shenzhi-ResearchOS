@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import logging
+import re
 from urllib.parse import quote
 from time import perf_counter
 from collections.abc import Callable
@@ -28,6 +29,9 @@ from app.integrations.knowledge.schemas import (
 
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
+SCHOLAR_AVATAR_PATH = re.compile(r'/images/scholars_[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+\.(?:jpe?g|png|webp)')
+SCHOLAR_AVATAR_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
+SCHOLAR_AVATAR_MAX_BYTES = 4 * 1024 * 1024
 logger = logging.getLogger(__name__)
 
 
@@ -98,6 +102,43 @@ class KnowledgeBaseClient:
             params={'q': query, 'limit': limit, 'offset': offset},
             validate=lambda value: isinstance(value.get('items'), list),
         )
+
+    async def browse_scholar_profiles(self, *, limit: int, offset: int) -> dict[str, Any]:
+        return await self._request_json(
+            'GET', '/api/v1/scholars',
+            params={'limit': limit, 'offset': offset},
+            validate=lambda value: isinstance(value.get('items'), list),
+        )
+
+    async def scholar_avatar(self, path: str) -> tuple[bytes, str]:
+        if not SCHOLAR_AVATAR_PATH.fullmatch(path):
+            raise KnowledgeIntegrationError.not_found()
+        if not self.base_url:
+            raise KnowledgeIntegrationError.not_configured()
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
+                async with client.stream('GET', f'{self.base_url}{path}') as response:
+                    if response.status_code != 200:
+                        raise self._status_error(response.status_code)
+                    media_type = response.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+                    if media_type not in SCHOLAR_AVATAR_TYPES:
+                        raise KnowledgeIntegrationError.contract_violation()
+                    data = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=64 * 1024):
+                        if len(data) + len(chunk) > SCHOLAR_AVATAR_MAX_BYTES:
+                            raise KnowledgeIntegrationError.contract_violation()
+                        data.extend(chunk)
+                    if not data:
+                        raise KnowledgeIntegrationError.contract_violation()
+                    return bytes(data), media_type
+        except httpx.TimeoutException as exc:
+            raise KnowledgeIntegrationError.timeout() from exc
+        except (httpx.ConnectError, httpx.NetworkError) as exc:
+            raise KnowledgeIntegrationError.connection_unavailable() from exc
+        except (httpx.InvalidURL, httpx.UnsupportedProtocol) as exc:
+            raise KnowledgeIntegrationError.invalid_configuration() from exc
+        except httpx.HTTPError as exc:
+            raise KnowledgeIntegrationError.request_failed() from exc
 
     async def scholar_profile(self, scholar_id: str) -> dict[str, Any]:
         return await self._request_json(

@@ -60,6 +60,10 @@ export const scholarPapersPageSchema = z.object({
     authors: z.array(z.string()), year: z.number().int().nullable(),
     venue: z.string().nullable(), abstract: z.string().nullable(),
     doi: z.string().nullable(), pdfUrl: z.string().nullable(),
+    imageId: z.string().nullable().optional(),
+    topics: z.array(z.object({
+      id: z.string(), nameZh: z.string().nullable(), nameEn: z.string(),
+    })).optional(),
     platform_detail: z.boolean(),
   })),
   limit: z.number().int().min(1).max(100),

@@ -1,5 +1,6 @@
 import type { PaperCardModel } from "../../../types";
-import type { PaperTopic } from "../../../clients/knowledge/types";
+import type { KnowledgePaperHit, PaperTopic } from "../../../clients/knowledge/types";
+import { getPaperThumbnailUrl } from "../../../lib/paper-thumbnail";
 
 const VENUE_TONES: PaperCardModel["venueTone"][] = ["violet", "amber", "green"];
 
@@ -32,4 +33,21 @@ export function pickPaperTopics(topics?: PaperTopic[]): PaperTopic[] {
     if (visible.size === 5) break;
   }
   return [...visible.values()];
+}
+
+export function toPaperCardModel(
+  paper: Pick<KnowledgePaperHit, "id" | "year" | "venue" | "authors" | "title" | "abstract" | "topics">
+    & Partial<Pick<KnowledgePaperHit, "imageId">>,
+): PaperCardModel {
+  return {
+    id: paper.id,
+    date: formatPaperYear(paper.year),
+    venue: paper.venue,
+    venueTone: paperVenueTone(paper.id),
+    authors: formatPaperAuthors(paper.authors),
+    title: paper.title,
+    abstract: paper.abstract ?? "",
+    topics: pickPaperTopics(paper.topics),
+    thumbnailUrl: getPaperThumbnailUrl(paper.imageId),
+  };
 }

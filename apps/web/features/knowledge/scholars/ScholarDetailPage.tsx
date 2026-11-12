@@ -137,13 +137,13 @@ function ScholarProfileSections({ scholar, preview = false }: { scholar: Scholar
               {scholar.name_en}
             </p>
           ) : null}
-          {!preview || scholar.affiliations?.length ? (
+          {scholar.affiliations?.length ? (
             <div className="mt-4">
-              {preview ? <p className="mb-1 text-xs text-muted">关联机构</p> : null}
+              <p className="mb-1 text-xs text-muted">关联机构</p>
               <Affiliations scholar={scholar} />
             </div>
           ) : null}
-          {preview && scholar.external_ids?.orcid ? (
+          {scholar.external_ids?.orcid ? (
             <a
               href={`https://orcid.org/${scholar.external_ids.orcid}`}
               target="_blank"
@@ -154,7 +154,7 @@ function ScholarProfileSections({ scholar, preview = false }: { scholar: Scholar
               ORCID
             </a>
           ) : null}
-          {preview && scholar.topics?.length ? <ScholarTopics topics={scholar.topics} /> : null}
+          {scholar.topics?.length ? <ScholarTopics topics={scholar.topics} /> : null}
         </div>
       </header>
       <div className="mt-8 grid items-start gap-x-10 gap-y-6 border-t border-line pt-8 @min-[800px]:grid-cols-[minmax(0,1fr)_17rem] @min-[800px]:grid-rows-[auto_1fr] @min-[1100px]:grid-cols-[minmax(0,1fr)_19rem]">
@@ -162,17 +162,17 @@ function ScholarProfileSections({ scholar, preview = false }: { scholar: Scholar
           <ScholarBiography key={scholar.scholar_id} scholar={scholar} />
         </div>
         <aside className="min-w-0 rounded-xl border border-line bg-card p-4 sm:max-w-sm @min-[800px]:col-start-2 @min-[800px]:row-span-2 @min-[800px]:row-start-1 @min-[800px]:max-w-none" aria-label="学术统计">
-          <ScholarMetrics scholar={scholar} preview={preview} sidebar />
+          <ScholarMetrics scholar={scholar} sidebar />
           <div className="mt-4 border-t border-line pt-4">
             <AnnualCitations data={scholar.annual_citations} />
           </div>
         </aside>
-        {preview ? (
+        {scholar.employment?.length || preview ? (
           <div className="min-w-0 @min-[800px]:col-start-1">
             {scholar.employment?.length ? (
-              <ScholarEmployment key={scholar.scholar_id} entries={scholar.employment} />
+              <ScholarEmployment key={`employment-${scholar.scholar_id}`} entries={scholar.employment} />
             ) : null}
-            <ScholarFeaturedPapers key={scholar.scholar_id} />
+            {preview ? <ScholarFeaturedPapers key={`featured-papers-${scholar.scholar_id}`} /> : null}
           </div>
         ) : null}
       </div>

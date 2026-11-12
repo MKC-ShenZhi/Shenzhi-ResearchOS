@@ -6,7 +6,7 @@ import logging
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 
 from app.core.identity import request_identity, require_bff
@@ -23,7 +23,7 @@ from app.schemas.knowledge import (
     PersonalRecentPaper,
     RelatedPaperSearchRequest,
     ScholarSearchRequest,
-    ScholarPapersRequest,
+    ScholarProfilePagination,
 )
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
@@ -309,6 +309,26 @@ async def overview_search(
 
 
 # V2 paths cannot collide with the existing retrieval Scholar API or its cache.
+@router.get('/scholar-profiles')
+async def browse_scholar_profiles(
+    request: Request,
+    limit: str = Query(default='20'),
+    offset: str = Query(default='0'),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        params = ScholarProfilePagination(limit=int(limit), offset=int(offset))
+    except (ValidationError, ValueError):
+        return invalid_argument(request, '学者浏览分页参数不合法')
+    try:
+        response = await service.browse_scholar_profiles(limit=params.limit, offset=params.offset)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return ok(response.model_dump(mode='json', by_alias=True))
+
+
 @router.get('/scholar-profiles/search')
 async def search_scholar_profiles(
     request: Request,
@@ -330,6 +350,21 @@ async def search_scholar_profiles(
     return ok(response.model_dump(mode='json', by_alias=True))
 
 
+@router.get('/scholar-avatar')
+async def scholar_avatar(
+    request: Request,
+    path: str = Query(max_length=512),
+    _credential: None = Depends(require_bff),
+):
+    try:
+        data, media_type = await service.get_scholar_avatar(path)
+    except KnowledgeServiceError as error:
+        return _error_payload(error, request)
+    except Exception as error:
+        return unknown_error(request, error)
+    return Response(data, media_type=media_type, headers={'X-Content-Type-Options': 'nosniff'})
+
+
 # Query ID avoids ambiguity when an opaque ID itself ends in /papers.
 @router.get('/scholar-profile-papers')
 async def scholar_profile_papers(
@@ -340,7 +375,7 @@ async def scholar_profile_papers(
     _credential: None = Depends(require_bff),
 ):
     try:
-        params = ScholarPapersRequest(limit=int(limit), offset=int(offset))
+        params = ScholarProfilePagination(limit=int(limit), offset=int(offset))
         if not scholar_id.strip():
             raise ValueError('empty scholar ID')
     except (ValidationError, TypeError, ValueError):

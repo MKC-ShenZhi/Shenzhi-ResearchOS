@@ -222,9 +222,18 @@ export class BffKnowledgeClient implements KnowledgeClient {
 
   async searchScholarProfiles(query: string, limit = 20, offset = 0, signal?: AbortSignal) {
     const params = new URLSearchParams({ q: query, limit: String(limit), offset: String(offset) });
+    return this.scholarProfilePage(`/knowledge/scholar-profiles/search?${params}`, signal);
+  }
+
+  async browseScholarProfiles(limit = 20, offset = 0, signal?: AbortSignal) {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    return this.scholarProfilePage(`/knowledge/scholar-profiles?${params}`, signal);
+  }
+
+  private async scholarProfilePage(path: string, signal?: AbortSignal) {
     try {
       return parseScholarContract(scholarProfilePageSchema, await apiJson<unknown>(
-        `/knowledge/scholar-profiles/search?${params}`, { signal },
+        path, { signal },
       ));
     } catch (error) {
       if (isAbortError(error)) throw error;

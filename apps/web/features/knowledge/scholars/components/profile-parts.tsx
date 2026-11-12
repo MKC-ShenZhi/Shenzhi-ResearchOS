@@ -78,7 +78,7 @@ export function Affiliations({
         compact && "text-[13px] leading-5",
       )}
     >
-      {affiliations.map((item, i) => (
+      {(compact ? affiliations.slice(0, 1) : affiliations).map((item, i) => (
         <p className="break-words" key={`${item.institution}-${i}`}>
           {item.institution?.trim()}
           {item.position?.trim() ? (
@@ -108,22 +108,18 @@ export function ScholarTopics({ topics }: { topics: string[] }) {
 export function ScholarMetrics({
   scholar,
   compact = false,
-  preview = false,
   sidebar = false,
 }: {
   scholar: ScholarProfile;
   compact?: boolean;
-  preview?: boolean;
   sidebar?: boolean;
 }) {
   const metrics = scholar.metrics;
   const items = [
-    { label: preview ? "收录作品" : "平台关联论文", value: preview ? metrics?.source_work_count : metrics?.paper_count },
+    { label: "收录作品", value: metrics?.source_work_count },
     { label: "总引用次数", value: metrics?.citation_count },
-    ...(preview ? [
-      { label: "h 指数", value: metrics?.h_index },
-      { label: "i10 指数", value: metrics?.i10_index },
-    ] : []),
+    { label: "h 指数", value: metrics?.h_index },
+    { label: "i10 指数", value: metrics?.i10_index },
   ];
 
   return (

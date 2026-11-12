@@ -15,7 +15,7 @@ import { topicHref } from "@/features/knowledge/topics/topic-url-state";
 import type { PaperCardModel } from "@/types";
 
 /**
- * 首页与检索共用的论文卡片版式。数据转换、埋点与底部操作由各场景自己提供：
+ * 首页、检索和学者成果共用的论文卡片版式。数据转换、埋点与底部操作由各场景自己提供：
  * `onNavigate` 在进入详情前触发，`actions` 放在底部右侧。
  */
 export function PaperCardLayout({
@@ -32,7 +32,7 @@ export function PaperCardLayout({
   index: number;
   detailHref?: string;
   onNavigate?: () => void;
-  behaviorSource: ComponentProps<typeof ExpandableAbstract>["source"];
+  behaviorSource?: ComponentProps<typeof ExpandableAbstract>["source"];
   actions: ReactNode;
   articleRef?: Ref<HTMLElement>;
   /** 长列表中跳过屏幕外卡片的渲染。 */

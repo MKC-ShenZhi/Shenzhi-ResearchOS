@@ -7,32 +7,11 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { recordPaperBehavior } from "@/clients/backend/behavior";
 import { Button } from "@/components/ui/button";
 import { paperHref } from "@/lib/navigation/paper";
-import { getPaperThumbnailUrl } from "@/lib/paper-thumbnail";
 import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
 import { PaperCardLayout } from "@/features/knowledge/papers/components/paper-card-layout";
-import {
-  formatPaperAuthors,
-  formatPaperYear,
-  paperVenueTone,
-  pickPaperTopics,
-} from "@/features/knowledge/papers/paper-card-model";
+import { toPaperCardModel } from "@/features/knowledge/papers/paper-card-model";
 import { PaperCollectorCount } from "@/features/knowledge/interactions/components/paper-collector-count";
 import { PaperLikeButton } from "@/features/knowledge/interactions/components/paper-like-button";
-import type { PaperCardModel } from "@/types";
-
-function toPaperCardModel(hit: KnowledgePaperHit): PaperCardModel {
-  return {
-    id: hit.id,
-    date: formatPaperYear(hit.year),
-    venue: hit.venue,
-    venueTone: paperVenueTone(hit.id),
-    authors: formatPaperAuthors(hit.authors),
-    title: hit.title,
-    abstract: hit.abstract ?? "",
-    topics: pickPaperTopics(hit.topics),
-    thumbnailUrl: getPaperThumbnailUrl(hit.imageId),
-  };
-}
 
 /** 论文搜索结果卡片：检索点击埋点与详情 / 图谱入口，版式见 PaperCardLayout。 */
 export function KnowledgeResultCard({

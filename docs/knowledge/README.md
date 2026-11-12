@@ -258,4 +258,4 @@ component test 和 demo fixture。真实 BFF 请求失败、Backend 未配置 up
 
 ## 学者库 V2 产品接口接入
 
-`feat/scholars-v2` 的 V2 页面现默认使用产品学者 API，经同一 ShenZhi BFF / FastAPI / Knowledge 集成边界接入。旧 retrieval Scholar API 继续供总览与混合搜索使用；上述旧接口表不代表 V2 画像契约。实现、真实 GET 证据、测试、配置及底座需求见 [学者库 V2 真实接入与联调](scholars-v2-integration.md)。V2 无词访问为搜索初始态，不能据此宣称全量目录已上线。
+学者库 V2 默认使用产品学者 API，经 ShenZhi BFF、FastAPI 和 Knowledge 集成层接入。无关键词时浏览产品学者目录，输入关键词后搜索，列表均支持滚动加载。旧 retrieval Scholar API 继续供总览与混合搜索使用。接口、统计口径和配置见 [学者库 V2 接入说明](scholars-v2-integration.md)。

@@ -625,7 +625,22 @@ class ScholarProfileAffiliation(KnowledgeModel):
 class ScholarProfileMetrics(KnowledgeModel):
     # Platform-linked papers, never OpenAlex works_count.
     paper_count: int | None = Field(default=None, ge=0, strict=True)
+    source_work_count: int | None = Field(default=None, ge=0, strict=True)
     citation_count: int | None = Field(default=None, ge=0, strict=True)
+    h_index: int | None = Field(default=None, ge=0, strict=True)
+    i10_index: int | None = Field(default=None, ge=0, strict=True)
+
+
+class ScholarEmployment(KnowledgeModel):
+    organization: str | None = None
+    role_title: str | None = None
+    department: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+class ScholarExternalIds(KnowledgeModel):
+    orcid: str | None = Field(default=None, pattern=r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$')
 
 
 class ScholarAnnualCitation(KnowledgeModel):
@@ -645,8 +660,11 @@ class ScholarProfile(KnowledgeModel):
     name_en: str | None = None
     avatar_path: str | None = None
     affiliations: list[ScholarProfileAffiliation] | None = None
+    topics: list[str] = Field(default_factory=list)
     bio_zh: str | None = None
     bio_en: str | None = None
+    employment: list[ScholarEmployment] = Field(default_factory=list)
+    external_ids: ScholarExternalIds = Field(default_factory=ScholarExternalIds)
     metrics: ScholarProfileMetrics | None = None
     annual_citations: list[ScholarAnnualCitation] | None = None
     updated_at: str | None = None
@@ -663,6 +681,7 @@ class ScholarProfilePage(KnowledgeModel):
 
 
 class ScholarPublication(PaperDetail):
+    image_id: str | None = Field(default=None, serialization_alias='imageId')
     platform_detail: bool = False
 
 
@@ -673,6 +692,6 @@ class ScholarPapersPage(KnowledgeModel):
     total: int = Field(ge=0, strict=True)
 
 
-class ScholarPapersRequest(KnowledgeModel):
+class ScholarProfilePagination(KnowledgeModel):
     limit: int = Field(default=20, ge=1, le=100)
     offset: int = Field(default=0, ge=0)

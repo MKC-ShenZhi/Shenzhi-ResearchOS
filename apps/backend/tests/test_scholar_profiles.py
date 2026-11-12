@@ -29,6 +29,8 @@ PAPER = {
     'authors': ['Jahangir Alam', 'Marcel Kockmann'], 'year': 2017,
     'conference': 'INTERSPEECH', 'doi': '10.21437/INTERSPEECH.2017-1240',
     'pdf_url': 'https://www.isca-archive.org/interspeech_2017/alam17b_interspeech.pdf',
+    'image_id': '/images/papers/alam17b.webp',
+    'topics': [{'id': 'topic:speech', 'nameEn': 'Speech recognition'}],
     'external': False,
 }
 
@@ -71,6 +73,18 @@ class ProductMappingTests(unittest.TestCase):
 
 
 class FixtureClient:
+    async def browse_scholar_profiles(self, *, limit, offset):
+        return {
+            'items': [{
+                **deepcopy(PROFILE),
+                'topics': ['Machine learning'],
+                'metrics': {'source_work_count': 17, 'paper_count': 2, 'h_index': 5, 'i10_index': 0},
+                'employment': [{'organization': 'Example University', 'start_date': '2024-06'}],
+                'avatar_path': '/images/scholars_example/avatar.jpg',
+            }],
+            'limit': limit, 'offset': offset, 'total': 3,
+        }
+
     async def search_scholar_profiles(self, query, *, limit, offset):
         self.search_args = query, limit, offset
         return {'items': [deepcopy(PROFILE)], 'limit': limit, 'offset': offset}
@@ -98,6 +112,8 @@ class ProductAdapterTests(unittest.IsolatedAsyncioTestCase):
         page = await adapter.scholar_papers(ID, limit=2)
         self.assertEqual(page.items[0].id, PAPER['paper_id'])
         self.assertEqual(page.items[0].venue, 'INTERSPEECH')
+        self.assertEqual(page.items[0].image_id, PAPER['image_id'])
+        self.assertEqual(page.items[0].topics[0].name_en, 'Speech recognition')
         self.assertTrue(page.items[0].platform_detail)
         self.assertEqual((await adapter.scholar_papers(ID, limit=2, offset=2)).items, [])
 
@@ -125,6 +141,8 @@ class ProductAdapterTests(unittest.IsolatedAsyncioTestCase):
         seen = []
         def handler(request):
             seen.append(request)
+            if request.url.path == '/api/v1/scholars':
+                return httpx.Response(200, json={'items': [], 'limit': 2, 'offset': 4, 'total': 4})
             if request.url.path.endswith('/search'):
                 return httpx.Response(200, json={'items': [], 'limit': 2, 'offset': 4})
             if request.url.raw_path.split(b'?')[0].endswith(b'/papers'):
@@ -134,10 +152,32 @@ class ProductAdapterTests(unittest.IsolatedAsyncioTestCase):
         await adapter.search_scholar_profiles(ScholarSearchRequest(query='何恺明', limit=2, offset=4))
         await adapter.scholar_profile(ID)
         await adapter.scholar_papers(ID, limit=2)
+        await adapter.browse_scholar_profiles(limit=2, offset=4)
         self.assertEqual(seen[0].url.params['q'], '何恺明')
         self.assertEqual(seen[0].url.path, '/api/v1/scholars/search')
         self.assertIn(quote(ID, safe=''), str(seen[1].url))
         self.assertTrue(seen[2].url.path.endswith('/papers'))
+        self.assertEqual(seen[3].url.path, '/api/v1/scholars')
+        self.assertEqual(dict(seen[3].url.params), {'limit': '2', 'offset': '4'})
+
+    async def test_avatar_fetch_only_accepts_scholar_image_paths_and_types(self):
+        seen = []
+
+        def handler(request):
+            seen.append(request.url.path)
+            media_type = 'image/jpeg' if request.url.path.endswith('avatar.jpg') else 'text/html'
+            return httpx.Response(200, content=b'image', headers={'content-type': media_type})
+
+        client = KnowledgeBaseClient(base_url='https://example.test', transport=httpx.MockTransport(handler))
+        path = '/images/scholars_example/avatar.jpg'
+        self.assertEqual(await client.scholar_avatar(path), (b'image', 'image/jpeg'))
+        for invalid in ('//other.test/avatar.jpg', '/images/scholars_example/../avatar.jpg',
+                        '/images/scholars_example/%2e%2e.jpg', '/api/v1/scholars'):
+            with self.subTest(invalid=invalid), self.assertRaises(KnowledgeIntegrationError):
+                await client.scholar_avatar(invalid)
+        self.assertEqual(seen, [path])
+        with self.assertRaises(KnowledgeIntegrationError):
+            await client.scholar_avatar('/images/scholars_example/not_an_image.jpg')
 
     async def test_timeout_network_status_and_invalid_json_map_through_service(self):
         for failure, code, retryable in [
@@ -183,6 +223,7 @@ class ProductApiTests(unittest.IsolatedAsyncioTestCase):
         papers = await self.client.get('/api/v1/knowledge/scholar-profile-papers', params={'scholarId': ID, 'limit': 2})
         self.assertEqual(papers.status_code, 200, papers.text)
         self.assertEqual(papers.json()['data']['items'][0]['id'], PAPER['paper_id'])
+        self.assertEqual(papers.json()['data']['items'][0]['imageId'], PAPER['image_id'])
 
     async def test_query_pagination_and_invalid_input(self):
         response = await self.client.get('/api/v1/knowledge/scholar-profiles/search', params={'q': '何恺明', 'limit': 1, 'offset': 2})
@@ -192,3 +233,17 @@ class ProductApiTests(unittest.IsolatedAsyncioTestCase):
             bad = await self.client.get('/api/v1/knowledge/scholar-profiles/search', params=params)
             self.assertEqual(bad.status_code, 422)
             self.assertEqual(bad.json()['code'], 'INVALID_ARGUMENT')
+
+    async def test_browse_preserves_enriched_profile_and_validates_pagination(self):
+        response = await self.client.get('/api/v1/knowledge/scholar-profiles', params={'limit': 1, 'offset': 1})
+        self.assertEqual(response.status_code, 200, response.text)
+        page = response.json()['data']
+        self.assertEqual((page['total'], page['has_more']), (3, True))
+        row = page['items'][0]
+        self.assertEqual(row['topics'], ['Machine learning'])
+        self.assertEqual(row['employment'][0]['start_date'], '2024-06')
+        self.assertEqual(row['metrics']['source_work_count'], 17)
+        self.assertEqual(row['metrics']['i10_index'], 0)
+        self.assertEqual(row['avatar_path'], '/api/v1/knowledge/scholar-avatar?path=%2Fimages%2Fscholars_example%2Favatar.jpg')
+        invalid = await self.client.get('/api/v1/knowledge/scholar-profiles', params={'limit': 101})
+        self.assertEqual(invalid.status_code, 422)

@@ -1,12 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { paperHref, paperDoiUrl, paperExternalUrl } from "@/lib/navigation/paper";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { PaperCardLayout } from "../../papers/components/paper-card-layout";
+import { toPaperCardModel } from "../../papers/paper-card-model";
 import { knowledgeQueryRetry } from "../../retry";
 import { useScholarProvider } from "../provider";
 import { ScholarError, ScholarLoading } from "./profile-parts";
@@ -31,29 +32,24 @@ export function ScholarPublications({ scholarId }: { scholarId: string }) {
         {provider.isDemo ? "Mock 论文关联仅供演示，不代表真实作者关系。" : "展示知识底座已关联的论文；平台关联论文数不代表 OpenAlex 作品总数。"}
       </p>
       {isPending ? <ScholarLoading /> : isError ? <ScholarError onRetry={() => void refetch()} /> : data.items.length ? (
-        <div className="mt-2 divide-y divide-line">
-          {data.items.map((paper) => {
+        <div className="mt-5 grid gap-4">
+          {data.items.map((paper, index) => {
             const doiUrl = paperDoiUrl(paper.doi);
             const pdfUrl = paperExternalUrl(paper.pdfUrl);
             return (
-              <article key={paper.id} className="py-6 last:pb-0">
-                <div className="flex flex-col gap-3 sm:flex-row sm:gap-7">
-                  <p className="shrink-0 text-sm font-medium tabular-nums leading-7 text-muted sm:w-12">{paper.year ?? "年份暂缺"}</p>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="break-words text-[17px] font-semibold leading-7 text-ink">
-                      {!provider.isDemo && paper.platform_detail ? <Link className="hover:text-primary focus-visible:outline-2" href={paperHref(paper.id, { mode: "create", source: returnTo })}>{paper.title}</Link> : paper.title}
-                    </h3>
-                    {paper.venue ? <p className="mt-1 text-xs font-medium leading-5 text-primary">{paper.venue}</p> : null}
-                    <p className="mt-1.5 break-words text-[13px] leading-6 text-muted">{paper.authors.length ? paper.authors.join(" · ") : "作者暂无数据"}</p>
-                    {paper.abstract ? <p className="mt-3 line-clamp-2 text-sm leading-6 text-ink-2">{paper.abstract}</p> : null}
-                    {!provider.isDemo ? <div className="mt-3 flex flex-wrap gap-4 text-sm text-primary">
-                      {doiUrl ? <a href={doiUrl} target="_blank" rel="noopener noreferrer">DOI 来源</a> : null}
-                      {pdfUrl ? <a href={pdfUrl} target="_blank" rel="noopener noreferrer">PDF 来源</a> : null}
-                      {!paper.platform_detail && !doiUrl && !pdfUrl ? <span className="text-muted">暂无可用来源</span> : null}
-                    </div> : null}
-                  </div>
-                </div>
-              </article>
+              <PaperCardLayout
+                key={paper.id}
+                index={index}
+                paper={toPaperCardModel(paper)}
+                detailHref={!provider.isDemo && paper.platform_detail ? paperHref(paper.id, { mode: "create", source: returnTo }) : undefined}
+                actions={provider.isDemo ? null : (
+                  <>
+                    {doiUrl ? <a className="text-sm text-primary hover:underline" href={doiUrl} target="_blank" rel="noopener noreferrer">DOI 来源</a> : null}
+                    {pdfUrl ? <a className="text-sm text-primary hover:underline" href={pdfUrl} target="_blank" rel="noopener noreferrer">PDF 来源</a> : null}
+                    {!paper.platform_detail && !doiUrl && !pdfUrl ? <span className="text-sm text-muted">暂无可用来源</span> : null}
+                  </>
+                )}
+              />
             );
           })}
         </div>

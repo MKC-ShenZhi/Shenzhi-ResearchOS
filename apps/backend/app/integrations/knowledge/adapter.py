@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from pydantic import ValidationError
 
-from app.integrations.knowledge.client import KnowledgeBaseClient
+from app.integrations.knowledge.client import KnowledgeBaseClient, SCHOLAR_AVATAR_PATH
 from app.schemas.topic import KnowledgeTopicCategory, OpenAlexTopic, OpenAlexTopicListResponse
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.integrations.knowledge.schemas import UpstreamSearchPayload
@@ -363,8 +363,11 @@ def map_scholar_profile(item: dict[str, Any]) -> ScholarProfile:
     for key in ('name_zh', 'name_en', 'bio_zh', 'bio_en', 'updated_at'):
         values[key] = _optional_string(item.get(key))
     avatar = _optional_string(item.get('avatar_path'))
-    # Relative upstream image paths have no same-origin meaning in ShenZhi.
-    values['avatar_path'] = avatar if avatar and avatar.startswith('https://') else None
+    if avatar and SCHOLAR_AVATAR_PATH.fullmatch(avatar):
+        avatar = f'/api/v1/knowledge/scholar-avatar?path={quote(avatar, safe="")}'
+    elif not avatar or not avatar.startswith('https://'):
+        avatar = None
+    values['avatar_path'] = avatar
     result = _contract_model(lambda: ScholarProfile.model_validate(values))
     years = [entry.year for entry in result.annual_citations or []]
     if len(years) != len(set(years)):
@@ -377,6 +380,20 @@ def _profile_pagination(body: dict[str, Any], limit: int, offset: int) -> None:
             or type(body.get('offset')) is not int or body['offset'] != offset
             or not isinstance(body.get('items'), list) or len(body['items']) > limit):
         raise KnowledgeIntegrationError.contract_violation()
+
+
+def _scholar_profile_page(body: dict[str, Any], limit: int, offset: int) -> ScholarProfilePage:
+    _profile_pagination(body, limit, offset)
+    total = body.get('total')
+    if total is not None and (type(total) is not int or total < 0):
+        raise KnowledgeIntegrationError.contract_violation()
+    items = [map_scholar_profile(item) for item in body['items']]
+    if len({item.scholar_id for item in items}) != len(items):
+        raise KnowledgeIntegrationError.contract_violation()
+    return ScholarProfilePage(
+        items=items, limit=limit, offset=offset, total=total,
+        has_more=offset + len(items) < total if total is not None else len(items) == limit,
+    )
 
 
 def map_paper_detail(
@@ -673,18 +690,14 @@ class KnowledgeAdapter:
         body = await self.client.search_scholar_profiles(
             request.query, limit=request.limit, offset=request.offset
         )
-        _profile_pagination(body, request.limit, request.offset)
-        total = body.get('total')
-        if total is not None and (type(total) is not int or total < 0):
-            raise KnowledgeIntegrationError.contract_violation()
-        items = [map_scholar_profile(item) for item in body['items']]
-        if len({item.scholar_id for item in items}) != len(items):
-            raise KnowledgeIntegrationError.contract_violation()
-        return ScholarProfilePage(
-            items=items, limit=request.limit, offset=request.offset, total=total,
-            has_more=(request.offset + len(items) < total if total is not None
-                      else len(items) == request.limit),
-        )
+        return _scholar_profile_page(body, request.limit, request.offset)
+
+    async def browse_scholar_profiles(self, *, limit: int, offset: int) -> ScholarProfilePage:
+        body = await self.client.browse_scholar_profiles(limit=limit, offset=offset)
+        return _scholar_profile_page(body, limit, offset)
+
+    async def scholar_avatar(self, path: str) -> tuple[bytes, str]:
+        return await self.client.scholar_avatar(path)
 
     async def scholar_profile(self, scholar_id: str) -> ScholarProfile:
         profile = map_scholar_profile(await self.client.scholar_profile(scholar_id))
@@ -700,6 +713,7 @@ class KnowledgeAdapter:
         return _contract_model(lambda: ScholarPapersPage(
             items=[ScholarPublication(
                 **map_paper_detail(item).model_dump(),
+                image_id=_first_optional_string(item, 'image_id', 'imageId'),
                 platform_detail=item.get('external') is False,
             ) for item in body['items']],
             total=body.get('total'), limit=limit, offset=offset,

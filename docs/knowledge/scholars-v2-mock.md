@@ -1,4 +1,4 @@
-> 历史说明：本文记录 Mock Demo 阶段。正式 V2 已默认接入真实产品 Scholar API，Mock Provider 保留供显式注入与测试；当前行为、统计口径和验收结果以 [真实接入报告](scholars-v2-integration.md) 为准。
+> 历史说明：本文记录 Mock Demo 阶段。正式 V2 已默认接入真实产品 Scholar API，Mock Provider 保留供显式注入与测试；当前行为和统计口径见 [学者库 V2 接入说明](scholars-v2-integration.md)。
 
 # 学者库 V2 · Mock 预览
 

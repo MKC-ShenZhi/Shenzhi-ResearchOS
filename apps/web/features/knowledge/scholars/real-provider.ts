@@ -6,9 +6,12 @@ export function createRealScholarProvider(client = new BffKnowledgeClient()): Sc
   return {
     cacheKey: "product-scholars-v2-bff",
     isDemo: false,
-    supportsBrowse: false,
+    supportsBrowse: true,
     search(query, signal, page = { limit: 20, offset: 0 }) {
-      return client.searchScholarProfiles(query.trim(), page.limit, page.offset, signal);
+      const term = query.trim();
+      return term
+        ? client.searchScholarProfiles(term, page.limit, page.offset, signal)
+        : client.browseScholarProfiles(page.limit, page.offset, signal);
     },
     async detail(id, signal) {
       try {

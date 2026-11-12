@@ -135,6 +135,18 @@ class KnowledgeService:
         except KnowledgeIntegrationError as error:
             raise KnowledgeServiceError.from_integration_error(error) from error
 
+    async def browse_scholar_profiles(self, *, limit: int, offset: int) -> ScholarProfilePage:
+        try:
+            return await self.adapter.browse_scholar_profiles(limit=limit, offset=offset)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def get_scholar_avatar(self, path: str) -> tuple[bytes, str]:
+        try:
+            return await self.adapter.scholar_avatar(path)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
     async def get_scholar_papers(
         self, scholar_id: str, *, limit: int = 20, offset: int = 0
     ) -> ScholarPapersPage:

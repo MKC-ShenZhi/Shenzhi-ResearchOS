@@ -5,7 +5,7 @@ import { KnowledgeClientError } from "../../clients/knowledge/client";
 import { createRealScholarProvider } from "../../features/knowledge/scholars/real-provider";
 import { createMockScholarProvider } from "../../features/knowledge/scholars/mock-provider";
 import { parseScholarContract, scholarProfileSchema } from "../../clients/knowledge/scholar-profiles";
-import { scholarPage } from "../../features/knowledge/scholars/url-state";
+import { SCHOLAR_BATCH_SIZE, nextScholarOffset } from "../../features/knowledge/scholars/browse-pagination";
 import { recentCitations, scholarAvatarSource } from "../../features/knowledge/scholars/presentation";
 import { createSearchRestoration } from "../../lib/navigation/search-restoration";
 
@@ -30,7 +30,7 @@ test("real provider uses same-origin product endpoints, Unicode query, page offs
   }, async () => {
     const provider = createRealScholarProvider();
     assert.equal(provider.isDemo, false);
-    assert.equal(provider.supportsBrowse, false);
+    assert.equal(provider.supportsBrowse, true);
     assert.notEqual(provider.cacheKey, createMockScholarProvider().cacheKey);
     const page = await provider.search(" 何恺明 ", controller.signal, { limit: 20, offset: 20 });
     assert.equal(page.items[0].metrics?.paper_count, 0);
@@ -42,6 +42,28 @@ test("real provider uses same-origin product endpoints, Unicode query, page offs
   assert.equal(seen[0], "/api/v1/knowledge/scholar-profiles/search?q=%E4%BD%95%E6%81%BA%E6%98%8E&limit=20&offset=20");
   assert.equal(seen[1], "/api/v1/knowledge/scholar-profiles/author%3Alegacy%2F%E4%BD%95%3F%25252F");
   assert.equal(seen[2], "/api/v1/knowledge/scholar-profile-papers?scholarId=openalex%3AA5000001524&limit=20&offset=0");
+});
+
+test("real provider uses the collection endpoint for blank browsing and preserves enriched card fields", async () => {
+  const avatarPath = "/api/v1/knowledge/scholar-avatar?path=%2Fimages%2Fscholars_example%2Favatar.jpg";
+  await withFetch(async (input) => {
+    assert.equal(String(input), "/api/v1/knowledge/scholar-profiles?limit=20&offset=40");
+    return envelope({
+      items: [{
+        ...profile,
+        avatar_path: avatarPath,
+        topics: ["Machine learning"],
+        metrics: { ...profile.metrics, source_work_count: 17, h_index: 5, i10_index: 0 },
+      }],
+      limit: 20, offset: 40, total: 41, has_more: false,
+    });
+  }, async () => {
+    const page = await createRealScholarProvider().search("  ", undefined, { limit: 20, offset: 40 });
+    assert.equal(page.total, 41);
+    assert.deepEqual(page.items[0].topics, ["Machine learning"]);
+    assert.equal(page.items[0].metrics?.i10_index, 0);
+    assert.equal(scholarAvatarSource(page.items[0].avatar_path), avatarPath);
+  });
 });
 
 test("real detail NOT_FOUND becomes null; service failures never become demo data", async () => {
@@ -97,14 +119,21 @@ test("mock pagination is isolated and supports empty results", async () => {
   assert.deepEqual((await mock.search("不存在")).items, []);
 });
 
-test("page parsing and search restoration retain page and query across detail navigation", () => {
-  for (const value of [null, "0", "-1", "1.5", "Infinity", "abc"]) assert.equal(scholarPage(value), 1);
-  assert.equal(scholarPage("3"), 3);
+test("scroll loading advances by the actual batch size and stops at the end", () => {
+  const batch = { items: Array.from({ length: 8 }, () => profile), limit: SCHOLAR_BATCH_SIZE, offset: 0, total: 19, has_more: true };
+  assert.equal(SCHOLAR_BATCH_SIZE, 8);
+  assert.equal(nextScholarOffset(batch), 8);
+  assert.equal(nextScholarOffset({ ...batch, items: [profile], offset: 8 }), 9);
+  assert.equal(nextScholarOffset({ ...batch, items: [profile], offset: 18, has_more: false }), undefined);
+  assert.equal(nextScholarOffset({ ...batch, items: [] }), undefined);
+});
+
+test("scholar search restoration retains the query without a page number", () => {
   const storage = new Map<string, string>();
   const restoration = createSearchRestoration(() => ({ getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => { storage.set(key, value); }, removeItem: (key) => { storage.delete(key); } }));
   const href = "/knowledge/scholars?q=Marcel&page=2";
   restoration.record("anonymous", href);
-  assert.equal(restoration.getHref("anonymous", "/knowledge/scholars"), href);
+  assert.equal(restoration.getHref("anonymous", "/knowledge/scholars"), "/knowledge/scholars?q=Marcel");
 });
 
 test("citation display uses the latest five reported years without filling gaps or nulls", () => {

@@ -39,5 +39,9 @@ export function recentCitations(data: ScholarProfile["annual_citations"]) {
 /** Failed images, unsafe URLs and missing paths share the initials fallback. */
 export function scholarAvatarSource(value?: string | null, failedSrc?: string | null): string | null {
   const src = value?.trim();
-  return src && src !== failedSrc && (src.startsWith("https://") || src.startsWith("/images/")) ? src : null;
+  return src && src !== failedSrc && (
+    src.startsWith("https://") ||
+    src.startsWith("/images/") ||
+    src.startsWith("/api/v1/knowledge/scholar-avatar?path=")
+  ) ? src : null;
 }
