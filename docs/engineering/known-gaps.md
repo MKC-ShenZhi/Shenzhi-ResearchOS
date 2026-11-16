@@ -10,7 +10,6 @@
 
 | 项 | 现状 | 方向 |
 |----|------|------|
-| Serverless 与长驻进程设计不匹配 | 后端在 Vercel 上以单个 Serverless 函数运行，而 `lifespan` 恢复与首页调度器、进程内 Agent 运行归属、本地 workspace、900s 的 Agent 运行时限都依赖长驻进程 | 明确正式服务器部署方式；Vercel 定位为开发测试环境。详见 [部署与运行环境](deployment.md) |
 | 平台统计快照未调度 | `python -m app.services.stats` 不在进程内调度器中，首页 `trending` 数据源依赖这些快照 | 随部署方式确定定时任务 |
 | 无 CI 门禁 | 仓库没有运行 typecheck / lint / test 的 workflow | 增加基础检查 workflow |
 

@@ -45,8 +45,8 @@ def upgrade() -> None:
     )
 
     # Old binaries cannot renew leases. Give work already in flight time to finish
-    # before a new binary is allowed to recover it. The ten-minute grace exceeds
-    # the configured 90-second model timeout and the 300-second Vercel function cap.
+    # before a new binary is allowed to recover it. The ten-minute grace spans
+    # multiple model calls at the default 90-second timeout.
     # Marking the rows claimed (by an unknown legacy worker) keeps a new binary
     # from starting a second generation for them during the grace window.
     op.execute(

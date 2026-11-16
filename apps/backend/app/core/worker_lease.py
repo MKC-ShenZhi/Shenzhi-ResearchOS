@@ -8,8 +8,8 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-# Model calls default to 90s and the Vercel backend cap is 300s. This is a
-# process-loss grace, refreshed independently of model output every 30 seconds.
+# Allow a grace period after process loss. Heartbeats renew the lease every
+# 30 seconds independently of model output.
 LEASE_SECONDS = 300
 HEARTBEAT_SECONDS = 30
 
