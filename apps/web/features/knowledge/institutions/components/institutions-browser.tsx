@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { InstitutionCard } from "./institution-card";
 import { useDebounce } from "@/hooks/use-debounce";
-import { institutions } from "@/lib/data/institutions";
+import { institutions } from "@/features/knowledge/data-institutions";
 import { useUserPreferences } from "@/stores/user-preferences";
 import { cn } from "@/lib/utils";
 import type { Institution } from "@/types";

@@ -1,18 +1,27 @@
-/** 论文 Feed 卡片 */
-export interface FeedPaper {
+import type { PaperTopic } from "../clients/knowledge/types";
+
+/** 论文卡片展示数据：首页与检索各自的数据适配层转换为此结构后共用同一版式。 */
+export interface PaperCardModel {
   id: string;
   date: string;
-  venue: string;
-  venueTone: "violet" | "amber" | "green";
+  /** 为空时不展示会议标签。 */
+  venue: string | null;
   authors: string;
   title: string;
   abstract: string;
-  aiLink: string;
-  tags: string[];
+  topics: PaperTopic[];
+  /** 由数据适配层提供；为空时由展示组件使用统一 fallback。 */
+  thumbnailUrl?: string | null;
+}
+
+/** 论文 Feed 卡片 */
+export interface FeedPaper extends PaperCardModel {
+  venue: string;
   /** 仅在真实数据源提供时展示；发现页 Knowledge 搜索结果不伪造指标。 */
   likes?: number;
   citations?: number;
-  thumb: string;
+  recommendationRequestId?: string;
+  recommendationRank?: number;
 }
 
 /** 投稿目标(会议/期刊) */
@@ -26,13 +35,6 @@ export interface Venue {
   metaRows: [VenueMetaIcon, string][][];
   chips: string[];
   accent: "danger" | "success";
-  /** 仅会议有倒计时 */
-  deadline?: {
-    label: string;
-    dateText: string;
-    /** 相对当前时间的毫秒偏移(演示用实时倒计时) */
-    offsetMs: number;
-  };
 }
 
 export type VenueMetaIcon = "folder" | "pin" | "cal" | "chart" | "quote";
@@ -165,45 +167,6 @@ export interface PaperGraph {
   relatedIds: string[];
 }
 
-/** 专利 */
-export interface Patent {
-  id: string;
-  /** 专利名称 */
-  title: string;
-  /** 申请号,如 CN202410123456.7 */
-  applicationNo: string;
-  /** 申请人 */
-  applicant: string;
-  /** 公开日 YYYY-MM-DD(字典序即可排序) */
-  publishedAt: string;
-  /** 技术领域(左栏筛选维度) */
-  field: string;
-  status: "已授权" | "实质审查" | "已公开" | "PCT";
-  kind: "发明" | "实用新型";
-  /** 被引次数(排序用) */
-  citations: number;
-}
-
-/** 项目基金 */
-export interface Funding {
-  id: string;
-  /** 项目名称 */
-  title: string;
-  /** 批准号 */
-  grantNo: string;
-  /** 负责人 */
-  pi: string;
-  /** 依托单位 */
-  institution: string;
-  /** 资助金额,如 300 万元 */
-  amount: string;
-  /** 起止年限,如 2024-01 ~ 2027-12 */
-  period: string;
-  /** 资助类别(左栏筛选维度) */
-  category: string;
-  status: "在研" | "结题";
-}
-
 /** 机构统计项 */
 export interface InstitutionStat {
   label: string;
@@ -311,9 +274,8 @@ export interface DRHistoryItem {
 export type ComposerEntryMode = "search" | "ai";
 
 export type {
-  ChatAttachment,
-  ChatCapabilities,
-  ChatModelId,
-  ChatReplyMode,
+  ComposerAttachment,
+  ModelId,
+  ReplyMode,
   ComposerSubmitPayload,
 } from "./ai-search";

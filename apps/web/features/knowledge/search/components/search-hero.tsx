@@ -2,20 +2,22 @@
 
 import { Search, Sparkles } from "lucide-react";
 
-/** 论文检索页顶部 —— 标题 + 检索框 */
+/** 论文库顶部 —— 保留现有论文检索能力。 */
 export function KnowledgeSearchHero({
   initialQuery,
   onQueryChange,
   onSearch,
+  disabled = false,
 }: {
   initialQuery: string;
   onQueryChange: (value: string) => void;
   onSearch: (query: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <header>
       <div className="flex items-center gap-2.5">
-        <h1 className="text-2xl font-bold tracking-tight text-ink">论文检索</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-ink">论文库</h1>
         <span className="rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-medium text-primary">
           知识底座
         </span>
@@ -35,16 +37,18 @@ export function KnowledgeSearchHero({
           <Search className="size-5 shrink-0 text-faint" />
           <input
             value={initialQuery}
+            disabled={disabled}
+            aria-label="搜索论文"
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder="搜索论文标题、作者、关键词… 例如 Diffusion Policy"
-            className="h-12 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-faint"
-            autoFocus
+            className="h-12 min-w-0 flex-1 bg-transparent text-base sm:text-[15px] text-ink outline-none placeholder:text-faint"
           />
           <span className="hidden shrink-0 items-center gap-1 text-[11px] text-faint md:flex">
             <Sparkles className="size-3.5" /> 论文数据库
           </span>
           <button
             type="submit"
+            disabled={disabled}
             className="h-9 shrink-0 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-deep"
           >
             开始检索

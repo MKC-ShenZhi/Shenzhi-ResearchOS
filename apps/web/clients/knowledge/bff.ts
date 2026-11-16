@@ -2,13 +2,33 @@
 
 import { apiJson, ApiError } from "../backend/http";
 import { KnowledgeClientError, type KnowledgeClient } from "./client";
+import {
+  parseScholarContract, scholarProfileSchema, scholarProfilePageSchema,
+  scholarPapersPageSchema,
+} from "./scholar-profiles";
 import type {
+  KnowledgeConferenceListResponse,
+  KnowledgePaperBrowseParams,
+  KnowledgePaperBrowseResponse,
   KnowledgeErrorCode,
+  KnowledgeFundingSearchParams,
+  KnowledgeFundingSearchResponse,
   KnowledgeGraph,
   KnowledgeGraphDepth,
+  KnowledgeMixedSearchParams,
+  KnowledgeMixedSearchResponse,
+  KnowledgeOverviewResponse,
+  KnowledgePersonalOverviewResponse,
   KnowledgePaperDetail,
+  KnowledgeTopic,
+  KnowledgeTopicListResponse,
+  KnowledgeCreator,
+  KnowledgeScholarDetail,
+  KnowledgeScholarSearchParams,
+  KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
 } from "./types";
 
 /**
@@ -58,17 +78,119 @@ function toKnowledgeError(error: unknown): KnowledgeClientError {
     });
   }
 
+  if (error instanceof TypeError) {
+    return KnowledgeClientError.unavailable("无法连接知识服务，请重试");
+  }
+
   return new KnowledgeClientError(
     "UNKNOWN",
     "知识底座服务异常",
   );
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 export class BffKnowledgeClient implements KnowledgeClient {
-  async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {
+  async conferences(signal?: AbortSignal): Promise<KnowledgeConferenceListResponse> {
+    try {
+      return await apiJson<KnowledgeConferenceListResponse>("/knowledge/conferences", { signal });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async browsePapers(params: KnowledgePaperBrowseParams, signal?: AbortSignal): Promise<KnowledgePaperBrowseResponse> {
+    const query = new URLSearchParams({
+      conference: params.conference, year: String(params.year),
+      limit: String(params.limit), offset: String(params.offset),
+    });
+    try {
+      return await apiJson<KnowledgePaperBrowseResponse>(`/knowledge/papers?${query}`, { signal });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async overview(): Promise<KnowledgeOverviewResponse> {
+    try {
+      return await apiJson<KnowledgeOverviewResponse>("/knowledge/overview");
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async personalOverview(): Promise<KnowledgePersonalOverviewResponse> {
+    try {
+      return await apiJson<KnowledgePersonalOverviewResponse>("/knowledge/personal-overview");
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async topics(signal?: AbortSignal): Promise<KnowledgeTopicListResponse> {
+    try {
+      return await apiJson<KnowledgeTopicListResponse>("/knowledge/topics", { signal });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async topic(topicId: string, signal?: AbortSignal): Promise<KnowledgeTopic> {
+    try {
+      return await apiJson<KnowledgeTopic>(`/knowledge/topics/${encodeURIComponent(topicId)}`, { signal });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async topicPapers(topicId: string, offset: number, limit: number, signal?: AbortSignal): Promise<KnowledgePaperBrowseResponse> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    try {
+      return await apiJson<KnowledgePaperBrowseResponse>(
+        '/knowledge/topics/' + encodeURIComponent(topicId) + '/papers?' + query.toString(),
+        { signal },
+      );
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async creator(creatorId: string): Promise<KnowledgeCreator> {
+    try {
+      return await apiJson<KnowledgeCreator>(
+        `/knowledge/creators/${encodeURIComponent(creatorId)}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse> {
+    try {
+      return await apiJson<KnowledgeMixedSearchResponse>("/knowledge/overview/search", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async search(
+    params: KnowledgeSearchParams,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchResponse> {
     try {
       return await apiJson<KnowledgeSearchResponse>("/knowledge/search", {
         method: "POST",
+        signal,
         body: JSON.stringify({
           query: params.query,
           topK: params.topK,
@@ -82,6 +204,8 @@ export class BffKnowledgeClient implements KnowledgeClient {
         }),
       });
     } catch (error) {
+      // TanStack Query 需要保留原始 AbortError，才能把主动取消恢复为非错误状态。
+      if (isAbortError(error)) throw error;
       throw toKnowledgeError(error);
     }
   }
@@ -90,6 +214,122 @@ export class BffKnowledgeClient implements KnowledgeClient {
     try {
       return await apiJson<KnowledgePaperDetail>(
         `/knowledge/paper?paperId=${encodeURIComponent(paperId)}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchScholarProfiles(query: string, limit = 20, offset = 0, signal?: AbortSignal) {
+    const params = new URLSearchParams({ q: query, limit: String(limit), offset: String(offset) });
+    return this.scholarProfilePage(`/knowledge/scholar-profiles/search?${params}`, signal);
+  }
+
+  async browseScholarProfiles(limit = 20, offset = 0, signal?: AbortSignal) {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    return this.scholarProfilePage(`/knowledge/scholar-profiles?${params}`, signal);
+  }
+
+  private async scholarProfilePage(path: string, signal?: AbortSignal) {
+    try {
+      return parseScholarContract(scholarProfilePageSchema, await apiJson<unknown>(
+        path, { signal },
+      ));
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async scholarProfile(id: string, signal?: AbortSignal) {
+    try {
+      return parseScholarContract(scholarProfileSchema, await apiJson<unknown>(
+        `/knowledge/scholar-profiles/${encodeURIComponent(id)}`, { signal },
+      ));
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async scholarPapers(id: string, limit = 20, offset = 0, signal?: AbortSignal) {
+    try {
+      return parseScholarContract(scholarPapersPageSchema, await apiJson<unknown>(
+        `/knowledge/scholar-profile-papers?scholarId=${encodeURIComponent(id)}&limit=${limit}&offset=${offset}`,
+        { signal },
+      ));
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchScholars(
+    params: KnowledgeScholarSearchParams,
+  ): Promise<KnowledgeScholarSearchResponse> {
+    const query = new URLSearchParams({
+      q: params.query,
+      limit: String(params.limit ?? 20),
+      offset: String(params.offset ?? 0),
+    });
+    try {
+      return await apiJson<KnowledgeScholarSearchResponse>(
+        `/knowledge/scholars/search?${query.toString()}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async scholar(scholarId: string): Promise<KnowledgeScholarDetail> {
+    try {
+      return await apiJson<KnowledgeScholarDetail>(
+        `/knowledge/scholars/${encodeURIComponent(scholarId)}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchFundings(
+    params: KnowledgeFundingSearchParams,
+  ): Promise<KnowledgeFundingSearchResponse> {
+    const query = new URLSearchParams();
+    const searchText = params.query?.trim();
+    if (searchText) query.set("q", searchText);
+    query.set("limit", String(params.limit ?? 20));
+    query.set("offset", String(params.offset ?? 0));
+    try {
+      return await apiJson<KnowledgeFundingSearchResponse>(
+        `/knowledge/fundings/search?${query.toString()}`,
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchBySubject(
+    subject: string,
+    offset = 0,
+    limit = 10,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSubjectSearchResponse> {
+    const query = new URLSearchParams({ subject, offset: String(offset), limit: String(limit) });
+    try {
+      return await apiJson<KnowledgeSubjectSearchResponse>(
+        `/knowledge/subjects/search?${query.toString()}`,
+        { signal },
+      );
+    } catch (error) {
+      throw toKnowledgeError(error);
+    }
+  }
+
+  async searchByFunding(funding: string, topK = 10): Promise<KnowledgeSearchResponse> {
+    const query = new URLSearchParams({ funding, topK: String(topK) });
+    try {
+      return await apiJson<KnowledgeSearchResponse>(
+        `/knowledge/funding/search?${query.toString()}`,
       );
     } catch (error) {
       throw toKnowledgeError(error);

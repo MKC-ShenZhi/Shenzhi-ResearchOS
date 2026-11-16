@@ -1,12 +1,12 @@
 import { AppShell } from "@/components/common/layout/app-shell";
-import { SubmitBrowser } from "@/features/submit/components/submit-browser";
+import { ConferenceBrowser } from "@/features/submit/components/conference-browser";
 
-/** 投稿 · 会议 `/submit` —— 对应「深知-投稿详情页.svg」,点击侧边栏「投稿」默认打开 */
+/** 会议DDL `/submit` —— 会议截稿倒计时,侧边栏一级入口「会议DDL」 */
 export function SubmitPage() {
   return (
     <AppShell>
-      <div className="mx-auto max-w-[1180px] px-8 py-6">
-        <SubmitBrowser kind="conference" />
+      <div className="mx-auto max-w-[1180px] px-4 py-4 sm:px-8 sm:py-6">
+        <ConferenceBrowser />
       </div>
     </AppShell>
   );

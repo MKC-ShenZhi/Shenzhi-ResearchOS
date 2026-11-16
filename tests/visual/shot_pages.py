@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 import subprocess, os, sys, io, time
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-edge = r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
-node = r'C:\Program Files\nodejs\node.exe'
+from _tools import edge_path, node_path, out_dir
+edge = edge_path()
+node = node_path()
 cdp_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'shot-cdp.mjs')
-tmp = os.environ['TEMP']
+tmp = out_dir()
 base = 'http://localhost:3100'
 # 元组:(路径, 输出, 宽, 高[, virtual-time 预算[, 等待文本]])
 # 带「等待文本」的页面走 shot-cdp.mjs(CDP 真实时间等待,适合 effect 驱动的视图);

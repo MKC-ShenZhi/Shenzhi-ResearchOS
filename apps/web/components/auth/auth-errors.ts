@@ -8,6 +8,7 @@ type AuthErrorKind =
   | "otp"
   | "register"
   | "reset"
+  | "change-email"
   | "change-password"
   | "delete-user"
   | "profile"
@@ -105,6 +106,10 @@ export function getAuthErrorMessage(
 
   if (kind === "change-password" && code === "INVALID_PASSWORD") {
     return "当前密码错误";
+  }
+
+  if (kind === "change-email" && code === "SENSITIVE_SESSION_REQUIRED") {
+    return "登录状态需要重新验证，请重新登录后再试";
   }
 
   if (kind === "delete-user" && code === "SESSION_EXPIRED") {

@@ -15,6 +15,9 @@
 /build
 /apps/web/build
 
+# local paper thumbnails
+/data/paper-thumbnails/
+
 # misc
 .DS_Store
 Thumbs.db
@@ -49,14 +52,13 @@ __pycache__/
 *.py[cod]
 .venv/
 
-# vercel
-.vercel
-
-# feishu cli sync temp
-docs/dev/.feishu-sync-body.md
-docs/dev/.feishu-auth-qr.png
+# Agent session workspaces and generated artifacts
+/apps/backend/workspace/
 
 # docker
 *.tar
 .superpowers/
 docs/superpowers/
+
+
+国自然图谱汇总_共617

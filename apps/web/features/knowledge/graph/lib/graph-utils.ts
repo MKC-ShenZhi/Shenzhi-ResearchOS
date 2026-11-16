@@ -8,6 +8,7 @@
  */
 import type {
   KnowledgeGraph,
+  KnowledgeGraphDepth,
   KnowledgeGraphNode,
   KnowledgeRelatedPaper,
   KnowledgeRelationDirection,
@@ -86,6 +87,61 @@ const DIRECTION_ORDER: Record<KnowledgeRelationDirection, number> = { reference:
 
 /** 图谱方向筛选（列表 / 图谱统一） */
 export type GraphDirectionFilter = "all" | KnowledgeRelationDirection;
+
+export const MAX_VISIBLE_GRAPH_NODES = 50;
+
+/** 从中心论文逐层选取节点，按类型轮流取样，避免高频类型占满画布。 */
+export function limitGraphNodes(
+  graph: KnowledgeGraph,
+  depth: KnowledgeGraphDepth,
+  nodesPerLayer: number,
+): KnowledgeGraph {
+  const nodeMap = nodeById(graph);
+  if (!nodeMap.has(graph.rootId)) return { ...graph, nodes: [], edges: [] };
+
+  const adjacency = new Map<string, Set<string>>();
+  for (const edge of graph.edges) {
+    if (!nodeMap.has(edge.sourceId) || !nodeMap.has(edge.targetId)) continue;
+    if (!adjacency.has(edge.sourceId)) adjacency.set(edge.sourceId, new Set());
+    if (!adjacency.has(edge.targetId)) adjacency.set(edge.targetId, new Set());
+    adjacency.get(edge.sourceId)!.add(edge.targetId);
+    adjacency.get(edge.targetId)!.add(edge.sourceId);
+  }
+
+  const selected = new Set<string>([graph.rootId]);
+  let frontier = [graph.rootId];
+  for (let level = 1; level <= depth && selected.size < MAX_VISIBLE_GRAPH_NODES; level += 1) {
+    const candidates = [...new Set(frontier.flatMap((id) => [...(adjacency.get(id) ?? [])]))]
+      .filter((id) => !selected.has(id))
+      .map((id) => nodeMap.get(id))
+      .filter((node): node is KnowledgeGraphNode => Boolean(node));
+    const groups = new Map<string, KnowledgeGraphNode[]>();
+    for (const node of candidates) {
+      const group = groups.get(node.kind) ?? [];
+      group.push(node);
+      groups.set(node.kind, group);
+    }
+
+    const chosen: KnowledgeGraphNode[] = [];
+    const limit = Math.min(nodesPerLayer, MAX_VISIBLE_GRAPH_NODES - selected.size);
+    while (chosen.length < limit && [...groups.values()].some((group) => group.length > 0)) {
+      for (const group of groups.values()) {
+        const node = group.shift();
+        if (node) chosen.push(node);
+        if (chosen.length === limit) break;
+      }
+    }
+    for (const node of chosen) selected.add(node.id);
+    frontier = chosen.map((node) => node.id);
+    if (frontier.length === 0) break;
+  }
+
+  return {
+    ...graph,
+    nodes: graph.nodes.filter((node) => selected.has(node.id)),
+    edges: graph.edges.filter((edge) => selected.has(edge.sourceId) && selected.has(edge.targetId)),
+  };
+}
 
 /** 左栏关联论文列表：与 root 通过 CITES 直接相连的 Paper 节点 */
 export function relatedPapers(graph: KnowledgeGraph): KnowledgeRelatedPaper[] {

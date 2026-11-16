@@ -32,13 +32,106 @@ class UpstreamSearchResult(TypedDict):
     subjects: NotRequired[list[str] | str | None]
     score: NotRequired[int | float | str | None]
     rank: NotRequired[int | str | None]
+    # Preserve the asset identifier separately from transport-only diagnostics.
+    image_id: NotRequired[str | None]
+    source_scores: NotRequired[dict[str, Any] | None]
+    retrieval_mode: NotRequired[str | None]
+    funding: NotRequired[list[str] | str | None]
 
 
 class UpstreamSearchResponse(TypedDict):
     results: list[UpstreamSearchResult]
+    total: NotRequired[int]
     state: NotRequired[dict[str, Any]]
     query_parse: NotRequired[dict[str, Any]]
     query_rewrite: NotRequired[dict[str, Any]]
+
+
+class UpstreamVenue(TypedDict):
+    conference: str
+    count: int | str
+    years: list[int | str]
+    minYear: NotRequired[int | str | None]
+    maxYear: NotRequired[int | str | None]
+    yearCount: NotRequired[int | str]
+    trackCount: NotRequired[int | str]
+
+
+class UpstreamVenuesResponse(TypedDict):
+    # Transport normalizes the upstream top-level array into this container.
+    items: list[UpstreamVenue]
+
+
+class UpstreamPaperBrowseResponse(TypedDict):
+    items: list[UpstreamSearchResult]
+    total: int | str
+    limit: int | str
+    offset: int | str
+
+
+class UpstreamScholarSearchResult(TypedDict):
+    scholar_id: str
+    name: str
+    paper_count: int | str
+
+
+class UpstreamScholarSearchResponse(TypedDict):
+    results: list[UpstreamScholarSearchResult]
+    query: NotRequired[str]
+
+
+class UpstreamFundingSearchResult(TypedDict):
+    funding_id: str
+    name: str
+    paper_count: int | str
+
+
+class UpstreamFundingSearchResponse(TypedDict):
+    results: list[UpstreamFundingSearchResult]
+    query: NotRequired[str]
+
+
+class UpstreamPaperSummaryResponse(TypedDict):
+    paper_count: int | str
+
+
+class UpstreamResearchAssetsSummaryResponse(TypedDict):
+    research_asset_count: int | str
+
+
+class UpstreamScholarReference(TypedDict):
+    scholar_id: str
+    name: str
+
+
+class UpstreamScholarPaper(TypedDict):
+    paper_id: str
+    title: str
+    year: NotRequired[int | str | None]
+
+
+class UpstreamScholarResponse(TypedDict):
+    scholar_id: str
+    name: str
+    paper_count: int | str
+    years: NotRequired[list[int | str] | None]
+    conferences: NotRequired[list[str] | None]
+    topics: NotRequired[list[str] | None]
+    funding: NotRequired[list[str] | None]
+    institutions: NotRequired[list[str] | None]
+    coauthors: NotRequired[list[UpstreamScholarReference] | None]
+    papers: NotRequired[list[UpstreamScholarPaper] | None]
+
+
+class UpstreamFundingSearchResult(TypedDict):
+    funding_id: str
+    name: str
+    paper_count: int | str
+
+
+class UpstreamFundingSearchResponse(TypedDict):
+    results: list[UpstreamFundingSearchResult]
+    query: NotRequired[str]
 
 
 class UpstreamPaperResponse(TypedDict):

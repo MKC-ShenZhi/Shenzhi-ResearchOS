@@ -12,7 +12,22 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.models.chat import Base  # noqa: E402
+from app.models import conference_snapshot as _conference_snapshot_models
+from app.models import knowledge_conference_snapshot as _knowledge_conference_snapshot_models  # noqa: F401
+from app.models.base import Base  # noqa: E402
+from app.models import settings as _settings_models  # noqa: E402,F401
+from app.models import profile as _profile_models  # noqa: E402,F401
+from app.models import agent_session as _agent_session_models  # noqa: E402,F401
+from app.models import home_daily_edition as _home_daily_edition_models  # noqa: E402,F401
+from app.models import home_scheduler_state as _home_scheduler_state_models  # noqa: E402,F401
+from app.models import collections as _collection_models  # noqa: E402,F401
+from app.models import reading_history as _reading_history_models  # noqa: E402,F401
+from app.models import private_paper as _private_paper_models  # noqa: E402,F401
+from app.models import agent_upload as _agent_upload_models  # noqa: E402,F401
+from app.models import interactions as _interaction_models  # noqa: E402,F401
+from app.models import stats as _stats_models  # noqa: E402,F401
+from app.models import recommendation as _recommendation_models  # noqa: E402,F401
+from app.models import discovery_pool as _discovery_pool_models  # noqa: E402,F401
 
 config = context.config
 if config.config_file_name is not None:

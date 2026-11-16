@@ -1,0 +1,78 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+const tabs = readFileSync("features/settings/components/settings-tabs.tsx", "utf8");
+const profile = readFileSync("features/settings/components/profile-panel.tsx", "utf8");
+const notifications = readFileSync("features/settings/components/notifications-panel.tsx", "utf8");
+const bff = readFileSync("app/api/v1/[...path]/route.ts", "utf8");
+const profileEditor = readFileSync("features/settings/components/profile/profile-editor.tsx", "utf8");
+const profileHook = readFileSync("hooks/use-user-profile.ts", "utf8");
+const profileClient = readFileSync("clients/profile/index.ts", "utf8");
+const avatarOptions = readFileSync("clients/profile/avatar.ts", "utf8");
+const sidebar = readFileSync("components/common/layout/app-sidebar.tsx", "utf8");
+const userAvatar = readFileSync("components/common/user-avatar.tsx", "utf8");
+const menu = readFileSync("components/common/layout/settings-menu.tsx", "utf8");
+
+test("settings keeps all deep links and falls back invalid values to profile", () => {
+  for (const value of ["profile", "subscription", "usage", "agent", "mcp", "api", "notifications"]) {
+    assert.match(readFileSync("features/settings/components/tab-config.tsx", "utf8"), new RegExp(`value: "${value}"`));
+  }
+  assert.match(tabs, /isSettingsTab\(requestedTab\)[\s\S]*requestedTab : "profile"/);
+  for (const value of ["profile", "subscription", "usage", "agent", "mcp", "api", "notifications"]) {
+    assert.ok(menu.includes(`/settings?tab=${value}`));
+  }
+});
+
+test("more colors links to the mounted appearance section without suppressing hash scroll", () => {
+  assert.match(profile, /<Section id="appearance"/);
+  assert.match(profile, /scroll-mt-6/);
+  const moreLink = menu.match(/<Link\s+href="\/settings\?tab=profile#appearance"[\s\S]*?<\/Link>/)?.[0];
+  assert.ok(moreLink);
+  assert.doesNotMatch(moreLink, /scroll=\{false\}/);
+  assert.match(moreLink, /onNavigate=[\s\S]*scrollIntoView/);
+  assert.match(tabs, /active !== "profile"/);
+  assert.match(tabs, /requestAnimationFrame\([\s\S]*getElementById\("appearance"\)/);
+  assert.match(tabs, /removeEventListener\("hashchange"/);
+});
+
+test("profile and notifications no longer expose fabricated biography or notification detail", () => {
+  assert.doesNotMatch(profile, /NeurIPS|国家奖学金|清华大学人工智能研究院/);
+  assert.doesNotMatch(notifications, /演示:|发表了新论文|本月用量/);
+  assert.match(notifications, /通知投递渠道尚未启用/);
+});
+
+test("settings reuses the generic authenticated BFF", () => {
+  assert.match(bff, /forwardToBusinessBackend/);
+  assert.doesNotMatch(tabs, /x-shenzhi-user-id/i);
+});
+
+test("profile uses five local avatars and the authenticated profile API", () => {
+  for (let index = 1; index <= 5; index += 1) {
+    assert.match(avatarOptions, new RegExp(`avatar-0${index}\\.webp`));
+  }
+  assert.match(profileClient, /apiJson<UserProfile>\("\/profile"\)/);
+  assert.match(profileClient, /method: "PATCH"/);
+  assert.doesNotMatch(profileClient, /user_id/);
+  assert.match(profileHook, /session\?\.user\.id/);
+  assert.match(profileHook, /queryKey: profileQueryKey\(userId\)/);
+});
+
+test("settings and sidebar share the profile query and avatar renderer", () => {
+  assert.match(profileHook, /setQueryData\(profileQueryKey\(savedUserId\), updated\)/);
+  assert.match(profileEditor, /userAvatarSource\(profile, user\.image\)/);
+  assert.match(profileEditor, /<UserAvatar/);
+  assert.match(sidebar, /useUserProfile\(\)/);
+  assert.match(sidebar, /userAvatarSource\(profile, session\?\.user\.image\)/);
+  assert.match(sidebar, /<UserAvatar/);
+  assert.match(userAvatar, /onError=\{\(\) => setFailedSrc\(src\)\}/);
+});
+
+test("profile editor covers the stage two editable scholar fields", () => {
+  for (const field of ["bio", "achievements", "educations", "biography", "institutions"]) {
+    assert.match(profileEditor, new RegExp(`draft\\.${field}`));
+  }
+  assert.match(profileEditor, /moveItem/);
+  assert.match(profileEditor, /保存失败，草稿已保留/);
+  assert.doesNotMatch(profileEditor, /上传头像/);
+});

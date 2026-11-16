@@ -1,5 +1,5 @@
 import { ArrowRight } from "lucide-react";
-import { agentReferences } from "@/lib/data/agent";
+import { agentReferences } from "@/features/search/deep-search/data";
 import { cn } from "@/lib/utils";
 
 const TONE_COLORS: Record<string, string> = {

@@ -1,0 +1,118 @@
+import { NextRequest, NextResponse } from "next/server";
+
+import { backendConfig, backendConnectionIsAllowed } from "@/config/backend";
+import {
+  attachMigrationIdentity,
+  resolveBackendIdentity,
+} from "@/clients/backend/identity";
+import {
+  REQUEST_ID_HEADER,
+  resolveRequestId,
+} from "@/lib/observability/request-id";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const ANONYMOUS_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function withRequestId(response: NextResponse, requestId: string) {
+  response.headers.set(REQUEST_ID_HEADER, requestId);
+  return response;
+}
+
+/** Preview only: it never changes ownership or returns conversation content. */
+export async function GET(request: NextRequest) {
+  const requestId = resolveRequestId(request.headers.get(REQUEST_ID_HEADER));
+  const empty = () => withRequestId(NextResponse.json({ code: 0, data: { count: 0 } }), requestId);
+  if (!backendConfig.url || !backendConnectionIsAllowed(backendConfig)) {
+    return withRequestId(NextResponse.json({ code: 20004, message: "历史服务不可用" }, { status: 503 }), requestId);
+  }
+  try {
+    const identity = await resolveBackendIdentity(request.headers);
+    if (identity.kind !== "authenticated") {
+      return withRequestId(NextResponse.json(
+        { code: 10001, message: "请先登录" },
+        { status: 401 },
+      ), requestId);
+    }
+    const anonymousId = request.cookies.get("shenzhi-chat-anon")?.value;
+    if (!anonymousId || !ANONYMOUS_ID.test(anonymousId)) return empty();
+    const headers = new Headers({ "X-ShenZhi-Anonymous-Id": anonymousId });
+    headers.set(REQUEST_ID_HEADER, requestId);
+    if (backendConfig.secret) headers.set("X-ShenZhi-Bff-Secret", backendConfig.secret);
+    const baseUrl = backendConfig.url.replace(/\/$/, "");
+    const response = await fetch(`${baseUrl}/api/v1/agent/sessions?limit=50`, {
+      headers, cache: "no-store", signal: request.signal,
+    });
+    const body = await response.json();
+    if (!response.ok || body.code !== 0 || !Array.isArray(body.data?.sessions)) {
+      throw new Error("Invalid agent history response");
+    }
+    const count = body.data.ephemeral === false ? body.data.sessions.length : 0;
+    return withRequestId(NextResponse.json({ code: 0, data: { count } }), requestId);
+  } catch {
+    return withRequestId(NextResponse.json({ code: 20004, message: "暂时无法检查匿名历史" }, { status: 503 }), requestId);
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const requestId = resolveRequestId(request.headers.get(REQUEST_ID_HEADER));
+  if (!backendConfig.url || !backendConnectionIsAllowed(backendConfig)) {
+    return withRequestId(NextResponse.json(
+      { code: 20004, message: "匿名会话归属服务未配置" },
+      { status: 503 },
+    ), requestId);
+  }
+
+  let identity;
+  try {
+    identity = await resolveBackendIdentity(request.headers);
+  } catch {
+    return withRequestId(NextResponse.json(
+      { code: 10001, message: "鉴权服务异常，请稍后重试" },
+      { status: 503 },
+    ), requestId);
+  }
+  if (identity.kind !== "authenticated") {
+    return withRequestId(NextResponse.json(
+      { code: 10001, message: "请登录后认领匿名会话" },
+      { status: 401 },
+    ), requestId);
+  }
+
+  const anonymousId = request.cookies.get("shenzhi-chat-anon")?.value;
+  if (!anonymousId || !ANONYMOUS_ID.test(anonymousId)) {
+    return withRequestId(NextResponse.json({
+      code: 0,
+      data: { moved_count: 0, skipped_streaming_count: 0, durable: true },
+    }), requestId);
+  }
+
+  const headers = new Headers();
+  attachMigrationIdentity(headers, identity.userId, anonymousId);
+  headers.set(REQUEST_ID_HEADER, requestId);
+  if (backendConfig.secret) {
+    headers.set("X-ShenZhi-Bff-Secret", backendConfig.secret);
+  }
+
+  try {
+    const upstream = await fetch(
+      `${backendConfig.url.replace(/\/$/, "")}/api/v1/identity/anonymous-claim`,
+      {
+        method: "POST",
+        headers,
+        cache: "no-store",
+        signal: request.signal,
+      },
+    );
+    return withRequestId(new NextResponse(upstream.body, {
+      status: upstream.status,
+      headers: { "Content-Type": upstream.headers.get("content-type") ?? "application/json" },
+    }), requestId);
+  } catch {
+    return withRequestId(NextResponse.json(
+      { code: 20004, message: "无法连接匿名会话归属服务" },
+      { status: 503 },
+    ), requestId);
+  }
+}

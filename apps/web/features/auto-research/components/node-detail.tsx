@@ -1,8 +1,8 @@
 "use client";
 
 import { Play } from "lucide-react";
-import { GATE_META, MODULES, type NodeStatus, type PipelineNode } from "@/lib/data/research-pipeline";
-import { EVIDENCE_SAMPLE, REVIEW_PANEL, TOPIC_GATES } from "@/lib/data/research-run";
+import { GATE_META, MODULES, type NodeStatus, type PipelineNode } from "@/features/auto-research/research-pipeline";
+import { EVIDENCE_SAMPLE, REVIEW_PANEL, TOPIC_GATES } from "@/features/auto-research/research-run";
 import { cn } from "@/lib/utils";
 
 interface NodeDetailProps {

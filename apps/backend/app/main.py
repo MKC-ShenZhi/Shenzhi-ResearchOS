@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from app.api import chat, knowledge, paper_resource, uploads
+from app.api import account_deletion, agent, behavior, collections, conferences, discovery, history, identity, interactions, knowledge, maintenance, paper_resource, private_papers, profile, recommendations, settings, stats
 from app.core.logging import configure_logging, http_logging_middleware, log_exception, request_duration_ms
 from app.core.errors import BusinessError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE
 from app.core.responses import fail
@@ -10,24 +10,45 @@ from app.core.request_context import (
     REQUEST_ID_HEADER,
     get_request_id,
 )
-from app.services.sessions import repository
+from app.core.database import dispose_engine
+from app.services.agent_sessions.repository import agent_session_repository
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    await repository.recover()
+    from app.integrations.llm.resolver import load_registry
+    from app.services.discovery_pool.scheduler import start_home_feed_scheduler, stop_home_feed_scheduler
+    load_registry()
+    await agent_session_repository.recover()
+    home_feed_scheduler = start_home_feed_scheduler()
     yield
-    await repository.close()
+    await stop_home_feed_scheduler(home_feed_scheduler)
+    await agent_session_repository.close()
+    await dispose_engine()
 
 
 app = FastAPI(title='ShenZhi AI API', version='1.0.0', lifespan=lifespan)
 configure_logging()
 logger = logging.getLogger(__name__)
 for router in (
-    chat.router,
+    account_deletion.router,
+    behavior.router,
+    recommendations.router,
+    maintenance.router,
+    agent.router,
+    conferences.router,
+    discovery.router,
+    knowledge.papers_router,
+    collections.router,
+    interactions.router,
+    history.router,
+    identity.router,
     knowledge.router,
     paper_resource.router,
-    uploads.router,
+    private_papers.router,
+    profile.router,
+    settings.router,
+    stats.router,
 ):
     app.include_router(router)
 
@@ -42,7 +63,7 @@ async def business_error(_request: Request, error: BusinessError):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(_request: Request, _error: RequestValidationError):
-    return fail(20001, '请求参数不合法，请检查问题长度、模型和附件数量', 422)
+    return fail(20001, '请求参数不合法，请检查字段格式与长度', 422)
 
 
 @app.exception_handler(Exception)
@@ -70,3 +91,9 @@ async def unexpected_error(request: Request, error: Exception):
 @app.get('/health')
 def health() -> dict[str, str]:
     return {'status': 'ok'}
+
+
+@app.get('/api/v1/health')
+def versioned_health() -> dict[str, str]:
+    """Expose the health probe under the same prefix used by the Web BFF."""
+    return health()

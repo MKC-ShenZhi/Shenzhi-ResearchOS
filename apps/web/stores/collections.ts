@@ -1,0 +1,114 @@
+"use client";
+
+import { create } from "zustand";
+import { apiJson, ApiError, expectedUserHeaders } from "@/clients/backend/http";
+import { invalidateKnowledgeOverviewCache } from "@/features/knowledge/lib/overview-cache";
+
+export interface CollectionFolder {
+  id: number;
+  name: string;
+  is_default: boolean;
+  paper_count: number;
+}
+
+interface CollectionState {
+  identityKey: string | null;
+  generation: number;
+  folders: CollectionFolder[];
+  loading: boolean;
+  syncIdentity: (userId: string | null) => void;
+  loadFolders: () => Promise<void>;
+  createFolder: (name: string) => Promise<CollectionFolder>;
+  renameFolder: (folderId: number, name: string) => Promise<CollectionFolder>;
+  deleteFolder: (folderId: number) => Promise<void>;
+  updatePaperFolders: (paperId: string, folderIds: number[]) => Promise<void>;
+}
+
+/**
+ * 未登录时的默认文件夹占位：仅用于前端展示与提示，不来自后端。
+ * 使用负数 id，保证未登录时不会命中任何真实文件夹。
+ */
+const UNAUTHENTICATED_FOLDERS: CollectionFolder[] = [
+  { id: -1, name: "想读", is_default: true, paper_count: 0 },
+  { id: -2, name: "在读", is_default: true, paper_count: 0 },
+  { id: -3, name: "已读", is_default: true, paper_count: 0 },
+];
+
+export const useCollections = create<CollectionState>((set, get) => ({
+  identityKey: null,
+  generation: 0,
+  folders: [],
+  loading: false,
+  syncIdentity: (userId) => set((state) => {
+    if (state.identityKey === userId) return state;
+    invalidateKnowledgeOverviewCache();
+    return {
+      identityKey: userId,
+      generation: state.generation + 1,
+      folders: [],
+      loading: false,
+    };
+  }),
+  loadFolders: async () => {
+    const { generation, identityKey } = get();
+    set({ loading: true });
+    try {
+      const response = await apiJson<{ folders: CollectionFolder[] }>("/collections/folders", { headers: expectedUserHeaders(identityKey ?? "") });
+      if (get().generation === generation) set({ folders: response.folders });
+    } catch (error) {
+      // 未登录：固定展示三个默认文件夹占位，使展示与上次登录状态无关；
+      // 点击文件夹后由内容区给出“请先登录”提示。
+      if (error instanceof ApiError && error.status === 401) {
+        if (get().generation === generation) set({ folders: UNAUTHENTICATED_FOLDERS });
+        return;
+      }
+      throw error;
+    } finally {
+      if (get().generation === generation) set({ loading: false });
+    }
+  },
+  createFolder: async (name) => {
+    const { generation, identityKey } = get();
+    const folder = await apiJson<CollectionFolder>("/collections/folders", {
+      method: "POST",
+      headers: expectedUserHeaders(identityKey ?? ""),
+      body: JSON.stringify({ name }),
+    });
+    if (get().generation !== generation) return folder;
+    set((state) => ({ folders: [...state.folders, folder] }));
+    invalidateKnowledgeOverviewCache();
+    return folder;
+  },
+  renameFolder: async (folderId, name) => {
+    const { generation, identityKey } = get();
+    const folder = await apiJson<CollectionFolder>(`/collections/folders/${folderId}`, {
+      method: "PATCH",
+      headers: expectedUserHeaders(identityKey ?? ""),
+      body: JSON.stringify({ name }),
+    });
+    if (get().generation !== generation) return folder;
+    set((state) => ({ folders: state.folders.map((item) => item.id === folderId ? folder : item) }));
+    invalidateKnowledgeOverviewCache();
+    return folder;
+  },
+  deleteFolder: async (folderId) => {
+    const { generation, identityKey } = get();
+    await apiJson<unknown>(`/collections/folders/${folderId}`, { method: "DELETE", headers: expectedUserHeaders(identityKey ?? "") });
+    if (get().generation !== generation) return;
+    set((state) => ({
+      folders: state.folders.filter((item) => item.id !== folderId),
+    }));
+    invalidateKnowledgeOverviewCache();
+  },
+  updatePaperFolders: async (paperId, folderIds) => {
+    const { generation, identityKey } = get();
+    await apiJson<unknown>(`/papers/${encodeURIComponent(paperId)}/collections`, {
+      method: "PUT",
+      headers: expectedUserHeaders(identityKey ?? ""),
+      body: JSON.stringify({ folder_ids: folderIds }),
+    });
+    if (get().generation !== generation) return;
+    invalidateKnowledgeOverviewCache();
+    await get().loadFolders();
+  },
+}));

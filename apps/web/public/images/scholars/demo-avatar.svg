@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="虚构学者插画头像">
+  <rect width="160" height="160" rx="80" fill="#e8f1f8"/>
+  <circle cx="125" cy="35" r="31" fill="#dff0ee"/>
+  <path d="M25 160c2-43 21-62 55-62s53 19 55 62" fill="#174a7e"/>
+  <path d="M65 95h30v25l-15 13-15-13" fill="#deb598"/>
+  <ellipse cx="80" cy="69" rx="31" ry="39" fill="#edc9ad"/>
+  <path d="M48 71c-7-38 9-52 31-52 31 0 39 22 33 54l-10-28c-16 14-29 11-43 9L48 77" fill="#17212b"/>
+  <path d="M66 75h5m18 0h5" stroke="#17212b" stroke-width="3" stroke-linecap="round"/>
+  <path d="M73 90q7 5 14 0" fill="none" stroke="#a86455" stroke-width="2" stroke-linecap="round"/>
+  <path d="m61 117 19 16 19-16" fill="none" stroke="#fff" stroke-width="3" opacity=".8"/>
+</svg>

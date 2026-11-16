@@ -4,15 +4,69 @@ import { KnowledgeClientError, type KnowledgeClient } from "./client";
 import {
   buildMockGraph,
   MOCK_PAPERS,
+  MOCK_TOPICS,
   mockPaperDetail,
 } from "./mock-data";
 import type {
+  KnowledgeConferenceListResponse,
+  KnowledgePaperBrowseParams,
+  KnowledgePaperBrowseResponse,
+  KnowledgeFundingSearchParams,
+  KnowledgeFundingSearchResponse,
+  KnowledgeFundingSummary,
   KnowledgeGraph,
+  KnowledgeMixedSearchParams,
+  KnowledgeMixedSearchResponse,
+  KnowledgeOverviewResponse,
+  KnowledgePersonalOverviewResponse,
   KnowledgePaperDetail,
   KnowledgePaperHit,
+  KnowledgeScholarDetail,
+  KnowledgeScholarSearchParams,
+  KnowledgeScholarSearchResponse,
   KnowledgeSearchParams,
   KnowledgeSearchResponse,
+  KnowledgeSubjectSearchResponse,
+  KnowledgeTopic,
+  KnowledgeTopicListResponse,
+  KnowledgeCreator,
 } from "./types";
+
+const MOCK_CREATOR: KnowledgeCreator = {
+  id: "shenzhi",
+  name: "ShenZhi",
+  avatarUrl: "/brand/logo-night.png",
+  bio: "深知 ShenZhi · Research OS，整理和维护面向科研工作的知识主题。",
+  topicCount: 0,
+  isVerified: true,
+};
+
+const MOCK_SCHOLAR: KnowledgeScholarDetail = {
+  id: "author:mock:geoffrey-hinton",
+  name: "Geoffrey Hinton",
+  paperCount: 2,
+  years: [2021, 2022],
+  conferences: ["NeurIPS 2021", "NeurIPS 2022"],
+  topics: ["neural networks", "interpretable machine learning"],
+  funding: [],
+  institutions: [],
+  coauthors: [],
+  papers: MOCK_PAPERS.slice(0, 2).map((paper) => ({
+    id: paper.id,
+    title: paper.title,
+    year: paper.year,
+  })),
+  provenance: { source: "mock" },
+};
+
+const MOCK_FUNDINGS: KnowledgeFundingSummary[] = [
+  {
+    id: "funding:mock:research",
+    name: "Mock Research Fund",
+    paperCount: 2,
+    provenance: { source: "mock" },
+  },
+];
 
 /** Mock 可模拟的行为状态 */
 export type MockScenario =
@@ -44,8 +98,18 @@ function scenarioFromQuery(query: string): MockScenario | null {
   return null;
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timeout = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timeout);
+      reject(signal.reason);
+    }, { once: true });
+  });
 }
 
 /**
@@ -55,6 +119,25 @@ function delay(ms: number): Promise<void> {
  * 仅在 getKnowledgeClient() 显式配置 source=mock 时启用；正式运行走 BFF。
  */
 export class MockKnowledgeClient implements KnowledgeClient {
+  async conferences(signal?: AbortSignal): Promise<KnowledgeConferenceListResponse> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded();
+    if (scenario === "zero_results") return { items: [] };
+    const names = [...new Set(MOCK_PAPERS.map((paper) => paper.venue).filter((name): name is string => Boolean(name)))];
+    return { items: names.map((name) => {
+      const papers = MOCK_PAPERS.filter((paper) => paper.venue === name);
+      const years = [...new Set(papers.map((paper) => paper.year).filter((year): year is number => year !== null))].sort((a, b) => b - a);
+      return { name, paperCount: papers.length, years, yearCount: years.length };
+    }) };
+  }
+
+  async browsePapers(params: KnowledgePaperBrowseParams, signal?: AbortSignal): Promise<KnowledgePaperBrowseResponse> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded();
+    const papers = scenario === "zero_results" ? [] : MOCK_PAPERS.filter((paper) => paper.venue === params.conference && paper.year === params.year);
+    return { results: papers.slice(params.offset, params.offset + params.limit).map((paper) => ({ ...paper, imageId: null, score: null, rank: null, provenance: { source: "mock" } })), total: papers.length, limit: params.limit, offset: params.offset };
+  }
+
   private scenario: MockScenario;
   private latencyMs: number;
 
@@ -63,8 +146,8 @@ export class MockKnowledgeClient implements KnowledgeClient {
     this.latencyMs = options.latencyMs ?? 400;
   }
 
-  private async wait(): Promise<void> {
-    if (this.latencyMs > 0) await delay(this.latencyMs);
+  private async wait(signal?: AbortSignal): Promise<void> {
+    if (this.latencyMs > 0) await delay(this.latencyMs, signal);
   }
 
   private throwIfNeeded(query = ""): MockScenario | null {
@@ -74,8 +157,129 @@ export class MockKnowledgeClient implements KnowledgeClient {
     return effective;
   }
 
-  async search(params: KnowledgeSearchParams): Promise<KnowledgeSearchResponse> {
+  async overview(): Promise<KnowledgeOverviewResponse> {
     await this.wait();
+    this.throwIfNeeded();
+    return {
+      asOf: new Date().toISOString(),
+      scope: "mock fixture",
+      paperLibrary: {
+        paperCount: MOCK_PAPERS.length,
+        status: "available",
+        popularTags: [],
+        recentPapers: [],
+      },
+      scholarHighlights: [],
+      topicHighlights: [],
+      researchAssets: {
+        total: null,
+        status: "unsupported",
+        highlights: [],
+        byType: {
+          project: { count: null, supported: false, status: "unsupported" },
+          patent: { count: null, supported: false, status: "unsupported" },
+          funding: { count: null, supported: false, status: "unsupported" },
+        },
+        coverage: {},
+      },
+      graphPreview: {
+        supported: false,
+        status: "unsupported",
+        rootPaperId: null,
+        nodes: [],
+        edges: [],
+      },
+    };
+  }
+
+  async personalOverview(): Promise<KnowledgePersonalOverviewResponse> {
+    await this.wait();
+    this.throwIfNeeded();
+    return { authRequired: false, folders: [], recentPapers: [] };
+  }
+
+  async topics(signal?: AbortSignal): Promise<KnowledgeTopicListResponse> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded();
+    if (scenario === "zero_results") return { items: [], total: 0, categories: [] };
+    const items = MOCK_TOPICS.filter((topic) => topic.enabled);
+    return {
+      items,
+      total: items.length,
+      categories: [...new Map(items.map((topic) => [topic.category, topic.categoryName]))]
+        .map(([id, name]) => ({ id, name, total: items.filter((topic) => topic.category === id).length })),
+    };
+  }
+
+  async topic(topicId: string, signal?: AbortSignal): Promise<KnowledgeTopic> {
+    await this.wait(signal);
+    const scenario = this.throwIfNeeded(topicId);
+    if (scenario === "zero_results") throw KnowledgeClientError.notFound("未找到对应主题");
+    const topic = MOCK_TOPICS.find((item) => item.id === topicId && item.enabled);
+    if (!topic) throw KnowledgeClientError.notFound("未找到对应主题");
+    return topic;
+  }
+
+  async topicPapers(topicId: string, offset: number, limit: number, signal?: AbortSignal): Promise<KnowledgePaperBrowseResponse> {
+    await this.topic(topicId, signal);
+    const papers = topicId === "openalex:topic:T10028" ? MOCK_PAPERS.slice(0, 2) : [];
+    return {
+      results: papers.slice(offset, offset + limit).map((paper) => ({
+        ...paper, imageId: null, score: null, rank: null, provenance: { source: "mock" },
+      })),
+      total: papers.length,
+      limit,
+      offset,
+    };
+  }
+
+  async creator(creatorId: string): Promise<KnowledgeCreator> {
+    await this.wait();
+    if (this.scenario === "timeout") throw KnowledgeClientError.timeout();
+    if (this.scenario === "upstream_unavailable") throw KnowledgeClientError.unavailable();
+    if (creatorId.trim().toLowerCase() !== MOCK_CREATOR.id) {
+      throw KnowledgeClientError.notFound("未找到对应创作者");
+    }
+    return MOCK_CREATOR;
+  }
+
+  async overviewSearch(params: KnowledgeMixedSearchParams): Promise<KnowledgeMixedSearchResponse> {
+    await this.wait();
+    const scenario = this.throwIfNeeded(params.query);
+    if (scenario === "zero_results") {
+      return { results: [], supportedTypes: params.types, unsupportedTypes: [], failedTypes: [], nextCursor: null };
+    }
+    const response = await this.search({
+      query: params.query,
+      topK: params.limit ?? 20,
+      yearFrom: null,
+      yearTo: null,
+      venue: [],
+      author: [],
+      keyword: [],
+      subject: [],
+    });
+    return {
+      results: response.results.map((paper) => ({
+        type: "paper",
+        id: paper.id,
+        title: paper.title,
+        summary: paper.abstract,
+        metadata: { year: paper.year, venue: paper.venue },
+        action: `/papers/${encodeURIComponent(paper.id)}`,
+      })),
+      supportedTypes: params.types.filter((type) => type === "paper"),
+      unsupportedTypes: params.types.filter((type) => type !== "paper"),
+      failedTypes: [],
+      nextCursor: null,
+    };
+  }
+
+  async search(
+    params: KnowledgeSearchParams,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchResponse> {
+    await this.wait(signal);
     const scenario = this.throwIfNeeded(params.query);
 
     const text = params.query.trim().toLowerCase();
@@ -85,6 +289,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
         const score = Math.min(1, base + (index % 5) * 0.04);
         return {
           id: paper.id,
+          imageId: null,
           title: paper.title,
           abstract: paper.abstract,
           authors: paper.authors,
@@ -115,6 +320,74 @@ export class MockKnowledgeClient implements KnowledgeClient {
     const detail = mockPaperDetail(paperId);
     if (!detail) throw KnowledgeClientError.notFound();
     return detail;
+  }
+
+  async searchScholars(
+    params: KnowledgeScholarSearchParams,
+  ): Promise<KnowledgeScholarSearchResponse> {
+    await this.wait();
+    const scenario = this.throwIfNeeded(params.query);
+    if (scenario === "zero_results") return { results: [] };
+    const query = params.query.trim().toLowerCase();
+    if (query && !MOCK_SCHOLAR.name.toLowerCase().includes(query)) return { results: [] };
+    return { results: [MOCK_SCHOLAR] };
+  }
+
+  async scholar(scholarId: string): Promise<KnowledgeScholarDetail> {
+    await this.wait();
+    if (this.scenario === "timeout") throw KnowledgeClientError.timeout();
+    if (this.scenario === "upstream_unavailable") throw KnowledgeClientError.unavailable();
+    if (scholarId !== MOCK_SCHOLAR.id) throw KnowledgeClientError.notFound("未找到对应学者");
+    return MOCK_SCHOLAR;
+  }
+
+  async searchFundings(
+    params: KnowledgeFundingSearchParams,
+  ): Promise<KnowledgeFundingSearchResponse> {
+    await this.wait();
+    const scenario = this.throwIfNeeded(params.query ?? "");
+    if (scenario === "zero_results") return { results: [] };
+    const query = (params.query ?? "").trim().toLowerCase();
+    const matches = query
+      ? MOCK_FUNDINGS.filter((funding) =>
+        `${funding.id} ${funding.name}`.toLowerCase().includes(query),
+      )
+      : MOCK_FUNDINGS;
+    const offset = params.offset ?? 0;
+    const limit = params.limit ?? 20;
+    return { results: matches.slice(offset, offset + limit) };
+  }
+
+  async searchBySubject(
+    subject: string,
+    offset = 0,
+    limit = 10,
+  ): Promise<KnowledgeSubjectSearchResponse> {
+    const response = await this.search({
+      query: subject,
+      topK: limit,
+      offset,
+      yearFrom: null,
+      yearTo: null,
+      venue: [],
+      author: [],
+      keyword: [],
+      subject: [],
+    });
+    return { results: response.results, total: response.results.length };
+  }
+
+  async searchByFunding(funding: string, topK = 10): Promise<KnowledgeSearchResponse> {
+    return this.search({
+      query: funding,
+      topK,
+      yearFrom: null,
+      yearTo: null,
+      venue: [],
+      author: [],
+      keyword: [],
+      subject: [],
+    });
   }
 
   async graph(paperId: string): Promise<KnowledgeGraph> {

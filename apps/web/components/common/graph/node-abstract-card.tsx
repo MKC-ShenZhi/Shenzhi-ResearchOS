@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Quote } from "lucide-react";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { paperHref } from "@/lib/navigation/paper";
+import { PaperReadBadgeForPaper } from "@/features/knowledge/papers/components/paper-read-badge";
 import type { GraphNode } from "@/types";
 
 /** 右栏 —— 选中节点论文的摘要卡(默认 origin) */
@@ -13,6 +14,7 @@ export function NodeAbstractCard({ node }: { node: GraphNode }) {
       <h2 className="text-[15px] font-bold leading-snug text-ink">
         {node.title}
       </h2>
+      {node.paperId && <PaperReadBadgeForPaper paperId={node.paperId} />}
       <p className="text-xs text-muted">{node.authors}</p>
       <p className="flex items-center gap-3 text-xs text-faint">
         <span>

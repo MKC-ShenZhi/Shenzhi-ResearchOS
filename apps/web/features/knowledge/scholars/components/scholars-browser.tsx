@@ -1,108 +1,197 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import { Network, Search } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Search, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { useClearSearchRestoration } from "@/hooks/use-search-restoration";
+import { knowledgeQueryRetry } from "../../retry";
+import { SCHOLAR_BATCH_SIZE, nextScholarOffset } from "../browse-pagination";
+import { useScholarProvider } from "../provider";
 import { ScholarCard } from "./scholar-card";
-import { DirectionFilter } from "./direction-filter";
-import { useDebounce } from "@/hooks/use-debounce";
-import { scholars } from "@/lib/data/scholars";
-import { cn } from "@/lib/utils";
+import { DemoBadge, ScholarError, ScholarLoading } from "./profile-parts";
 
-const SORTS = [
-  { key: "top", label: "Top 引用" },
-  { key: "recent", label: "近期活跃" },
-  { key: "followed", label: "已关注" },
-];
-
-/** 学者浏览区 —— 搜索防抖过滤 + 排序切换(README 5.2 交互增强) */
 export function ScholarsBrowser() {
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState("top");
-  const [direction, setDirection] = useState<string | null>(null);
-  const debouncedQuery = useDebounce(query, 300);
+  const router = useRouter();
+  const clearRestoration = useClearSearchRestoration("/knowledge/scholars");
+  const searchParams = useSearchParams();
+  const committedQuery = searchParams.get("q")?.trim() ?? "";
+  const returnTo = useCurrentInternalPath();
+  const provider = useScholarProvider();
+  const [queryDraft, setQueryDraft] = useState({
+    source: committedQuery,
+    value: committedQuery,
+  });
+  const query =
+    queryDraft.source === committedQuery ? queryDraft.value : committedQuery;
+  const setQuery = (value: string) =>
+    setQueryDraft({ source: committedQuery, value });
+  const canLoad = Boolean(committedQuery || provider.supportsBrowse);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const {
+    data, isPending, isError, isFetching, isFetchingNextPage,
+    isFetchNextPageError, hasNextPage, fetchNextPage, refetch,
+  } = useInfiniteQuery({
+    queryKey: ["scholars-v2", provider.cacheKey, "browse", committedQuery],
+    enabled: canLoad,
+    retry: knowledgeQueryRetry,
+    staleTime: 120_000,
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) =>
+      provider.search(committedQuery, signal, { limit: SCHOLAR_BATCH_SIZE, offset: pageParam }),
+    getNextPageParam: nextScholarOffset,
+  });
+  const scholarsById = new Map(
+    data?.pages.flatMap((batch) => batch.items.map((scholar) => [scholar.scholar_id, scholar] as const)),
+  );
+  const total = data?.pages[0]?.total;
+  const shouldLoadSecondBatch = !committedQuery && data?.pages.length === 1;
 
-  const filtered = useMemo(() => {
-    const q = debouncedQuery.trim().toLowerCase();
-    let list = scholars;
-    if (direction) list = list.filter((s) => s.tags.includes(direction));
-    if (sort === "followed") list = list.filter((s) => s.followed);
-    if (q) {
-      list = list.filter((s) =>
-        [s.nameCn, s.nameEn, s.affiliation, ...s.tags]
-          .join(" ")
-          .toLowerCase()
-          .includes(q),
-      );
+  useEffect(() => {
+    if (!hasNextPage || isFetching || isFetchNextPageError) return;
+    if (shouldLoadSecondBatch) {
+      void fetchNextPage({ cancelRefetch: false });
+      return;
     }
-    return list;
-  }, [debouncedQuery, direction, sort]);
+
+    const target = loadMoreRef.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) void fetchNextPage({ cancelRefetch: false });
+    }, { rootMargin: "0px 0px 160px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetching, isFetchNextPageError, shouldLoadSecondBatch]);
+
+  function navigate(value: string) {
+    const next = new URLSearchParams();
+    // 保留预览主题，其余搜索状态由本功能管理。
+    const theme = searchParams.get("theme");
+    if (theme) next.set("theme", theme);
+    const normalized = value.trim();
+    if (!normalized) clearRestoration();
+    else next.set("q", normalized);
+    const serialized = next.toString();
+    router.push(`/knowledge/scholars${serialized ? `?${serialized}` : ""}`, {
+      scroll: false,
+    });
+    setQueryDraft({ source: normalized, value: normalized });
+  }
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    navigate(query);
+  }
+  function clear() {
+    setQuery("");
+    navigate("");
+  }
 
   return (
-    <>
-      <DirectionFilter activeDirection={direction} onDirectionChange={setDirection} />
-      <div className="min-w-0 flex-1 space-y-5 px-8 py-6">
-      {/* 顶部横幅:探索学者关系图谱 */}
-      <section className="flex items-center justify-between rounded-2xl bg-card px-8 py-7 shadow-card">
-        <div className="flex items-center gap-4">
-          <span className="flex size-12 items-center justify-center rounded-2xl bg-primary-soft">
-            <Network className="size-6 text-primary" />
-          </span>
-          <div>
-            <p className="text-[15px] font-semibold text-ink">学者关系图谱</p>
-            <p className="mt-0.5 text-xs text-muted">
-              从合作网络与引用脉络中发现关键学者
-            </p>
+    <div className="mx-auto w-full max-w-[1200px] px-5 py-7 sm:px-8 lg:py-8 xl:px-12">
+      <header className="flex flex-wrap items-start justify-between gap-5">
+        <div>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-semibold tracking-tight text-ink">
+              学者库
+            </h1>
+            <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted">
+              Researchers
+            </span>
           </div>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            从学者出发，了解研究与成果。
+          </p>
         </div>
-        <Link href="/knowledge/scholars/graph" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-primary/40 px-4 text-[13px] font-medium text-primary transition-colors hover:bg-primary-soft">
-          探索学者关系图谱
-          <span aria-hidden>→</span>
-        </Link>
-      </section>
-
-      {/* 搜索 + 排序 */}
-      <div className="flex items-center gap-3">
-        <div className="relative w-full max-w-[420px]">
-          <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-faint" />
+        {provider.isDemo ? <DemoBadge /> : null}
+      </header>
+      <form
+        onSubmit={submit}
+        role="search"
+        className="mt-5 flex items-center gap-2 rounded-lg border border-line bg-card p-1.5 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 sm:gap-3"
+      >
+        <Search
+          aria-hidden="true"
+          className="ml-2 size-5 shrink-0 text-muted sm:ml-3"
+        />
+        <label className="min-w-0 flex-1">
+          <span className="sr-only">搜索姓名、别名或机构</span>
           <input
+            type="search"
+            maxLength={200}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索学者姓名、机构或研究关键词…"
-            className="h-10 w-full rounded-xl border border-line bg-card pl-10 pr-4 text-sm text-ink outline-none transition-colors placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索姓名、别名或机构"
+            className="h-10 w-full min-w-0 bg-transparent text-sm text-ink outline-none placeholder:text-faint [&::-webkit-search-cancel-button]:hidden"
           />
+        </label>
+        {query || committedQuery ? (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="清空搜索"
+            onClick={clear}
+          >
+            <X />
+          </Button>
+        ) : null}
+        <Button type="submit" disabled={!query.trim()} className="h-10 px-4 sm:px-6">
+          搜索
+        </Button>
+      </form>
+      <div className="mb-4 mt-6 flex items-center justify-between gap-3 border-b border-line pb-3">
+        <h2 className="flex items-center gap-2 text-sm font-medium text-ink">
+          {committedQuery ? "搜索结果" : provider.supportsBrowse ? "浏览学者" : "搜索学者"}
+        </h2>
+        {committedQuery && total != null ? (
+          <p aria-live="polite" className="text-xs text-muted">共 {total.toLocaleString("zh-CN")} 位</p>
+        ) : null}
+      </div>
+      {!canLoad ? (
+        <div role="status" className="rounded-2xl border border-dashed border-line p-12 text-center text-sm text-muted">
+          输入中文或英文姓名，搜索真实学者。当前数据源暂不支持无关键词浏览。
         </div>
-        <div className="ml-auto flex gap-2">
-          {SORTS.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => setSort(s.key)}
-              className={cn(
-                "h-9 cursor-pointer rounded-full border px-4 text-[13px] transition-colors",
-                sort === s.key
-                  ? "border-primary font-medium text-primary"
-                  : "border-line bg-card text-muted hover:text-ink-2",
-              )}
-            >
-              {s.label}
-            </button>
+      ) : isPending && !data ? (
+        <ScholarLoading cards />
+      ) : isError && !data ? (
+        <ScholarError onRetry={() => void refetch()} />
+      ) : scholarsById.size === 0 ? (
+        <div className="rounded-2xl border border-dashed border-line bg-card/50 px-5 py-16 text-center">
+          <Search className="mx-auto size-7 text-faint" />
+          <p className="mt-4 break-words text-sm font-medium text-ink">
+            {committedQuery ? `未找到与「${committedQuery}」匹配的学者` : "暂无可浏览的学者"}
+          </p>
+          {committedQuery ? (
+            <Button variant="outline" className="mt-5" onClick={clear}>清空搜索</Button>
+          ) : null}
+        </div>
+      ) : (
+        <div className="grid items-stretch gap-4 md:grid-cols-2">
+          {[...scholarsById.values()].map((scholar) => (
+            <ScholarCard
+              key={scholar.scholar_id}
+              scholar={scholar}
+              returnTo={returnTo}
+            />
           ))}
         </div>
-      </div>
-
-      {/* 双列卡片 */}
-      <div className="grid gap-5 xl:grid-cols-2">
-        {filtered.map((scholar, i) => (
-          <ScholarCard key={scholar.id} scholar={scholar} index={i} />
-        ))}
-      </div>
-      {filtered.length === 0 && (
-        <div className="rounded-2xl bg-card p-12 text-center text-sm text-faint shadow-card">
-          未找到匹配的学者
-        </div>
       )}
-      </div>
-    </>
+      {hasNextPage ? (
+        <div ref={loadMoreRef} className="mt-4 flex min-h-8 items-center justify-center" aria-live="polite">
+          {isFetchingNextPage ? <span className="text-sm text-muted">正在加载更多学者…</span> : null}
+          {isFetchNextPageError ? (
+            <Button variant="outline" size="sm" onClick={() => void fetchNextPage({ cancelRefetch: false })}>
+              加载失败，点击重试
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      <p className="mt-6 text-center text-xs leading-6 text-muted">
+        {provider.isDemo ? "人物、机构与学术统计均为虚构演示内容，未经知识底座验证。" : "数据来自知识底座；检索可能包含姓名片段匹配，请核对学者身份。未提供字段显示暂无数据。"}
+      </p>
+    </div>
   );
 }

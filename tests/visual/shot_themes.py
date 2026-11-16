@@ -2,10 +2,11 @@
 """日/夜模式对比截图:?theme=dark 由 layout 内联脚本识别"""
 import subprocess, os, sys, io, time
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-edge = r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
-node = r'C:\Program Files\nodejs\node.exe'
+from _tools import edge_path, node_path, out_dir
+edge = edge_path()
+node = node_path()
 cdp_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'shot-cdp.mjs')
-tmp = os.environ['TEMP']
+tmp = out_dir()
 base = 'http://localhost:3100'
 # 元组:(路径, 输出[, 等待文本]);带等待文本的走 CDP(shot-cdp.mjs),其余 Edge --screenshot
 shots = [

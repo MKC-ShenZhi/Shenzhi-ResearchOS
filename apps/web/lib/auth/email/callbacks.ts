@@ -16,6 +16,7 @@ export interface BetterAuthEmailLinkCallbackData {
   user: User;
   url: string;
   token: string;
+  newEmail?: string;
 }
 
 export interface BetterAuthEmailOtpCallbackData {
@@ -34,7 +35,11 @@ export function createBetterAuthEmailCallbacks(
     ) => {
       void _request;
       await requireAuthEmailProvider(provider).send(
-        buildVerificationEmailMessage({ user: data.user, url: data.url }),
+        buildVerificationEmailMessage({
+          user: data.user,
+          url: data.url,
+          newEmail: data.newEmail,
+        }),
       );
     },
     sendResetPassword: async (

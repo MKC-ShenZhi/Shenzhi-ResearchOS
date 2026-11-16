@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { scholarDetail } from "@/lib/data/scholars";
+import { scholarDetail } from "@/features/knowledge/data-scholars";
 
 const TABS = ["Top 引用", "近期热门", "最新"];
 

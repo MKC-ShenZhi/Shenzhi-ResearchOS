@@ -6,7 +6,7 @@ import {
   drEvents,
   drPlan,
   drReport,
-} from "@/lib/data/deep-research";
+} from "@/features/deep-research/data";
 import type { DRStepEvent } from "@/types";
 
 /** 计划节/报告节三态:待生成 → 生成中 → 已生成 */

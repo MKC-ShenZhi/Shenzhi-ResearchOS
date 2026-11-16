@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="620" viewBox="0 0 1440 620" role="img" aria-labelledby="title description">
+  <title id="title">知识库总览卡片等尺寸布局预览</title>
+  <desc id="description">主题库和项目专利基金库在桌面端并列为等宽等高卡片。主题库左侧展示主题标签，右侧展示四个主题论文数量的柱状图。</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#18385a" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .title { fill:#102a43; font:700 23px 'Microsoft YaHei','Noto Sans SC',sans-serif; }
+      .body { fill:#60758d; font:400 15px 'Microsoft YaHei','Noto Sans SC',sans-serif; }
+      .section { fill:#102a43; font:700 16px 'Microsoft YaHei','Noto Sans SC',sans-serif; }
+      .small { fill:#71849a; font:400 13px 'Microsoft YaHei','Noto Sans SC',sans-serif; }
+      .chip { fill:#087e7a; font:500 14px 'Microsoft YaHei','Noto Sans SC',sans-serif; }
+      .stat { fill:#102a43; font:700 42px 'Microsoft YaHei','Noto Sans SC',sans-serif; }
+      .count { fill:#087e7a; font:700 13px 'Microsoft YaHei','Noto Sans SC',sans-serif; }
+      .axis { fill:#71849a; font:400 11px 'Microsoft YaHei','Noto Sans SC',sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="620" fill="#f5f8fc"/>
+  <text x="48" y="36" class="section">知识库总览 · 预计桌面端布局</text>
+  <text x="1392" y="36" text-anchor="end" class="small">主题库与项目专利基金库统一卡片尺寸</text>
+
+  <rect x="48" y="68" width="656" height="500" rx="28" fill="#ffffff" filter="url(#shadow)"/>
+  <rect x="736" y="68" width="656" height="500" rx="28" fill="#ffffff" filter="url(#shadow)"/>
+
+  <!-- Theme library header -->
+  <rect x="80" y="100" width="68" height="68" rx="20" fill="#e5f4f2"/>
+  <path d="M99 124l17 17m-11-23 16 16-8 8-16-16z" fill="none" stroke="#087e7a" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="107" cy="127" r="2.5" fill="#087e7a"/>
+  <text x="168" y="129" class="title">主题库</text>
+  <text x="168" y="156" class="body">按科研主题探索相关论文</text>
+  <path d="M666 124l7 7-7 7" fill="none" stroke="#71849a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Theme library content: left list -->
+  <text x="80" y="220" class="section">热门研究主题</text>
+  <text x="80" y="244" class="small">来自知识底座的真实主题</text>
+  <rect x="80" y="270" width="112" height="40" rx="10" fill="#e5f4f2"/>
+  <text x="136" y="296" text-anchor="middle" class="chip">大语言模型</text>
+  <rect x="204" y="270" width="96" height="40" rx="10" fill="#e5f4f2"/>
+  <text x="252" y="296" text-anchor="middle" class="chip">模型压缩</text>
+  <rect x="80" y="322" width="96" height="40" rx="10" fill="#e5f4f2"/>
+  <text x="128" y="348" text-anchor="middle" class="chip">低秩压缩</text>
+  <rect x="188" y="322" width="112" height="40" rx="10" fill="#e5f4f2"/>
+  <text x="244" y="348" text-anchor="middle" class="chip">论证与辩论</text>
+
+  <!-- Theme library content: vertical chart -->
+  <text x="360" y="220" class="section">各主题论文数量</text>
+  <text x="360" y="244" class="small">按主题匹配论文总量排序</text>
+  <line x1="360" y1="438" x2="672" y2="438" stroke="#dce6ef" stroke-width="1"/>
+  <text x="396" y="270" text-anchor="middle" class="count">1,785</text>
+  <rect x="374" y="282" width="44" height="156" rx="10" fill="#d9e9ed"/>
+  <rect x="374" y="282" width="44" height="156" rx="10" fill="#31958f"/>
+  <text x="474" y="270" text-anchor="middle" class="count">104</text>
+  <rect x="452" y="282" width="44" height="156" rx="10" fill="#d9e9ed"/>
+  <rect x="452" y="399" width="44" height="39" rx="10" fill="#31958f"/>
+  <text x="552" y="270" text-anchor="middle" class="count">17</text>
+  <rect x="530" y="282" width="44" height="156" rx="10" fill="#d9e9ed"/>
+  <rect x="530" y="407" width="44" height="31" rx="10" fill="#31958f"/>
+  <text x="630" y="270" text-anchor="middle" class="count">2</text>
+  <rect x="608" y="282" width="44" height="156" rx="10" fill="#d9e9ed"/>
+  <rect x="608" y="414" width="44" height="24" rx="10" fill="#31958f"/>
+  <text x="396" y="458" text-anchor="middle" class="axis">大语言模型</text>
+  <text x="474" y="458" text-anchor="middle" class="axis">论证与辩论</text>
+  <text x="552" y="458" text-anchor="middle" class="axis">模型压缩</text>
+  <text x="630" y="458" text-anchor="middle" class="axis">低秩压缩</text>
+
+  <!-- Research assets header -->
+  <rect x="768" y="100" width="68" height="68" rx="20" fill="#fff4cf"/>
+  <path d="M785 132h34m-29-7 12-7 12 7m-22 7v16m8-16v16m8-16v16m-23 4h30" fill="none" stroke="#22313f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="856" y="129" class="title">项目专利基金库</text>
+  <text x="856" y="156" class="body">按项目、专利或基金探索关联科研成果</text>
+  <path d="M1354 124l7 7-7 7" fill="none" stroke="#71849a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Research assets content -->
+  <rect x="768" y="204" width="592" height="138" rx="20" fill="#eef6fb"/>
+  <text x="792" y="240" class="body">资产总量</text>
+  <text x="792" y="300" class="stat">7,353</text>
+  <text x="792" y="326" class="small">统一 Funding 资产，不拆分项目、专利、基金类型</text>
+  <text x="768" y="390" class="section">资产信息</text>
+  <text x="1360" y="390" text-anchor="end" class="small">知识底座实时返回</text>
+  <rect x="768" y="408" width="592" height="50" rx="14" fill="#fff8dc"/>
+  <text x="792" y="439" class="body">Google Research</text>
+  <text x="1336" y="439" text-anchor="end" class="small">272 篇论文</text>
+  <rect x="768" y="470" width="592" height="50" rx="14" fill="#fff8dc"/>
+  <text x="792" y="501" class="body">National Natural Science Foundation of China</text>
+  <text x="1336" y="501" text-anchor="end" class="small">30 篇论文</text>
+  <text x="768" y="542" class="small">项目、专利暂无独立实体接口，暂不展示虚构资产。</text>
+
+  <path d="M48 588h1344" stroke="#dce6ef" stroke-width="1"/>
+  <text x="48" y="610" class="small">预览说明：两张主卡片均为 656 × 500 px；真实页面以响应式网格实现，窄屏自动改为单列。</text>
+</svg>

@@ -1,0 +1,27 @@
+{
+  "evaluated_at": "2026-10-26",
+  "command": "python -m app.services.recommendation.evaluation --judgments evaluation/recommendation-judgments/robot-visuomotor-v0.json --k 3 5 10",
+  "evaluated_cases": 1,
+  "candidate_pool_size": 13,
+  "relevant_candidates": 6,
+  "candidate_set_policy": "identical_per_case; retrieved prefixes followed by stable-ID remainder",
+  "provisional": true,
+  "metrics": {
+    "global_discovery": {
+      "@3": {"recall": 0.0, "ndcg": 0.0},
+      "@5": {"recall": 0.0, "ndcg": 0.0},
+      "@10": {"recall": 0.833333, "ndcg": 0.482681}
+    },
+    "explicit_topic": {
+      "@3": {"recall": 0.5, "ndcg": 1.0},
+      "@5": {"recall": 0.833333, "ndcg": 1.0},
+      "@10": {"recall": 1.0, "ndcg": 1.0}
+    },
+    "content-v1": {
+      "@3": {"recall": 0.5, "ndcg": 1.0},
+      "@5": {"recall": 0.833333, "ndcg": 1.0},
+      "@10": {"recall": 1.0, "ndcg": 1.0}
+    }
+  },
+  "interpretation": "Provisional smoke benchmark only: explicit_topic and content-v1 both place the six judged-positive candidates before the cutoff-10 remainder; global_discovery is weak in the first five but recovers five positives by rank 10. This is not evidence of production algorithm quality or superiority."
+}

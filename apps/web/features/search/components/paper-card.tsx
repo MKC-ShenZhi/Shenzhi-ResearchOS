@@ -1,130 +1,104 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { ArrowRight, Bookmark, Plus, ThumbsUp, TrendingUp, Users } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CollectionPicker } from "@/features/knowledge/papers/components/collection-picker";
+import { PaperCardLayout } from "@/features/knowledge/papers/components/paper-card-layout";
+import { PaperCollectorCount } from "@/features/knowledge/interactions/components/paper-collector-count";
+import { PaperLikeButton } from "@/features/knowledge/interactions/components/paper-like-button";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { paperHref } from "@/lib/navigation/paper";
-import { useUserPreferences } from "@/stores/user-preferences";
 import type { FeedPaper } from "@/types";
+import { useAuth } from "@/components/auth/auth-provider";
+import { recordPaperBehavior } from "@/clients/backend/behavior";
 
-const VENUE_VARIANT = { violet: "violet", amber: "amber", green: "green" } as const;
-
-/** 论文卡片 —— 对应主发现页 SVG 的 Feed 卡片 */
+/** 首页 Feed 卡片：发现 / 推荐的曝光与点击埋点，版式见 PaperCardLayout。 */
 export function PaperCard({
   paper,
   index,
-  layout = "feed",
 }: {
   paper: FeedPaper;
   index: number;
-  layout?: "feed" | "explore";
 }) {
   const returnTo = useCurrentInternalPath();
-  const { likedPapers, bookmarkedPapers, toggleLike, toggleBookmark } =
-    useUserPreferences();
-  const liked = !!likedPapers[paper.id];
-  const bookmarked = !!bookmarkedPapers[paper.id];
+  const { session } = useAuth();
+  const userId = session?.user.id ?? "";
+  const articleRef = useRef<HTMLElement>(null);
+  const impressionSent = useRef(false);
+  const detailHref = paperHref(paper.id, { mode: "create", source: returnTo });
+  const source = paper.recommendationRequestId ? "recommendation" : "discovery";
+  const trackClick = () => {
+    if (!userId) return;
+    recordPaperBehavior({
+      userId,
+      eventType: source === "recommendation" ? "recommendation_click" : "paper_click",
+      paperId: paper.id, source,
+      requestId: paper.recommendationRequestId,
+      rank: paper.recommendationRank,
+    });
+  };
+
+  useEffect(() => {
+    const element = articleRef.current;
+    if (!element || !userId || impressionSent.current) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let visibleEnough = false;
+    const clearTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+    };
+    const updateTimer = () => {
+      if (!visibleEnough || document.visibilityState !== "visible") {
+        clearTimer();
+        return;
+      }
+      if (timer || impressionSent.current) return;
+      timer = setTimeout(() => {
+        timer = undefined;
+        if (document.visibilityState !== "visible" || !visibleEnough || impressionSent.current) return;
+        impressionSent.current = true;
+        recordPaperBehavior({
+          userId,
+          eventType: source === "recommendation" ? "recommendation_impression" : "paper_impression",
+          paperId: paper.id, source,
+          requestId: paper.recommendationRequestId,
+          rank: paper.recommendationRank,
+        });
+      }, 1000);
+    };
+    const observer = new IntersectionObserver(([entry]) => {
+      visibleEnough = Boolean(entry && entry.intersectionRatio >= 0.5);
+      updateTimer();
+    }, { threshold: 0.5 });
+    observer.observe(element);
+    document.addEventListener("visibilitychange", updateTimer);
+    return () => { observer.disconnect(); document.removeEventListener("visibilitychange", updateTimer); clearTimer(); };
+  }, [paper.id, paper.recommendationRank, paper.recommendationRequestId, userId, source]);
 
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.08 }}
-      className="rounded-2xl bg-card p-6 shadow-card"
-    >
-      <div className="flex gap-6">
-        <div className="min-w-0 flex-1">
-          {/* 元信息行 */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-            <span className="text-faint">{paper.date}</span>
-            <Badge variant={VENUE_VARIANT[paper.venueTone]}>{paper.venue}</Badge>
-            <span className="flex items-center gap-1.5 text-muted">
-              <Users className="size-3.5 text-faint" />
-              {paper.authors}
-            </span>
-          </div>
-
-          {/* 标题 */}
-          <Link href={paperHref(paper.id, { mode: "create", source: returnTo })} className="group mt-2 block">
-            <h3 className="text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-primary">
-              {paper.title}
-            </h3>
+    <PaperCardLayout
+      paper={paper}
+      index={index}
+      detailHref={detailHref}
+      onNavigate={trackClick}
+      behaviorSource={source}
+      articleRef={articleRef}
+      deferOffscreen
+      actions={
+        <>
+          <PaperLikeButton paperId={paper.id} />
+          <PaperCollectorCount paperId={paper.id} />
+          <CollectionPicker paperId={paper.id} />
+          <Link href={detailHref} onClick={trackClick}>
+            <Button size="sm" className="h-9 rounded-lg px-4 text-[13px]">
+              立即阅读
+              <ArrowRight className="size-3.5" />
+            </Button>
           </Link>
-
-          {/* 摘要 */}
-          <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted">
-            {paper.abstract}
-          </p>
-
-          {/* AI 解读入口 */}
-          <Link
-            href={paperHref(paper.id, { mode: "create", source: returnTo })}
-            className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
-          >
-            <Plus className="size-3.5" />
-            {paper.aiLink}
-            <ArrowRight className="size-3.5" />
-          </Link>
-
-          {/* 底部操作行 */}
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-x-4 gap-y-1">
-              {paper.tags.map((tag) => (
-                <span key={tag} className="text-[13px] text-muted">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={() => toggleLike(paper.id)}
-                className={
-                  "flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] transition-colors " +
-                  (liked ? "text-primary" : "text-muted hover:bg-chip")
-                }
-              >
-                <ThumbsUp className="size-4" fill={liked ? "currentColor" : "none"} />
-                {paper.likes !== undefined && paper.likes + (liked ? 1 : 0)}
-              </button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => toggleBookmark(paper.id)}
-                className={bookmarked ? "text-primary" : undefined}
-              >
-                <Bookmark className="size-4" fill={bookmarked ? "currentColor" : "none"} />
-                收藏
-              </Button>
-              {layout === "feed" && (
-                <Link href={paperHref(paper.id, { mode: "create", source: returnTo })}>
-                  <Button size="sm" className="h-9 rounded-lg px-4 text-[13px]">
-                    立即阅读
-                    <ArrowRight className="size-3.5" />
-                  </Button>
-                </Link>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {layout === "feed" && (
-          <div className="relative hidden w-[200px] shrink-0 md:block">
-            {paper.citations !== undefined && (
-              <div className="absolute -top-2 right-2 z-10 flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs text-muted shadow-card">
-                <TrendingUp className="size-3 text-primary" />
-                引用 {paper.citations}
-              </div>
-            )}
-            <div className="flex h-full min-h-[128px] items-center justify-center rounded-xl bg-chip text-sm text-faint">
-              {paper.thumb}
-            </div>
-          </div>
-        )}
-      </div>
-    </motion.article>
+        </>
+      }
+    />
   );
 }

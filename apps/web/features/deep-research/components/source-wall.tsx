@@ -1,4 +1,4 @@
-import { drReport } from "@/lib/data/deep-research";
+import { drReport } from "@/features/deep-research/data";
 
 /** 来源墙 —— 已收集来源 chips,hover 显示完整标题与出处 */
 export function SourceWall({ count }: { count: number }) {

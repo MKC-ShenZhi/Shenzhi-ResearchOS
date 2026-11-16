@@ -1,0 +1,85 @@
+<svg width="1120" height="560" viewBox="0 0 1120 560" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">论文库卡片样式方案</title>
+  <desc id="desc">保留论文库名称和全部论文数量，突出知识底座总量，并在右侧展示最近浏览状态与快捷入口。</desc>
+
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="1120" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4F8FC"/>
+      <stop offset="1" stop-color="#EAF2F9"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="64" y1="174" x2="580" y2="410" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#174E82"/>
+      <stop offset="1" stop-color="#0F355A"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="280" y1="174" x2="570" y2="410" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6CC4C0" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#6CC4C0" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="1120" height="560" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#8FA7BB" flood-opacity=".16"/>
+    </filter>
+    <filter id="smallShadow" x="0" y="0" width="520" height="160" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#6A839A" flood-opacity=".11"/>
+    </filter>
+    <clipPath id="heroClip">
+      <rect x="64" y="174" width="516" height="296" rx="28"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1120" height="560" fill="url(#page)"/>
+  <rect x="32" y="24" width="1056" height="512" rx="34" fill="#FFFFFF" filter="url(#shadow)"/>
+
+  <!-- Header: preserve the product name and existing navigation affordance. -->
+  <rect x="64" y="56" width="56" height="56" rx="18" fill="#E6F1F8"/>
+  <path d="M78 70.5H91.5C97.299 70.5 102 75.201 102 81V98.5C98.962 96.185 95.203 95 91.35 95H78V70.5Z" stroke="#175283" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M78 70.5V98.5C81.182 96.185 84.872 95 88.65 95H91.35C95.203 95 98.962 96.185 102 98.5" stroke="#175283" stroke-width="2.5" stroke-linejoin="round"/>
+  <text x="140" y="82" fill="#0B2239" font-family="Inter, Microsoft YaHei, sans-serif" font-size="26" font-weight="700">论文库</text>
+  <text x="140" y="108" fill="#66819A" font-family="Inter, Microsoft YaHei, sans-serif" font-size="15">检索和探索学术论文，连接论文、主题与引用脉络</text>
+  <path d="M1038 78L1045 85L1038 92" stroke="#657C91" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Main content: one strong fact and one useful empty state. -->
+  <rect x="64" y="174" width="516" height="296" rx="28" fill="url(#hero)"/>
+  <g clip-path="url(#heroClip)">
+    <circle cx="493" cy="208" r="190" fill="url(#glow)"/>
+    <path d="M390 209C451 173 524 177 604 223" stroke="#9DE1DA" stroke-opacity=".2" stroke-width="1.5"/>
+    <path d="M368 255C448 218 531 228 608 279" stroke="#9DE1DA" stroke-opacity=".16" stroke-width="1.5"/>
+    <path d="M404 305C475 279 542 293 596 335" stroke="#9DE1DA" stroke-opacity=".13" stroke-width="1.5"/>
+    <circle cx="469" cy="216" r="5" fill="#9DE1DA" fill-opacity=".7"/>
+    <circle cx="532" cy="258" r="4" fill="#9DE1DA" fill-opacity=".5"/>
+    <circle cx="449" cy="318" r="4" fill="#9DE1DA" fill-opacity=".4"/>
+    <circle cx="562" cy="335" r="3" fill="#9DE1DA" fill-opacity=".35"/>
+  </g>
+  <text x="96" y="218" fill="#B9D2E4" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">知识底座可检索论文</text>
+  <text x="94" y="302" fill="#FFFFFF" font-family="Inter, Microsoft YaHei, sans-serif" font-size="68" font-weight="750" letter-spacing="-2">536,241</text>
+  <rect x="98" y="329" width="92" height="28" rx="14" fill="#FFFFFF" fill-opacity=".13" stroke="#B8E3DE" stroke-opacity=".28"/>
+  <text x="144" y="348" text-anchor="middle" fill="#D7F2EE" font-family="Inter, Microsoft YaHei, sans-serif" font-size="13" font-weight="600">全部论文</text>
+  <text x="96" y="392" fill="#B9D2E4" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">当前已入库且可检索的论文总量</text>
+  <path d="M96 426H254" stroke="#75C9C2" stroke-width="3" stroke-linecap="round"/>
+
+  <rect x="612" y="174" width="444" height="206" rx="28" fill="#F5F9FC" stroke="#DCE8F0"/>
+  <text x="644" y="218" fill="#0B2239" font-family="Inter, Microsoft YaHei, sans-serif" font-size="18" font-weight="700">最近浏览</text>
+  <text x="1024" y="218" text-anchor="end" fill="#7B91A5" font-family="Inter, Microsoft YaHei, sans-serif" font-size="13">当前账号</text>
+  <circle cx="836" cy="278" r="31" fill="#E3F1F6"/>
+  <path d="M826 271H846M829 271V291M843 271V291M825 291H847M831 266L836 261L841 266" stroke="#2B7895" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="836" y="330" text-anchor="middle" fill="#506B82" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">暂无当前账号的最近浏览记录</text>
+  <rect x="770" y="350" width="132" height="34" rx="17" fill="#175283"/>
+  <text x="836" y="372" text-anchor="middle" fill="#FFFFFF" font-family="Inter, Microsoft YaHei, sans-serif" font-size="13" font-weight="600">去论文检索</text>
+
+  <!-- Non-numeric shortcuts add hierarchy without inventing statistics. -->
+  <text x="612" y="424" fill="#0B2239" font-family="Inter, Microsoft YaHei, sans-serif" font-size="15" font-weight="700">快速进入</text>
+  <g filter="url(#smallShadow)">
+    <rect x="612" y="442" width="132" height="58" rx="18" fill="#FFFFFF"/>
+    <rect x="756" y="442" width="132" height="58" rx="18" fill="#FFFFFF"/>
+    <rect x="900" y="442" width="156" height="58" rx="18" fill="#FFFFFF"/>
+  </g>
+  <circle cx="638" cy="471" r="14" fill="#E6F1F8"/>
+  <path d="M633 471H643M638 466V476M644 477L649 482" stroke="#175283" stroke-width="1.8" stroke-linecap="round"/>
+  <text x="661" y="476" fill="#27465F" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">论文检索</text>
+  <circle cx="782" cy="471" r="14" fill="#E8F4F1"/>
+  <circle cx="778" cy="468" r="3" fill="#257C77"/><circle cx="787" cy="475" r="3" fill="#257C77"/>
+  <path d="M780 470L785 473" stroke="#257C77" stroke-width="1.6"/>
+  <text x="805" y="476" fill="#27465F" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">关系图谱</text>
+  <circle cx="926" cy="471" r="14" fill="#F0ECFA"/>
+  <path d="M920 466H932V480H920V466ZM923 463H929" stroke="#7255A5" stroke-width="1.8" stroke-linejoin="round"/>
+  <text x="949" y="476" fill="#27465F" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">我的文献</text>
+</svg>

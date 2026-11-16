@@ -59,6 +59,7 @@ export function PaperPdfViewer({
   zoom,
   setZoom,
   onViewerStateChange,
+  onReachedEnd,
 }: {
   paperId: string;
   pdfUrl: string | null;
@@ -66,6 +67,7 @@ export function PaperPdfViewer({
   zoom: number;
   setZoom: Dispatch<SetStateAction<number>>;
   onViewerStateChange: (state: ViewerState) => void;
+  onReachedEnd: () => void;
 }) {
   const externalUrl = paperExternalUrl(pdfUrl);
   const [state, setState] = useState<ViewerState>(() => {
@@ -88,7 +90,10 @@ export function PaperPdfViewer({
     const element = contentRef.current;
     if (!element || (state !== "loading" && state !== "rendering" && state !== "ready")) return;
 
-    const updateWidth = () => setContentWidth(element.clientWidth);
+    const updateWidth = () => {
+      const nextWidth = element.clientWidth;
+      if (nextWidth > 0) setContentWidth(nextWidth);
+    };
     updateWidth();
     const observer = new ResizeObserver(updateWidth);
     observer.observe(element);
@@ -127,6 +132,10 @@ export function PaperPdfViewer({
 
   const handleDocumentLoad = useCallback(({ numPages: loadedPages }: { numPages: number }) => {
     setNumPages(loadedPages);
+    updateState("rendering");
+  }, [updateState]);
+
+  const handleFirstPageReady = useCallback(() => {
     updateState("ready");
   }, [updateState]);
 
@@ -142,12 +151,12 @@ export function PaperPdfViewer({
   return (
     <section
       aria-label={`${title} PDF 阅读区`}
-      className="flex h-[75dvh] min-h-96 flex-col overflow-hidden bg-background lg:h-full"
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-chip/60"
     >
       {showViewer && (
         <div
           ref={contentRef}
-          className="relative min-h-0 flex-1 overflow-auto bg-background/70 p-4"
+          className="relative min-h-0 flex-1 overflow-auto p-4"
         >
           {(state === "loading" || state === "rendering") && (
             <div className="pointer-events-none absolute inset-x-0 top-4 z-10 flex justify-center">
@@ -156,15 +165,20 @@ export function PaperPdfViewer({
               </span>
             </div>
           )}
-          <PdfDocumentView
-            key={`${paperId}-${retryKey}`}
-            file={pdfPath}
-            numPages={numPages}
-            width={pageWidth}
-            className={cn(zoom > 1 ? "items-start" : "items-center")}
-            onLoadSuccess={handleDocumentLoad}
-            onLoadError={handleDocumentError}
-          />
+          {contentWidth > 0 && (
+            <PdfDocumentView
+              key={`${paperId}-${retryKey}`}
+              file={pdfPath}
+              numPages={numPages}
+              width={pageWidth}
+              scrollRootRef={contentRef}
+              className={cn(zoom > 1 ? "items-start" : "items-center")}
+              onLoadSuccess={handleDocumentLoad}
+              onLoadError={handleDocumentError}
+              onFirstPageReady={handleFirstPageReady}
+              onReachedEnd={onReachedEnd}
+            />
+          )}
         </div>
       )}
 

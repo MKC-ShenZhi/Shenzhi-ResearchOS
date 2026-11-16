@@ -1,0 +1,88 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import {
+  comingSoonRedirectPath,
+  isUnavailableFeatureHref,
+  isUnavailableFeatureRoute,
+} from "../../lib/feature-availability";
+
+const sidebar = readFileSync(
+  "components/common/layout/app-sidebar.tsx",
+  "utf8",
+);
+
+test("keeps currently released research routes available", () => {
+  const availableRoutes = [
+    "/",
+    "/knowledge",
+    "/knowledge/search",
+    "/knowledge/papers",
+    "/knowledge/scholars",
+    "/knowledge/topics",
+    "/knowledge/funding",
+    "/papers/paper-1",
+    "/papers/paper-1/graph",
+    "/submit",
+  ];
+
+  for (const pathname of availableRoutes) {
+    assert.equal(isUnavailableFeatureRoute(pathname), false, pathname);
+  }
+});
+
+test("blocks only the knowledge overview graph route", () => {
+  assert.equal(isUnavailableFeatureHref("/knowledge/graph"), true);
+  assert.equal(isUnavailableFeatureHref("/papers/paper-1/graph"), false);
+  assert.equal(isUnavailableFeatureHref("/knowledge/graph-preview"), false);
+});
+
+test("blocks projects and journal submission routes at every depth", () => {
+  for (const href of [
+    "/projects",
+    "/projects/demo",
+    "/projects/demo/settings",
+    "/submit/journals",
+    "/submit/journals/demo",
+  ]) {
+    assert.equal(isUnavailableFeatureHref(href), true, href);
+  }
+
+  assert.equal(isUnavailableFeatureHref("/projects-archive"), false);
+  assert.equal(isUnavailableFeatureHref("/submission-guide"), false);
+});
+
+test("allows only the 深知 AI page and Agent Session Chat route", () => {
+  assert.equal(isUnavailableFeatureHref("/agents"), false);
+  assert.equal(isUnavailableFeatureHref("/agents?session="), false);
+  assert.equal(isUnavailableFeatureHref("/agents?session=session-1"), false);
+  assert.equal(
+    isUnavailableFeatureHref("/agents?session=opaque%2Fid&launch=launch-1"),
+    false,
+  );
+
+  for (const href of [
+    "/agents/ask?session=session-1",
+    "/agents/deep-search",
+    "/agents/deep-research",
+    "/agents/deep-research/session-1",
+    "/agents/auto-research",
+    "/agents/auto-research/session-1",
+  ]) {
+    assert.equal(isUnavailableFeatureHref(href), true, href);
+  }
+});
+
+test("builds a one-time coming-soon notice redirect", () => {
+  assert.equal(comingSoonRedirectPath(), "/?notice=coming-soon");
+});
+
+test("sidebar hides unavailable navigation while preserving session history", () => {
+  assert.match(
+    sidebar,
+    /const availableSubNav = subNav\.filter\([\s\S]*?!isUnavailableFeatureHref\(item\.href\)/,
+  );
+  assert.match(sidebar, /if \(isUnavailableFeatureHref\(href\)\) return null;/);
+  assert.match(sidebar, /availableSubNav\.map/);
+  assert.match(sidebar, /<SidebarChatHistory collapsed=\{collapsed\} \/>/);
+});

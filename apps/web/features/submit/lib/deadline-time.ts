@@ -1,0 +1,123 @@
+import type { ConferenceEditionDto, ConferenceMilestoneDto, ConferenceTimelinePoint } from "../../../clients/backend/conferences";
+
+const SECOND = 1000;
+const MINUTE = 60 * SECOND;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+export interface Remaining {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+}
+
+/** Time left until `atMs`, clamped at zero. */
+export function remainingUntil(atMs: number, nowMs: number): Remaining {
+  const total = Math.max(0, atMs - nowMs);
+  return {
+    days: Math.floor(total / DAY),
+    hours: Math.floor((total % DAY) / HOUR),
+    minutes: Math.floor((total % HOUR) / MINUTE),
+    seconds: Math.floor((total % MINUTE) / SECOND),
+  };
+}
+
+/** Compact remaining time for small tiles: `2 天 22 小时` / `5 小时 12 分` / `8 分钟`. */
+export function formatRemainingShort(atMs: number, nowMs: number): string {
+  const { days, hours, minutes } = remainingUntil(atMs, nowMs);
+  if (days > 0) return `${days} 天 ${hours} 小时`;
+  if (hours > 0) return `${hours} 小时 ${minutes} 分`;
+  return `${Math.max(minutes, 1)} 分钟`;
+}
+
+export type DeadlineUrgency = "passed" | "day" | "week" | "month" | "later";
+
+/** Thresholds are inclusive: exactly 24h left is still `day`. */
+export function deadlineUrgency(atMs: number, nowMs: number): DeadlineUrgency {
+  const left = atMs - nowMs;
+  if (left <= 0) return "passed";
+  if (left <= DAY) return "day";
+  if (left <= 7 * DAY) return "week";
+  if (left <= 30 * DAY) return "month";
+  return "later";
+}
+
+/**
+ * The next dated milestone after `nowMs`. Re-derived on the client so that an
+ * open page rolls over from abstract to full-paper deadline without a refetch.
+ */
+export function upcomingMilestone<T extends Pick<ConferenceMilestoneDto, "at">>(
+  milestones: readonly T[],
+  nowMs: number,
+): (T & { at: string }) | null {
+  let best: (T & { at: string }) | null = null;
+  for (const milestone of milestones) {
+    if (!milestone.at) continue;
+    const atMs = Date.parse(milestone.at);
+    if (atMs > nowMs && (!best || atMs < Date.parse(best.at))) best = milestone as T & { at: string };
+  }
+  return best;
+}
+
+/** The card previews all known events, while calendar and follow actions use submission milestones only. */
+export function timelinePoints(edition: ConferenceEditionDto): ConferenceTimelinePoint[] {
+  const dated = (point: ConferenceTimelinePoint) => point.at ? Date.parse(point.at) : Infinity;
+  return [...edition.milestones, ...(edition.events ?? [])].sort((a, b) => dated(a) - dated(b));
+}
+
+export function milestoneLabel(milestone: Pick<ConferenceTimelinePoint, "kind">): string {
+  return {
+    abstract: "摘要截止",
+    full: "全文截稿",
+    rebuttal: "作者回复截止",
+    decision: "最终录用通知",
+    opening: "会议开始",
+  }[milestone.kind];
+}
+
+export function formatTimelineDate(iso: string): string {
+  const p = parts(new Date(iso), undefined);
+  return `${p.month}/${p.day}`;
+}
+
+// Constructing Intl formatters is costly and countdowns re-render every second.
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+function parts(date: Date, timeZone: string | undefined) {
+  const key = timeZone ?? "";
+  let formatter = formatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZoneName: "longOffset",
+    });
+    formatters.set(key, formatter);
+  }
+  return Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+}
+
+/**
+ * `2026-11-02 09:00 (UTC+8)` in the viewer's timezone (or `timeZone` when given).
+ * Deadlines are absolute instants, so the viewer sees their own wall clock.
+ */
+export function formatInstant(iso: string, timeZone?: string): string {
+  const p = parts(new Date(iso), timeZone);
+  // longOffset renders `GMT+08:00` / `GMT`; show the shorter `UTC+8` / `UTC+5:30`.
+  const match = /^GMT(?:([+-])(\d{2}):(\d{2}))?$/.exec(p.timeZoneName ?? "");
+  const offset = !match || !match[1] || (match[2] === "00" && match[3] === "00")
+    ? "UTC"
+    : `UTC${match[1]}${Number(match[2])}${match[3] === "00" ? "" : `:${match[3]}`}`;
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute} (${offset})`;
+}
+
+/** Official time as published, e.g. `2026-11-01 17:00 PT`. */
+export function formatOfficialTime(local: string, timezone: string): string {
+  return `${local.slice(0, 16)} ${timezone}`;
+}

@@ -12,7 +12,7 @@ import {
   VIEW_W,
   type NodeStatus,
   type PipelineNode,
-} from "@/lib/data/research-pipeline";
+} from "@/features/auto-research/research-pipeline";
 
 interface FlowCanvasProps {
   status: Record<string, NodeStatus>;

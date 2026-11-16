@@ -1,0 +1,281 @@
+"""ShenZhi Knowledge Capability business service."""
+
+from __future__ import annotations
+
+import asyncio
+
+from app.integrations.knowledge.adapter import KnowledgeAdapter, paper_summary
+from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
+from app.integrations.knowledge.nsfc_projects import NsfcProjectsAdapter
+from app.schemas.nsfc_project import ProjectDetail, ProjectList
+from app.services.knowledge.cache import (
+    PaperDetailTTLCache,
+    ScholarBrowseCache,
+    shared_paper_detail_cache,
+    shared_project_first_page_cache,
+    shared_scholar_browse_cache,
+)
+from app.services.knowledge.conference_directory import load_conference_directory
+from app.schemas.knowledge import (
+    ConferenceListResponse,
+    PaperBrowseRequest,
+    PaperBrowseResponse,
+    KnowledgeError,
+    FundingSearchRequest,
+    FundingSearchResponse,
+    KnowledgeMixedSearchRequest,
+    KnowledgeMixedSearchResponse,
+    KnowledgeOverviewResponse,
+    KnowledgeSearchRequest,
+    KnowledgeSearchResponse,
+    KnowledgeSubjectSearchResponse,
+    PaperDetail,
+    PaperSummary,
+    PaperGraph,
+    ScholarDetail,
+    ScholarProfile,
+    ScholarProfilePage,
+    ScholarPapersPage,
+    ScholarSearchRequest,
+    ScholarSearchResponse,
+)
+
+
+_SCHOLAR_QUERY_ALIASES = {
+    '何恺明': 'Kaiming He',
+}
+
+
+def _resolve_scholar_query(query: str) -> str:
+    return _SCHOLAR_QUERY_ALIASES.get(query, query)
+
+
+class KnowledgeServiceError(Exception):
+    """Safe domain error returned by the Knowledge service boundary."""
+
+    def __init__(self, error: KnowledgeError | str, status_code: int = 502):
+        if isinstance(error, str):
+            error = KnowledgeError(
+                code='CONTRACT_VIOLATION',
+                message='知识底座返回格式无效',
+                retryable=False,
+                request_id='',
+            )
+        super().__init__(error.message)
+        self.error = error
+        self.status_code = status_code
+
+    @classmethod
+    def from_integration_error(
+        cls, error: KnowledgeIntegrationError
+    ) -> 'KnowledgeServiceError':
+        return cls(
+            KnowledgeError(
+                code=error.code,
+                message=error.message,
+                retryable=error.retryable,
+                request_id='',
+            ),
+            status_code=error.status_code,
+        )
+
+
+class KnowledgeService:
+    """Thin business boundary shared by the API and future backend callers."""
+
+    def __init__(
+        self,
+        adapter: KnowledgeAdapter | None = None,
+        *,
+        paper_detail_cache: PaperDetailTTLCache | None = None,
+        scholar_browse_cache: ScholarBrowseCache | None = None,
+    ):
+        self.adapter = adapter or KnowledgeAdapter()
+        self.nsfc_projects = NsfcProjectsAdapter()
+        # Default production services share one process-local cache. Injected adapters
+        # remain isolated unless their caller explicitly supplies a cache.
+        self.paper_detail_cache = paper_detail_cache or (
+            shared_paper_detail_cache if adapter is None else None
+        )
+        self.scholar_browse_cache = scholar_browse_cache or (
+            shared_scholar_browse_cache if adapter is None else None
+        )
+
+    async def search(self, request: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
+        try:
+            return await self.adapter.search(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_nsfc_projects(self, q: str, limit: int, offset: int, *, keyword: str = '') -> ProjectList:
+        cache = shared_project_first_page_cache if not (q or keyword or offset) else None
+        if cache is not None:
+            cached = cache.get(limit)
+            if cached is not None:
+                return cached
+        try:
+            projects = await self.nsfc_projects.search_projects(q, limit, offset, keyword=keyword)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+        if cache is not None:
+            cache.set(limit, projects)
+        return projects
+
+    async def get_nsfc_project(self, award_number: str) -> ProjectDetail:
+        try:
+            return await self.nsfc_projects.get_project(award_number.upper())
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def conferences(self) -> ConferenceListResponse:
+        snapshot = await load_conference_directory()
+        if snapshot is not None:
+            return snapshot
+        try:
+            return await self.adapter.conferences()
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def browse_papers(self, request: PaperBrowseRequest) -> PaperBrowseResponse:
+        try:
+            return await self.adapter.browse_papers(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_scholars(
+        self, request: ScholarSearchRequest
+    ) -> ScholarSearchResponse:
+        resolved_request = ScholarSearchRequest(
+            query=_resolve_scholar_query(request.query),
+            limit=request.limit,
+            offset=request.offset,
+        )
+        try:
+            return await self.adapter.search_scholars(resolved_request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_scholar_profiles(self, request: ScholarSearchRequest) -> ScholarProfilePage:
+        # Product V2 queries preserve the user's name; legacy aliases belong to
+        # the retrieval contract and must not change this endpoint's recall.
+        try:
+            return await self.adapter.search_scholar_profiles(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def get_scholar_profile(self, scholar_id: str) -> ScholarProfile:
+        try:
+            return await self.adapter.scholar_profile(scholar_id)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def browse_scholar_profiles(self, *, limit: int, offset: int) -> ScholarProfilePage:
+        cache = self.scholar_browse_cache
+        key = (limit, offset)
+        if cache is not None:
+            cached = cache.get(key)
+            if cached is not None:
+                return cached
+
+        try:
+            page = await self.adapter.browse_scholar_profiles(limit=limit, offset=offset)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+        if cache is not None:
+            cache.set(key, page)
+        return page
+
+    async def get_scholar_avatar(self, path: str) -> tuple[bytes, str]:
+        try:
+            return await self.adapter.scholar_avatar(path)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def get_scholar_papers(
+        self, scholar_id: str, *, limit: int = 20, offset: int = 0
+    ) -> ScholarPapersPage:
+        try:
+            return await self.adapter.scholar_papers(scholar_id, limit=limit, offset=offset)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def overview(self) -> KnowledgeOverviewResponse:
+        try:
+            return await self.adapter.overview()
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def mixed_search(
+        self, request: KnowledgeMixedSearchRequest
+    ) -> KnowledgeMixedSearchResponse:
+        try:
+            return await self.adapter.mixed_search(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def get_scholar(self, scholar_id: str) -> ScholarDetail:
+        try:
+            return await self.adapter.scholar(scholar_id)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_by_subject(
+        self, subject: str, *, offset: int = 0, limit: int = 10
+    ) -> KnowledgeSubjectSearchResponse:
+        try:
+            return await self.adapter.search_by_subject(subject, offset=offset, limit=limit)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_by_funding(
+        self, funding: str, *, top_k: int = 10
+    ) -> KnowledgeSearchResponse:
+        try:
+            return await self.adapter.search_by_funding(funding, top_k=top_k)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def search_fundings(
+        self, request: FundingSearchRequest
+    ) -> FundingSearchResponse:
+        try:
+            return await self.adapter.search_fundings(request)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+
+    async def get_paper(self, paper_id: str) -> PaperDetail:
+        if self.paper_detail_cache is not None:
+            cached = self.paper_detail_cache.get(paper_id)
+            if cached is not None:
+                return cached
+        try:
+            detail = await self.adapter.paper(paper_id)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error
+        if self.paper_detail_cache is not None:
+            self.paper_detail_cache.set(paper_id, detail)
+        return detail
+
+    async def batch_get_papers(self, paper_ids: list[str]) -> list[PaperSummary]:
+        if not paper_ids:
+            return []
+        # Folder lists and reading history share the detail cache with paper pages.
+        # Keep concurrent fetches and the batch API's missing-paper behavior.
+        results = await asyncio.gather(
+            *(self.get_paper(paper_id) for paper_id in paper_ids),
+            return_exceptions=True,
+        )
+        summaries: list[PaperSummary] = []
+        for result in results:
+            if isinstance(result, KnowledgeServiceError) and result.error.code == 'NOT_FOUND':
+                continue
+            if isinstance(result, Exception):
+                raise result
+            summaries.append(paper_summary(result))
+        return summaries
+
+    async def get_graph(self, paper_id: str, *, depth: int = 1) -> PaperGraph:
+        try:
+            return await self.adapter.graph(paper_id, depth=depth)
+        except KnowledgeIntegrationError as error:
+            raise KnowledgeServiceError.from_integration_error(error) from error

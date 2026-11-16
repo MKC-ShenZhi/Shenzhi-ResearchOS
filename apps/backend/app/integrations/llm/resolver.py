@@ -1,0 +1,111 @@
+"""Load declarative definitions + legacy environment settings into one registry."""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+from pydantic import ValidationError
+
+from app.integrations.llm.registry import (
+    Capabilities, Catalog, ModelRegistry, ModelSpec, ProviderSpec, RegistryConfigError,
+)
+
+CATALOG_PATH = Path(__file__).with_name('catalog.json')
+# Exact upstream IDs verified by scripts/autodl_probe.py; priority is intentional.
+AUTODL_DEFAULT_MODELS = (
+    'DeepSeek-V4.1-Flash-1017',
+    'Qwen3.5-397B-A17B',
+    'Kimi-K2.5',
+)
+
+
+def _read_catalog(path: Path) -> Catalog:
+    try:
+        return Catalog.model_validate(json.loads(path.read_text(encoding='utf-8')))
+    except (OSError, ValueError, ValidationError):
+        # Validation errors can contain input values. Never expose file contents.
+        raise RegistryConfigError('无法加载声明文件，请检查文件和字段格式') from None
+
+
+def model_definition(model_id: str, provider_id: str, upstream: str) -> ModelSpec:
+    """Exact catalog lookup only; unknown models get conservative Chat capabilities."""
+    catalog = _read_catalog(CATALOG_PATH)
+    template = next((model for model in catalog.models
+                     if model.provider_id == provider_id and model.upstream_model == upstream), None)
+    if template:
+        return template.model_copy(update={'id': model_id})
+    return ModelSpec(id=model_id, provider_id=provider_id, upstream_model=upstream,
+                     label=upstream, brand='zhipu' if provider_id == 'zhipu' else 'platform',
+                     capabilities=Capabilities())
+
+
+def load_registry() -> ModelRegistry:
+    builtins = _read_catalog(CATALOG_PATH)
+    providers = [provider.model_copy(update={
+        'base_url': os.getenv(f'{provider.id.upper()}_BASE_URL', provider.base_url).strip().rstrip('/'),
+    }) for provider in builtins.providers]
+    # Revalidate environment URLs too; model_copy deliberately skips validation.
+    try:
+        providers = [ProviderSpec.model_validate(provider.model_dump()) for provider in providers]
+    except ValidationError:
+        raise RegistryConfigError('Provider 地址必须为可信 HTTPS 端点') from None
+    legacy = 'dashscope' if os.getenv('DASHSCOPE_API_KEY', '').strip() else 'deepseek'
+    default_names = {'dashscope': 'qwen-plus', 'deepseek': 'deepseek-chat', 'zhipu': ''}
+    names = {provider: os.getenv(f'{provider.upper()}_MODEL', default).strip()
+             for provider, default in default_names.items()}
+    models: list[ModelSpec] = []
+    aliases: dict[str, str] = {}
+    # Persist qualified IDs so changing default credentials never rebinds a saved
+    # model to a different provider. Raw IDs remain explicit legacy aliases.
+    for provider in dict.fromkeys([legacy, 'dashscope', 'deepseek', 'zhipu']):
+        upstreams = [names[provider]]
+        if provider == legacy:
+            upstreams += [item.strip() for item in os.getenv('AI_ALLOWED_MODELS', '').split(',')]
+        for upstream in dict.fromkeys(filter(None, upstreams)):
+            model_id = f'{provider}/{upstream}'
+            models.append(model_definition(model_id, provider, upstream))
+            aliases.setdefault(upstream, model_id)
+    if os.getenv('AUTODL_API_KEY', '').strip():
+        autodl_models = list(dict.fromkeys(item.strip() for item in
+                                         os.getenv('AUTODL_MODELS', '').split(',') if item.strip()))
+        for upstream in autodl_models or AUTODL_DEFAULT_MODELS:
+            models.append(model_definition(f'autodl/{upstream}', 'autodl', upstream))
+    defaults: dict[str, str] = {}
+    path = os.getenv('AI_MODEL_REGISTRY_FILE', '').strip()
+    if path:
+        custom = _read_catalog(Path(path))
+        # A custom definition intentionally replaces a generated legacy entry.
+        # Duplicate IDs *inside* the file remain errors.
+        if len({item.id for item in custom.models}) != len(custom.models):
+            raise RegistryConfigError('声明文件存在重复 Model ID')
+        if len({item.id for item in custom.providers}) != len(custom.providers):
+            raise RegistryConfigError('声明文件存在重复 Provider ID')
+        providers = [item for item in providers if item.id not in {p.id for p in custom.providers}] + custom.providers
+        models = [item for item in models if item.id not in {m.id for m in custom.models}] + custom.models
+        aliases = {alias: target for alias, target in aliases.items()
+                   if alias not in {model.id for model in custom.models}}
+        aliases.update(custom.aliases)
+        defaults = dict(custom.defaults)
+    # Explicit defaults take precedence over file defaults and legacy order.
+    for purpose, env in [('chat', 'AI_DEFAULT_MODEL'), ('agent', 'AI_AGENT_DEFAULT_MODEL')]:
+        if os.getenv(env, '').strip():
+            defaults[purpose] = os.environ[env].strip()
+    # Explicit new provider definitions can supply a configured-first default.
+    # With only old environment settings, retain DashScope -> DeepSeek priority.
+    configured_new = any(provider.enabled and provider.id not in ('dashscope', 'deepseek')
+                         and os.getenv(provider.api_key_env, '').strip() for provider in providers)
+    if ('chat' not in defaults and (os.getenv('DASHSCOPE_API_KEY', '').strip()
+                                   or os.getenv('DEEPSEEK_API_KEY', '').strip()
+                                   or not configured_new)):
+        defaults['chat'] = names[legacy]
+    return ModelRegistry(Catalog(providers=providers, models=models, aliases=aliases, defaults=defaults), dict(os.environ))
+
+
+def registry_from_legacy(config) -> ModelRegistry:
+    """Compatibility for existing server-side ModelConfig/MockTransport injection."""
+    provider_id = 'dashscope' if config.provider == 'platform' else config.provider
+    spec = ProviderSpec(id=provider_id, base_url=config.base_url, api_key_env='_INJECTED_LLM_KEY')
+    models = [model_definition(item, provider_id, item) for item in config.models]
+    return ModelRegistry(Catalog(providers=[spec], models=models, defaults={'chat': config.model}),
+                         {'_INJECTED_LLM_KEY': config.key})

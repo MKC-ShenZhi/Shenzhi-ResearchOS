@@ -1,0 +1,48 @@
+<svg width="1160" height="594" viewBox="0 0 1160 594" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">论文库卡片样式方案 v2</title>
+  <desc id="desc">参考简洁科研工具风格，以论文分类信息、真实最近浏览论文和主题标签组成论文库卡片。</desc>
+
+  <rect width="1160" height="594" fill="#F3F7FA"/>
+  <rect x="18" y="10" width="1124" height="552" rx="28" fill="#FFFFFF" stroke="#E7EEF4"/>
+
+  <!-- Header -->
+  <rect x="50" y="42" width="64" height="64" rx="18" fill="#E8F2F9"/>
+  <path d="M72 60H94V86H72V60Z" stroke="#185487" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M77 67H89M77 73H89M77 79H85" stroke="#185487" stroke-width="2" stroke-linecap="round"/>
+  <text x="132" y="71" fill="#0B2239" font-family="Inter, Microsoft YaHei, sans-serif" font-size="25" font-weight="700">论文库</text>
+  <text x="132" y="99" fill="#65809A" font-family="Inter, Microsoft YaHei, sans-serif" font-size="16">检索和探索学术论文，连接论文、主题与引用脉络</text>
+  <path d="M1101 55L1108 62L1101 69" stroke="#7890A5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Left: restrained summary block, retaining the complete paper count. -->
+  <rect x="50" y="134" width="246" height="262" rx="18" fill="#EAF3FA"/>
+  <text x="72" y="174" fill="#0B2239" font-family="Inter, Microsoft YaHei, sans-serif" font-size="17" font-weight="700">论文</text>
+  <text x="72" y="216" fill="#5D7EA0" font-family="Inter, Microsoft YaHei, sans-serif" font-size="16">全部论文</text>
+  <text x="274" y="216" text-anchor="end" fill="#185487" font-family="Inter, Microsoft YaHei, sans-serif" font-size="17" font-weight="500">536,241</text>
+  <line x1="72" y1="235" x2="274" y2="235" stroke="#D5E4EF"/>
+  <text x="72" y="274" fill="#5D7EA0" font-family="Inter, Microsoft YaHei, sans-serif" font-size="16">已收藏</text>
+  <text x="274" y="274" text-anchor="end" fill="#8CA0B2" font-family="Inter, Microsoft YaHei, sans-serif" font-size="15">暂无数据</text>
+
+  <!-- Right: real recent browsing list, with generous whitespace and fine dividers. -->
+  <text x="326" y="159" fill="#0B2239" font-family="Inter, Microsoft YaHei, sans-serif" font-size="18" font-weight="700">最近浏览</text>
+  <text x="1100" y="159" text-anchor="end" fill="#7890A5" font-family="Inter, Microsoft YaHei, sans-serif" font-size="15">共 1 篇</text>
+
+  <rect x="326" y="180" width="48" height="48" rx="14" fill="#E8F2F9"/>
+  <path d="M341 193H359V215H341V193Z" stroke="#3282A5" stroke-width="1.7" stroke-linejoin="round"/>
+  <path d="M345 198H355M345 203H355M345 208H352" stroke="#3282A5" stroke-width="1.4" stroke-linecap="round"/>
+  <text x="390" y="201" fill="#092F5A" font-family="Inter, Microsoft YaHei, sans-serif" font-size="17">Identifying the Achilles’ Heel: An Iterative Method for Dynamically</text>
+  <text x="390" y="224" fill="#7890A5" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">Uncovering Factual Errors in Large Language Models · 9/23 15:42</text>
+  <line x1="326" y1="243" x2="1100" y2="243" stroke="#DDE7EF"/>
+
+  <!-- Empty space is intentional: no additional fake recent papers. -->
+  <text x="390" y="286" fill="#A1B0BD" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">暂无更多真实浏览记录</text>
+
+  <!-- Real topic highlights, expressed as quiet tags rather than commercial CTAs. -->
+  <rect x="50" y="430" width="116" height="36" rx="18" fill="#F3F5F7"/>
+  <text x="108" y="453" text-anchor="middle" fill="#52718F" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">#大语言模型</text>
+  <rect x="176" y="430" width="104" height="36" rx="18" fill="#F3F5F7"/>
+  <text x="228" y="453" text-anchor="middle" fill="#52718F" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">#模型压缩</text>
+  <rect x="290" y="430" width="104" height="36" rx="18" fill="#F3F5F7"/>
+  <text x="342" y="453" text-anchor="middle" fill="#52718F" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">#低秩压缩</text>
+  <rect x="404" y="430" width="116" height="36" rx="18" fill="#F3F5F7"/>
+  <text x="462" y="453" text-anchor="middle" fill="#52718F" font-family="Inter, Microsoft YaHei, sans-serif" font-size="14">#论证与辩论</text>
+</svg>

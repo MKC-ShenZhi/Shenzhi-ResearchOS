@@ -2,25 +2,77 @@
 
 from __future__ import annotations
 
+import re
+
 import math
+import asyncio
+import os
 from datetime import datetime, timezone
 from typing import Any, Callable
+from urllib.parse import quote
 
 from pydantic import ValidationError
 
-from app.integrations.knowledge.client import KnowledgeBaseClient
+from app.integrations.knowledge.client import KnowledgeBaseClient, SCHOLAR_AVATAR_PATH
+from app.schemas.topic import KnowledgeTopicCategory, OpenAlexTopic, OpenAlexTopicListResponse
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
 from app.integrations.knowledge.schemas import UpstreamSearchPayload
 from app.schemas.knowledge import (
+    ConferenceSummary,
+    ConferenceListResponse,
+    PaperBrowseRequest,
+    PaperBrowseResponse,
     GraphEdge,
     GraphNode,
+    FundingSearchRequest,
+    FundingSearchResponse,
+    FundingSummary,
+    KnowledgeMixedSearchRequest,
+    KnowledgeMixedSearchResponse,
+    KnowledgeMixedSearchResult,
+    KnowledgeOverviewResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
+    KnowledgeSubjectSearchResponse,
     PaperDetail,
+    PaperSummary,
     PaperGraph,
     PaperSearchResult,
+    OverviewHighlight,
+    OverviewPaperLibrary,
+    OverviewResearchAsset,
+    OverviewResearchAssets,
+    OverviewGraphPreview,
     Provenance,
+    ScholarDetail,
+    ScholarProfile,
+    ScholarProfilePage,
+    ScholarPapersPage,
+    ScholarPublication,
+    ScholarPaper,
+    ScholarReference,
+    ScholarSearchRequest,
+    ScholarSearchResponse,
+    ScholarSummary,
 )
+
+
+# The retrieval API has no offset parameter, so paginated callers are served
+# by fetching through the requested page and slicing locally. Deployments may
+# raise the upstream result window without changing ShenZhi's public request.
+DEFAULT_UPSTREAM_SEARCH_MAX_TOP_K = 100
+
+
+def _configured_search_max_top_k() -> int:
+    raw = os.getenv(
+        'KNOWLEDGE_BASE_SEARCH_MAX_TOP_K',
+        str(DEFAULT_UPSTREAM_SEARCH_MAX_TOP_K),
+    ).strip()
+    try:
+        value = int(raw)
+    except (TypeError, ValueError, OverflowError):
+        return DEFAULT_UPSTREAM_SEARCH_MAX_TOP_K
+    return value if value > 0 else DEFAULT_UPSTREAM_SEARCH_MAX_TOP_K
 
 
 def _retrieved_at(value: datetime | None) -> datetime:
@@ -96,6 +148,27 @@ def _optional_int(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise KnowledgeIntegrationError.contract_violation()
     return value
+
+
+def _required_int(item: dict[str, Any], key: str) -> int:
+    value = _optional_int(item.get(key))
+    if value is None:
+        raise KnowledgeIntegrationError.contract_violation()
+    return value
+
+
+def _int_list(value: Any) -> list[int]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise KnowledgeIntegrationError.contract_violation()
+    result: list[int] = []
+    for item in value:
+        parsed = _optional_int(item)
+        if parsed is None:
+            raise KnowledgeIntegrationError.contract_violation()
+        result.append(parsed)
+    return result
 
 
 def _optional_number(value: Any) -> float | None:
@@ -188,17 +261,139 @@ def map_search_result(
     title = _required_string(item, 'title')
     return _contract_model(lambda: PaperSearchResult(
         id=paper_id,
+        image_id=_optional_string(item.get('image_id')),
         title=title,
         abstract=_optional_string(item.get('abstract')),
         authors=_string_list(item.get('authors')),
         year=_optional_int(item.get('year')),
         venue=_first_optional_string(item, 'conference', 'venue'),
+        primary_subject=_optional_string(item.get('primary_subject')),
         keywords=_string_list(item.get('keywords')),
         subjects=_string_list(item.get('subjects')),
+        topics=item.get('topics'),
         score=_optional_number(item.get('score')),
         rank=_optional_int(item.get('rank')),
         provenance=_provenance(paper_id, retrieved_at),
     ))
+
+
+def map_scholar_summary(
+    item: dict[str, Any], *, retrieved_at: datetime | None = None
+) -> ScholarSummary:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    scholar_id = _required_string(item, 'scholar_id')
+    return _contract_model(lambda: ScholarSummary(
+        id=scholar_id,
+        name=_required_string(item, 'name'),
+        paper_count=_required_int(item, 'paper_count'),
+        provenance=_provenance(scholar_id, retrieved_at),
+    ))
+
+
+def map_funding_summary(
+    item: dict[str, Any], *, retrieved_at: datetime | None = None
+) -> FundingSummary:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    funding_id = _required_string(item, 'funding_id')
+    return _contract_model(lambda: FundingSummary(
+        id=funding_id,
+        name=_required_string(item, 'name'),
+        paper_count=_required_int(item, 'paper_count'),
+        provenance=_provenance(funding_id, retrieved_at),
+    ))
+
+
+def _scholar_reference(item: dict[str, Any]) -> ScholarReference:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    return _contract_model(lambda: ScholarReference(
+        id=_required_string(item, 'scholar_id'),
+        name=_required_string(item, 'name'),
+    ))
+
+
+def _scholar_paper(item: dict[str, Any]) -> ScholarPaper:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    return _contract_model(lambda: ScholarPaper(
+        id=_required_string(item, 'paper_id'),
+        title=_required_string(item, 'title'),
+        year=_optional_int(item.get('year')),
+    ))
+
+
+def _object_list(value: Any, mapper: Callable[[dict[str, Any]], Any]) -> list[Any]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise KnowledgeIntegrationError.contract_violation()
+    return [mapper(item) for item in value]
+
+
+def map_scholar_detail(
+    item: dict[str, Any], *, retrieved_at: datetime | None = None
+) -> ScholarDetail:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    scholar_id = _required_string(item, 'scholar_id')
+    return _contract_model(lambda: ScholarDetail(
+        id=scholar_id,
+        name=_required_string(item, 'name'),
+        paper_count=_required_int(item, 'paper_count'),
+        years=_int_list(item.get('years')),
+        conferences=_string_list(item.get('conferences')),
+        topics=_string_list(item.get('topics')),
+        funding=_string_list(item.get('funding')),
+        institutions=_string_list(item.get('institutions')),
+        coauthors=_object_list(item.get('coauthors'), _scholar_reference),
+        papers=_object_list(item.get('papers'), _scholar_paper),
+        provenance=_provenance(scholar_id, retrieved_at),
+    ))
+
+
+def map_scholar_profile(item: dict[str, Any]) -> ScholarProfile:
+    if not isinstance(item, dict):
+        raise KnowledgeIntegrationError.contract_violation()
+    # Project product fields explicitly. Never interpret raw OpenAlex JSON as a
+    # product profile or let unknown third-party fields enter the public schema.
+    values = {key: item[key] for key in ScholarProfile.model_fields if key in item}
+    values['scholar_id'] = _required_string(item, 'scholar_id')
+    for key in ('name_zh', 'name_en', 'bio_zh', 'bio_en', 'updated_at'):
+        values[key] = _optional_string(item.get(key))
+    avatar = _optional_string(item.get('avatar_path'))
+    if avatar and SCHOLAR_AVATAR_PATH.fullmatch(avatar):
+        avatar = f'/api/v1/knowledge/scholar-avatar?path={quote(avatar, safe="")}'
+    elif not avatar or not avatar.startswith('https://'):
+        avatar = None
+    values['avatar_path'] = avatar
+    result = _contract_model(lambda: ScholarProfile.model_validate(values))
+    years = [entry.year for entry in result.annual_citations or []]
+    if len(years) != len(set(years)):
+        raise KnowledgeIntegrationError.contract_violation()
+    return result
+
+
+def _profile_pagination(body: dict[str, Any], limit: int, offset: int) -> None:
+    if (type(body.get('limit')) is not int or body['limit'] != limit
+            or type(body.get('offset')) is not int or body['offset'] != offset
+            or not isinstance(body.get('items'), list) or len(body['items']) > limit):
+        raise KnowledgeIntegrationError.contract_violation()
+
+
+def _scholar_profile_page(body: dict[str, Any], limit: int, offset: int) -> ScholarProfilePage:
+    _profile_pagination(body, limit, offset)
+    total = body.get('total')
+    if total is not None and (type(total) is not int or total < 0):
+        raise KnowledgeIntegrationError.contract_violation()
+    items = [map_scholar_profile(item) for item in body['items']]
+    if len({item.scholar_id for item in items}) != len(items):
+        raise KnowledgeIntegrationError.contract_violation()
+    return ScholarProfilePage(
+        items=items, limit=limit, offset=offset, total=total,
+        has_more=offset + len(items) < total if total is not None else len(items) == limit,
+    )
 
 
 def map_paper_detail(
@@ -222,6 +417,7 @@ def map_paper_detail(
         # remain null rather than being presented as fabricated zeroes.
         keywords=_string_list(item.get('keywords')),
         subjects=_string_list(item.get('subjects')),
+        topics=item.get('topics'),
         citation_count=_optional_int(next((item[key] for key in (
             'citationCount', 'citation_count', 'citeCount', 'cite_count'
         ) if key in item), None)),
@@ -230,6 +426,18 @@ def map_paper_detail(
         ) if key in item), None)),
         provenance=_provenance(paper_id, retrieved_at),
     ))
+
+
+def paper_summary(detail: PaperDetail) -> PaperSummary:
+    return PaperSummary(
+        id=detail.id,
+        title=detail.title,
+        abstract=detail.abstract,
+        authors=detail.authors,
+        year=detail.year,
+        venue=detail.venue,
+        provenance=detail.provenance,
+    )
 
 
 def _graph_node(
@@ -312,21 +520,142 @@ def map_graph(
     ))
 
 
+def overview_graph_preview(graph: PaperGraph, *, related_limit: int = 6) -> OverviewGraphPreview:
+    """Keep the overview payload small while retaining real root relationships."""
+    nodes_by_id = {node.id: node for node in graph.nodes}
+    root = nodes_by_id.get(graph.root_id)
+    if root is None:
+        return OverviewGraphPreview(status='empty', root_paper_id=graph.root_id)
+
+    related_ids: list[str] = []
+    for edge in graph.edges:
+        if edge.source_id == graph.root_id:
+            related_id = edge.target_id
+        elif edge.target_id == graph.root_id:
+            related_id = edge.source_id
+        else:
+            continue
+        if related_id in nodes_by_id and related_id not in related_ids:
+            related_ids.append(related_id)
+        if len(related_ids) >= related_limit:
+            break
+
+    selected_ids = {graph.root_id, *related_ids}
+    selected_edges = [
+        edge for edge in graph.edges
+        if edge.source_id in selected_ids and edge.target_id in selected_ids
+    ]
+    return OverviewGraphPreview(
+        supported=bool(related_ids),
+        status='available' if related_ids else 'empty',
+        root_paper_id=graph.root_id,
+        nodes=[node for node in graph.nodes if node.id in selected_ids],
+        edges=selected_edges,
+    )
+
+
+def is_openalex_topic_id(topic_id: str) -> bool:
+    return re.fullmatch(r'openalex:topic:T[0-9]+', topic_id) is not None
+
+
+def _topic_children(node: dict[str, Any], level: str) -> list[dict[str, Any]]:
+    children = node.get('children')
+    if not isinstance(children, list) or any(
+        not isinstance(child, dict) or child.get('level') != level for child in children
+    ):
+        raise KnowledgeIntegrationError.contract_violation()
+    return children
+
+
+def _map_topic(node: dict[str, Any], category: str, category_name: str) -> OpenAlexTopic:
+    name_zh = _optional_string(node.get('nameZh'))
+    name_en = _optional_string(node.get('nameEn'))
+    if not (name_zh or name_en):
+        raise KnowledgeIntegrationError.contract_violation()
+    return _contract_model(lambda: OpenAlexTopic(
+        id=_required_string(node, 'id'),
+        name_zh=name_zh or name_en,
+        name_en=name_en or name_zh,
+        description_zh=_optional_string(node.get('descriptionZh')) or '',
+        description_en=_optional_string(node.get('descriptionEn')) or '',
+        category=category,
+        category_name=category_name,
+        subject_query=_optional_string(node.get('subjectQuery')) or '',
+        paper_count=_required_int(node, 'paperCount'),
+    ))
+
+
 class KnowledgeAdapter:
-    """Translate the three upstream calls into the ShenZhi domain contract."""
+    """Translate upstream Knowledge calls into the ShenZhi domain contract."""
+
+    OVERVIEW_TOPICS = (
+        ('large language models', '大语言模型'),
+        ('model compression', '模型压缩'),
+        ('low-rank compression', '低秩压缩'),
+        ('argumentation', '论证与辩论'),
+    )
 
     def __init__(self, client: Any | None = None):
         self.client = client or KnowledgeBaseClient()
+
+    async def conferences(self) -> ConferenceListResponse:
+        body = await self.client.conferences()
+        items = body.get('items') if isinstance(body, dict) else None
+        if not isinstance(items, list):
+            raise KnowledgeIntegrationError.contract_violation()
+
+        def map_conference(item: dict[str, Any]) -> ConferenceSummary:
+            name = _required_string(item, 'conference')
+            # Only actual years are navigable. Never fill gaps from min/maxYear.
+            if not isinstance(item.get('years'), list):
+                raise KnowledgeIntegrationError.contract_violation()
+            years = sorted(set(_int_list(item['years'])), reverse=True)
+            if any(year < 1000 or year > 9999 for year in years):
+                raise KnowledgeIntegrationError.contract_violation()
+            return _contract_model(lambda: ConferenceSummary(
+                name=name, paper_count=_required_int(item, 'count'),
+                years=years, year_count=len(years),
+            ))
+
+        return ConferenceListResponse(items=_object_list(items, map_conference))
+
+    async def browse_papers(self, request: PaperBrowseRequest) -> PaperBrowseResponse:
+        body = await self.client.browse_papers(
+            request.conference, request.year, limit=request.limit, offset=request.offset,
+        )
+        return self._map_paper_page(body, limit=request.limit, offset=request.offset)
+
+    @staticmethod
+    def _map_paper_page(
+        body: Any, *, limit: int, offset: int,
+    ) -> PaperBrowseResponse:
+        if not isinstance(body, dict) or not isinstance(body.get('items'), list):
+            raise KnowledgeIntegrationError.contract_violation()
+        response = _contract_model(lambda: PaperBrowseResponse(
+            results=[map_search_result(item) for item in body['items']],
+            total=_required_int(body, 'total'),
+            limit=_required_int(body, 'limit'),
+            offset=_required_int(body, 'offset'),
+        ))
+        if (response.limit != limit or response.offset != offset
+                or len(response.results) > response.limit):
+            raise KnowledgeIntegrationError.contract_violation()
+        return response
 
     async def search(self, request: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
         # The current upstream accepts larger top_k values but ignores offset
         # and exposes no total count. Paginated Paper Search therefore asks for
         # all hits through the requested page plus one look-ahead hit, then
         # slices at this backend boundary. Callers that omit offset retain the
-        # original top_k request (Knowledge2Chat relies on that behavior).
+        # original top_k request (the Agent knowledge tools rely on that behavior).
         upstream_top_k = request.top_k
+        page_end: int | None = None
         if request.offset is not None:
-            upstream_top_k = request.offset + request.top_k + 1
+            max_top_k = _configured_search_max_top_k()
+            if request.offset >= max_top_k:
+                raise KnowledgeIntegrationError.invalid_argument()
+            page_end = min(request.offset + request.top_k, max_top_k)
+            upstream_top_k = min(page_end + 1, max_top_k)
         body = await self.client.search(
             _upstream_search_payload(request, top_k=upstream_top_k)
         )
@@ -337,10 +666,387 @@ class KnowledgeAdapter:
         mapped = [map_search_result(item, retrieved_at=retrieved_at) for item in results]
         if request.offset is None:
             return KnowledgeSearchResponse(results=mapped)
-        page_end = request.offset + request.top_k
+        assert page_end is not None
         return KnowledgeSearchResponse(
             results=mapped[request.offset:page_end],
             has_more=len(mapped) > page_end,
+        )
+
+    async def search_scholars(
+        self, request: ScholarSearchRequest
+    ) -> ScholarSearchResponse:
+        body = await self.client.search_scholars(
+            request.query, limit=request.limit, offset=request.offset
+        )
+        results = body.get('results') if isinstance(body, dict) else None
+        if not isinstance(results, list):
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        return ScholarSearchResponse(results=[
+            map_scholar_summary(item, retrieved_at=retrieved_at) for item in results
+        ])
+
+    async def search_scholar_profiles(self, request: ScholarSearchRequest) -> ScholarProfilePage:
+        body = await self.client.search_scholar_profiles(
+            request.query, limit=request.limit, offset=request.offset
+        )
+        return _scholar_profile_page(body, request.limit, request.offset)
+
+    async def browse_scholar_profiles(self, *, limit: int, offset: int) -> ScholarProfilePage:
+        body = await self.client.browse_scholar_profiles(limit=limit, offset=offset)
+        return _scholar_profile_page(body, limit, offset)
+
+    async def scholar_avatar(self, path: str) -> tuple[bytes, str]:
+        return await self.client.scholar_avatar(path)
+
+    async def scholar_profile(self, scholar_id: str) -> ScholarProfile:
+        profile = map_scholar_profile(await self.client.scholar_profile(scholar_id))
+        if profile.scholar_id != scholar_id:
+            raise KnowledgeIntegrationError.contract_violation()
+        return profile
+
+    async def scholar_papers(
+        self, scholar_id: str, *, limit: int = 20, offset: int = 0
+    ) -> ScholarPapersPage:
+        body = await self.client.scholar_papers(scholar_id, limit=limit, offset=offset)
+        _profile_pagination(body, limit, offset)
+        return _contract_model(lambda: ScholarPapersPage(
+            items=[ScholarPublication(
+                **map_paper_detail(item).model_dump(),
+                image_id=_first_optional_string(item, 'image_id', 'imageId'),
+                platform_detail=item.get('external') is False,
+            ) for item in body['items']],
+            total=body.get('total'), limit=limit, offset=offset,
+        ))
+
+    async def _funding_highlights(
+        self, query: str | None, *, limit: int = 20, offset: int = 0
+    ) -> list[OverviewHighlight]:
+        response = await self.search_fundings(FundingSearchRequest(
+            query=query,
+            limit=limit,
+            offset=offset,
+        ))
+        return [OverviewHighlight(
+            id=item.id,
+            name=item.name,
+            count=item.paper_count,
+            metadata={'entityType': 'funding'},
+        ) for item in response.results]
+
+    async def overview(self) -> KnowledgeOverviewResponse:
+        paper_result, asset_result, scholar_result, topic_results, funding_result = await asyncio.gather(
+            self.client.paper_summary(),
+            self.client.research_assets_summary(),
+            # The upstream API provides scholar candidates rather than a
+            # leaderboard. A broad real query lets the overview surface three
+            # actual, currently indexed scholars without inventing rankings.
+            self.search_scholars(ScholarSearchRequest(query='a', limit=3)),
+            asyncio.gather(
+                *(self.search_by_subject(source_name, offset=0, limit=10) for source_name, _ in self.OVERVIEW_TOPICS),
+                return_exceptions=True,
+            ),
+            self._funding_highlights(None, limit=3),
+            return_exceptions=True,
+        )
+        paper_count: int | None = None
+        paper_status = 'error'
+        if not isinstance(paper_result, Exception):
+            paper_count = _required_int(paper_result, 'paper_count')
+            paper_status = 'available'
+        asset_count: int | None = None
+        asset_status = 'error'
+        if not isinstance(asset_result, Exception):
+            asset_count = _required_int(asset_result, 'research_asset_count')
+            asset_status = 'available'
+        funding_highlights = (
+            funding_result if isinstance(funding_result, list) else []
+        )
+        scholar_highlights = []
+        if isinstance(scholar_result, ScholarSearchResponse):
+            scholar_highlights = [
+                OverviewHighlight(
+                    id=item.id,
+                    name=item.name,
+                    count=item.paper_count,
+                    status='available',
+                    metadata={'entityType': 'scholar'},
+                )
+                for item in scholar_result.results[:3]
+            ]
+        topic_highlights = [
+            OverviewHighlight(
+                id=f'topic:{source_name}',
+                name=display_name,
+                count=topic_result.total,
+                status='available',
+                metadata={
+                    'entityType': 'topic',
+                    'sourceSubject': source_name,
+                },
+            )
+            for (source_name, display_name), topic_result in zip(self.OVERVIEW_TOPICS, topic_results)
+            if isinstance(topic_result, KnowledgeSubjectSearchResponse)
+        ]
+        graph_preview = OverviewGraphPreview(status='empty')
+        graph_source = next((
+            result.results[0]
+            for result in topic_results
+            if isinstance(result, KnowledgeSubjectSearchResponse) and result.results
+        ), None)
+        if graph_source is not None:
+            try:
+                graph_preview = overview_graph_preview(await self.graph(graph_source.id))
+            except Exception:
+                # The graph is supplementary overview content: an unavailable
+                # upstream graph must not hide the independently loaded cards.
+                graph_preview = OverviewGraphPreview(status='error')
+        now = datetime.now(timezone.utc)
+        return KnowledgeOverviewResponse(
+            as_of=now,
+            scope='已入库且可检索的论文及知识底座公开统计',
+            paper_library=OverviewPaperLibrary(
+                paper_count=paper_count,
+                status=paper_status,
+            ),
+            scholar_highlights=scholar_highlights,
+            topic_highlights=topic_highlights,
+            research_assets=OverviewResearchAssets(
+                total=asset_count,
+                status=asset_status,
+                highlights=funding_highlights,
+                by_type={
+                    'project': OverviewResearchAsset(status='unsupported'),
+                    'patent': OverviewResearchAsset(status='unsupported'),
+                    'funding': OverviewResearchAsset(supported=True, status='available'),
+                },
+                coverage={
+                    'projectEntities': False,
+                    'patentEntities': False,
+                    'fundingEntities': True,
+                },
+            ),
+            graph_preview=graph_preview,
+        )
+
+    async def mixed_search(self, request: KnowledgeMixedSearchRequest) -> KnowledgeMixedSearchResponse:
+        """Aggregate the supported search sources without serial upstream waits.
+
+        The knowledge-base API has no query-based graph search endpoint.  A
+        graph can only be loaded after a concrete paper id is known, so
+        ``graph`` is reported as unsupported here instead of incorrectly
+        repeating the paper search and relabelling its results.
+        """
+        supported: list[str] = []
+        unsupported: list[str] = []
+        failed: list[str] = []
+        results: list[KnowledgeMixedSearchResult] = []
+        runnable_types = [
+            kind for kind in request.types
+            if kind not in ('project', 'patent', 'graph')
+        ]
+        # A mixed query must leave space for every supported source. Individual
+        # type tabs still receive the full requested limit.
+        per_source_limit = max(1, (request.limit + len(runnable_types) - 1) // len(runnable_types)) if runnable_types else request.limit
+
+        async def run(kind: str, operation: Any) -> Any:
+            try:
+                return await operation()
+            except KnowledgeIntegrationError:
+                return None
+
+        async def collect(kind: str, value: Any) -> None:
+            """Map one completed source response in the requested order."""
+            if value is None:
+                failed.append(kind)
+                return
+            supported.append(kind)
+            if kind == 'paper':
+                papers = value.results
+                for paper in papers:
+                    results.append(KnowledgeMixedSearchResult(
+                        type=kind,
+                        id=paper.id,
+                        title=paper.title,
+                        summary=paper.abstract,
+                        metadata={'year': paper.year, 'venue': paper.venue},
+                        action=f"/papers/{quote(paper.id, safe='')}",
+                    ))
+            elif kind == 'scholar':
+                for scholar in value.results:
+                    results.append(KnowledgeMixedSearchResult(
+                        type='scholar',
+                        id=scholar.id,
+                        title=scholar.name,
+                        summary=f'收录论文 {scholar.paper_count} 篇',
+                        metadata={'paperCount': scholar.paper_count},
+                        action=f"/knowledge/scholars/{quote(scholar.id, safe='')}",
+                    ))
+            elif kind == 'funding':
+                for funding in value:
+                    results.append(KnowledgeMixedSearchResult(
+                        type='funding',
+                        id=funding.id,
+                        title=funding.name,
+                        summary=f'关联论文 {funding.count} 篇' if funding.count is not None else None,
+                        metadata=funding.metadata,
+                        action=f"/knowledge/funding?funding={quote(funding.id, safe='')}",
+                    ))
+            elif kind == 'topic':
+                for paper in value.results:
+                    results.append(KnowledgeMixedSearchResult(
+                        type='paper',
+                        id=paper.id,
+                        title=paper.title,
+                        summary=paper.abstract,
+                        metadata={'matchedBy': kind, 'year': paper.year, 'venue': paper.venue},
+                        action=f"/papers/{quote(paper.id, safe='')}",
+                    ))
+            elif kind == 'project' or kind == 'patent':
+                unsupported.append(kind)
+
+        requested = request.types
+        operations: list[tuple[str, Any]] = []
+        for kind in requested:
+            if kind in ('project', 'patent', 'graph'):
+                unsupported.append(kind)
+                continue
+            if kind == 'paper':
+                operations.append((kind, lambda: self.search(KnowledgeSearchRequest(query=request.query, topK=per_source_limit))))
+            elif kind == 'scholar':
+                operations.append((kind, lambda: self.search_scholars(ScholarSearchRequest(query=request.query, limit=per_source_limit))))
+            elif kind == 'topic':
+                operations.append((kind, lambda: self.search_by_subject(
+                    request.query, offset=0, limit=per_source_limit
+                )))
+            elif kind == 'funding':
+                operations.append((kind, lambda: self._funding_highlights(
+                    request.query, limit=per_source_limit
+                )))
+
+        # All independent source requests run concurrently.  Results are
+        # collected in the user's requested order so response ordering stays
+        # deterministic even when an upstream source finishes earlier.
+        values = await asyncio.gather(*(run(kind, operation) for kind, operation in operations))
+        for (kind, _), value in zip(operations, values):
+            await collect(kind, value)
+
+        deduped: list[KnowledgeMixedSearchResult] = []
+        seen: set[tuple[str, str, str]] = set()
+        for result in results:
+            # A topic match can legitimately point to the same paper as the
+            # general paper search. Preserve that separate discovery path so
+            # the mixed result list can represent both capabilities.
+            matched_by = result.metadata.get('matchedBy')
+            key = (result.type, result.id, str(matched_by) if matched_by is not None else '')
+            if key not in seen:
+                seen.add(key)
+                deduped.append(result)
+        return KnowledgeMixedSearchResponse(
+            results=deduped[:request.limit],
+            supported_types=supported,
+            unsupported_types=unsupported,
+            failed_types=failed,
+        )
+
+    async def scholar(self, scholar_id: str) -> ScholarDetail:
+        body = await self.client.scholar(scholar_id)
+        detail = map_scholar_detail(body, retrieved_at=datetime.now(timezone.utc))
+        if detail.id != scholar_id:
+            raise KnowledgeIntegrationError.contract_violation()
+        return detail
+
+    async def topic_catalog(self) -> OpenAlexTopicListResponse:
+        tree = await self.client.topic_tree()
+        items: list[OpenAlexTopic] = []
+        categories: list[KnowledgeTopicCategory] = []
+        seen_topics: set[str] = set()
+        seen_categories: set[str] = set()
+        for domain in _topic_children({'children': tree}, 'domain'):
+            for field in _topic_children(domain, 'field'):
+                for subfield in _topic_children(field, 'subfield'):
+                    category = _required_string(subfield, 'id')
+                    if category in seen_categories:
+                        raise KnowledgeIntegrationError.contract_violation()
+                    seen_categories.add(category)
+                    name = _first_optional_string(subfield, 'nameZh', 'nameEn') or category
+                    total = 0
+                    for node in _topic_children(subfield, 'topic'):
+                        if node.get('enabled') is not True or node.get('children'):
+                            continue
+                        topic_id = _required_string(node, 'id')
+                        if (not is_openalex_topic_id(topic_id) or topic_id in seen_topics
+                                or node.get('parentId') != category):
+                            raise KnowledgeIntegrationError.contract_violation()
+                        seen_topics.add(topic_id)
+                        items.append(_map_topic(node, category, name))
+                        total += 1
+                    if total:
+                        categories.append(KnowledgeTopicCategory(id=category, name=name, total=total))
+        return OpenAlexTopicListResponse(items=items, categories=categories, total=len(items))
+
+    async def topic(self, catalog_topic: OpenAlexTopic) -> OpenAlexTopic:
+        node = await self.client.topic(catalog_topic.id)
+        if node.get('id') != catalog_topic.id or node.get('level') != 'topic':
+            raise KnowledgeIntegrationError.contract_violation()
+        if node.get('enabled') is not True:
+            raise KnowledgeIntegrationError.not_found()
+        return _map_topic(node, catalog_topic.category, catalog_topic.category_name)
+
+    async def topic_papers(self, topic_id: str, *, limit: int, offset: int) -> PaperBrowseResponse:
+        body = await self.client.topic_papers(topic_id, limit=limit, offset=offset)
+        return self._map_paper_page(body, limit=limit, offset=offset)
+
+    async def search_by_subject(
+        self, subject: str, *, offset: int = 0, limit: int = 10
+    ) -> KnowledgeSubjectSearchResponse:
+        body = await self.client.search_by_subject(subject, offset=offset, limit=limit)
+        return self._map_subject_papers(body)
+
+    async def search_by_funding(
+        self, funding: str, *, top_k: int = 10
+    ) -> KnowledgeSearchResponse:
+        body = await self.client.search_by_funding(funding, top_k=top_k)
+        return self._map_related_papers(body)
+
+    async def search_fundings(
+        self, request: FundingSearchRequest
+    ) -> FundingSearchResponse:
+        body = await self.client.search_fundings(
+            request.query, limit=request.limit, offset=request.offset
+        )
+        results = body.get('results') if isinstance(body, dict) else None
+        if not isinstance(results, list):
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        return FundingSearchResponse(results=[
+            map_funding_summary(item, retrieved_at=retrieved_at) for item in results
+        ])
+
+    @staticmethod
+    def _map_related_papers(body: Any) -> KnowledgeSearchResponse:
+        results = body.get('results') if isinstance(body, dict) else None
+        if not isinstance(results, list):
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        total = body.get('total') if isinstance(body, dict) else None
+        if total is not None and (not isinstance(total, int) or total < 0):
+            raise KnowledgeIntegrationError.contract_violation()
+        return KnowledgeSearchResponse(
+            results=[map_search_result(item, retrieved_at=retrieved_at) for item in results],
+            total=total,
+        )
+
+    @staticmethod
+    def _map_subject_papers(body: Any) -> KnowledgeSubjectSearchResponse:
+        results = body.get('results') if isinstance(body, dict) else None
+        total = body.get('total') if isinstance(body, dict) else None
+        if not isinstance(results, list) or not isinstance(total, int) or total < 0:
+            raise KnowledgeIntegrationError.contract_violation()
+        retrieved_at = datetime.now(timezone.utc)
+        return KnowledgeSubjectSearchResponse(
+            results=[map_search_result(item, retrieved_at=retrieved_at) for item in results],
+            total=total,
         )
 
     async def paper(self, paper_id: str) -> PaperDetail:
@@ -349,6 +1055,25 @@ class KnowledgeAdapter:
         if detail.id != paper_id:
             raise KnowledgeIntegrationError.contract_violation()
         return detail
+
+    async def batch_papers(self, paper_ids: list[str]) -> list[PaperSummary]:
+        """Fetch summaries concurrently while keeping batch policy at this boundary."""
+        if not paper_ids:
+            return []
+        results = await asyncio.gather(
+            *(self.paper(paper_id) for paper_id in paper_ids),
+            return_exceptions=True,
+        )
+        summaries: list[PaperSummary] = []
+        for result in results:
+            if isinstance(result, KnowledgeIntegrationError):
+                if result.code == 'NOT_FOUND':
+                    continue
+                raise result
+            if isinstance(result, Exception):
+                raise result
+            summaries.append(paper_summary(result))
+        return summaries
 
     async def graph(self, paper_id: str, *, depth: int = 1) -> PaperGraph:
         body = await self.client.graph(paper_id, depth)

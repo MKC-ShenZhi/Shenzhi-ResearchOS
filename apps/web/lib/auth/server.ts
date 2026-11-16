@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
+import type { User } from "better-auth";
 
 import {
   authConfig,
@@ -31,6 +32,8 @@ import {
   PASSWORD_MIN_LENGTH,
   validatePasswordComposition,
 } from "@/lib/auth/policies/password";
+import { validateDisplayName } from "@/lib/auth/policies/display-name";
+import { setPasswordOtpIdentifier } from "@/lib/auth/password/otp";
 import { postgresPool } from "@/lib/infrastructure/postgres";
 import {
   createAuthEmailProvider,
@@ -59,6 +62,25 @@ const { requireEmailVerification } = emailVerificationSettings;
 const emailCallbacks = createBetterAuthEmailCallbacks(
   createAuthEmailProvider(),
 );
+const sendChangeEmailConfirmation = async (
+  data: {
+    user: User;
+    newEmail: string;
+    url: string;
+    token: string;
+  },
+  request?: Request,
+) => {
+  await emailCallbacks.sendVerificationEmail(
+    {
+      user: data.user,
+      newEmail: data.newEmail,
+      url: data.url,
+      token: data.token,
+    },
+    request,
+  );
+};
 
 export const auth = betterAuth({
   ...betterAuthConfig,
@@ -172,12 +194,32 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
   },
   user: {
+    changeEmail: {
+      enabled: true,
+      // Verified accounts must approve the request from their current mailbox
+      // before Better Auth sends the verification link to the replacement one.
+      sendChangeEmailConfirmation,
+    },
     deleteUser: {
       enabled: true,
     },
   },
   databaseHooks: {
     user: {
+      update: {
+        before: async (user, context) => {
+          if (context?.path !== "/update-user") return;
+          if (!("name" in user) || typeof user.name !== "string") return;
+          const validation = validateDisplayName(user.name);
+          if (!validation.valid) {
+            throw new APIError("BAD_REQUEST", {
+              code: validation.code,
+              message: validation.code,
+            });
+          }
+          return { data: { ...user, name: validation.normalized } };
+        },
+      },
       create: {
         after: async (user, context) => {
           // 仅在 OAuth 回调首次创建用户时补齐 credential 凭证。
@@ -195,6 +237,16 @@ export const auth = betterAuth({
             password: hash,
             scope: OAUTH_PLACEHOLDER_SCOPE,
           });
+        },
+      },
+      delete: {
+        before: async (user, context) => {
+          if (!context) return;
+          // Better Auth verification rows have no user foreign key, so the
+          // ShenZhi user-bound initial-password challenge cannot DB-cascade.
+          await context.context.internalAdapter.deleteVerificationByIdentifier(
+            setPasswordOtpIdentifier(user.id),
+          );
         },
       },
     },

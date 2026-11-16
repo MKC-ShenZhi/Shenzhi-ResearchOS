@@ -1,4 +1,4 @@
-import { scholarDirections } from "@/lib/data/scholars";
+import { scholarDirections } from "@/features/knowledge/data-scholars";
 import { cn } from "@/lib/utils";
 
 /** 学者关系左栏 —— 布局与专利库筛选栏保持一致 */

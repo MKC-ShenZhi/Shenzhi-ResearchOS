@@ -8,7 +8,7 @@ import {
   NODE_MAP,
   PIPELINE_NODES,
   type NodeStatus,
-} from "@/lib/data/research-pipeline";
+} from "@/features/auto-research/research-pipeline";
 import {
   INITIAL_HEALTH,
   RUN_EVENTS,
@@ -19,7 +19,7 @@ import {
   type CheckpointOption,
   type HealthState,
   type LogLine,
-} from "@/lib/data/research-run";
+} from "@/features/auto-research/research-run";
 
 type RunArtifacts = Record<string, Artifact>;
 import { FlowCanvas } from "./flow-canvas";

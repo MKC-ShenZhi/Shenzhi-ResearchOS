@@ -12,6 +12,7 @@ const badgeVariants = cva(
         amber: "bg-[#FEF3C7] text-[#B45309] dark:bg-[#3a2f10] dark:text-[#f0c94e]",
         green: "bg-success-soft text-[#059669] dark:text-success",
         gray: "bg-chip text-muted",
+        plain: "text-muted",
         danger: "bg-danger-soft text-danger",
         dark: "bg-ink text-white",
       },

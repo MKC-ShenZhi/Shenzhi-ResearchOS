@@ -137,7 +137,9 @@ AlibabaDirectMailProvider
 Alibaba Cloud DirectMail `SingleSendMail`
 ```
 
-Verification、OTP、Password Reset 共用一个 `AuthEmailProvider`。Provider adapter 将
+Verification、OTP、Password Reset 共用一个 `AuthEmailProvider`；Change Email 的当前邮箱
+确认（`sendChangeEmailConfirmation` 复用 verification callback）和 Set Password 验证码
+（`/api/auth/password/send-otp`，ShenZhi 自有 `type: "set-password"`）也走同一条链路。Provider adapter 将
 统一消息映射为 DirectMail `SingleSendMailRequest`：`AddressType=1`、
 `ReplyToAddress=false`、`ClickTrace="0"`，并使用已验证的 `AccountName`。
 

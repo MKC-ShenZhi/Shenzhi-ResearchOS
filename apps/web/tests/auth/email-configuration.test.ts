@@ -38,4 +38,5 @@ test("mail-delivery endpoints remain guarded when they actually send mail", () =
     requiresEmailDelivery("/registration-email/send-otp"),
     true,
   );
+  assert.equal(requiresEmailDelivery("/change-email"), true);
 });

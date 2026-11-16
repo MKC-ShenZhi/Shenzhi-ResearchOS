@@ -1,12 +1,20 @@
 # Backend Client boundary
 
+基础层（不依赖具体模块）：
+
 - `http.ts`：同源 `/api/v1`、请求头、匿名身份首次握手、统一错误。
-- `chat.ts`：会话 CRUD、发送、停止、续写和产品 SSE 事件分发。
 - `sse.ts`：UTF-8、CRLF、多行数据与游标通信。
-- `search.ts`：论文搜索。Chat 模型/模式/附件配置由 `chat.ts` 读取。
-- `uploads.ts`：上传及状态，正文不返回浏览器。
+- `types.ts`、`model-types.ts`：通用响应与模型类型。
 - `forward.ts` / `identity.ts`：仅 Next.js BFF 导入；Better Auth 身份注入、匿名/鉴权异常分界、去除 Cookie / 伪造身份头、取消上游连接。
 
-业务编排在 `features/chat/services`，UI 状态在 `features/chat/hooks`。
+模块 Client：
+
+- `agent.ts`：深知 AI（Agent）会话、运行、续流、停止与事件协议。
+- `uploads.ts`：Agent 附件上传，正文不返回浏览器。
+- `discovery.ts`、`recommendations.ts`、`behavior.ts`：首页论文 Feed、个人推荐与行为事件上报。
+- `interactions.ts`、`read-status.ts`、`private-papers.ts`：收藏/点赞/关注、已读状态、私有论文。
+- `conferences.ts`：会议截稿与分类。
+
+业务编排在对应 `features/{module}/services` 或 Feature hook 中。
 浏览器不得直连模型/搜索供应商。FastAPI 不读取 Better Auth 表，不创建第二套账号系统。
-详见 [docs/chat](../../../../docs/chat/README.md)。
+详见 [docs/agent](../../../../docs/agent/README.md) 与 [认证架构](../../../../docs/auth/ARCHITECTURE.md)。

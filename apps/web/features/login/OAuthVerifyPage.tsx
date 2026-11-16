@@ -8,6 +8,8 @@ const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 type VerifyResponse = {
   url?: string;
+  error?: string;
+  message?: string;
 };
 
 /**
@@ -16,14 +18,19 @@ type VerifyResponse = {
  * 进入页面先询问后端是否已在 15 分钟内通过验证;已通过则直接跳转 Provider
  * 授权页,否则只显示一个 Cloudflare Turnstile 组件,完成后自动发送 token。
  */
-export function OAuthVerifyPage({ provider }: { provider: string }) {
+export function OAuthVerifyPage({
+  provider,
+  turnstileAction,
+}: {
+  provider: string;
+  turnstileAction?: string;
+}) {
   const providerMeta = getSocialProviderMeta(provider);
   const providerLabel = providerMeta?.label ?? provider;
 
   // 后端要求先做人机验证时才显示验证框。
   const [needsChallenge, setNeedsChallenge] = React.useState(false);
-  // 验证失败后自增,强制重新挂载 Turnstile 组件以便再次验证。
-  const [attempt, setAttempt] = React.useState(0);
+  const [error, setError] = React.useState<string | null>(null);
   const submittedRef = React.useRef(false);
 
   const verify = React.useCallback(
@@ -50,11 +57,9 @@ export function OAuthVerifyPage({ provider }: { provider: string }) {
           return;
         }
 
-        setNeedsChallenge(true);
-        setAttempt((value) => value + 1);
+        setError(data?.message ?? "无法创建登录链接，请稍后重试");
       } catch {
-        setNeedsChallenge(true);
-        setAttempt((value) => value + 1);
+        setError("登录请求失败，请检查网络后重试");
       } finally {
         submittedRef.current = false;
       }
@@ -88,9 +93,14 @@ export function OAuthVerifyPage({ provider }: { provider: string }) {
           return;
         }
 
-        setNeedsChallenge(true);
+        if (data?.error === "verification_required") {
+          setNeedsChallenge(true);
+          return;
+        }
+
+        setError(data?.message ?? "无法创建登录链接，请稍后重试");
       } catch {
-        if (!cancelled) setNeedsChallenge(true);
+        if (!cancelled) setError("登录请求失败，请检查网络后重试");
       }
     })();
 
@@ -107,12 +117,12 @@ export function OAuthVerifyPage({ provider }: { provider: string }) {
   );
 
   const handleError = React.useCallback(() => {
-    setAttempt((value) => value + 1);
+    setError("人机验证失败，请检查网络后重试");
   }, []);
 
   if (!TURNSTILE_SITE_KEY) {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-background p-4">
+      <main className="flex min-h-dvh flex-col items-center justify-center bg-background p-4">
         <p className="text-[13px] text-danger" role="alert">
           人机验证未配置，暂时无法使用 {providerLabel} 登录。
         </p>
@@ -121,15 +131,27 @@ export function OAuthVerifyPage({ provider }: { provider: string }) {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-background p-4">
+    <main className="flex min-h-dvh flex-col items-center justify-center bg-background p-4">
       {needsChallenge && (
         <CloudflareTurnstile
-          key={attempt}
           siteKey={TURNSTILE_SITE_KEY}
+          action={turnstileAction}
           scale={1.5}
           onToken={handleToken}
           onError={handleError}
         />
+      )}
+      {error && (
+        <div className="mt-4 text-center" role="alert">
+          <p className="text-[13px] text-danger">{error}</p>
+          <button
+            type="button"
+            className="mt-3 rounded-md px-3 py-2 text-[13px] font-medium text-primary hover:bg-chip"
+            onClick={() => window.location.reload()}
+          >
+            重新尝试
+          </button>
+        </div>
       )}
     </main>
   );

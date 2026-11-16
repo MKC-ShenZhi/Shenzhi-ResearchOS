@@ -1,114 +1,197 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search, Upload } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useInteractionIdentity } from "@/features/knowledge/interactions/use-interaction-identity";
+import { useRefreshPaperInteraction } from "@/features/knowledge/interactions/use-refresh-paper-interaction";
+import { MoreHorizontal, Search, Upload } from "lucide-react";
+import { apiJson, ApiError, expectedUserHeaders } from "@/clients/backend/http";
+import { deletePrivatePaper, listPrivatePapers, privatePaperFileHref, uploadPrivatePaper, type PrivatePaper } from "@/clients/backend/private-papers";
+import type { CollectionPaperListResponse } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
-import { libraryItems } from "@/lib/data/library";
-import { cn } from "@/lib/utils";
+import { PaperCollectorCount } from "@/features/knowledge/interactions/components/paper-collector-count";
+import { paperHref } from "@/lib/navigation/paper";
+import { useCollections } from "@/stores/collections";
+import { PaperReadBadgeForPaper } from "./paper-read-badge";
 
-const PDF_TONES = {
-  violet: "bg-primary-soft text-primary",
-  amber: "bg-[#FEF3C7] text-[#B45309] dark:bg-[#3a2f10] dark:text-[#f0c94e]",
-  green: "bg-success-soft text-[#059669] dark:text-success",
-} as const;
-
-/** 在读文献表格 —— 标题 / 作者 / 添加时间 */
-export function LibraryTable() {
+export function LibraryTable({ folderId }: { folderId: number | null }) {
   const [query, setQuery] = useState("");
-  const [venue, setVenue] = useState("全部会议");
-  const [year, setYear] = useState("全部年份");
+  const [page, setPage] = useState(1);
+  const [error, setError] = useState("");
+  const [unauthenticated, setUnauthenticated] = useState(false);
+  const [menu, setMenu] = useState<string | null>(null);
+  const [privateMenu, setPrivateMenu] = useState<number | null>(null);
+  const [privatePapers, setPrivatePapers] = useState<PrivatePaper[]>([]);
+  const [privateTabOpen, setPrivateTabOpen] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const folders = useCollections((state) => state.folders);
+  const loadFolders = useCollections((state) => state.loadFolders);
+  const refreshCollectorCounts = useRefreshPaperInteraction();
+  const { identityKey, isSessionPending } = useInteractionIdentity();
+  const papers = useQuery({
+    queryKey: ["collection-folder-papers", identityKey, folderId, page],
+    queryFn: () => apiJson<CollectionPaperListResponse>(`/collections/folders/${folderId}/papers?page=${page}&page_size=20`, {
+      headers: expectedUserHeaders(identityKey),
+    }),
+    enabled: !isSessionPending && Boolean(identityKey) && folderId !== null && folderId > 0,
+    retry: false,
+  });
+  const data = papers.data;
+  const isLoading = papers.isFetching;
+  const queryError = papers.error instanceof ApiError && papers.error.status === 401
+    ? "该功能需要登录后使用，请先登录" : papers.isError ? "文件夹内容加载失败" : "";
+  const visibleError = error || queryError;
 
-  const venues = ["全部会议", ...new Set(libraryItems.map((item) => item.venue.split(" ")[0]))];
-  const years = ["全部年份", ...new Set(libraryItems.map((item) => item.venue.match(/\d{4}/)?.[0] ?? "其他"))];
-  const filtered = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-    return libraryItems.filter((item) => {
-      const itemVenue = item.venue.split(" ")[0];
-      const itemYear = item.venue.match(/\d{4}/)?.[0] ?? "其他";
-      if (venue !== "全部会议" && itemVenue !== venue) return false;
-      if (year !== "全部年份" && itemYear !== year) return false;
-      return !keyword || `${item.title} ${item.authors} ${item.venue} ${item.arxiv}`.toLowerCase().includes(keyword);
+  useEffect(() => {
+    if (folderId === null || folderId < 1) return;
+    let cancelled = false;
+    void listPrivatePapers(folderId).then((result) => {
+      if (!cancelled) setPrivatePapers(result.items);
+    }).catch((reason) => {
+      if (!cancelled) {
+        setPrivateTabOpen(true);
+        setUploadError(reason instanceof ApiError && reason.status === 401
+          ? "请先登录后查看私有论文" : "私有论文加载失败，请刷新重试");
+      }
     });
-  }, [query, venue, year]);
+    return () => { cancelled = true; };
+  }, [folderId]);
+
+  async function handlePrivateUpload(file: File | undefined) {
+    if (!file || folderId === null || folderId < 1) return;
+    setPrivateTabOpen(true);
+    setUploadError("");
+    if (!file.name.toLowerCase().endsWith(".pdf")) { setUploadError("仅支持 PDF 文件"); return; }
+    if (file.size > 20 * 1024 * 1024) { setUploadError("私有论文不能超过 20 MB"); return; }
+    setUploading(true);
+    try {
+      await uploadPrivatePaper(folderId, file);
+      const result = await listPrivatePapers(folderId);
+      setPrivatePapers(result.items);
+      setPrivateTabOpen(true);
+      await loadFolders();
+    } catch (reason) {
+      setUploadError(reason instanceof ApiError ? reason.message : "上传失败，请稍后重试");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removePrivatePaper(id: number) {
+    if (!window.confirm("删除这篇私有论文？")) return;
+    try {
+      await deletePrivatePaper(id);
+      setPrivatePapers((current) => current.filter((paper) => paper.id !== id));
+      setPrivateMenu(null);
+      await loadFolders();
+    } catch (reason) {
+      setPrivateTabOpen(true);
+      setUploadError(reason instanceof ApiError ? reason.message : "删除失败，请重试");
+    }
+  }
+
+  async function loadPage(nextPage: number) {
+    setError("");
+    if (nextPage === page) await papers.refetch();
+    else setPage(nextPage);
+  }
+
+  async function removePaper(paperId: string) {
+    if (!folderId) return;
+    try {
+      await apiJson<unknown>(`/collections/folders/${folderId}/papers/${encodeURIComponent(paperId)}`, { method: "DELETE", headers: expectedUserHeaders(identityKey) });
+      await loadPage(page);
+      await loadFolders();
+      void refreshCollectorCounts();
+      setMenu(null);
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 401) setUnauthenticated(true);
+      else setError(reason instanceof ApiError && reason.status === 403 ? "无权访问该文件夹" : "操作失败，请重试");
+    }
+  }
+
+  async function movePaper(paperId: string, targetFolderId: number) {
+    if (!folderId) return;
+    try {
+      await apiJson<unknown>(`/collections/folders/${folderId}/papers/${encodeURIComponent(paperId)}/move`, {
+        method: "POST",
+        headers: expectedUserHeaders(identityKey),
+        body: JSON.stringify({ target_folder_id: targetFolderId }),
+      });
+      await loadPage(page);
+      await loadFolders();
+      void refreshCollectorCounts();
+      setMenu(null);
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 401) setUnauthenticated(true);
+      else setError(reason instanceof ApiError ? reason.message : "移动失败，请重试");
+    }
+  }
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const items = data?.items.filter((item) => `${item.title} ${item.authors.join(" ")} ${item.venue ?? ""}`.toLowerCase().includes(normalizedQuery)) ?? [];
+  const matchingPrivatePapers = privatePapers.filter((paper) => `${paper.title} ${paper.filename}`.toLowerCase().includes(normalizedQuery));
+  const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / 20));
 
   return (
-    <div className="min-w-0 flex-1 p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-ink">在读</h1>
-          <p className="mt-1 text-xs text-faint">
-            12 篇文献 · 上次更新 7 月 25 日
-          </p>
-        </div>
-        <Button className="rounded-xl">
-          <Upload className="size-4" />
-          上传私有论文
-        </Button>
+    <section className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-5 lg:h-full lg:min-h-0 lg:p-8">
+      <div className="flex items-center gap-3">
+        <div className="relative min-w-0 max-w-[460px] flex-1"><Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-faint" /><input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索本页深知论文及私有论文" placeholder="搜索本页深知论文及私有论文" className="h-10 w-full rounded-xl border border-line bg-card pl-10 pr-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50" /></div>
+        {normalizedQuery && <span className="text-xs text-faint">已显示匹配 {items.length + matchingPrivatePapers.length} 篇</span>}
       </div>
-
-      <div className="mt-5 flex flex-wrap items-center gap-2.5">
-        <div className="relative min-w-[280px] max-w-[460px] flex-1">
-          <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-faint" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索标题、作者、会议或 arXiv 编号…"
-            className="h-10 w-full rounded-xl border border-line bg-card pl-10 pr-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
-          />
-        </div>
-        <select value={venue} onChange={(event) => setVenue(event.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-xs text-ink-2 outline-none">
-          {venues.map((item) => <option key={item}>{item}</option>)}
-        </select>
-        <select value={year} onChange={(event) => setYear(event.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-xs text-ink-2 outline-none">
-          {years.map((item) => <option key={item}>{item}</option>)}
-        </select>
-        <span className="text-xs text-faint">找到 {filtered.length} 篇</span>
-      </div>
-
-      {/* 表头 */}
-      <div className="mt-4 grid grid-cols-[minmax(0,1fr)_220px_90px] items-center gap-4 rounded-xl bg-card px-5 py-3 text-xs text-faint shadow-card">
-        <span className="flex items-center gap-3">
-          <span className="size-4 rounded border border-line" />
-          标题
-        </span>
-        <span>作者</span>
-        <span>添加时间</span>
-      </div>
-
-      {/* 数据行 */}
-      <div className="mt-3 space-y-2">
-        {filtered.map((item) => (
-          <div
-            key={item.id}
-            className="grid cursor-pointer grid-cols-[minmax(0,1fr)_220px_90px] items-center gap-4 rounded-xl px-5 py-3 transition-colors hover:bg-card"
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="size-4 shrink-0 rounded border border-line bg-card" />
-              <span
-                className={cn(
-                  "flex h-11 w-9 shrink-0 items-end justify-center rounded-md pb-1 text-[10px] font-bold",
-                  PDF_TONES[item.pdfTone],
-                )}
-              >
-                PDF
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-[15px] font-semibold text-ink">
-                  {item.title}
-                </p>
-                <p className="mt-0.5 text-xs text-faint">
-                  {item.venue} · {item.arxiv}
-                </p>
-              </div>
+      <section className="mt-5 rounded-2xl bg-card p-3 sm:p-5 shadow-card" aria-label="深知论文">
+      <h2 className="text-base font-semibold text-ink">深知论文</h2>
+      {visibleError && <div className="mt-4 rounded-xl bg-danger-soft p-4 text-sm text-danger">{visibleError}<button type="button" onClick={() => void loadPage(page)} className="ml-3 underline">重试</button></div>}
+      {unauthenticated || (!isSessionPending && !identityKey) ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-muted">该功能需要登录后使用，请先登录</div> : !folderId ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-faint">暂无文件夹</div> : isLoading ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-muted">加载中...</div> : visibleError ? null : data && data.items.length === 0 ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-faint">当前文件夹暂无深知论文</div> : !visibleError && <>
+        <div className="mt-4 hidden lg:grid grid-cols-[minmax(0,1fr)_220px_100px_36px] items-center gap-4 border-b border-line px-3 py-2 text-xs text-faint"><span>论文</span><span>作者</span><span>添加时间</span><span /></div>
+        <div className="divide-y divide-line">
+          {items.map((item) => (
+            <div key={item.paper_id} className="grid grid-cols-[minmax(0,1fr)_36px] lg:grid-cols-[minmax(0,1fr)_220px_100px_36px] items-center gap-4 rounded-xl px-3 py-3 transition-colors hover:bg-panel">
+              <Link href={paperHref(item.paper_id, { mode: "create", source: "/knowledge/papers" })} className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-9 shrink-0 items-end justify-center rounded-md bg-primary-soft pb-1 text-[10px] font-bold text-primary">PDF</span><span className="min-w-0"><span className="flex min-w-0 items-center gap-2"><span className="truncate text-[15px] font-semibold text-ink">{item.title}</span><PaperReadBadgeForPaper paperId={item.paper_id} /></span><span className="mt-0.5 block truncate text-xs text-faint">{item.venue ?? "暂无会议"} · {item.year ?? "—"} · <PaperCollectorCount paperId={item.paper_id} className="align-middle text-xs" /></span></span></Link>
+              <p className="hidden truncate text-[13px] text-muted lg:block">{item.authors.join(" · ") || "未知作者"}</p>
+              <time className="hidden text-[13px] text-muted lg:block">{new Date(item.added_at).toLocaleDateString("zh-CN")}</time>
+              <span className="relative"><button type="button" onClick={() => setMenu(menu === item.paper_id ? null : item.paper_id)} aria-label="论文操作" className="rounded-md p-1 text-faint hover:bg-chip"><MoreHorizontal className="size-4" /></button>{menu === item.paper_id && <span className="absolute right-0 top-full z-20 w-36 rounded-lg border border-line bg-card p-1 text-xs shadow-card"><button type="button" onClick={() => void removePaper(item.paper_id)} className="block w-full rounded-md px-2 py-1.5 text-left text-danger hover:bg-danger-soft">删除</button><span className="mt-1 block border-t border-line pt-1"><span className="block px-2 py-1 text-faint">移至</span>{folders.filter((folder) => folder.id !== folderId).map((folder) => <button key={folder.id} type="button" onClick={() => void movePaper(item.paper_id, folder.id)} className="block w-full truncate rounded-md px-2 py-1.5 text-left text-ink-2 hover:bg-chip">{folder.name}</button>)}</span></span>}</span>
             </div>
-            <p className="truncate text-[13px] text-muted">{item.authors}</p>
-            <p className="text-[13px] text-muted">{item.addedAt}</p>
+          ))}
+        </div>
+        {items.length === 0 && (data?.total ?? 0) > 0 && <div className="mt-3 rounded-xl bg-panel p-6 text-center text-sm text-faint">未找到匹配的深知论文</div>}
+        {pageCount > 1 && <div className="mt-3 flex justify-center gap-1">{Array.from({ length: Math.min(pageCount, 5) }, (_, index) => index + 1).map((number) => <button key={number} type="button" onClick={() => void loadPage(number)} className={`size-8 rounded-lg text-xs ${number === page ? "bg-primary text-white" : "text-muted hover:bg-chip"}`}>{number}</button>)}</div>}
+      </>}
+      </section>
+      {!unauthenticated && folderId !== null && folderId > 0 && (
+        <section className="mt-5 rounded-2xl bg-card p-3 sm:p-5 shadow-card" aria-label="私有论文">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h2><button
+              type="button"
+              onClick={() => setPrivateTabOpen((open) => !open)}
+              aria-expanded={privateTabOpen}
+              aria-controls="private-paper-list"
+              className="text-base font-semibold text-ink"
+            >
+              私有论文 <span className="ml-1 text-xs font-normal text-muted">{normalizedQuery ? matchingPrivatePapers.length : privatePapers.length}</span>
+            </button></h2>
+            <input ref={fileInput} type="file" accept=".pdf,application/pdf" className="hidden" onChange={(event) => { void handlePrivateUpload(event.target.files?.[0]); event.target.value = ""; }} />
+            <Button className="rounded-xl" disabled={uploading} onClick={() => fileInput.current?.click()}><Upload className="size-4" />{uploading ? "上传中…" : "上传私有论文"}</Button>
           </div>
-        ))}
-      </div>
-      {filtered.length === 0 && (
-        <div className="mt-3 rounded-2xl bg-card p-12 text-center text-sm text-faint shadow-card">未找到匹配的文献</div>
+          {uploadError && <p role="alert" className="mt-4 text-sm text-danger">{uploadError}</p>}
+          <div id="private-paper-list" hidden={!privateTabOpen}>
+            {matchingPrivatePapers.length === 0 ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-faint">{normalizedQuery ? "未找到匹配的私有论文" : "当前文件夹暂无私有论文"}</div> : <>
+              <div className="mt-4 hidden lg:grid grid-cols-[minmax(0,1fr)_220px_100px_36px] items-center gap-4 border-b border-line px-3 py-2 text-xs text-faint"><span>论文</span><span>作者</span><span>添加时间</span><span /></div>
+              <div className="divide-y divide-line">{matchingPrivatePapers.map((paper) => (
+                <div key={paper.id} className="grid grid-cols-[minmax(0,1fr)_36px] lg:grid-cols-[minmax(0,1fr)_220px_100px_36px] items-center gap-4 rounded-xl px-3 py-3 transition-colors hover:bg-panel">
+                  <a href={privatePaperFileHref(paper.id)} target="_blank" rel="noopener noreferrer" className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-9 shrink-0 items-end justify-center rounded-md bg-primary-soft pb-1 text-[10px] font-bold text-primary">PDF</span><span className="min-w-0"><span className="block truncate text-[15px] font-semibold text-ink">{paper.title}</span><span className="mt-0.5 block text-xs text-faint">私有上传 · {(paper.size_bytes / 1024 / 1024).toFixed(1)} MB</span></span></a>
+                  <span className="hidden text-[13px] text-muted lg:block">—</span>
+                  <time className="hidden text-[13px] text-muted lg:block">{new Date(paper.created_at).toLocaleDateString("zh-CN")}</time>
+                  <span className="relative"><button type="button" onClick={() => setPrivateMenu(privateMenu === paper.id ? null : paper.id)} aria-label="私有论文操作" className="rounded-md p-1 text-faint hover:bg-chip"><MoreHorizontal className="size-4" /></button>{privateMenu === paper.id && <span className="absolute right-0 top-full z-20 w-28 rounded-lg border border-line bg-card p-1 text-xs shadow-card"><a href={privatePaperFileHref(paper.id)} target="_blank" rel="noopener noreferrer" className="block rounded-md px-2 py-1.5 text-ink-2 hover:bg-chip">查看</a><button type="button" onClick={() => void removePrivatePaper(paper.id)} className="block w-full rounded-md px-2 py-1.5 text-left text-danger hover:bg-danger-soft">删除</button></span>}</span>
+                </div>
+              ))}</div>
+            </>}
+          </div>
+        </section>
       )}
-    </div>
+    </section>
   );
 }

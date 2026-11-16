@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { FileText } from "lucide-react";
-import { NODE_MAP } from "@/lib/data/research-pipeline";
-import { FAILURE_MODES, PASSPORT_LEVELS, type Artifact } from "@/lib/data/research-run";
+import { NODE_MAP } from "@/features/auto-research/research-pipeline";
+import { FAILURE_MODES, PASSPORT_LEVELS, type Artifact } from "@/features/auto-research/research-run";
 import { cn } from "@/lib/utils";
 
 type Tab = "artifacts" | "passport" | "integrity";

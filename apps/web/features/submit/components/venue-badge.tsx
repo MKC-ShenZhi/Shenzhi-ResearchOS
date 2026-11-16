@@ -1,4 +1,4 @@
-import { BADGE_PALETTE } from "@/lib/data/venues";
+import { BADGE_PALETTE } from "@/features/submit/data";
 import type { VenueBadgeName } from "@/types";
 
 /** 等级徽章 —— 配色与投稿详情页 SVG 的调色板一一对应 */

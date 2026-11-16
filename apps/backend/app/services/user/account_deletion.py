@@ -1,0 +1,70 @@
+"""Idempotent removal of every currently persisted business record for one user."""
+
+from dataclasses import dataclass
+
+from sqlalchemy import delete, select
+
+from app.core.database import session_scope
+from app.models.agent_session import AgentSessionRow
+from app.models.agent_upload import AgentUploadRow
+from app.models.collections import CollectionFolderRow, CollectionItemRow, CollectionUserStateRow
+from app.models.interactions import ConferenceFollowRow, PaperLikeRow, TopicFollowRow
+from app.models.profile import UserProfileRow
+from app.models.reading_history import ReadingHistoryRow
+from app.models.recommendation import BehaviorEventRow, RecommendationSnapshotRow, UserInterestProfileRow
+from app.models.settings import UserSettingsRow
+
+
+@dataclass(frozen=True)
+class BusinessDataDeletionResult:
+    profiles_deleted: int
+    settings_deleted: int
+    agent_sessions_deleted: int
+
+
+class AccountDeletionService:
+    """Remove business data before the separate Better Auth account is deleted.
+
+    All current business tables share CHAT_DATABASE_URL, so this method has one
+    transaction. Repeating it is safe: a completed deletion simply returns
+    zero counts, allowing a user to retry if the later auth deletion fails.
+    """
+
+    async def delete_all_for_user(self, user_id: str) -> BusinessDataDeletionResult:
+        owner = f'user:{user_id}'
+        async with session_scope() as db:
+            await db.execute(delete(AgentUploadRow).where(AgentUploadRow.owner == owner))
+            folder_ids = select(CollectionFolderRow.id).where(CollectionFolderRow.user_id == user_id)
+            await db.execute(delete(CollectionItemRow).where(CollectionItemRow.folder_id.in_(folder_ids)))
+            await db.execute(delete(CollectionFolderRow).where(CollectionFolderRow.user_id == user_id))
+            await db.execute(delete(CollectionUserStateRow).where(CollectionUserStateRow.user_id == user_id))
+            await db.execute(delete(PaperLikeRow).where(PaperLikeRow.user_id == user_id))
+            await db.execute(delete(TopicFollowRow).where(TopicFollowRow.user_id == user_id))
+            await db.execute(delete(ConferenceFollowRow).where(ConferenceFollowRow.user_id == user_id))
+            await db.execute(delete(ReadingHistoryRow).where(ReadingHistoryRow.user_id == user_id))
+            await db.execute(delete(BehaviorEventRow).where(BehaviorEventRow.user_id == user_id))
+            await db.execute(delete(UserInterestProfileRow).where(UserInterestProfileRow.user_id == user_id))
+            await db.execute(delete(RecommendationSnapshotRow).where(RecommendationSnapshotRow.user_id == user_id))
+            profiles = await db.execute(
+                delete(UserProfileRow)
+                .where(UserProfileRow.user_id == user_id)
+                .returning(UserProfileRow.user_id)
+            )
+            settings = await db.execute(
+                delete(UserSettingsRow)
+                .where(UserSettingsRow.user_id == user_id)
+                .returning(UserSettingsRow.user_id)
+            )
+            agent_sessions = await db.execute(
+                delete(AgentSessionRow)
+                .where(AgentSessionRow.owner == owner)
+                .returning(AgentSessionRow.id)
+            )
+
+        # Counts deliberately omit content and identifiers so logs and the
+        # response stay safe.
+        return BusinessDataDeletionResult(
+            profiles_deleted=len(profiles.all()),
+            settings_deleted=len(settings.all()),
+            agent_sessions_deleted=len(agent_sessions.all()),
+        )

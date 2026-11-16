@@ -3,7 +3,7 @@
  *
  * 契约来源：知识底座科研组 Contract（同学调研确认）。
  * 稳定依赖字段：
- *   Search   → id / title / abstract / authors / year / venue / keywords / subjects / score / rank
+ *   Search   → id / imageId / title / abstract / authors / year / venue / keywords / subjects / topics / score / rank
  *   Detail   → 同上 + doi / pdfUrl / citationCount / referenceCount
  *   Graph    → rootId / nodes[{id,kind,label,properties}] / edges[{sourceId,targetId,relation,description,weight}]
  *
@@ -35,9 +35,155 @@ export interface KnowledgeSearchResponse {
   hasMore?: boolean;
 }
 
+export interface KnowledgeSubjectSearchResponse {
+  results: KnowledgePaperHit[];
+  total: number;
+}
+
+/** ShenZhi 产品契约；不暴露科研组原始会议字段。 */
+export interface KnowledgeConference {
+  name: string;
+  paperCount: number;
+  years: number[];
+  yearCount: number;
+}
+
+export interface KnowledgeConferenceListResponse {
+  items: KnowledgeConference[];
+  snapshotUpdatedAt?: string;
+  snapshotStale?: boolean;
+}
+
+export interface KnowledgePaperBrowseParams {
+  conference: string;
+  year: number;
+  limit: number;
+  offset: number;
+}
+
+export interface KnowledgePaperBrowseResponse {
+  results: KnowledgePaperHit[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** 主题广场卡片；imagePath 使用前端可直接访问的 public 路径。 */
+export interface KnowledgeTopic {
+  id: string;
+  imagePath: string | null;
+  nameZh: string;
+  nameEn: string;
+  author: string | KnowledgeTopicAuthor | null;
+  descriptionZh: string;
+  /** 详情页使用的完整介绍；缺省时回退到 descriptionZh。 */
+  descriptionDetail?: string | null;
+  descriptionEn: string;
+  followersCount: number;
+  /** 实时关注状态和人数由平台互动接口单独返回。 */
+  isFollowing?: boolean;
+  /** OpenAlex Subfield ID。 */
+  category: string;
+  categoryName: string;
+  subjectQuery: string;
+  paperCount: number;
+  enabled: boolean;
+}
+
+export interface KnowledgeTopicAuthor {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  isVerified?: boolean;
+}
+
+export interface KnowledgeCreator {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  bio: string;
+  topicCount: number;
+  isVerified: boolean;
+}
+
+export interface KnowledgeTopicCategory {
+  id: string;
+  name: string;
+  total: number;
+}
+
+export interface KnowledgeTopicListResponse {
+  items: KnowledgeTopic[];
+  total: number;
+  categories: KnowledgeTopicCategory[];
+}
+
+export interface KnowledgeScholarSearchParams {
+  query: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface KnowledgeScholarSummary {
+  id: string;
+  name: string;
+  paperCount: number;
+  provenance: unknown;
+}
+
+export interface KnowledgeScholarSearchResponse {
+  results: KnowledgeScholarSummary[];
+}
+
+export interface KnowledgeScholarReference {
+  id: string;
+  name: string;
+}
+
+export interface KnowledgeScholarPaper {
+  id: string;
+  title: string;
+  year: number | null;
+}
+
+export interface KnowledgeScholarDetail extends KnowledgeScholarSummary {
+  years: number[];
+  conferences: string[];
+  topics: string[];
+  funding: string[];
+  institutions: string[];
+  coauthors: KnowledgeScholarReference[];
+  papers: KnowledgeScholarPaper[];
+}
+
+export interface KnowledgeFundingSearchParams {
+  query?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface KnowledgeFundingSummary {
+  id: string;
+  name: string;
+  paperCount: number;
+  provenance: unknown;
+}
+
+export interface KnowledgeFundingSearchResponse {
+  results: KnowledgeFundingSummary[];
+}
+
 /** 搜索结果单条（论文） */
+export interface PaperTopic {
+  id: string;
+  nameZh: string | null;
+  nameEn: string;
+}
+
 export interface KnowledgePaperHit {
   id: string;
+  /** 上游真实图片标识；null 表示未提供，不从论文 id 推断。 */
+  imageId: string | null;
   title: string;
   abstract: string | null;
   authors: string[];
@@ -45,6 +191,7 @@ export interface KnowledgePaperHit {
   venue: string | null;
   keywords: string[];
   subjects: string[];
+  topics?: PaperTopic[];
   /** 相关性得分（非百分比） */
   score: number | null;
   rank: number | null;
@@ -65,12 +212,38 @@ export interface KnowledgePaperDetail {
 
   keywords: string[];
   subjects: string[];
+  topics?: PaperTopic[];
 
   /** null = 上游未提供，禁止显示为 0 */
   citationCount: number | null;
   referenceCount: number | null;
 
   provenance: unknown;
+}
+
+export interface ReadingHistoryItem extends KnowledgePaperDetail {
+  paper_id: string;
+  last_viewed_at: string;
+}
+
+export interface ReadingHistoryResponse {
+  items: ReadingHistoryItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface CollectionPaperItem extends KnowledgePaperDetail {
+  paper_id: string;
+  added_at: string;
+  is_available: boolean;
+}
+
+export interface CollectionPaperListResponse {
+  items: CollectionPaperItem[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 /** 图谱节点 kind 是开放字符串；这里只列出当前已知类型，未知类型默认展示 */
@@ -133,6 +306,108 @@ export interface KnowledgeGraph {
   edges: KnowledgeGraphEdge[];
   /** Backend provenance is retained for downstream diagnostics and attribution. */
   provenance?: unknown;
+}
+
+export type KnowledgeOverviewStatus =
+  | "available"
+  | "empty"
+  | "unsupported"
+  | "pending"
+  | "error";
+
+export interface KnowledgeOverviewTag {
+  name: string;
+  count: number | null;
+}
+
+export interface KnowledgeOverviewPaperLibrary {
+  paperCount: number | null;
+  status: KnowledgeOverviewStatus;
+  popularTags: KnowledgeOverviewTag[];
+  recentPapers: KnowledgePaperDetail[];
+}
+
+export interface KnowledgeOverviewHighlight {
+  id: string;
+  name: string;
+  count: number | null;
+  status: KnowledgeOverviewStatus;
+  metadata: Record<string, unknown>;
+}
+
+export interface KnowledgeOverviewResearchAsset {
+  count: number | null;
+  supported: boolean;
+  status: KnowledgeOverviewStatus;
+}
+
+export interface KnowledgeOverviewResponse {
+  asOf: string;
+  scope: string;
+  paperLibrary: KnowledgeOverviewPaperLibrary;
+  scholarHighlights: KnowledgeOverviewHighlight[];
+  topicHighlights: KnowledgeOverviewHighlight[];
+  researchAssets: {
+    total: number | null;
+    status: KnowledgeOverviewStatus;
+    highlights: KnowledgeOverviewHighlight[];
+    byType: Record<string, KnowledgeOverviewResearchAsset>;
+    coverage: Record<string, boolean>;
+  };
+  graphPreview: {
+    supported: boolean;
+    status: KnowledgeOverviewStatus;
+    rootPaperId: string | null;
+    nodes: KnowledgeGraphNode[];
+    edges: KnowledgeGraphEdge[];
+  };
+}
+
+export interface KnowledgePersonalOverviewResponse {
+  authRequired: boolean;
+  folders: Array<{
+    id: number;
+    name: string;
+    isDefault: boolean;
+    paperCount: number;
+  }>;
+  recentPapers: Array<KnowledgePaperDetail & {
+    paper_id: string;
+    last_viewed_at: string;
+  }>;
+}
+
+export type KnowledgeMixedSearchType =
+  | "paper"
+  | "scholar"
+  | "topic"
+  | "project"
+  | "patent"
+  | "funding"
+  | "graph";
+
+export interface KnowledgeMixedSearchParams {
+  query: string;
+  types: KnowledgeMixedSearchType[];
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface KnowledgeMixedSearchResult {
+  type: KnowledgeMixedSearchType;
+  id: string;
+  title: string;
+  summary: string | null;
+  metadata: Record<string, unknown>;
+  action: string | null;
+}
+
+export interface KnowledgeMixedSearchResponse {
+  results: KnowledgeMixedSearchResult[];
+  supportedTypes: KnowledgeMixedSearchType[];
+  unsupportedTypes: KnowledgeMixedSearchType[];
+  failedTypes: KnowledgeMixedSearchType[];
+  nextCursor: string | null;
 }
 
 /** Backend-supported graph depth. */

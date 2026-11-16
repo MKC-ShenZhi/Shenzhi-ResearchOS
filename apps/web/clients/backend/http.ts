@@ -1,4 +1,4 @@
-import type { ApiEnvelope } from "../../types/ai-search";
+import type { ApiEnvelope } from "./types";
 
 /** 浏览器一律打同源 `/api/v1`，由 Next 微后端转发到 FastAPI（BUSINESS_BACKEND_URL） */
 export const API_PREFIX = "/api/v1";
@@ -29,6 +29,14 @@ export class ApiError extends Error {
   }
 }
 
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+export function requestIdForApiError(error: unknown): string | undefined {
+  return error instanceof ApiError ? error.requestId ?? undefined : undefined;
+}
+
 export function apiPath(path: string) {
   const p = path.startsWith("/") ? path : `/${path}`;
   return `${API_PREFIX}${p}`;
@@ -39,12 +47,19 @@ export function requestHeaders(extra?: HeadersInit): Headers {
   return new Headers(extra);
 }
 
+/** Reject a request if cookies changed accounts before the BFF resolved them.
+ * This is a precondition, never an authentication credential.
+ */
+export function expectedUserHeaders(userId: string): HeadersInit {
+  return { "x-shenzhi-expected-user-id": userId };
+}
+
 // Serialize first contact so parallel config/history/upload requests cannot issue
 // different anonymous cookies. This is transport bootstrap, not an account system.
 let identityReady: Promise<void> | undefined;
 async function ensureBackendIdentity() {
   if (typeof window === "undefined") return;
-  identityReady ??= fetch(apiPath("/chat/config"), { cache: "no-store", signal: AbortSignal.timeout(30000) }).then((response) => {
+  identityReady ??= fetch(apiPath("/identity/bootstrap"), { cache: "no-store", signal: AbortSignal.timeout(30000) }).then((response) => {
     if (!response.ok) throw new ApiError(20004, "无法连接生成服务", response.status, {
       requestId: response.headers.get("X-Request-ID"),
     });
@@ -56,14 +71,17 @@ export async function apiJson<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
+  init.signal?.throwIfAborted();
   await ensureBackendIdentity();
+  init.signal?.throwIfAborted();
   const headers = requestHeaders(init.headers);
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(apiPath(path), { ...init, headers, signal: init.signal ?? AbortSignal.timeout(30000) });
+  const res = await fetch(apiPath(path), { ...init, headers, signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000) });
   const requestId = res.headers.get("X-Request-ID");
+  if (res.status === 204) return undefined as T;
   let payload: unknown;
   try {
     payload = await res.json();

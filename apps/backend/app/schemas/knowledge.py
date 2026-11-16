@@ -9,9 +9,9 @@ new knowledge-base entity types can be introduced without a backend release.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 
 
 class KnowledgeModel(BaseModel):
@@ -58,7 +58,7 @@ class KnowledgeSearchRequest(KnowledgeModel):
         validation_alias='topK',
         serialization_alias='topK',
     )
-    # None keeps non-paginated callers (notably Knowledge2Chat) on the
+    # None keeps non-paginated callers (notably Agent knowledge tools) on the
     # existing upstream request. Paper Search sends an explicit offset,
     # including 0 for its first page.
     offset: int | None = Field(default=None, ge=0)
@@ -113,8 +113,45 @@ class KnowledgeSearchRequest(KnowledgeModel):
         return self
 
 
+class PaperTopic(KnowledgeModel):
+    id: str
+    name_zh: str | None = Field(alias='nameZh')
+    name_en: str = Field(alias='nameEn')
+
+
+def _normalize_paper_topics(value: Any) -> list[PaperTopic]:
+    """Keep the first named entry per ID, in upstream order."""
+    topics: list[PaperTopic] = []
+    seen: set[str] = set()
+    for item in value if isinstance(value, list) else []:
+        if isinstance(item, PaperTopic):
+            item = item.model_dump()
+        if not isinstance(item, dict):
+            continue
+        raw_id = item.get('id')
+        topic_id = raw_id.strip() if isinstance(raw_id, str) else ''
+        if not topic_id or topic_id in seen or topic_id in {'.', '..'}:
+            continue
+        raw_zh = item.get('nameZh', item.get('name_zh'))
+        raw_en = item.get('nameEn', item.get('name_en'))
+        name_zh = raw_zh.strip() if isinstance(raw_zh, str) else ''
+        name_en = raw_en.strip() if isinstance(raw_en, str) else ''
+        if name_zh or name_en:
+            seen.add(topic_id)
+            topics.append(PaperTopic(id=topic_id, name_zh=name_zh or None, name_en=name_en))
+    return topics
+
+
+PaperTopics = Annotated[list[PaperTopic], BeforeValidator(_normalize_paper_topics)]
+
+
 class PaperSearchResult(KnowledgeModel):
     id: str
+    image_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices('imageId', 'image_id'),
+        serialization_alias='imageId',
+    )
     title: str
     abstract: str | None = None
     authors: list[str] = Field(default_factory=list)
@@ -122,6 +159,9 @@ class PaperSearchResult(KnowledgeModel):
     venue: str | None = None
     keywords: list[str] = Field(default_factory=list)
     subjects: list[str] = Field(default_factory=list)
+    topics: PaperTopics = Field(default_factory=list)
+    # Browse-only main subject; kept internal (home-pool diversity), not part of the public contract.
+    primary_subject: str | None = Field(default=None, exclude=True)
     score: float | None = None
     rank: int | None = None
     provenance: Provenance
@@ -130,6 +170,149 @@ class PaperSearchResult(KnowledgeModel):
 class KnowledgeSearchResponse(KnowledgeModel):
     results: list[PaperSearchResult] = Field(default_factory=list)
     has_more: bool = Field(default=False, serialization_alias='hasMore')
+    total: int | None = None
+
+
+class KnowledgeSubjectSearchResponse(KnowledgeModel):
+    results: list[PaperSearchResult] = Field(default_factory=list)
+    total: int = Field(ge=0)
+
+
+class ConferenceSummary(KnowledgeModel):
+    name: str = Field(min_length=1)
+    paper_count: int = Field(ge=0, serialization_alias='paperCount')
+    years: list[int]
+    year_count: int = Field(ge=0, serialization_alias='yearCount')
+
+
+class ConferenceListResponse(KnowledgeModel):
+    items: list[ConferenceSummary]
+    snapshot_updated_at: datetime | None = Field(default=None, serialization_alias='snapshotUpdatedAt')
+    snapshot_stale: bool | None = Field(default=None, serialization_alias='snapshotStale')
+
+
+class PaperBrowseRequest(KnowledgeModel):
+    conference: str = Field(min_length=1, max_length=500)
+    year: int = Field(ge=1000, le=9999)
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0, le=2_147_483_647)
+
+    @field_validator('conference')
+    @classmethod
+    def normalize_conference(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('conference must not be blank')
+        return value.strip()
+
+
+class PaperBrowseResponse(KnowledgeModel):
+    results: list[PaperSearchResult]
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
+    offset: int = Field(ge=0)
+
+
+class ScholarSearchRequest(KnowledgeModel):
+    query: str = Field(min_length=1, max_length=200)
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+    @field_validator('query')
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError('query must not be blank')
+        return value
+
+
+class RelatedPaperSearchRequest(KnowledgeModel):
+    query: str = Field(min_length=1, max_length=500)
+    top_k: int = Field(
+        default=10,
+        ge=1,
+        le=20,
+        validation_alias=AliasChoices('topK', 'top_k'),
+        serialization_alias='topK',
+    )
+
+    @field_validator('query')
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError('query must not be blank')
+        return value
+
+
+class FundingSearchRequest(KnowledgeModel):
+    query: str | None = Field(default=None, validation_alias=AliasChoices('q', 'query'))
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+    @field_validator('query')
+    @classmethod
+    def normalize_query(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
+
+class ScholarSummary(KnowledgeModel):
+    id: str
+    name: str
+    paper_count: int = Field(
+        ge=0,
+        validation_alias=AliasChoices('paperCount', 'paper_count'),
+        serialization_alias='paperCount',
+    )
+    provenance: Provenance
+
+
+class ScholarSearchResponse(KnowledgeModel):
+    results: list[ScholarSummary] = Field(default_factory=list)
+
+
+class FundingSummary(KnowledgeModel):
+    id: str
+    name: str
+    paper_count: int = Field(
+        ge=0,
+        validation_alias=AliasChoices('paperCount', 'paper_count'),
+        serialization_alias='paperCount',
+    )
+    provenance: Provenance
+
+
+class FundingSearchResponse(KnowledgeModel):
+    results: list[FundingSummary] = Field(default_factory=list)
+
+
+class ScholarReference(KnowledgeModel):
+    id: str
+    name: str
+
+
+class ScholarPaper(KnowledgeModel):
+    id: str
+    title: str
+    year: int | None = None
+
+
+class ScholarDetail(KnowledgeModel):
+    id: str
+    name: str
+    paper_count: int = Field(
+        ge=0,
+        validation_alias=AliasChoices('paperCount', 'paper_count'),
+        serialization_alias='paperCount',
+    )
+    years: list[int] = Field(default_factory=list)
+    conferences: list[str] = Field(default_factory=list)
+    topics: list[str] = Field(default_factory=list)
+    funding: list[str] = Field(default_factory=list)
+    institutions: list[str] = Field(default_factory=list)
+    coauthors: list[ScholarReference] = Field(default_factory=list)
+    papers: list[ScholarPaper] = Field(default_factory=list)
+    provenance: Provenance
 
 
 class PaperDetail(KnowledgeModel):
@@ -147,6 +330,7 @@ class PaperDetail(KnowledgeModel):
     )
     keywords: list[str] = Field(default_factory=list)
     subjects: list[str] = Field(default_factory=list)
+    topics: PaperTopics = Field(default_factory=list)
     citation_count: int | None = Field(
         default=None,
         validation_alias=AliasChoices('citationCount', 'citation_count'),
@@ -158,6 +342,38 @@ class PaperDetail(KnowledgeModel):
         serialization_alias='referenceCount',
     )
     provenance: Provenance
+
+
+class PaperSummary(KnowledgeModel):
+    """Small paper representation for list views."""
+
+    id: str
+    title: str
+    abstract: str | None = None
+    authors: list[str] = Field(default_factory=list)
+    year: int | None = None
+    venue: str | None = None
+    provenance: Provenance
+
+
+class PaperBatchRequest(KnowledgeModel):
+    paper_ids: list[str] = Field(min_length=1, max_length=100)
+
+    @field_validator('paper_ids')
+    @classmethod
+    def normalize_paper_ids(cls, value: list[str]) -> list[str]:
+        normalized = []
+        for paper_id in value:
+            if not isinstance(paper_id, str) or not paper_id.strip():
+                raise ValueError('paper_ids must contain non-empty strings')
+            paper_id = paper_id.strip()
+            if paper_id not in normalized:
+                normalized.append(paper_id)
+        return normalized
+
+
+class PaperBatchResponse(KnowledgeModel):
+    papers: list[PaperSummary] = Field(default_factory=list)
 
 
 class GraphNode(KnowledgeModel):
@@ -193,6 +409,192 @@ class PaperGraph(KnowledgeModel):
     provenance: Provenance
 
 
+OverviewStatus = Literal['available', 'empty', 'unsupported', 'pending', 'error']
+MixedSearchType = Literal['paper', 'scholar', 'topic', 'project', 'patent', 'funding', 'graph']
+
+
+class OverviewTag(KnowledgeModel):
+    name: str
+    count: int | None = None
+
+
+class OverviewPaperLibrary(KnowledgeModel):
+    paper_count: int | None = Field(
+        default=None,
+        validation_alias=AliasChoices('paperCount', 'paper_count'),
+        serialization_alias='paperCount',
+    )
+    status: OverviewStatus = 'pending'
+    popular_tags: list[OverviewTag] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices('popularTags', 'popular_tags'),
+        serialization_alias='popularTags',
+    )
+    recent_papers: list[PaperSummary] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices('recentPapers', 'recent_papers'),
+        serialization_alias='recentPapers',
+    )
+
+
+class OverviewHighlight(KnowledgeModel):
+    id: str
+    name: str
+    count: int | None = None
+    status: OverviewStatus = 'available'
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class OverviewResearchAsset(KnowledgeModel):
+    count: int | None = None
+    supported: bool = False
+    status: OverviewStatus = 'pending'
+
+
+class OverviewResearchAssets(KnowledgeModel):
+    total: int | None = None
+    status: OverviewStatus = 'pending'
+    highlights: list[OverviewHighlight] = Field(default_factory=list)
+    by_type: dict[str, OverviewResearchAsset] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices('byType', 'by_type'),
+        serialization_alias='byType',
+    )
+    coverage: dict[str, bool] = Field(default_factory=dict)
+
+
+class OverviewGraphPreview(KnowledgeModel):
+    supported: bool = False
+    status: OverviewStatus = 'pending'
+    root_paper_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices('rootPaperId', 'root_paper_id'),
+        serialization_alias='rootPaperId',
+    )
+    nodes: list[GraphNode] = Field(default_factory=list)
+    edges: list[GraphEdge] = Field(default_factory=list)
+
+
+class KnowledgeOverviewResponse(KnowledgeModel):
+    as_of: datetime = Field(validation_alias=AliasChoices('asOf', 'as_of'), serialization_alias='asOf')
+    scope: str
+    paper_library: OverviewPaperLibrary = Field(
+        validation_alias=AliasChoices('paperLibrary', 'paper_library'),
+        serialization_alias='paperLibrary',
+    )
+    scholar_highlights: list[OverviewHighlight] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices('scholarHighlights', 'scholar_highlights'),
+        serialization_alias='scholarHighlights',
+    )
+    topic_highlights: list[OverviewHighlight] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices('topicHighlights', 'topic_highlights'),
+        serialization_alias='topicHighlights',
+    )
+    research_assets: OverviewResearchAssets = Field(
+        validation_alias=AliasChoices('researchAssets', 'research_assets'),
+        serialization_alias='researchAssets',
+    )
+    graph_preview: OverviewGraphPreview = Field(
+        validation_alias=AliasChoices('graphPreview', 'graph_preview'),
+        serialization_alias='graphPreview',
+    )
+
+
+class PersonalFolderCount(KnowledgeModel):
+    id: int
+    name: str
+    is_default: bool = Field(
+        validation_alias=AliasChoices('isDefault', 'is_default'),
+        serialization_alias='isDefault',
+    )
+    paper_count: int = Field(
+        validation_alias=AliasChoices('paperCount', 'paper_count'),
+        serialization_alias='paperCount',
+    )
+
+
+class PersonalRecentPaper(PaperDetail):
+    paper_id: str
+    last_viewed_at: datetime
+
+
+class KnowledgePersonalOverviewResponse(KnowledgeModel):
+    auth_required: bool = Field(
+        default=False,
+        validation_alias=AliasChoices('authRequired', 'auth_required'),
+        serialization_alias='authRequired',
+    )
+    folders: list[PersonalFolderCount] = Field(default_factory=list)
+    recent_papers: list[PersonalRecentPaper] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices('recentPapers', 'recent_papers'),
+        serialization_alias='recentPapers',
+    )
+
+
+class KnowledgeMixedSearchRequest(KnowledgeModel):
+    query: str = Field(min_length=1, max_length=200)
+    types: list[MixedSearchType] = Field(min_length=1, max_length=7)
+    limit: int = Field(default=20, ge=1, le=50)
+    cursor: str | None = None
+
+    @field_validator('query')
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError('query must not be blank')
+        return value
+
+    @field_validator('types')
+    @classmethod
+    def normalize_types(cls, value: list[str]) -> list[str]:
+        result: list[str] = []
+        for item in value:
+            if item not in ('paper', 'scholar', 'topic', 'project', 'patent', 'funding', 'graph'):
+                raise ValueError('unsupported search type')
+            if item not in result:
+                result.append(item)
+        if not result:
+            raise ValueError('types must not be empty')
+        return result
+
+
+class KnowledgeMixedSearchResult(KnowledgeModel):
+    type: MixedSearchType
+    id: str
+    title: str
+    summary: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    action: str | None = None
+
+
+class KnowledgeMixedSearchResponse(KnowledgeModel):
+    results: list[KnowledgeMixedSearchResult] = Field(default_factory=list)
+    supported_types: list[MixedSearchType] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices('supportedTypes', 'supported_types'),
+        serialization_alias='supportedTypes',
+    )
+    unsupported_types: list[MixedSearchType] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices('unsupportedTypes', 'unsupported_types'),
+        serialization_alias='unsupportedTypes',
+    )
+    failed_types: list[MixedSearchType] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices('failedTypes', 'failed_types'),
+        serialization_alias='failedTypes',
+    )
+    next_cursor: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices('nextCursor', 'next_cursor'),
+        serialization_alias='nextCursor',
+    )
+
+
 class KnowledgeError(KnowledgeModel):
     """Safe error payload exposed by the Knowledge API.
 
@@ -214,3 +616,84 @@ class KnowledgeError(KnowledgeModel):
         validation_alias=AliasChoices('requestId', 'request_id'),
         serialization_alias='requestId',
     )
+
+
+# Product Scholar V2 is deliberately separate from retrieval ScholarSummary/Detail.
+class ScholarProfileAffiliation(KnowledgeModel):
+    institution: str | None = None
+    position: str | None = None
+
+
+class ScholarProfileMetrics(KnowledgeModel):
+    # Platform-linked papers, never OpenAlex works_count.
+    paper_count: int | None = Field(default=None, ge=0, strict=True)
+    source_work_count: int | None = Field(default=None, ge=0, strict=True)
+    citation_count: int | None = Field(default=None, ge=0, strict=True)
+    h_index: int | None = Field(default=None, ge=0, strict=True)
+    i10_index: int | None = Field(default=None, ge=0, strict=True)
+
+
+class ScholarEmployment(KnowledgeModel):
+    organization: str | None = None
+    role_title: str | None = None
+    department: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+class ScholarExternalIds(KnowledgeModel):
+    orcid: str | None = Field(default=None, pattern=r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$')
+
+
+class ScholarAnnualCitation(KnowledgeModel):
+    year: int = Field(ge=1, le=9999, strict=True)
+    count: int | None = Field(default=None, ge=0, strict=True)
+
+
+class ScholarCitationMeta(KnowledgeModel):
+    source: str | None = None
+    coverage: str | None = None
+    as_of: str | None = None
+
+
+class ScholarProfile(KnowledgeModel):
+    scholar_id: str = Field(min_length=1, strict=True)
+    name_zh: str | None = None
+    name_en: str | None = None
+    avatar_path: str | None = None
+    affiliations: list[ScholarProfileAffiliation] | None = None
+    topics: list[str] = Field(default_factory=list)
+    bio_zh: str | None = None
+    bio_en: str | None = None
+    employment: list[ScholarEmployment] = Field(default_factory=list)
+    external_ids: ScholarExternalIds = Field(default_factory=ScholarExternalIds)
+    metrics: ScholarProfileMetrics | None = None
+    annual_citations: list[ScholarAnnualCitation] | None = None
+    updated_at: str | None = None
+    citation_meta: ScholarCitationMeta | None = None
+
+
+class ScholarProfilePage(KnowledgeModel):
+    items: list[ScholarProfile]
+    limit: int = Field(ge=1, le=100, strict=True)
+    offset: int = Field(ge=0, strict=True)
+    total: int | None = Field(default=None, ge=0, strict=True)
+    # Without an upstream total a full page means a possible next page.
+    has_more: bool
+
+
+class ScholarPublication(PaperDetail):
+    image_id: str | None = Field(default=None, serialization_alias='imageId')
+    platform_detail: bool = False
+
+
+class ScholarPapersPage(KnowledgeModel):
+    items: list[ScholarPublication]
+    limit: int = Field(ge=1, le=100, strict=True)
+    offset: int = Field(ge=0, strict=True)
+    total: int = Field(ge=0, strict=True)
+
+
+class ScholarProfilePagination(KnowledgeModel):
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)

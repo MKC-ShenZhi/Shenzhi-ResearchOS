@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { NODE_MAP } from "@/lib/data/research-pipeline";
-import type { LogLine, LogLevel } from "@/lib/data/research-run";
+import { NODE_MAP } from "@/features/auto-research/research-pipeline";
+import type { LogLine, LogLevel } from "@/features/auto-research/research-run";
 import { cn } from "@/lib/utils";
 
 const LEVEL_STYLE: Record<LogLevel, { dot: string; label: string }> = {

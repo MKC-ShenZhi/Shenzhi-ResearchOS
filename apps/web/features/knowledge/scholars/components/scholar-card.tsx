@@ -1,61 +1,50 @@
-"use client";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import { scholarHref } from "@/lib/navigation/scholar";
+import type { ScholarProfile } from "../types";
+import { scholarName } from "../presentation";
+import { Affiliations, ScholarAvatar, ScholarMetrics, ScholarTopics } from "./profile-parts";
 
-import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { FollowButton } from "@/features/scholars/components/follow-button";
-import type { Scholar } from "@/types";
-
-/** 学者卡片 —— 对应学者画像页 SVG 的双列卡片 */
-export function ScholarCard({ scholar, index }: { scholar: Scholar; index: number }) {
-  const router = useRouter();
-
+export function ScholarCard({
+  scholar,
+  returnTo,
+}: {
+  scholar: ScholarProfile;
+  returnTo: string;
+}) {
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.06 }}
-      onClick={() => router.push(`/scholars/${scholar.id}`)}
-      className="cursor-pointer rounded-2xl bg-card p-5 shadow-card transition-shadow hover:shadow-pop"
+    <Link
+      href={scholarHref(scholar.scholar_id, returnTo)}
+      className="group flex min-w-0 flex-col rounded-xl border border-line bg-card p-5 transition-colors hover:border-primary/40 hover:bg-primary-soft/20 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
     >
-      <div className="flex gap-4">
-        <span
-          className="flex size-16 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white"
-          style={{ backgroundColor: scholar.avatarColor }}
-        >
-          {scholar.initials}
-        </span>
-
+      <div className="flex items-start gap-3.5">
+        <ScholarAvatar scholar={scholar} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <h3 className="text-[15px] font-bold text-ink">
-              {scholar.nameCn} · {scholar.nameEn}
-            </h3>
-            <FollowButton scholarId={scholar.id} defaultFollowing={scholar.followed} />
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="break-words text-xl font-semibold leading-7 tracking-tight text-ink transition-colors group-hover:text-primary">
+              {scholarName(scholar)}
+            </h2>
+            <ArrowUpRight
+              aria-hidden="true"
+              className="mt-1 size-4 shrink-0 text-faint transition-colors group-hover:text-primary"
+            />
           </div>
-
-          <p className="mt-1 text-xs text-muted">
-            {scholar.role} · {scholar.affiliation}
-          </p>
-          <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-muted">
-            {scholar.bio}
-          </p>
-
-          <p className="mt-2.5 text-[13px]">
-            <span className="font-bold text-ink">{scholar.citations}</span>
-            <span className="ml-1 text-muted">引用</span>
-            <span className="ml-4 font-bold text-ink">{scholar.hIndex}</span>
-            <span className="ml-1 text-muted">h-index</span>
-          </p>
-
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-            {scholar.tags.map((tag) => (
-              <span key={tag} className="text-xs text-muted">
-                {tag}
-              </span>
-            ))}
-          </div>
+          {scholar.name_zh?.trim() && scholar.name_en?.trim() ? (
+            <p className="mt-0.5 break-words text-sm text-muted">
+              {scholar.name_en}
+            </p>
+          ) : null}
         </div>
       </div>
-    </motion.article>
+      {scholar.affiliations?.length ? (
+        <div className="mt-3"><Affiliations scholar={scholar} compact /></div>
+      ) : null}
+      {scholar.topics?.length ? <ScholarTopics topics={scholar.topics.slice(0, 3)} /> : null}
+      <div className="mt-auto pt-4">
+        <div className="border-t border-line pt-3">
+          <ScholarMetrics scholar={scholar} compact />
+        </div>
+      </div>
+    </Link>
   );
 }

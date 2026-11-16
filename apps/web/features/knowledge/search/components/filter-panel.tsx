@@ -4,15 +4,9 @@ import { useMemo, useState } from "react";
 import { Filter, Plus, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { KnowledgeFilters } from "../search-url-state";
 
-export interface KnowledgeFilters {
-  yearFrom: number | null;
-  yearTo: number | null;
-  venue: string[];
-  author: string[];
-  keyword: string[];
-  subject: string[];
-}
+export type { KnowledgeFilters } from "../search-url-state";
 
 const EMPTY: KnowledgeFilters = {
   yearFrom: null,

@@ -65,6 +65,84 @@ test("BFF client unwraps the Search success envelope and preserves the request c
   }]);
 });
 
+test("BFF search preserves imageId and structured topics alongside legacy metadata", async () => {
+  const results = ["/images/ASPLOS_2026/10.1145_3779212.3790216_minimal.jpg", null]
+    .map((imageId) => ({
+      id: "paper:opaque-identifier", imageId, title: "Paper", abstract: null,
+      authors: [], year: null, venue: null, keywords: ["legacy"], subjects: ["subject"],
+      ...(imageId ? { topics: [{ id: "openalex:topic:T10028", nameZh: "语言模型", nameEn: "Language models" }] } : {}),
+      score: null, rank: null, provenance: null,
+    }));
+  await withFetch(async () => jsonResponse({ code: 0, data: { results } }), async () => {
+    const response = await new BffKnowledgeClient().search(SEARCH_PARAMS);
+    assert.deepEqual(response.results, results);
+  });
+});
+
+test("Topic detail exposes a 404 as the existing unavailable state", async () => {
+  await withFetch(async () => jsonResponse({
+    code: "NOT_FOUND", message: "Topic missing", retryable: false, requestId: null,
+  }, 404), async () => {
+    await assert.rejects(new BffKnowledgeClient().topic("openalex:topic:T10181"),
+      (error) => error instanceof KnowledgeClientError && error.code === "NOT_FOUND");
+  });
+  const detail = readFileSync("features/knowledge/topics/detail/topic-detail-page.tsx", "utf8");
+  assert.match(detail, /error\.code === "NOT_FOUND"/);
+  assert.match(detail, /该主题页面暂不可用/);
+  assert.match(detail, /href=\{squareHref\}[\s\S]*返回主题广场/);
+});
+
+test("BFF client encodes the OpenAlex ID for detail and papers", async () => {
+  const requests: string[] = [];
+  const topic = {
+    id: "openalex:topic:T10028",
+    category: "openalex:subfield:1702",
+    categoryName: "Artificial Intelligence",
+    author: null,
+  };
+  await withFetch(async (input) => {
+    const path = String(input);
+    requests.push(path);
+    if (path.includes("/papers?")) {
+      return jsonResponse({ code: 0, data: { results: [], total: 12379, offset: 1001, limit: 10 } });
+    }
+    if (path.endsWith("/topics")) {
+      return jsonResponse({ code: 0, data: {
+        items: [topic], total: 1, categories: [{ id: topic.category, name: topic.categoryName, total: 1 }],
+      } });
+    }
+    return jsonResponse({ code: 0, data: topic });
+  }, async () => {
+    const client = new BffKnowledgeClient();
+    assert.equal((await client.topics()).categories[0].id, topic.category);
+    assert.equal((await client.topic(topic.id)).id, topic.id);
+    assert.equal((await client.topicPapers(topic.id, 1001, 10)).offset, 1001);
+  });
+
+  assert.deepEqual(requests, [
+    "/api/v1/knowledge/topics",
+    "/api/v1/knowledge/topics/openalex%3Atopic%3AT10028",
+    "/api/v1/knowledge/topics/openalex%3Atopic%3AT10028/papers?offset=1001&limit=10",
+  ]);
+});
+
+test("BFF paper search forwards AbortSignal and preserves cancellation as AbortError", async () => {
+  const controller = new AbortController();
+  await withFetch((_input, init) => new Promise((_resolve, reject) => {
+    assert.equal(init?.signal, controller.signal);
+    if (init?.signal?.aborted) {
+      reject(init.signal.reason);
+      return;
+    }
+    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+  }), async () => {
+    const request = new BffKnowledgeClient().search(SEARCH_PARAMS, controller.signal);
+    controller.abort();
+    await assert.rejects(request, (error: unknown) =>
+      error instanceof Error && error.name === "AbortError");
+  });
+});
+
 test("BFF client requests Detail and Graph through same-origin routes", async () => {
   const requests: string[] = [];
   const rawPaperId = "paper:2025_findings_acl_1253_acl:012e17bab23d";
@@ -107,6 +185,94 @@ test("BFF client requests Detail and Graph through same-origin routes", async ()
     `/api/v1/knowledge/graph?paperId=${encodeURIComponent(paperId)}&depth=2`,
   ]);
   assert.ok(requests.every((request) => !request.includes("%253A")));
+});
+
+test("BFF client requests Scholar, Subject and Funding through stable routes", async () => {
+  const requests: string[] = [];
+  const scholarId = "author:legacy:d1381dc0b07a0347ebb834d5";
+  await withFetch(async (input) => {
+    requests.push(String(input));
+    if (requests.length === 1) {
+      return jsonResponse({ code: 0, data: { results: [] } });
+    }
+    if (requests.length === 2) {
+      return jsonResponse({ code: 0, data: {
+        id: scholarId,
+        name: "Geoffrey Hinton",
+        paperCount: 0,
+        years: [],
+        conferences: [],
+        topics: [],
+        funding: [],
+        institutions: [],
+        coauthors: [],
+        papers: [],
+        provenance: null,
+      } });
+    }
+    return jsonResponse({ code: 0, data: { results: [] } });
+  }, async () => {
+    const client = new BffKnowledgeClient();
+    await client.searchScholars({ query: "Hinton", limit: 20, offset: 0 });
+    const scholar = await client.scholar(scholarId);
+    await client.searchBySubject("graph", 10, 20);
+    await client.searchByFunding("NSF", 20);
+    assert.equal(scholar.id, scholarId);
+  });
+
+  assert.deepEqual(requests, [
+    "/api/v1/knowledge/scholars/search?q=Hinton&limit=20&offset=0",
+    `/api/v1/knowledge/scholars/${encodeURIComponent(scholarId)}`,
+    "/api/v1/knowledge/subjects/search?subject=graph&offset=10&limit=20",
+    "/api/v1/knowledge/funding/search?funding=NSF&topK=20",
+  ]);
+  assert.ok(requests.every((request) => request.startsWith("/api/v1/knowledge/")));
+});
+
+test("BFF client requests Funding candidates through a separate stable route", async () => {
+  const requests: string[] = [];
+  await withFetch(async (input) => {
+    requests.push(String(input));
+    return jsonResponse({ code: 0, data: {
+      results: [{
+        id: "funding:nsf:graph",
+        name: "NSF Graph Research",
+        paperCount: 12,
+        provenance: { provider: "knowledge-base" },
+      }],
+    } });
+  }, async () => {
+    const result = await new BffKnowledgeClient().searchFundings({
+      query: "NSF",
+      limit: 5,
+      offset: 10,
+    });
+    assert.equal(result.results[0]?.id, "funding:nsf:graph");
+    assert.equal(result.results[0]?.paperCount, 12);
+  });
+
+  assert.deepEqual(requests, [
+    "/api/v1/knowledge/fundings/search?q=NSF&limit=5&offset=10",
+  ]);
+});
+
+test("BFF Funding candidate browsing omits an empty optional query", async () => {
+  const requests: string[] = [];
+  await withFetch(async (input) => {
+    requests.push(String(input));
+    return jsonResponse({ code: 0, data: { results: [] } });
+  }, async () => {
+    const result = await new BffKnowledgeClient().searchFundings({
+      query: "",
+      limit: 20,
+      offset: 0,
+    });
+    assert.deepEqual(result, { results: [] });
+  });
+
+  assert.deepEqual(requests, [
+    "/api/v1/knowledge/fundings/search?limit=20&offset=0",
+  ]);
 });
 
 test("BFF client preserves formal Knowledge errors and request metadata", async () => {
@@ -184,14 +350,14 @@ test("unknown formal errors normalize to UNKNOWN without losing safe metadata", 
 
 test("malformed upstream-facing error text is not exposed to the browser", async () => {
   await withFetch(async () => new Response(
-    "https://47.110.47.12 secret-token traceback",
+    "https://203.0.113.10 secret-token traceback",
     { status: 503 },
   ), async () => {
     await assert.rejects(
       new BffKnowledgeClient().paper("paper:opaque"),
       (error: unknown) => {
         assert.ok(error instanceof KnowledgeClientError);
-        assert.doesNotMatch(error.message, /47\.110\.47\.12|secret-token|traceback/);
+        assert.doesNotMatch(error.message, /203\.0\.113\.10|secret-token|traceback/);
         return true;
       },
     );
@@ -237,11 +403,11 @@ test("a failed BFF request stays an error and never falls back to Mock", async (
 
 test("the generic numeric backend envelope remains compatible", async () => {
   await withFetch(async () => jsonResponse({ code: 0, data: { ok: true } }), async () => {
-    assert.deepEqual(await apiJson<{ ok: boolean }>("/chat/config"), { ok: true });
+    assert.deepEqual(await apiJson<{ ok: boolean }>("/agent/config"), { ok: true });
   });
   await withFetch(async () => jsonResponse({ code: 21001, message: "legacy error" }, 400), async () => {
     await assert.rejects(
-      apiJson("/chat/config"),
+      apiJson("/agent/config"),
       (error: unknown) => error instanceof ApiError &&
         error.code === 21001 &&
         error.message === "legacy error",

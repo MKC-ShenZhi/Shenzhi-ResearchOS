@@ -1,84 +1,169 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AppShell } from "@/components/common/layout/app-shell";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
+import { useAuth } from "@/components/auth/auth-provider";
+import { recordSearchSubmit } from "@/clients/backend/behavior";
+import { useSearchDraft } from "@/hooks/use-search-draft";
+import { SlidersHorizontal } from "lucide-react";
+import { useClearSearchRestoration, useSearchRestorationScope } from "@/hooks/use-search-restoration";
 import type { KnowledgeSearchParams } from "@/clients/knowledge";
-import { KnowledgeFilterPanel, type KnowledgeFilters } from "./components/filter-panel";
+import { KnowledgeFilterPanel } from "./components/filter-panel";
 import { KnowledgeResultsSection } from "./components/results-section";
 import { KnowledgeSearchHero } from "./components/search-hero";
+import { ConferenceBrowser } from "./conferences/conference-browser";
+import { LibraryModeNav } from "./conferences/library-mode-nav";
+import { readPaperBrowseState } from "./conferences/conference-state";
+import { discardSearchScroll } from "./use-search-scroll-restoration";
 import {
   KNOWLEDGE_SEARCH_PAGE_SIZE,
   knowledgeSearchOffset,
 } from "./pagination";
+import {
+  buildKnowledgeSearchUrl,
+  readKnowledgeSearchUrlState,
+  type KnowledgeFilters,
+} from "./search-url-state";
+import {
+  cancelObsoleteKnowledgeSearches,
+  startKnowledgeSearch,
+} from "./search-query-resource";
 
-const EMPTY_FILTERS: KnowledgeFilters = {
-  yearFrom: null,
-  yearTo: null,
-  venue: [],
-  author: [],
-  keyword: [],
-  subject: [],
-};
+const KNOWLEDGE_SEARCH_PREFETCH_DELAY_MS = 700;
+
+function createSearchParams(
+  query: string,
+  filters: KnowledgeFilters,
+  page: number,
+): KnowledgeSearchParams | null {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) return null;
+  return {
+    query: normalizedQuery,
+    topK: KNOWLEDGE_SEARCH_PAGE_SIZE,
+    offset: knowledgeSearchOffset(page),
+    yearFrom: filters.yearFrom,
+    yearTo: filters.yearTo,
+    venue: filters.venue,
+    author: filters.author,
+    keyword: filters.keyword,
+    subject: filters.subject,
+  };
+}
 
 /**
- * 论文检索页 `/knowledge/search` —— 知识底座 · 论文搜索。
+ * 论文库 `/knowledge/search` —— 保留知识底座论文搜索能力。
  *
  * 业务链路：页面 → KnowledgeClient 接口 → Next.js BFF → FastAPI。
  * 页面只依赖 clients/knowledge 的契约类型与 Client 工厂。
  */
-function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }) {
+function KeywordSearchContent() {
   const router = useRouter();
+  const { session } = useAuth();
+  const scope = useSearchRestorationScope();
+  const clearRestoration = useClearSearchRestoration("/knowledge/search?mode=keyword");
+  const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const returnTo = useCurrentInternalPath();
+  const { query: committedQuery, filters, page } = readKnowledgeSearchUrlState(searchParams);
+  const draft = useSearchDraft("/knowledge/search", returnTo, committedQuery);
+  const query = draft.value;
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searchIntent, setSearchIntent] = useState<{ query: string; id: string } | null>(null);
+  const setQuery = (value: string) => {
+    draft.set(value);
+    // 输入变化立即废弃旧预取；新请求只会在 debounce 到期后开始。
+    void cancelObsoleteKnowledgeSearches(
+      queryClient,
+      createSearchParams(value, filters, 1),
+    );
+  };
 
-  const [query, setQuery] = useState(initialQuery);
-  const [committedQuery, setCommittedQuery] = useState(initialQuery);
-  const [filters, setFilters] = useState<KnowledgeFilters>(EMPTY_FILTERS);
-  const [page, setPage] = useState(1);
+  const prefetchParams = useMemo(
+    () => createSearchParams(query, filters, 1),
+    [query, filters],
+  );
+
+  useEffect(() => {
+    if (!prefetchParams) return;
+    const timeout = window.setTimeout(() => {
+      void startKnowledgeSearch(queryClient, prefetchParams).catch(() => undefined);
+    }, KNOWLEDGE_SEARCH_PREFETCH_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [prefetchParams, queryClient]);
 
   /** 提交搜索：更新查询词并同步 URL */
   const submitSearch = (q: string) => {
+    draft.clear();
+    discardSearchScroll(returnTo, scope);
     const text = q.trim();
-    setCommittedQuery(text);
-    setPage(1);
-    const next = new URLSearchParams();
-    if (text) next.set("q", text);
-    router.replace(`/knowledge/search?${next.toString()}`);
+    const queryId = text && session?.user.id ? recordSearchSubmit(text, session.user.id) : null;
+    setSearchIntent(queryId ? { query: text, id: queryId } : null);
+    if (!text) clearRestoration();
+    discardSearchScroll(buildKnowledgeSearchUrl({ query: text, filters, page: 1 }), scope);
+    const nextParams = createSearchParams(text, filters, 1);
+    void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
+    if (nextParams) {
+      // 请求与路由同步启动；相同 debounce 预取会直接复用同一个 in-flight 请求。
+      void startKnowledgeSearch(queryClient, nextParams).catch(() => undefined);
+    }
+    router.replace(text ? buildKnowledgeSearchUrl({ query: text, filters, page: 1 }) : "/knowledge/search?mode=keyword", {
+      scroll: false,
+    });
   };
 
   const searchParamsForQuery: KnowledgeSearchParams | null = useMemo(() => {
-    if (!committedQuery) return null;
-    return {
-      query: committedQuery,
-      topK: KNOWLEDGE_SEARCH_PAGE_SIZE,
-      offset: knowledgeSearchOffset(page),
-      yearFrom: filters.yearFrom,
-      yearTo: filters.yearTo,
-      venue: filters.venue,
-      author: filters.author,
-      keyword: filters.keyword,
-      subject: filters.subject,
-    };
+    return createSearchParams(committedQuery, filters, page);
   }, [committedQuery, filters, page]);
 
   const updateFilters = (nextFilters: KnowledgeFilters) => {
-    setFilters(nextFilters);
-    setPage(1);
+    discardSearchScroll(returnTo, scope);
+    discardSearchScroll(buildKnowledgeSearchUrl({ query: committedQuery, filters: nextFilters, page: 1 }), scope);
+    const nextParams = createSearchParams(committedQuery, nextFilters, 1);
+    void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
+    if (nextParams) {
+      void startKnowledgeSearch(queryClient, nextParams).catch(() => undefined);
+    }
+    router.replace(
+      buildKnowledgeSearchUrl({ query: committedQuery, filters: nextFilters, page: 1 }),
+      { scroll: false },
+    );
+  };
+
+  const updatePage = (nextPage: number) => {
+    discardSearchScroll(returnTo, scope);
+    discardSearchScroll(buildKnowledgeSearchUrl({ query: committedQuery, filters, page: nextPage }), scope);
+    const nextParams = createSearchParams(committedQuery, filters, nextPage);
+    void cancelObsoleteKnowledgeSearches(queryClient, nextParams);
+    if (nextParams) {
+      void startKnowledgeSearch(queryClient, nextParams).catch(() => undefined);
+    }
+    router.replace(
+      buildKnowledgeSearchUrl({ query: committedQuery, filters, page: nextPage }),
+      { scroll: false },
+    );
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
-    <AppShell>
-      <div className="mx-auto max-w-[1120px] px-6 py-8 lg:px-8">
+      <div className="mx-auto max-w-[1120px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <KnowledgeSearchHero
           initialQuery={query}
           onQueryChange={setQuery}
           onSearch={submitSearch}
+          disabled={!draft.ready}
         />
 
+        <LibraryModeNav mode="keyword" />
+
+        <button type="button" aria-expanded={filtersOpen} aria-controls="paper-search-filters" onClick={() => setFiltersOpen((open) => !open)} className="mt-4 flex min-h-10 items-center gap-2 rounded-xl border border-line bg-card px-4 text-sm text-ink lg:hidden">
+          <SlidersHorizontal className="size-4" />{filtersOpen ? "收起筛选" : "展开筛选"}
+        </button>
         <div className="mt-6 flex flex-col gap-6 lg:flex-row">
           {/* 筛选栏 */}
-          <aside className="w-full shrink-0 lg:w-64">
+          <aside id="paper-search-filters" className={`${filtersOpen ? "block" : "hidden"} w-full shrink-0 lg:block lg:w-64`}>
             <KnowledgeFilterPanel
               filters={filters}
               onChange={updateFilters}
@@ -93,7 +178,8 @@ function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }
                 params={searchParamsForQuery}
                 returnTo={returnTo}
                 page={page}
-                onPageChange={setPage}
+                queryId={searchIntent?.query === committedQuery ? searchIntent.id : undefined}
+                onPageChange={updatePage}
               />
             ) : (
               <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-line bg-card/40 px-6 text-center shadow-card">
@@ -106,14 +192,23 @@ function KnowledgeSearchContent({ initialQuery = "" }: { initialQuery?: string }
           </main>
         </div>
       </div>
-    </AppShell>
   );
 }
 
-export function KnowledgeSearchPage({ initialQuery = "" }: { initialQuery?: string }) {
+export function KnowledgeSearchPage() {
   return (
-    <Suspense fallback={<p className="p-8 text-sm text-muted">正在加载论文检索…</p>}>
-      <KnowledgeSearchContent initialQuery={initialQuery} />
+    <Suspense fallback={<p className="p-8 text-sm text-muted">正在加载论文库…</p>}>
+      <KnowledgeSearchContent />
     </Suspense>
   );
+}
+
+function KnowledgeSearchContent() {
+  const params = useSearchParams();
+  const queryClient = useQueryClient();
+  const mode = readPaperBrowseState(params).mode;
+  useEffect(() => {
+    if (mode === "conference") void cancelObsoleteKnowledgeSearches(queryClient, null);
+  }, [mode, queryClient]);
+  return mode === "keyword" ? <KeywordSearchContent /> : <ConferenceBrowser />;
 }

@@ -9,7 +9,42 @@ import type {
   KnowledgeGraphEdge,
   KnowledgeGraphNode,
   KnowledgePaperDetail,
+  KnowledgeTopic,
 } from "./types";
+
+/** 主题与分类的显式开发 fixture。 */
+export const MOCK_TOPICS: KnowledgeTopic[] = [
+  {
+    id: "openalex:topic:T10028",
+    nameZh: "自然语言处理模型与表示",
+    nameEn: "Natural Language Processing Models and Representations",
+    category: "openalex:subfield:1702",
+    categoryName: "Artificial Intelligence",
+    descriptionZh: "自然语言处理中的模型与表示方法。",
+    descriptionEn: "Models and representations used in natural language processing.",
+    subjectQuery: "",
+    imagePath: null,
+    author: null,
+    followersCount: 0,
+    paperCount: 2,
+    enabled: true,
+  },
+  {
+    id: "openalex:topic:T11689",
+    nameZh: "机器学习中的对抗鲁棒性",
+    nameEn: "Adversarial Robustness in Machine Learning",
+    category: "openalex:subfield:1702",
+    categoryName: "Artificial Intelligence",
+    descriptionZh: "机器学习模型的对抗鲁棒性。",
+    descriptionEn: "",
+    subjectQuery: "",
+    imagePath: null,
+    author: null,
+    followersCount: 0,
+    paperCount: 0,
+    enabled: true,
+  },
+];
 
 export interface MockPaperRecord {
   id: string;

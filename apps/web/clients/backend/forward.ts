@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { ANONYMOUS_CHAT_TTL_SECONDS, backendConfig } from "../../config/backend";
+import { ANONYMOUS_TTL_SECONDS, backendConfig } from "../../config/backend";
 import { logError, logInfo } from "../../lib/observability/logger";
 import { REQUEST_ID_HEADER, resolveRequestId } from "../../lib/observability/request-id";
 import { attachIdentity, resolveBackendIdentity } from "./identity";
 
-const FORWARDED_REQUEST_HEADERS = ["accept", "content-type", "last-event-id", "range"] as const;
+const FORWARDED_REQUEST_HEADERS = [
+  "accept", "content-type", "idempotency-key", "last-event-id", "range", "x-shenzhi-expected-user-id",
+] as const;
 
 function forwardedHeaders(requestHeaders: Headers): Headers {
   const headers = new Headers();
@@ -14,6 +16,16 @@ function forwardedHeaders(requestHeaders: Headers): Headers {
     if (value) headers.set(name, value);
   }
   return headers;
+}
+
+/** Node fetch cannot deliver a 401 response to a non-replayable request body.
+ * Keep small JSON protocol bodies replayable; binary uploads still stream.
+ */
+export async function readForwardedBody(request: Request): Promise<BodyInit | undefined> {
+  if (request.headers.get("content-length") === "0" || !request.body) return undefined;
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  if (contentType === "application/json" || contentType?.endsWith("+json")) return request.text();
+  return request.body;
 }
 
 /**
@@ -59,7 +71,7 @@ export async function forwardToBusinessBackend(
   };
 
   if (req.method !== "GET" && req.method !== "HEAD") {
-    Object.assign(init, { body: req.body, duplex: "half" });
+    Object.assign(init, { body: await readForwardedBody(req), duplex: "half" });
   }
 
   let upstream: Response;
@@ -98,7 +110,7 @@ export async function forwardToBusinessBackend(
   // Only anonymous traffic renews this access key. An authenticated request
   // must not silently extend data that has already been (or will be) claimed.
   if (identity.kind === "anonymous" && upstream.ok) response.cookies.set("shenzhi-chat-anon", anonymousId, {
-    httpOnly: true, sameSite: "lax", secure: req.nextUrl.protocol === "https:", path: "/", maxAge: ANONYMOUS_CHAT_TTL_SECONDS,
+    httpOnly: true, sameSite: "lax", secure: req.nextUrl.protocol === "https:", path: "/", maxAge: ANONYMOUS_TTL_SECONDS,
   });
   return response;
 }
