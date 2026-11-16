@@ -6,6 +6,8 @@
 
 新人请先看 [ONBOARDING.md](ONBOARDING.md);工程架构见 [docs/engineering/architecture-confirmation.md](docs/engineering/architecture-confirmation.md);部署与运行环境见 [docs/engineering/deployment.md](docs/engineering/deployment.md)。
 
+正式环境位于韩国服务器。Web 以 Next.js 服务运行，FastAPI 以 `app.main:app` 为入口。访问地址和发布流程向服务器负责人确认。
+
 ---
 
 ## 快速开始

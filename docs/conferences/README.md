@@ -94,7 +94,7 @@ uv run --locked python -m app.services.conferences.cli publish --source /path/to
 
 ## 架构与验收
 
-会议服务集中到 app/services/conferences/，API、模型与Schema保持原分层。常驻后端复用原HomeFeedScheduler；本功能的Actions/Vercel外部触发已清理。正式服务器环境待负责人实际验证。完整流程图、锁的用途、迁移链和命令见 [自动同步设计](AUTO-SYNC-DESIGN.md)。
+会议服务集中到 app/services/conferences/，API、模型与Schema保持原分层。自动同步由常驻后端的 `HomeFeedScheduler` 执行。正式服务器环境待负责人实际验证。完整流程图、锁的用途、迁移链和命令见 [自动同步设计](AUTO-SYNC-DESIGN.md)。
 
 ## API接口
 

@@ -61,7 +61,7 @@ npm run build
 
 学者测试覆盖默认浏览、中英文搜索、独立详情、未知 ID、返回数据隔离、ID 关联复用论文、缺失值/真实零值、稀疏年份、不改写总引用、首字母头像、取消请求及路由编码。旧 Scholar BFF 请求测试继续保留。
 
-该功能仅在 `feat/scholars-v2-mock` 预览。README 指定 `dev` 是 Vercel Production Branch；不得为预览直接推送或合并到 `dev` / `main`。需由产品负责人评审后决定下一阶段。
+该功能在 `feat/scholars-v2-mock` 分支本地验收。需由产品负责人评审后决定下一阶段，不直接推送到 `dev` 或 `main`。
 
 ### 本轮结果（2026-10-20）
 
