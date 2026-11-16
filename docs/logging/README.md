@@ -426,4 +426,4 @@ python scripts/verify_feishu_webhook.py --service agent --component worker --env
 
 迁移分支的共享契约位于 `packages/agent-contracts/src/agent_contracts/`，事件以 `(run_id, seq)` 标识，`RunRecordWire.attempt` 是正整数。按已部署版本的契约去重，并从脱敏的事件元信息或终态报告提取告警字段；事件 `data` 和执行结果中包含的用户内容只进入各自受控存储。
 
-正式服务器宿主机巡检（`scripts/ops/health-report.sh`）已实现 **probe 恢复通知**（异常 → 正常时推送 `[恢复]`）。生产报错采集、告警聚合与台账写入仍待业务信号与授权范围确定后扩展。飞书投递通过独立告警进程执行，业务事务、任务执行和额度结算按各自契约完成。
+正式服务器宿主机巡检（`scripts/ops/health-report.sh`）在 `probe` 下**仅在状态变化时**推送飞书：刚出现异常发 `[告警]`，异常 → 正常发 `[恢复]`；持续异常期间不每 5 分钟重复。生产报错采集、告警聚合与台账写入仍待业务信号与授权范围确定后扩展。飞书投递通过独立告警进程执行，业务事务、任务执行和额度结算按各自契约完成。

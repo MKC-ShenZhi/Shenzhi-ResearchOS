@@ -317,22 +317,12 @@ ${body}"
       [[ "$k" == "$key" ]] && found=1 && break
     done
     if (( found == 0 )); then
-      send_feishu_text "[告警·新] ${key}
+      send_feishu_text "[告警] ${key}
 ${body}"
       record_event_ts "alert:${key}"
       sent=1
       log "alert sent (new) $key"
-      continue
     fi
-    if cooldown_active "alert:${key}"; then
-      log "cooldown skip alert:${key}"
-      continue
-    fi
-    send_feishu_text "[告警·持续] ${key}
-${body}"
-    record_event_ts "alert:${key}"
-    sent=1
-    log "alert sent (ongoing) $key"
   done
 
   write_active_alerts curr_alerts
@@ -340,7 +330,7 @@ ${body}"
   if ((${#curr_alerts[@]} == 0)); then
     log "probe ok"
   elif (( sent == 0 )); then
-    log "probe alerts muted by cooldown"
+    log "probe unchanged (no new alert or recovery)"
   fi
 }
 

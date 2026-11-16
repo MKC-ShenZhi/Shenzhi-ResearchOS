@@ -2,7 +2,7 @@
 
 P0 采用 **Bash + cron**：
 
-- 脚本：`scripts/ops/health-report.sh`（`probe`：新告警、持续告警、**恢复通知**）
+- 脚本：`scripts/ops/health-report.sh`（`probe`：仅**新异常**与**恢复**时推送，不刷持续告警）
 - 配置：`scripts/ops/ops.env.example`
 - 测试群验通：`scripts/verify_feishu_webhook.py`（`docs/logging/README.md` §15）
 

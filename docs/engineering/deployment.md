@@ -114,7 +114,7 @@ set -a && . /opt/shenzhi/.env.ops && set +a
 /opt/shenzhi/bin/health-report.sh daily
 ```
 
-cron：每天 08:00 `daily`；每 5 分钟 `probe`（异常推送 + **从异常恢复为正常时发恢复消息**，均有冷却）。索引见 [server-health-monitoring-plan.md](./server-health-monitoring-plan.md)。
+cron：每天 08:00 `daily`；每 5 分钟 `probe`（**仅状态变化时推送**：刚出现异常发 `[告警]`，恢复正常发 `[恢复]`；持续异常期间不重复）。索引见 [server-health-monitoring-plan.md](./server-health-monitoring-plan.md)。
 
 ---
 
