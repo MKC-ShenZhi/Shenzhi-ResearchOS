@@ -95,6 +95,27 @@ Vercel Postgres (Neon):Auth 表与业务表共存于同一库
 
 完成数据库迁移后，正式常驻后端设置 `BACKGROUND_JOBS_ENABLED=true`，统一启动首页数据任务、会议 DDL 同步和论文库会议目录同步。此开关默认关闭。已有部署升级时，用它替换原来的 `HOME_FEED_SCHEDULER_ENABLED` 和 `CONFERENCE_SYNC_ENABLED`。论文库首份目录可在上线前提前同步，见 [会议目录快照](../knowledge/PAPER-LIBRARY-V2.md#常驻后端的会议目录快照)。
 
+### 正式服务器：宿主机巡检与飞书告警
+
+方案 A：**Shell + cron**，不依赖 Backend 进程内调度。飞书 Wiki 有完整步骤；仓库内文件：
+
+| 文件 | 说明 |
+|------|------|
+| `scripts/ops/health-report.sh` | `daily` 日报；`probe` 阈值告警 + **恢复通知** |
+| `scripts/ops/ops.env.example` | 复制为服务器上 `/opt/shenzhi/.env.ops`（**Webhook 不入库**） |
+| `scripts/verify_feishu_webhook.py` | 测试群 Webhook 签名校验（见 `docs/logging/README.md` §15） |
+
+```bash
+sudo mkdir -p /opt/shenzhi/bin /var/lib/shenzhi
+sudo cp scripts/ops/health-report.sh /opt/shenzhi/bin/
+sudo chmod 755 /opt/shenzhi/bin/health-report.sh
+# 配置 /opt/shenzhi/.env.ops 后试跑:
+set -a && . /opt/shenzhi/.env.ops && set +a
+/opt/shenzhi/bin/health-report.sh daily
+```
+
+cron：每天 08:00 `daily`；每 5 分钟 `probe`（**仅状态变化时推送**：刚出现异常发 `[告警]`，恢复正常发 `[恢复]`；持续异常期间不重复）。索引见 [server-health-monitoring-plan.md](./server-health-monitoring-plan.md)。
+
 ---
 
 ## 四、下一阶段

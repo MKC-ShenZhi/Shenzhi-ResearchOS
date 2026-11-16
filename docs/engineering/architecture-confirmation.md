@@ -94,7 +94,7 @@ shenzhi/
 ├── docs/                        # 开发与产品文档
 ├── tests/                       # 视觉截图脚本
 ├── tools/
-├── scripts/                     # 数据发布与本地辅助脚本
+├── scripts/                     # 数据发布、正式机运维巡检(`scripts/ops/`)与本地辅助脚本
 └── README.md
 ```
 

@@ -389,3 +389,41 @@ web_search.completed / web_search.provider_failed
 Logging 不参与业务决策。
 
 演进：先 stdout；真有多实例/检索/告警再上阿里云 SLS；跨长期服务再上 Trace/Span。不提前建平台。
+
+---
+
+## 15. 飞书群机器人通信验证
+
+在测试群添加飞书自定义机器人并开启签名校验。通过团队密钥渠道获取该机器人的 Webhook URL 和签名密钥，注入当前进程的 `FEISHU_WEBHOOK_URL` 和 `FEISHU_WEBHOOK_SECRET`。在仓库根目录执行以下命令。 [飞书自定义机器人指南](https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot)
+
+```sh
+python scripts/verify_feishu_webhook.py
+```
+
+脚本每次发送一条带唯一 Test ID 的模拟告警。退出码 `0` 表示飞书 API 已受理。再到测试群核对是否收到一条相同 Test ID 的消息，确认通信验收通过。退出码 `2` 表示凭据缺失或 URL 格式不符，`1` 表示 HTTP、网络或飞书业务响应异常。发生超时时，先到测试群核对 Test ID 再决定是否重发。
+
+正式接入时由部署负责人在正式告警群单独创建机器人，并将对应凭据配置到实际发送端。
+
+### 来源标签与服务拆分
+
+脚本可通过 `--service`、`--component` 和 `--environment` 标注通知来源。默认来源为 `monitoring`，环境为 `test`。标签接受 1～64 个字母、数字、点、下划线或连字符。这些标签描述消息来源，服务健康由后续采集器验证。
+
+```sh
+python scripts/verify_feishu_webhook.py --service agent --component worker --environment test
+```
+
+按 [Agent Platform 设计稿](https://fcnuj1ibe921.feishu.cn/wiki/L0pPwItlcixoMukZAOLcc9cCnLd)规划，后续采集对齐以下边界。接入时先核对远程仓库的实际结构、共享契约和部署配置。
+
+- Backend 的产品 API、身份和产品额度异常使用 `service=backend`。位于 Backend 内的任务提交、控制命令和事件流通信使用 `service=backend`、`component=agent-gateway`。
+- 独立 Agent 的接口和执行进程分别使用 `service=agent`、`component=api` 与 `component=worker`，分别采集可达性和执行状态。
+- 消息发送工具独立于业务应用，保持通过进程环境读取飞书凭据。当前实现使用 Python 标准库，代码入口是 `scripts/verify_feishu_webhook.py`。
+
+后续接入使用实际共享契约中的 `request_id`、`task_id`、`run_id` 等关联字段。事件去重键与 Attempt 的含义在接入时依据该契约确认。Agent 的运行状态以其权威状态来源为准，Backend 事件流重放后按稳定事件标识去重。
+
+迁移分支的 [Agent 运行说明](https://github.com/MKC-ShenZhi/Shenzhi-ResearchOS/blob/2fc5202d4367dcd0a5cd4dbaf8a82a4ca4becb59/apps/agent/README.md)已提供独立服务实现。该版本的接口入口为 `apps/agent/src/agent_app/main.py`，Worker 入口为 `apps/agent/src/agent_app/worker_main.py`，Backend 通信边界为 `apps/backend/app/services/agent_gateway/client.py`。部署接入前先确认目标环境采用的分支与版本。
+
+该实现的 `GET /internal/v1/health` 返回 Agent API 状态，Worker 执行状态通过心跳、租约与执行报告判断。日志采集需分别处理 Backend 的 JSON 日志与 Agent 进程的日志配置。该版本 Agent 的 `log_event` 使用 Python logging 的额外字段，Worker 使用默认日志格式；后续采集器需验证部署环境实际输出的事件名和关联字段，再执行字段映射。
+
+迁移分支的共享契约位于 `packages/agent-contracts/src/agent_contracts/`，事件以 `(run_id, seq)` 标识，`RunRecordWire.attempt` 是正整数。按已部署版本的契约去重，并从脱敏的事件元信息或终态报告提取告警字段；事件 `data` 和执行结果中包含的用户内容只进入各自受控存储。
+
+正式服务器宿主机巡检（`scripts/ops/health-report.sh`）在 `probe` 下**仅在状态变化时**推送飞书：刚出现异常发 `[告警]`，异常 → 正常发 `[恢复]`；持续异常期间不每 5 分钟重复。生产报错采集、告警聚合与台账写入仍待业务信号与授权范围确定后扩展。飞书投递通过独立告警进程执行，业务事务、任务执行和额度结算按各自契约完成。
