@@ -10,14 +10,16 @@ fi
 
 OPS_LARK_WEBHOOK_URL="${OPS_LARK_WEBHOOK_URL:-}"
 OPS_LARK_SIGN_SECRET="${OPS_LARK_SIGN_SECRET:-}"
-OPS_COMPOSE_FILE="${OPS_COMPOSE_FILE:-/opt/shenzhi/docker-compose.yml}"
+OPS_COMPOSE_FILE="${OPS_COMPOSE_FILE:-}"
 OPS_HTTP_URL="${OPS_HTTP_URL:-http://127.0.0.1/}"
 OPS_STATE_FILE="${OPS_STATE_FILE:-/var/lib/shenzhi/ops-alert-state.json}"
 OPS_ALERT_MEM_AVAIL_PCT="${OPS_ALERT_MEM_AVAIL_PCT:-10}"
 OPS_ALERT_DISK_USE_PCT="${OPS_ALERT_DISK_USE_PCT:-90}"
 OPS_ALERT_LOAD_FACTOR="${OPS_ALERT_LOAD_FACTOR:-2}"
 OPS_ALERT_COOLDOWN_SEC="${OPS_ALERT_COOLDOWN_SEC:-1800}"
-OPS_HOST_LABEL="${OPS_HOST_LABEL:-$(hostname -s 2>/dev/null || echo ecs)}"
+OPS_HOST_LABEL="${OPS_HOST_LABEL:-$(hostname -s 2>/dev/null || echo host)}"
+OPS_SOURCE_SERVICE="${OPS_SOURCE_SERVICE:-monitoring}"
+OPS_SOURCE_COMPONENT="${OPS_SOURCE_COMPONENT:-host-probe}"
 
 log() {
   echo "[$(date -Iseconds)] $*" >&2
@@ -152,7 +154,7 @@ PY
   return 1
 }
 
-record_alert() {
+record_event_ts() {
   local key="$1"
   local now
   now=$(date +%s)
@@ -173,6 +175,49 @@ with open(path, "w", encoding="utf-8") as f:
 PY
 }
 
+read_active_alerts() {
+  if [[ ! -f "$OPS_STATE_FILE" ]]; then
+  return
+  fi
+  python3 - "$OPS_STATE_FILE" <<'PY'
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    data = {}
+active = data.get("active")
+if isinstance(active, list):
+    for item in active:
+        if isinstance(item, str) and item:
+            print(item)
+PY
+}
+
+write_active_alerts() {
+  local -n keys_ref=$1
+  mkdir -p "$(dirname "$OPS_STATE_FILE")"
+  local joined
+  joined=$(printf '%s\n' "${keys_ref[@]}")
+  ACTIVE_LIST="$joined" python3 - "$OPS_STATE_FILE" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+raw = os.environ.get("ACTIVE_LIST", "")
+active = [line.strip() for line in raw.splitlines() if line.strip()]
+data = {}
+if os.path.isfile(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        data = {}
+data["active"] = active
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, indent=2)
+PY
+}
+
 build_report() {
   local cpu pct mem_used mem_avail swap_used disk load cores code dkr
   cpu=$(cpu_usage_pct)
@@ -184,7 +229,7 @@ build_report() {
   dkr=$(docker_ps_summary)
 
   cat <<EOF
-【深知·运维】模式=${MODE} 主机=${OPS_HOST_LABEL}
+【深知·运维】模式=${MODE} 来源=${OPS_SOURCE_SERVICE}/${OPS_SOURCE_COMPONENT} 主机=${OPS_HOST_LABEL}
 CPU: ${cpu}%  内存已用: ${mem_used}%  可用: ${mem_avail}%  Swap已用: ${swap_used}%
 磁盘(/): ${disk}%  负载(1m): ${load}  CPU核: ${cores}
 HTTP ${OPS_HTTP_URL}: ${code}
@@ -204,21 +249,21 @@ collect_alerts() {
   code=$(http_code)
 
   if (( mem_avail < OPS_ALERT_MEM_AVAIL_PCT )); then
-    alerts+=("mem_avail_${mem_avail}")
+    alerts+=("mem_avail")
   fi
   if (( swap_used >= 95 )); then
-    alerts+=("swap_${swap_used}")
+    alerts+=("swap")
   fi
   if (( disk >= OPS_ALERT_DISK_USE_PCT )); then
-    alerts+=("disk_${disk}")
+    alerts+=("disk")
   fi
   load_int=${load%.*}
   if [[ -z "$load_int" ]]; then load_int=0; fi
   if (( load_int > cores * OPS_ALERT_LOAD_FACTOR )); then
-    alerts+=("load_${load}")
+    alerts+=("load")
   fi
   if [[ "$code" != "200" && "$code" != "301" && "$code" != "302" && "$code" != "304" ]]; then
-    alerts+=("http_${code}")
+    alerts+=("http")
   fi
   if ! web_running; then
     alerts+=("web_down")
@@ -241,26 +286,60 @@ main() {
   fi
 
   local alert_lines key sent=0
-  alert_lines=$(collect_alerts || true)
-  if [[ -z "$alert_lines" ]]; then
-    log "probe ok"
-    exit 0
-  fi
+  mapfile -t curr_alerts < <(collect_alerts | sed '/^$/d')
+  mapfile -t prev_alerts < <(read_active_alerts | sed '/^$/d')
 
-  while IFS= read -r key; do
+  local prev key found
+  for key in "${prev_alerts[@]}"; do
     [[ -z "$key" ]] && continue
-    if cooldown_active "$key"; then
-      log "cooldown skip $key"
+    found=0
+    for k in "${curr_alerts[@]}"; do
+      [[ "$k" == "$key" ]] && found=1 && break
+    done
+  if (( found == 0 )); then
+    local rkey="recovery:${key}"
+    if cooldown_active "$rkey"; then
+      log "cooldown skip $rkey"
+    else
+      send_feishu_text "[恢复] 告警项 ${key} 已恢复正常
+${body}"
+      record_event_ts "$rkey"
+      sent=1
+      log "recovery sent $key"
+    fi
+  fi
+  done
+
+  for key in "${curr_alerts[@]}"; do
+    [[ -z "$key" ]] && continue
+    found=0
+    for k in "${prev_alerts[@]}"; do
+      [[ "$k" == "$key" ]] && found=1 && break
+    done
+    if (( found == 0 )); then
+      send_feishu_text "[告警·新] ${key}
+${body}"
+      record_event_ts "alert:${key}"
+      sent=1
+      log "alert sent (new) $key"
       continue
     fi
-    send_feishu_text "[告警 ${key}]
+    if cooldown_active "alert:${key}"; then
+      log "cooldown skip alert:${key}"
+      continue
+    fi
+    send_feishu_text "[告警·持续] ${key}
 ${body}"
-    record_alert "$key"
+    record_event_ts "alert:${key}"
     sent=1
-    log "alert sent $key"
-  done <<< "$alert_lines"
+    log "alert sent (ongoing) $key"
+  done
 
-  if (( sent == 0 )); then
+  write_active_alerts curr_alerts
+
+  if ((${#curr_alerts[@]} == 0)); then
+    log "probe ok"
+  elif (( sent == 0 )); then
     log "probe alerts muted by cooldown"
   fi
 }

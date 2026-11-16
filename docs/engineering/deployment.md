@@ -101,8 +101,9 @@ Vercel Postgres (Neon):Auth 表与业务表共存于同一库
 
 | 文件 | 说明 |
 |------|------|
-| `scripts/ops/health-report.sh` | `daily` 日报 / `probe` 阈值告警 |
+| `scripts/ops/health-report.sh` | `daily` 日报；`probe` 阈值告警 + **恢复通知** |
 | `scripts/ops/ops.env.example` | 复制为服务器上 `/opt/shenzhi/.env.ops`（**Webhook 不入库**） |
+| `scripts/verify_feishu_webhook.py` | 测试群 Webhook 签名校验（见 `docs/logging/README.md` §15） |
 
 ```bash
 sudo mkdir -p /opt/shenzhi/bin /var/lib/shenzhi
@@ -113,7 +114,7 @@ set -a && . /opt/shenzhi/.env.ops && set +a
 /opt/shenzhi/bin/health-report.sh daily
 ```
 
-cron：每天 08:00 `daily`；每 5 分钟 `probe`（仅异常推送，带冷却）。索引见 [server-health-monitoring-plan.md](./server-health-monitoring-plan.md)。
+cron：每天 08:00 `daily`；每 5 分钟 `probe`（异常推送 + **从异常恢复为正常时发恢复消息**，均有冷却）。索引见 [server-health-monitoring-plan.md](./server-health-monitoring-plan.md)。
 
 ---
 

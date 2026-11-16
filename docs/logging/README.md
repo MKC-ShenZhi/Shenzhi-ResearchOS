@@ -420,4 +420,10 @@ python scripts/verify_feishu_webhook.py --service agent --component worker --env
 
 后续接入使用实际共享契约中的 `request_id`、`task_id`、`run_id` 等关联字段。事件去重键与 Attempt 的含义在接入时依据该契约确认。Agent 的运行状态以其权威状态来源为准，Backend 事件流重放后按稳定事件标识去重。
 
-生产报错采集、告警聚合、恢复通知和台账写入在具体信号来源与授权范围确定后实现。飞书投递通过独立告警进程执行，业务事务、任务执行和额度结算按各自契约完成。
+迁移分支的 [Agent 运行说明](https://github.com/MKC-ShenZhi/Shenzhi-ResearchOS/blob/2fc5202d4367dcd0a5cd4dbaf8a82a4ca4becb59/apps/agent/README.md)已提供独立服务实现。该版本的接口入口为 `apps/agent/src/agent_app/main.py`，Worker 入口为 `apps/agent/src/agent_app/worker_main.py`，Backend 通信边界为 `apps/backend/app/services/agent_gateway/client.py`。部署接入前先确认目标环境采用的分支与版本。
+
+该实现的 `GET /internal/v1/health` 返回 Agent API 状态，Worker 执行状态通过心跳、租约与执行报告判断。日志采集需分别处理 Backend 的 JSON 日志与 Agent 进程的日志配置。该版本 Agent 的 `log_event` 使用 Python logging 的额外字段，Worker 使用默认日志格式；后续采集器需验证部署环境实际输出的事件名和关联字段，再执行字段映射。
+
+迁移分支的共享契约位于 `packages/agent-contracts/src/agent_contracts/`，事件以 `(run_id, seq)` 标识，`RunRecordWire.attempt` 是正整数。按已部署版本的契约去重，并从脱敏的事件元信息或终态报告提取告警字段；事件 `data` 和执行结果中包含的用户内容只进入各自受控存储。
+
+正式服务器宿主机巡检（`scripts/ops/health-report.sh`）已实现 **probe 恢复通知**（异常 → 正常时推送 `[恢复]`）。生产报错采集、告警聚合与台账写入仍待业务信号与授权范围确定后扩展。飞书投递通过独立告警进程执行，业务事务、任务执行和额度结算按各自契约完成。
