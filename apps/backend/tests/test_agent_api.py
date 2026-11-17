@@ -1,20 +1,54 @@
 """Agent HTTP 入口测试：SSE 事件流、history 校验、参数校验、BFF 鉴权。"""
 import base64
 import json
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 import httpx
 
 from app.main import app
-from app.services.agent import AgentRuntime
-from app.services.agent.provider import Finish, TextDelta, ToolCallEvent
-from app.services.agent.types import StopReason, ToolCall
+from app.core.errors import BusinessError
 from app.services.agent_sessions.entities import AgentSession
 from app.services.agent_sessions.repository import MemoryAgentSessionRepository
-from tests.test_agent import FakeProvider, make_echo
+
+
+class FakeAgentGateway:
+    def __init__(self):
+        self.events_data = []
+        self.result = {'status': 'completed', 'result': {
+            'stop_reason': 'stop', 'final_text': '你好', 'output': None,
+            'turns': 1, 'duration_ms': 5, 'prompt_tokens': 1,
+            'completion_tokens': 1, 'truncated': False,
+        }}
+        self.submissions = []
+        self.files = {}
+
+    async def submit(self, payload):
+        self.submissions.append(payload)
+        return {'task_id': 'task-1', 'current_run_id': 'run-1'}
+
+    async def events(self, run_id, owner, after_seq):
+        return [item for item in self.events_data if item['seq'] > after_seq]
+
+    async def run(self, run_id, owner):
+        return {'report': self.result}
+
+    async def task(self, task_id, owner):
+        return {'current_run_id': 'run-1'}
+
+    async def config(self):
+        return {'models': [], 'default_model': None, 'skills': []}
+
+    async def steer(self, run_id, owner, text):
+        raise BusinessError(20004, '运行不存在', 404)
+
+    async def read_session_file(self, owner, session_id, path):
+        if '..' in path.replace('\\', '/').split('/'):
+            raise BusinessError(20004, '路径超出工作区边界', 400)
+        item = self.files.get((session_id, path))
+        if item is None:
+            raise BusinessError(20004, '文件不存在', 404)
+        return item
 
 
 def parse_sse(text: str) -> list[tuple[str, dict]]:
@@ -40,15 +74,14 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
             'CHAT_DATABASE_URL': ''})
         self.env.start()
         self.repo = MemoryAgentSessionRepository()
+        self.gateway = FakeAgentGateway()
         self.api_repo = patch('app.api.agent.agent_session_repository', self.repo)
-        self.service_repo = patch(
-            'app.services.agent_sessions.service.agent_session_repository', self.repo,
-        )
+        self.gateway_patch = patch('app.api.agent.agent_gateway', self.gateway)
         self.api_repo.start()
-        self.service_repo.start()
+        self.gateway_patch.start()
 
     def tearDown(self):
-        self.service_repo.stop()
+        self.gateway_patch.stop()
         self.api_repo.stop()
         self.env.stop()
 
@@ -60,10 +93,8 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
             return await client.post('/api/v1/agent/run', json=payload, headers=self.OWNER)
 
     async def test_run_streams_events_and_result(self):
-        runtime = AgentRuntime(provider=FakeProvider(
-            [[TextDelta('你'), TextDelta('好'), Finish(StopReason.STOP)]]))
-        with patch('app.services.agent.service.default_runtime', return_value=runtime):
-            response = await self.post({'prompt': '打个招呼'})
+        self.gateway.events_data = [{'seq': 1, 'name': 'delta', 'data': {'text': '你好'}}]
+        response = await self.post({'prompt': '打个招呼'})
         self.assertEqual(response.status_code, 200)
         self.assertIn('text/event-stream', response.headers['content-type'])
         events = parse_sse(response.text)
@@ -75,12 +106,12 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['final_text'], '你好')
 
     async def test_tool_round_trip_over_http(self):
-        runtime = AgentRuntime(provider=FakeProvider([
-            [ToolCallEvent(ToolCall('c1', 'echo', {'value': 'x'})), Finish(StopReason.TOOL_CALLS)],
-            [TextDelta('完成'), Finish(StopReason.STOP)],
-        ]), tools=[make_echo()])
-        with patch('app.services.agent.service.default_runtime', return_value=runtime):
-            response = await self.post({'prompt': '调用 echo'})
+        self.gateway.events_data = [
+            {'seq': 1, 'name': 'tool_call', 'data': {'name': 'echo'}},
+            {'seq': 2, 'name': 'tool_end', 'data': {'name': 'echo'}},
+        ]
+        self.gateway.result['result']['final_text'] = '完成'
+        response = await self.post({'prompt': '调用 echo'})
         events = parse_sse(response.text)
         self.assertIn('tool_call', [name for name, _ in events])
         self.assertIn('tool_end', [name for name, _ in events])
@@ -90,11 +121,10 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         history = [{'kind': 'user', 'text': '上一问'},
                    {'kind': 'assistant', 'content': '上一答', 'reasoning': '',
                     'tool_calls': [], 'stop_reason': 'stop'}]
-        runtime = AgentRuntime(provider=FakeProvider([[TextDelta('好'), Finish(StopReason.STOP)]]))
-        with patch('app.services.agent.service.default_runtime', return_value=runtime):
-            response = await self.post({'prompt': '继续', 'history': history})
+        response = await self.post({'prompt': '继续', 'history': history})
         events = parse_sse(response.text)
         self.assertEqual(events[-1][1]['status'], 'done')
+        self.assertEqual(self.gateway.submissions[0]['history'], history)
 
     async def test_invalid_history_rejected(self):
         response = await self.post({'prompt': 'x', 'history': [{'kind': 'bogus'}]})
@@ -102,61 +132,43 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()['code'], 20001)
 
     async def test_session_file_endpoint(self):
-        from app.services.agent import service
-        from app.services.agent import workspace
-        # request_owner 返回 'anon:<uuid>'，产物目录按此 owner 哈希——写入须用同一格式
         owner = f"anon:{self.OWNER_ID}"
-        with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(workspace, 'WORKSPACE_ROOT', Path(tmp)):
-                self.repo.sessions['ses_file1'] = AgentSession(
-                    id='ses_file1', owner=owner, title='文件测试会话',
-                )
-                root = service.ensure_session_workspace(owner, 'ses_file1')
-                (root / 'rag_review.md').write_text('# 报告\n正文', encoding='utf-8')
-                (root / 'data.bin').write_bytes(b'\x00\x01\xff')
-
-                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
-                                             base_url='http://test') as client:
-                    inline = await client.get('/api/v1/agent/session/ses_file1/file',
-                                              params={'path': 'rag_review.md'}, headers=self.OWNER)
-                    self.assertEqual(inline.status_code, 200)
-                    self.assertEqual(inline.headers['content-type'].split(';')[0], 'text/markdown')
-                    self.assertIn('inline', inline.headers['content-disposition'])
-                    self.assertIn('报告', inline.text)
-
-                    download = await client.get('/api/v1/agent/session/ses_file1/file',
-                                                params={'path': 'rag_review.md', 'download': 'true'},
-                                                headers=self.OWNER)
-                    self.assertIn('attachment', download.headers['content-disposition'])
-
-                    # 二进制内容按 octet-stream 交付
-                    binary = await client.get('/api/v1/agent/session/ses_file1/file',
-                                              params={'path': 'data.bin'}, headers=self.OWNER)
-                    self.assertEqual(binary.headers['content-type'].split(';')[0],
-                                     'application/octet-stream')
-
-                    # 路径禁闭与不存在
-                    escape = await client.get('/api/v1/agent/session/ses_file1/file',
-                                              params={'path': '../x.md'}, headers=self.OWNER)
-                    self.assertEqual(escape.status_code, 400)
-                    missing = await client.get('/api/v1/agent/session/ses_file1/file',
-                                               params={'path': 'nope.md'}, headers=self.OWNER)
-                    self.assertEqual(missing.status_code, 404)
-
-                    # 越权 owner：owner 不同 → 目录不同 → 404
-                    other = {'x-shenzhi-anonymous-id': '00000000-0000-4000-8000-000000000002'}
-                    forbidden = await client.get('/api/v1/agent/session/ses_file1/file',
-                                                 params={'path': 'rag_review.md'}, headers=other)
-                    self.assertEqual(forbidden.status_code, 404)
-
-                    # Database deletion revokes the retained workspace URL;
-                    # the physical directory is intentionally not removed here.
-                    deleted = await client.delete('/api/v1/agent/sessions/ses_file1',
-                                                  headers=self.OWNER)
-                    self.assertEqual(deleted.status_code, 200)
-                    after_delete = await client.get('/api/v1/agent/session/ses_file1/file',
-                                                    params={'path': 'rag_review.md'}, headers=self.OWNER)
-                    self.assertEqual(after_delete.status_code, 404)
+        self.repo.sessions['ses_file1'] = AgentSession(
+            id='ses_file1', owner=owner, title='文件测试会话',
+        )
+        self.gateway.files[('ses_file1', 'rag_review.md')] = ('# 报告\n正文'.encode(), 'text/markdown')
+        self.gateway.files[('ses_file1', 'data.bin')] = (b'\x00\x01\xff', 'application/octet-stream')
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url='http://test') as client:
+            inline = await client.get('/api/v1/agent/session/ses_file1/file',
+                                      params={'path': 'rag_review.md'}, headers=self.OWNER)
+            self.assertEqual(inline.status_code, 200)
+            self.assertEqual(inline.headers['content-type'].split(';')[0], 'text/markdown')
+            self.assertIn('inline', inline.headers['content-disposition'])
+            self.assertIn('报告', inline.text)
+            download = await client.get('/api/v1/agent/session/ses_file1/file',
+                                        params={'path': 'rag_review.md', 'download': 'true'},
+                                        headers=self.OWNER)
+            self.assertIn('attachment', download.headers['content-disposition'])
+            binary = await client.get('/api/v1/agent/session/ses_file1/file',
+                                      params={'path': 'data.bin'}, headers=self.OWNER)
+            self.assertEqual(binary.headers['content-type'].split(';')[0],
+                             'application/octet-stream')
+            escape = await client.get('/api/v1/agent/session/ses_file1/file',
+                                      params={'path': '../x.md'}, headers=self.OWNER)
+            self.assertEqual(escape.status_code, 400)
+            missing = await client.get('/api/v1/agent/session/ses_file1/file',
+                                       params={'path': 'nope.md'}, headers=self.OWNER)
+            self.assertEqual(missing.status_code, 404)
+            other = {'x-shenzhi-anonymous-id': '00000000-0000-4000-8000-000000000002'}
+            forbidden = await client.get('/api/v1/agent/session/ses_file1/file',
+                                         params={'path': 'rag_review.md'}, headers=other)
+            self.assertEqual(forbidden.status_code, 404)
+            deleted = await client.delete('/api/v1/agent/sessions/ses_file1', headers=self.OWNER)
+            self.assertEqual(deleted.status_code, 200)
+            after_delete = await client.get('/api/v1/agent/session/ses_file1/file',
+                                            params={'path': 'rag_review.md'}, headers=self.OWNER)
+            self.assertEqual(after_delete.status_code, 404)
 
     OWNER_ID = '00000000-0000-4000-8000-000000000001'
 
@@ -165,22 +177,12 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=')
 
     def asset_workspace(self, session_id: str):
-        """建真实临时工作区并种入嵌套图片产物，返回该会话的工作区根（清理挂到 addCleanup）。"""
-        from app.services.agent import service
-        from app.services.agent import workspace
-        tmp = tempfile.TemporaryDirectory()
-        patcher = patch.object(workspace, 'WORKSPACE_ROOT', Path(tmp.name))
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        self.addCleanup(tmp.cleanup)
+        """Seed Agent Gateway artifact responses for product API forwarding checks."""
         owner = f'anon:{self.OWNER_ID}'
         self.repo.sessions[session_id] = AgentSession(
             id=session_id, owner=owner, title='资源测试会话',
         )
-        root = service.ensure_session_workspace(owner, session_id)
-        (root / 'figures').mkdir(exist_ok=True)
-        (root / 'figures' / 'chart-1.png').write_bytes(self.PNG_1X1)
-        return root
+        self.gateway.files[(session_id, 'figures/chart-1.png')] = (self.PNG_1X1, 'image/png')
 
     async def test_session_asset_serves_png_with_cache_header(self):
         self.assertTrue(self.PNG_1X1.startswith(b'\x89PNG\r\n\x1a\n'))  # 常量损坏时立刻失败
@@ -208,7 +210,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(escape.status_code, 400)
                     self.assertEqual(escape.json()['code'], 20004)   # 路径超出工作区边界
             # 裸 ".." 会被 HTTP 客户端先归一掉（请求没到路由）——底线是任何形式都不得 200
-            normalized = await client.get('/api/v1/agent/assets/ses_asset2/../../etc/passwd',
+            normalized = await client.get('/api/v1/agent/assets/ses_asset2/..%2F..%2Fetc%2Fpasswd',
                                           headers=self.OWNER)
             self.assertNotEqual(normalized.status_code, 200)
             missing = await client.get('/api/v1/agent/assets/ses_asset2/figures/nope.png',
@@ -226,10 +228,10 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(forbidden.status_code, 404)
 
     async def test_session_asset_svg_is_inline_but_csp_hardened(self):
-        root = self.asset_workspace('ses_asset4')
-        (root / 'figures' / 'plot.svg').write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
-            encoding='utf-8')
+        self.asset_workspace('ses_asset4')
+        self.gateway.files[('ses_asset4', 'figures/plot.svg')] = (
+            b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+            'image/svg+xml')
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url='http://test') as client:
             response = await client.get('/api/v1/agent/assets/ses_asset4/figures/plot.svg',

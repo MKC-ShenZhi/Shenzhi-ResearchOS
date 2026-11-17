@@ -68,12 +68,12 @@ shenzhi/
 │   │   ├── db/                  # 当前 Web 侧数据库相关实现
 │   │   └── config/              # Web 配置
 │   │
-│   └── backend/                 # FastAPI 核心业务后端
+│   ├── backend/                 # FastAPI 核心业务后端
 │       ├── app/
 │       │   ├── api/             # API 路由与请求边界；_support/ 放 HTTP transport helper
 │       │   ├── schemas/         # 输入输出 Schema
 │       │   ├── models/          # 持久化模型
-│       │   ├── services/        # 按 agent、agent_sessions、identity、knowledge、library、home_feed、
+│       │   ├── services/        # 按 agent_gateway、agent_sessions、identity、knowledge、library、home_feed、
 │       │   │                    # discovery_pool、recommendation、topics、user 等领域组织业务逻辑
 │       │   ├── integrations/    # 外部服务与科研能力接入边界
 │       │   │   ├── knowledge/   # Knowledge Base Research Capability
@@ -84,12 +84,15 @@ shenzhi/
 │       │   ├── data/            # 随包数据快照（会议截稿、首页兜底、主题目录）
 │       │   └── main.py          # FastAPI 应用入口
 │       ├── migrations/          # Alembic 数据库迁移
-│       ├── skills/              # Agent Skill 提示词与参考资料
 │       ├── evaluation/          # 推荐离线评估数据
 │       ├── tests/
 │       ├── pyproject.toml
 │       └── uv.lock
-│
+│   └── agent/                   # 独立 Agent API、Control、Worker 与 Runtime
+│       ├── src/agent_app/
+│       ├── migrations/
+│       └── skills/
+├── packages/agent-contracts/    # 跨服务请求、响应与事件模型
 ├── data/                        # 离线数据源（首页兜底种子、会议截稿等）
 ├── docs/                        # 开发与产品文档
 ├── tests/                       # 视觉截图脚本
@@ -185,7 +188,7 @@ timezone-aware 时间逻辑负责，不与 Python 业务时钟强制合并。
 
 ### 3. 运行形态
 
-后端按**长驻进程**设计。FastAPI `lifespan` 负责启动时的运行状态恢复与后台调度器，Agent 运行归属保存在进程内存，Agent workspace 写本地磁盘。部署到 Serverless 等非长驻环境时，这些能力不保证可用。当前部署形态与约束见 [部署与运行环境](deployment.md)。
+Backend 按**长驻进程**设计。FastAPI `lifespan` 恢复产品会话投影，并启动由 `BACKGROUND_JOBS_ENABLED` 控制的后台调度器。Backend 经 Gateway 调用独立 Agent API；Agent 执行状态与事件持久化到独立 PostgreSQL，由 Worker 执行 Runtime。Agent API 与 Worker 使用共享 Workspace。当前部署形态与约束见 [部署与运行环境](deployment.md)。
 
 ---
 
@@ -470,7 +473,7 @@ backend integrations/knowledge
 
 Knowledge Base 当前接入论文检索、详情、图谱、会议浏览、学者、主题、基金与知识库总览等能力（接口清单见 [apps/backend/README.md](../../apps/backend/README.md)）；科研组内部业务由科研组维护，ShenZhi 只调用、隔离和适配，不在此边界内修改、补偿或修复科研组业务。
 
-当前仓库尚未存在 `integrations/deep_research` 或 `integrations/auto_research`。目前可用的 Deep Research 是深知自身的 Agent Skill（`apps/backend/skills/deep-research/`），在 Agent Runtime 内运行，不属于科研组能力接入；说明见 [docs/agent](../agent/README.md)。Deep Research、Auto Research 等能力后续在真实服务化、接口稳定并开始产品接入时，优先遵循 `backend integrations/<capability>` 边界；在职责尚未出现前，不创建空目录，也不描述为已存在稳定 Integration。
+当前仓库尚未存在 `integrations/deep_research` 或 `integrations/auto_research`。目前可用的 Deep Research 是深知自身的 Agent Skill（`apps/agent/skills/deep-research/`），在 Agent Runtime 内运行，不属于科研组能力接入；说明见 [docs/agent](../agent/README.md)。Deep Research、Auto Research 等能力后续在真实服务化、接口稳定并开始产品接入时，优先遵循 `backend integrations/<capability>` 边界；在职责尚未出现前，不创建空目录，也不描述为已存在稳定 Integration。
 
 接入科研能力前，需要明确：
 
@@ -490,7 +493,7 @@ Knowledge Base 当前接入论文检索、详情、图谱、会议浏览、学�
 当前存在的边界例外（登记在 [已知偏移与待收敛项](known-gaps.md)）：
 
 - `apps/web/app/api/paper-images/` 由 Web 服务端直接代理知识底座图片（`KNOWLEDGE_BASE_API_URL`），说明见 [论文图片](../knowledge/PAPER-IMAGES.md)。
-- `services/agent/` 中部分外部调用尚未收敛到 `integrations/`：Agent 自有的流式 Provider、`chart_tools.py` 的 Exa 搜索、`read_paper.py` 的 arXiv / OpenReview / Unpaywall 全文获取及 `fetch_url.py`。
+- Agent 上游协议位于 `apps/agent/src/agent_app/integrations/` 下的 `llm/agent_stream.py`、`web_search/`、`paper_resource/` 与 `public_web/`；Agent Tool 负责调用和结果整形。Knowledge Tool 通过 Backend 的内部 Knowledge API 使用原有知识底座接入。
 
 当科研接口或内部实现仍在演进时，产品侧优先通过：
 
@@ -667,8 +670,8 @@ docs/auto-research/
 
 ## LLM 接入基础设施
 
-Agent 与后续 AI Feature 统一通过 `integrations/llm` 的 Model Registry / Resolver
+Agent 通过 `apps/agent/src/agent_app/integrations/llm` 的 Model Registry / Resolver
 解析 Model ID、Provider、上游型号和能力；流式协议处理由 Agent 的
-`services/agent/provider.py` 负责。模型品牌只用于展示，实际路由由
+`agent_app.integrations.llm.agent_stream` 负责。协议类型位于 `agent_app.execution.provider`。模型品牌只用于展示，实际路由由
 `provider_id` 决定；Provider 凭据仅在服务端加载。接入规则、兼容策略及声明示例见
 [LLM API Foundation](llm-api-foundation.md)。

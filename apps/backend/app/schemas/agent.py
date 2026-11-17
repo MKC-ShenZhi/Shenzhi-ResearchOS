@@ -1,4 +1,4 @@
-"""HTTP contracts for persistent Agent product sessions."""
+"""HTTP request contracts for Agent runs and persistent sessions."""
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -34,6 +34,24 @@ class AgentSessionRun(BaseModel):
     attachments: list[dict[str, Any]] = Field(default_factory=list, max_length=MAX_FILES)
     workspace_id: str | None = None
     skills: list[str] = Field(default_factory=list, max_length=10)
+
+
+class AgentRunBody(BaseModel):
+    """Stateless Agent run request contract."""
+    prompt: str = Field(min_length=1, max_length=10_000)
+    history: list[dict] = Field(default_factory=list, max_length=200)
+    model: str | None = None
+    # mode 决定温度、运行预算，以及未显式选择技能时的快速回答技能与工具集。
+    mode: Literal['fast', 'deep', 'idea', 'doubt'] = 'fast'
+    attachments: list[dict[str, Any]] = Field(default_factory=list, max_length=MAX_FILES)
+    workspace_id: str | None = None
+    skills: list[str] = Field(default_factory=list, max_length=10)
+    session_id: str | None = None
+
+
+class SteerBody(BaseModel):
+    """Inject a follow-up into the active run before its next model request."""
+    text: str = Field(min_length=1, max_length=4_000)
 
 
 class LegacyAgentSessionImport(BaseModel):
