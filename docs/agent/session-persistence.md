@@ -45,7 +45,7 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 2. Web 将第一轮完整 `AgentRunInput` 写入 `sessionStorage` 的一次性 launch 记录，URL 只携带 `session` 和不透明 `launch` id。
 3. `/agents?session=<id>&launch=<id>` 先向后端恢复 Session，然后消费一次 launch，调用 `POST /api/v1/agent/sessions/{id}/run`。首轮的 model / mode / attachments / skills 以显式入参传入，不依赖 React state flush。
 4. Backend 校验 owner，从最新 transcript 恢复历史，预留 running Turn，向 Agent API 提交 Task 并记录 Task / Run ID。
-5. Worker 经 Agent API 领取和执行 Run。Backend 轮询持久事件，经 SSE 发送 delta、tool、steer 等内容，并将终态投影到 Turn。Agent Control 为可重试失败创建新 Run，Backend 随 Task 的当前 Run ID 切换。
+5. Worker 经 Agent API 领取和执行 Run。Backend 轮询持久事件，经 SSE 发送 delta、tool、steer 等内容，并将终态投影到 Turn。Agent Control 为可重试失败创建新 Run；Backend 经只读 Task Run 列表按 attempt 顺序投影全部 Run，排空旧 Run 尾部后再进入直接后继，只在最后一个 Run 结束时生成 result。
 6. 产品 SSE 订阅与执行解耦。断开订阅后运行可继续。Backend 通过五分钟 Turn 投影租约和三十秒续租协调投影写入，Agent Worker 使用独立的 Run 租约。失去投影租约的 Backend 无法覆盖后续投影终态。
 7. `LiveRun` 与 SSE 缓冲仍在 Backend 进程内。缺少本地缓冲时，Backend 可依据 Task / Run ID 通过 Agent 持久事件恢复；活跃投影被另一 Backend 持有时返回 409。未关联 Agent Task 的运行无法从 Agent 回放。投影恢复和跨进程游标连续性仍需联调。
 
@@ -60,6 +60,7 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 - `DELETE /api/v1/agent/sessions/{id}`：删除 DB Session 及其 Turns。
 - `POST /api/v1/agent/sessions/{id}/run`：基于后端历史启动一轮 SSE Run；前端必须为一次用户提交生成并在该操作重试时复用 `Idempotency-Key`。
 - `GET /api/v1/agent/sessions/{id}/run/stream?after=<n>`：从事件索引 `after`（默认 0）起重放；Backend 会优先使用本地 `LiveRun`，缺少时尝试恢复已关联的 Agent Run。页面刷新后若最新 Turn 仍为 `running`，`ShenzhiAiPage` 用它重新订阅。
+- 同一 Task 的首次流和无缓存恢复均从最早 Run 枚举全部历史，SSE ID 保持零基事件偏移。`after` 是下一条待收事件的 ID：result ID 为 6 时，未收到传 6，已完整收到传 7。编号依据见 [共享契约](contracts.md#事件)。
 - `POST /api/v1/agent/run/{run_id}/steer`：向当前 owner 的 active run 插话。
 - `POST /api/v1/agent/run/{run_id}/stop`：请求当前 owner 的 active run 正常停止。
 - `POST /api/v1/agent/sessions/import`：按 `(owner, import_key)` 幂等导入旧本地会话。

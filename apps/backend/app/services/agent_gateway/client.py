@@ -10,7 +10,7 @@ from agent_contracts import (
     AgentConfigWire, OwnerQueryWire, PlatformEventWire, RunEventsQueryWire,
     RunRecordWire, RunSteerRequestWire, RunSteerResponseWire,
     SessionFileReadRequestWire, SessionFileReadResponseWire, TaskRecordWire,
-    TaskSubmissionWire, WorkspaceClaimCommitResponseWire,
+    TaskRunsResponseWire, TaskSubmissionWire, WorkspaceClaimCommitResponseWire,
     WorkspaceClaimPrepareResponseWire, WorkspaceClaimRequestWire,
     WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
     WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire,
@@ -74,6 +74,12 @@ class AgentGateway:
         result = await self.request('GET', f'/internal/v1/runs/{run_id}',
                                     params=query.model_dump(mode='json'))
         return RunRecordWire.model_validate(result).model_dump(mode='json')
+
+    async def task_runs(self, task_id: str, owner: str) -> list[str]:
+        query = OwnerQueryWire(owner_id=owner)
+        result = await self.request('GET', f'/internal/v1/tasks/{task_id}/runs',
+                                    params=query.model_dump(mode='json'))
+        return TaskRunsResponseWire.model_validate(result).run_ids
 
     async def events(self, run_id: str, owner: str, after_seq: int) -> list[dict[str, Any]]:
         query = RunEventsQueryWire(owner_id=owner, after_seq=after_seq)

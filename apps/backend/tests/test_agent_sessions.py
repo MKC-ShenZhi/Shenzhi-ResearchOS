@@ -117,6 +117,9 @@ class FakeAgentGateway:
         plan = next(item for item in self.runs.values() if item['task_id'] == task_id)
         return {'current_run_id': plan['run_id'], 'cancel_requested': plan['status'] == 'cancelled'}
 
+    async def task_runs(self, task_id, owner):
+        return [item['run_id'] for item in self.runs.values() if item['task_id'] == task_id]
+
     async def steer(self, run_id, owner, message):
         if run_id not in self.runs:
             raise BusinessError(20004, '运行不存在', 404)

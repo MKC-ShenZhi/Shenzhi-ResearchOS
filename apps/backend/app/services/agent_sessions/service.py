@@ -94,19 +94,19 @@ async def start_session_run(
 
     async def _drive() -> None:
         task_id = task['task_id']
-        run_id = task['current_run_id']
         after_seq = 0
         transcript: list[dict] = []
-        await _append_event(live, capture, 'run_start', {'run_id': run_id})
         try:
+            run_id = await _next_task_run(task_id, owner)
+            await _append_event(live, capture, 'run_start', {'run_id': run_id})
             while True:
                 run, events = await read_run_update(agent_gateway, run_id, owner, after_seq)
                 for event in events:
                     after_seq = max(after_seq, int(event['seq']))
                     await _append_event(live, capture, event['name'], event['data'])
-                task_state = await agent_gateway.task(task_id, owner)
-                next_run_id = task_state.get('current_run_id')
-                if run.get('report') and next_run_id and next_run_id != run_id:
+                next_run_id = (await _next_task_run(task_id, owner, run_id)
+                               if run.get('report') else None)
+                if next_run_id:
                     run_id, after_seq = next_run_id, 0
                     await _append_event(live, capture, 'run_start', {'run_id': run_id})
                     continue
@@ -194,6 +194,18 @@ async def _append_event(live: LiveRun, capture: TimelineCapture, name: str, data
     append(live, name, data)
 
 
+async def _next_task_run(task_id: str, owner: str, current_run_id: str | None = None) -> str | None:
+    """Walk the complete attempt order, including retries finished between polls.
+
+    A terminal report and its retry Run are committed atomically by Control.
+    Advance only after draining that terminal Run's events, so each sealed prefix
+    has the same length (and thus SSE IDs) in live and reconstructed streams.
+    """
+    run_ids = await agent_gateway.task_runs(task_id, owner)
+    index = run_ids.index(current_run_id) + 1 if current_run_id is not None else 0
+    return run_ids[index] if index < len(run_ids) else None
+
+
 async def _reuse_turn(turn: AgentTurn, owner: str) -> LiveRun:
     """Attach a repeated product request to the existing durable Agent run."""
     live = get_live(turn.session_id, owner)
@@ -252,7 +264,6 @@ async def resume_session_run(session_id: str, owner: str) -> LiveRun:
     if turn is None:
         raise BusinessError(20004, '当前没有可回放的 Agent 运行', 404)
     task_id = turn.settings.get('agent_task_id')
-    run_id = turn.settings.get('agent_run_id')
     worker_id = current_worker_id()
     active_turn = turn.status == 'running'
     if active_turn and not await agent_session_repository.claim_turn_projection(
@@ -265,19 +276,19 @@ async def resume_session_run(session_id: str, owner: str) -> LiveRun:
     history = session.turns[-2].transcript if len(session.turns) > 1 else []
 
     async def drive() -> None:
-        current_run = run_id
         after_seq = 0
-        append(live, 'run_start', {'run_id': current_run})
         try:
+            current_run = await _next_task_run(task_id, owner)
+            append(live, 'run_start', {'run_id': current_run})
             while True:
                 run, events = await read_run_update(agent_gateway, current_run, owner, after_seq)
                 for event in events:
                     after_seq = max(after_seq, int(event['seq']))
                     await _append_event(live, capture, event['name'], event['data'])
-                task_state = await agent_gateway.task(task_id, owner)
-                latest = task_state.get('current_run_id')
-                if run.get('report') and latest and latest != current_run:
-                    current_run, after_seq = latest, 0
+                next_run_id = (await _next_task_run(task_id, owner, current_run)
+                               if run.get('report') else None)
+                if next_run_id:
+                    current_run, after_seq = next_run_id, 0
                     await _append_event(live, capture, 'run_start', {'run_id': current_run})
                     continue
                 report = run.get('report')

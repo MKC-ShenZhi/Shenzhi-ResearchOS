@@ -21,7 +21,7 @@ from agent_app.extensions.workspace import (
 from agent_contracts import (
     AgentConfigWire, BudgetLimits, ExecutionReport, PlatformEvent, RunStatus,
     RunSteerRequestWire, RunSteerResponseWire, SessionFileReadResponseWire,
-    TaskSubmission, WorkerHeartbeatRequestWire, WorkerHeartbeatResponseWire,
+    TaskRunsResponseWire, TaskSubmission, WorkerHeartbeatRequestWire, WorkerHeartbeatResponseWire,
     WorkspaceClaimCommitResponseWire,
     WorkspaceClaimPrepareResponseWire, WorkspaceClaimRequestWire,
     WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
@@ -139,6 +139,12 @@ async def submit_task(body: SubmitBody, session: AsyncSession = Depends(get_sess
 @router.get('/tasks/{task_id}')
 async def get_task(task_id: str, owner_id: str, session: AsyncSession = Depends(get_session)):
     return _task_json(await repository.get_task(session, task_id, owner_id))
+
+
+@router.get('/tasks/{task_id}/runs')
+async def list_task_runs(task_id: str, owner_id: str,
+                        session: AsyncSession = Depends(get_session)) -> TaskRunsResponseWire:
+    return TaskRunsResponseWire(run_ids=await repository.list_task_runs(session, task_id, owner_id))
 
 
 @router.get('/runs/{run_id}')

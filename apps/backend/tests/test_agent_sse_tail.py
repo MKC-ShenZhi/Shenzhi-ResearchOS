@@ -49,6 +49,9 @@ class TailGateway:
     async def task(self, task_id, owner):
         return {'current_run_id': 'run-2' if self.retry and self.terminal else 'run-1'}
 
+    async def task_runs(self, task_id, owner):
+        return ['run-1', 'run-2'] if self.retry and self.terminal else ['run-1']
+
 
 def decode(chunk):
     if isinstance(chunk, bytes):

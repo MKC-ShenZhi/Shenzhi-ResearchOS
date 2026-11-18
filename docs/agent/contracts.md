@@ -31,11 +31,15 @@ Runtime `AgentEvent(seq, turn, name, data)` 是事件来源，其中 `seq` 从 1
 
 `seq` 在单个 Run 内排序；`PlatformEvent.sequence` 与 `seq` 相同。事件标识为 `PlatformEvent.event_key == (run_id, seq)`，数据库对 `(run_id, seq)` 建唯一约束；相同事件重放幂等，冲突事件拒绝。`PlatformEventWire` 与 `EventIngestWire` 是共享 HTTP envelope，`GET /internal/v1/runs/{run_id}/events?owner_id=...&after_seq=...` 提供持久事件读取。Backend Gateway 校验提交、Task、Run 与事件响应，再将持久事件投影到产品 SSE。
 
+`GET /internal/v1/tasks/{task_id}/runs?owner_id=...` 通过共享 `TaskRunsResponseWire` 返回 `{"run_ids":["r1","r2","r3"]}`。接口只读、受服务凭据和 Task Owner 校验保护，Task 不存在或不属于该 Owner 时均返回 404。列表不分页、不截断，按现有 `(task_id, attempt)` 唯一约束中的 `attempt` 升序返回全部 Run，不依赖时间戳或 `current_run_id`。Task 创建时已有首个 Run，因此有效列表至少包含一项；报告与重试 Run 原子提交，观察到可重试终态后重新枚举即可读到其后继。
+
 `POST /internal/v1/worker/claim` 在成功领取时返回 `run`、`lease_token` 与 `event_seq`。`event_seq` 是领取事务持有 Run 行锁期间查询的该 Run 最大已持久化事件序号，无事件时为 0。接管旧 Run 会提升 fencing token，新的 Worker 从 `event_seq + 1` 发布事件；旧 token 的事件、续租和首次终态报告不能再写入。Runtime 仍从头执行，这不表示 Checkpoint 恢复或工具副作用去重。
 
 Control 的事件写入与终态报告更新使用同一 Run 行锁，终态报告提交后拒绝新事件。Backend 三条产品流共用 `read_run_update`，按先读 Run、后读 events 的顺序轮询：若已观察到终态，后读的 events 包含该 Run 的完整尾部；若未观察到终态，则继续轮询，不提前发送 result。重试切换 Run 也先投影旧 Run 的事件，再切换到新 Run。
 
 产品 SSE 的 `after` 是从 0 开始的下一条事件偏移，与内部 API 的 `after_seq` 含义不同。若客户端最后完整收到的 SSE `id` 为 3，同一流续接时传 `after=4`。
+
+Session 首次投影与无缓存恢复都从 Task 最早的 Run 开始，依次投影每个 Run 的一条产品 `run_start` 和按 `seq` 排序的全部持久事件，只为最后一个 Run 的报告生成一条产品 `result`。每个旧 Run 排空尾部后才读取有序列表中的直接后继，即使两次轮询间发生多次重试也不跳过中间 Run。SSE ID 继续使用 `LiveRun.events` 的零基索引：若第 i 个 Run 有 Nᵢ 条持久事件，则最终 result 的 ID 为 Σ(1 + Nᵢ)，与轮询时机和缓存是否存在无关。result 的 ID 为 6 时，未完整收到该事件传 `after=6`，完整收到后传 `after=7`。该规则适用于关联 Agent Task 的 Session 流；未关联 Task 的历史导入继续使用原有产品投影回放。
 
 Agent Knowledge Adapter 使用共享 `KnowledgeSearchRequestWire`、`KnowledgeSearchResponseWire`、`KnowledgePaperDetailWire` 与 `KnowledgePaperGraphWire`。Backend 保留产品 Knowledge Schema 和上游实现，在内部 API 边界映射到共享 Wire Model；Agent 不安装或导入 Backend Python 包。
 

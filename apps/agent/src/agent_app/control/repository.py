@@ -126,6 +126,15 @@ async def get_run(session: AsyncSession, run_id: str, owner_id: str) -> tuple[Ru
     return found
 
 
+async def list_task_runs(session: AsyncSession, task_id: str, owner_id: str) -> list[str]:
+    """Enumerate every retry without relying on the latest current_run_id."""
+    await get_task(session, task_id, owner_id)
+    return list((await session.scalars(select(RunRow.run_id).join(
+        TaskRow, TaskRow.task_id == RunRow.task_id,
+    ).where(RunRow.task_id == task_id, TaskRow.owner_id == owner_id)
+        .order_by(RunRow.attempt))).all())
+
+
 async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 45):
     now = _now()
     query = (select(RunRow, TaskRow, OutboxRow).join(TaskRow, TaskRow.task_id == RunRow.task_id)
