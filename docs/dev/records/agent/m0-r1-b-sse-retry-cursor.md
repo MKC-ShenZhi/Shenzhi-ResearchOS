@@ -1,12 +1,14 @@
 # M0-R1-B：多次 Run 重试后的 Session SSE 恢复游标
 
-日期：2026-11-18。待独立审查，未 Commit / Push。
+日期：2026-11-18。M0-R1-B 已提交并推送审查分支；用户已确认 ChatGPT 独立代码审查通过。此结论不代表 M0-C 真实环境验收通过，M0 整体仍为 PARTIAL。
 
-## 基线与范围
+当前交接基线：本地分支 `feat/agent-m0-integration`，HEAD 为 `1d1bc7e0ea7791ba3abe6aa529a13ade1be6ed8f`；审查分支为 `review/m0-r1-b`。相对原 dev 基线 `5faee7e71bb14e7d6943dab1e2e342af61bd7581` 的 M0 工作尚未合入 dev。本次交接仅改文档，未再次 Commit / Push。后续执行入口见 [M0 交接](../../../agent/m0-handoff.md)。
+
+## 修复实施时的基线与范围（历史记录）
 
 - 分支：`feat/agent-m0-integration`
-- HEAD：`6ccd0d95a91795098158c700c0f594cc45923206`
-- 开始时工作区干净；结束时仅保留本次修改。未创建分支或 Worktree，未执行 merge / rebase，未修改 dev。
+- 修复前 HEAD：`6ccd0d95a91795098158c700c0f594cc45923206`；修复提交为 `1d1bc7e0ea7791ba3abe6aa529a13ade1be6ed8f`。
+- 修复开始时工作区干净；实施结束时的修改随后全部纳入上述提交，推送后工作区干净。未创建分支或 Worktree，未执行 merge / rebase，未修改 dev。
 - 未修改 Web UI、Runtime / Worker 事件生成、数据模型、迁移或依赖锁文件；未启动服务或连接外部数据库。
 
 ## 根因与修复
