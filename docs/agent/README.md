@@ -13,7 +13,7 @@ Web 的 `/agents` 和论文问答继续访问 Backend 产品 API。Backend 校�
 
 - `/api/v1/agent/sessions` 提供会话管理。`POST /sessions/{id}/run` 使用 Backend 保存的历史启动执行，`GET /sessions/{id}/run/stream` 提供续接。Backend 将 Agent 持久事件投影为产品 SSE 和 Turn。见 [会话持久化](session-persistence.md)。
 - `POST /api/v1/agent/run` 支持论文问答等无产品 Session 的兼容调用。配置、附件、工作区、文件、导出、steer 和 stop 继续由 Backend 对 Web 提供。
-- 第一方 `deep-research` Skill 位于 `apps/agent/skills/deep-research/`。在 `/agents` 选择该 Skill 或输入 `/research <主题>` 可加载指引。Runtime 将 Markdown 写入会话 Workspace，Worker 在提交 `ExecutionReport` 前读取文件并回填报告种类、完整正文和相对路径。Agent Control 持久化结果，Backend 将结果投影为产品 SSE，Web 继续消费 `result.output.report`。独立 `/agents/deep-research` 页面见 [产品说明](../deep-research/README.md)。
+- 第一方 `deep-research` Skill 位于 `apps/agent/skills/deep-research/`。在 `/agents` 选择该 Skill 或输入 `/research <主题>` 可加载指引。Worker 根据本次 Run 的工具事件定位最后一次成功写入或编辑的 Markdown，在提交 `ExecutionReport` 前从会话 Workspace 读取文件并回填报告种类、完整正文和相对路径。没有符合条件的操作时，运行结果保持原样。Agent Control 持久化结果，Backend 将结果投影为产品 SSE，Web 继续消费 `result.output.report`。独立 `/agents/deep-research` 页面见 [产品说明](../deep-research/README.md)。
 - Worker 装配 Runtime 时禁用任意 shell 执行。Agent API 与 Worker 共享持久化 Workspace，Backend 通过 Gateway 请求文件。SSE 缓冲依然属于 Backend 进程，跨进程恢复通过 Agent 持久事件实现，重连与租约接管需要集成验证。
 
 ## 配置与验证

@@ -21,7 +21,7 @@ User → Session → Turn → Task → Run 1 / Run 2 / ...
 
 Agent Worker 的报告适配器负责把 Runtime `RunResult` 转换为 JSON 兼容报告字典，并映射错误和测得用量。Agent Runtime 的消息、最终文本和产物以字典字段表达。Control 在单一数据库事务内写报告、更新 Run/Task 状态并决定重试；失败或超时最多执行 3 次，使用新 `run_id` 和指数退避。用量结算尚未接入 Backend 配额服务。
 
-会话运行成功时，Worker 在序列化 `ExecutionReport` 前通过当前 owner 的 Session Workspace 读取 Markdown，并以 `result.output.kind = "report"`、`result.output.report` 和 `result.output.report_path` 交付报告种类、完整 UTF-8 正文和 Workspace 内相对路径。正文保留文件的换行。Worker 优先选择本次运行最后一次成功写入或编辑的 Markdown，无对应路径时兼容查找会话工作区最大的 Markdown。已有报告、反问及其他终态制品保持原样。文件读取失败时记录告警，保留原运行结果。Agent API / Control 持久化完整结果，Backend Gateway 读取并投影到产品接口。
+会话运行成功时，Worker 在序列化 `ExecutionReport` 前通过当前 owner 的 Session Workspace 读取 Markdown，并以 `result.output.kind = "report"`、`result.output.report` 和 `result.output.report_path` 交付报告种类、完整 UTF-8 正文和 Workspace 内相对路径。正文保留文件的换行。Worker 按本次 Run 的 `(turn, tool_call_id)` 和工具名称匹配调用与结果，选择最后一个成功结束的 Markdown 写入或编辑操作。同一 turn 内重复使用的调用 ID 不参与选择。该记录独立于 transcript，消息压缩后仍可用于交付。没有符合条件的本轮操作时，保留原运行结果。已有报告、反问及其他终态制品保持原样。文件读取失败时记录告警，保留原运行结果。Agent API / Control 持久化完整结果，Backend Gateway 读取并投影到产品接口。
 
 `BudgetLimits` 包含时长、工具次数和模型 Token 限制。Worker 按模式设置默认时长与工具次数，并可执行更严格的显式上限。`UsageReport` 用 `None` 表示未知；模型 Token 上限当前无法可靠预先强制，带该限制的 Run 会失败并返回明确执行错误。
 

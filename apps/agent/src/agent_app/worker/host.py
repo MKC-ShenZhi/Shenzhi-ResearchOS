@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import socket
-from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -17,8 +17,7 @@ from agent_app.application.composition import build_runtime
 from agent_app.application.policies import run_deadline_s, tool_call_budget
 from agent_app.errors import BusinessError
 from agent_app.execution.types import (
-    AgentEvent, AgentMessage, AssistantMessage, RunChannel, RunResult, ToolResultMessage,
-    message_from_dict, message_to_dict,
+    TOOL_CALL, TOOL_END, AgentEvent, RunChannel, RunResult, message_from_dict, message_to_dict,
 )
 from agent_app.extensions.workspace import Workspace, ensure_session_workspace, read_session_file
 
@@ -62,37 +61,51 @@ class AgentControlClient:
 _MARKDOWN_SUFFIXES = {'.md', '.markdown'}
 
 
-def _latest_report_path(workspace: Workspace, messages: Sequence[AgentMessage]) -> str | None:
-    successful_calls = {item.call_id for item in messages
-                        if isinstance(item, ToolResultMessage) and not item.is_error}
-    for message in reversed(messages):
-        if not isinstance(message, AssistantMessage):
-            continue
-        for call in reversed(message.tool_calls):
-            if call.name not in {'write_file', 'edit_file'} or call.call_id not in successful_calls:
-                continue
-            path = call.arguments.get('path')
-            if not isinstance(path, str) or Path(path).suffix.lower() not in _MARKDOWN_SUFFIXES:
-                continue
-            try:
-                target = workspace.resolve(path)
-            except (BusinessError, OSError, RuntimeError, ValueError):
-                continue
-            if target.suffix.lower() in _MARKDOWN_SUFFIXES:
-                return target.relative_to(workspace.root).as_posix()
+class ReportFileOperations:
+    """Track successful Markdown operations for a single Worker execution."""
 
-    # Older runs may leave a report without a surviving write/edit in the transcript.
-    candidates = (path for path in workspace.root.rglob('*')
-                  if path.suffix.lower() in _MARKDOWN_SUFFIXES and not path.is_symlink()
-                  and path.resolve().is_relative_to(workspace.root) and path.is_file())
-    largest = max(candidates, key=lambda path: (path.stat().st_size, path.as_posix()), default=None)
-    return largest.relative_to(workspace.root).as_posix() if largest is not None else None
+    def __init__(self) -> None:
+        self._calls: dict[tuple[int, str], tuple[str, str] | None] = {}
+        self._successful: dict[tuple[int, str], str] = {}
+
+    def observe(self, event: AgentEvent) -> None:
+        if event.name not in (TOOL_CALL, TOOL_END):
+            return
+        call_id = event.data.get('tool_call_id')
+        if not isinstance(call_id, str) or not call_id:
+            return
+        key = (event.turn, call_id)
+        name = event.data.get('name')
+        if event.name == TOOL_CALL:
+            if key in self._calls:
+                # Even a non-file call can make this key ambiguous.
+                self._calls[key] = None
+                self._successful.pop(key, None)
+                return
+            self._calls[key] = None
+            if name not in ('write_file', 'edit_file'):
+                return
+            arguments = json.loads(event.data['arguments'])
+            path = arguments.get('path') if isinstance(arguments, dict) else None
+            if isinstance(path, str) and Path(path).suffix.lower() in _MARKDOWN_SUFFIXES:
+                self._calls[key] = (name, path)
+            return
+
+        call = self._calls.get(key)
+        if call is None or call[0] != name:
+            return
+        self._calls[key] = None
+        if event.data.get('is_error') is False:
+            self._successful[key] = call[1]
+
+    def latest_path(self) -> str | None:
+        return next(reversed(self._successful.values()), None)
 
 
 def attach_report_output(request: dict[str, Any], result: RunResult,
-                         history: Sequence[AgentMessage] = ()) -> None:
+                         candidate: str | None) -> None:
     session_id = request.get('session_id')
-    if not session_id or result.status != 'done':
+    if candidate is None or not session_id or result.status != 'done':
         return
     output = result.output
     if output is not None and (
@@ -100,15 +113,13 @@ def attach_report_output(request: dict[str, Any], result: RunResult,
     ):
         return
 
-    # Runtime returns the conversation transcript, including retained history.
-    historical = {id(message) for message in history}
-    current = [message for message in result.messages if id(message) not in historical]
     owner = request['owner_id']
     try:
         workspace = Workspace(ensure_session_workspace(owner, session_id))
-        path = _latest_report_path(workspace, current)
-        if path is None:
+        target = workspace.resolve(candidate)
+        if target.suffix.lower() not in _MARKDOWN_SUFFIXES:
             return
+        path = target.relative_to(workspace.root).as_posix()
         content, _ = read_session_file(owner, session_id, path)
         report = content.decode('utf-8')
     except (BusinessError, OSError, RuntimeError, ValueError):
@@ -157,7 +168,16 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
     stop = asyncio.Event()
     channel = RunChannel()
     queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
+    report_files = ReportFileOperations()
     delivery_error: Exception | None = None
+
+    def on_event(event: AgentEvent) -> None:
+        queue.put_nowait(event)
+        try:
+            report_files.observe(event)
+        except Exception:
+            logger.warning('Agent report event could not be tracked run_id=%s event_seq=%s',
+                           run_id, event.seq, exc_info=True)
 
     async def publish_events() -> None:
         nonlocal delivery_error
@@ -239,11 +259,11 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
         runtime.strict_tool_budget = True
         history = [message_from_dict(item) for item in request.get('history') or []]
         result = await runtime.run(request['prompt'], history=history,
-                                   stop=stop, on_event=queue.put_nowait, channel=channel)
+                                   stop=stop, on_event=on_event, channel=channel)
         await queue.join()
         if delivery_error:
             raise RuntimeError('Agent event persistence failed') from delivery_error
-        await asyncio.to_thread(attach_report_output, request, result, history)
+        await asyncio.to_thread(attach_report_output, request, result, report_files.latest_path())
     except Exception as exc:
         execution_error = exc
         result = None

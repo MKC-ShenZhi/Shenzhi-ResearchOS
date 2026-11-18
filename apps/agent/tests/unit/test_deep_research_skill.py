@@ -14,7 +14,7 @@ from agent_app import service as agent_service
 from agent_app import workspace as agent_workspace
 from agent_app.application.composition import build_runtime
 from agent_app.execution.runtime import AgentRuntime
-from agent_app.execution.types import AssistantMessage, RunResult, ToolResultMessage
+from agent_app.execution.types import AgentEvent, RunResult
 from agent_app.extensions.skills import default_store
 from agent_app.integrations.llm.agent_stream import Finish, TextDelta, ToolCallEvent
 from agent_app.main import app
@@ -112,7 +112,7 @@ class DeepResearchServiceTests(unittest.IsolatedAsyncioTestCase):
         skill = next(item for item in response.json()['skills'] if item['name'] == 'deep-research')
         self.assertTrue(skill['description'])
 
-    async def execute_with_provider(self, provider, **session_options):
+    async def execute_with_provider(self, provider, *, runtime_type=AgentRuntime, **session_options):
         control = AsyncMock(spec=host.AgentControlClient)
         control.get.return_value = {'controls': []}
         claim = {'lease_token': 1, 'run': {
@@ -122,7 +122,7 @@ class DeepResearchServiceTests(unittest.IsolatedAsyncioTestCase):
 
         def build_with_fake_provider(**kwargs):
             return build_runtime(
-                runtime_factory=lambda **options: AgentRuntime(provider=provider, **options),
+                runtime_factory=lambda **options: runtime_type(provider=provider, **options),
                 **kwargs,
             )
 
@@ -175,6 +175,119 @@ class DeepResearchServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(report['result']['output']['kind'], 'question')
         self.assertEqual(report['result']['output']['question'], '研究哪个时间段？')
 
+    async def test_reused_call_id_keeps_each_turns_own_outcome(self):
+        for edit_succeeds in (False, True):
+            with self.subTest(edit_succeeds=edit_succeeds), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(agent_workspace, 'WORKSPACE_ROOT', Path(tmp)):
+                workspace = agent_workspace.ensure_session_workspace(f'anon:{OWNER_ID}', 'report-session')
+                (workspace / 'draft.markdown').write_bytes(b'old\r\n')
+                provider = FakeProvider([
+                    [ToolCallEvent(ToolCall('call_0', 'write_file', {
+                        'path': 'report.md', 'content': '# Current run',
+                    })), Finish(StopReason.TOOL_CALLS)],
+                    [ToolCallEvent(ToolCall('call_0', 'edit_file', {
+                        'path': 'draft.markdown',
+                        'edits': [{'old_text': 'old' if edit_succeeds else 'missing',
+                                   'new_text': 'edited'}],
+                    })), Finish(StopReason.TOOL_CALLS)],
+                    [TextDelta('Done'), Finish(StopReason.STOP)],
+                ])
+                control = await self.execute_with_provider(provider, session_id='report-session')
+                posts = [item.args[1] for item in control.post.await_args_list]
+                outcomes = [(event['turn'], event['data']['tool_call_id'], event['data']['is_error'])
+                            for event in posts if event.get('name') == 'tool_end']
+                self.assertEqual(outcomes, [(1, 'call_0', False), (2, 'call_0', not edit_succeeds)])
+                output = ReportIngestWire.model_validate(posts[-1]).result['output']
+                self.assertEqual((output['report_path'], output['report']),
+                                 ('draft.markdown', 'edited\r\n') if edit_succeeds
+                                 else ('report.md', '# Current run'))
+
+    async def test_reports_stay_with_the_writing_run_on_followup(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(agent_workspace, 'WORKSPACE_ROOT', Path(tmp)):
+            first = await self.execute_with_provider(FakeProvider([
+                [ToolCallEvent(ToolCall('call_0', 'write_file', {
+                    'path': 'report.md', 'content': '# First run',
+                })), Finish(StopReason.TOOL_CALLS)],
+                [TextDelta('Report ready'), Finish(StopReason.STOP)],
+            ]), session_id='report-session')
+            first_result = ReportIngestWire.model_validate(first.post.await_args.args[1]).result
+            self.assertEqual(first_result['output']['report'], '# First run')
+            self.assertEqual(first_result['output']['report_path'], 'report.md')
+
+            second = await self.execute_with_provider(
+                FakeProvider([[TextDelta('Follow-up answer'), Finish(StopReason.STOP)]]),
+                run_id='run-2', task_id='task-2', session_id='report-session', skills=[],
+                prompt='What does that mean?', history=first_result['messages'],
+            )
+            followup = ReportIngestWire.model_validate(second.post.await_args.args[1])
+        self.assertEqual(followup.status.value, 'completed')
+        self.assertEqual(followup.result['final_text'], 'Follow-up answer')
+        self.assertIsNone(followup.result['output'])
+
+    async def test_report_survives_removal_of_tool_messages_from_final_transcript(self):
+        class CompactedRuntime(AgentRuntime):
+            async def run(self, *args, **kwargs):
+                result = await super().run(*args, **kwargs)
+                # Simulate compaction removing the tool messages before the result is returned.
+                result.messages.clear()
+                return result
+
+        provider = FakeProvider([
+            [ToolCallEvent(ToolCall('c1', 'write_file', {
+                'path': 'report.md', 'content': '# From tool events',
+            })), Finish(StopReason.TOOL_CALLS)],
+            [TextDelta('Done'), Finish(StopReason.STOP)],
+        ])
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(agent_workspace, 'WORKSPACE_ROOT', Path(tmp)):
+            control = await self.execute_with_provider(provider, runtime_type=CompactedRuntime,
+                                                       session_id='report-session')
+        report = ReportIngestWire.model_validate(control.post.await_args.args[1])
+        self.assertEqual(report.result['messages'], [])
+        self.assertEqual(report.result['output'], {
+            'kind': 'report', 'report': '# From tool events', 'report_path': 'report.md',
+        })
+
+    async def test_tracking_exception_does_not_interrupt_event_delivery(self):
+        provider = FakeProvider([[TextDelta('Still delivered'), Finish(StopReason.STOP)]])
+        with patch.object(host.ReportFileOperations, 'observe', side_effect=ValueError('test')), \
+                self.assertLogs('agent.worker', level='WARNING'):
+            control = await self.execute_with_provider(provider)
+        posts = [item.args[1] for item in control.post.await_args_list]
+        self.assertIn('delta', [item.get('name') for item in posts])
+        self.assertEqual(posts[-1]['status'], 'completed')
+        self.assertEqual(posts[-1]['result']['final_text'], 'Still delivered')
+
+
+class ReportFileOperationsTests(unittest.TestCase):
+    def test_duplicate_call_in_same_turn_invalidates_even_an_earlier_success(self):
+        tracker = host.ReportFileOperations()
+        tracker.observe(AgentEvent(1, 1, 'tool_call', {
+            'tool_call_id': 'call_0', 'name': 'write_file', 'arguments': '{"path":"report.md"}',
+        }))
+        tracker.observe(AgentEvent(2, 1, 'tool_end', {
+            'tool_call_id': 'call_0', 'name': 'write_file', 'is_error': False,
+        }))
+        self.assertEqual(tracker.latest_path(), 'report.md')
+        tracker.observe(AgentEvent(3, 1, 'tool_call', {
+            'tool_call_id': 'call_0', 'name': 'read_file', 'arguments': '{"path":"notes.md"}',
+        }))
+        tracker.observe(AgentEvent(4, 1, 'tool_end', {
+            'tool_call_id': 'call_0', 'name': 'write_file', 'is_error': False,
+        }))
+        self.assertIsNone(tracker.latest_path())
+
+    def test_result_name_must_match_call(self):
+        tracker = host.ReportFileOperations()
+        tracker.observe(AgentEvent(1, 1, 'tool_call', {
+            'tool_call_id': 'c1', 'name': 'edit_file', 'arguments': '{"path":"report.md"}',
+        }))
+        tracker.observe(AgentEvent(2, 1, 'tool_end', {
+            'tool_call_id': 'c1', 'name': 'read_file', 'is_error': False,
+        }))
+        self.assertIsNone(tracker.latest_path())
+
 
 class WorkerReportOutputTests(unittest.TestCase):
     def setUp(self):
@@ -188,25 +301,11 @@ class WorkerReportOutputTests(unittest.TestCase):
             self.request['owner_id'], self.request['session_id'],
         )
 
-    def test_last_successful_markdown_edit_preserves_crlf_and_metadata(self):
+    def test_report_output_preserves_crlf_and_metadata(self):
         markdown = '# 报告\r\n\r\n编辑后的正文。\r\n'
         (self.root / 'edited.markdown').write_bytes(markdown.encode('utf-8'))
-        (self.root / 'old.md').write_text('larger prior report' * 20, encoding='utf-8')
-        (self.root / 'draft.md').write_text('draft', encoding='utf-8')
-        history = [AssistantMessage(tool_calls=(ToolCall('c1', 'write_file', {'path': 'old.md'}),)),
-                   ToolResultMessage('c1', 'write_file', 'written')]
-        result = RunResult(stop_reason=StopReason.STOP, messages=[
-            *history,
-            AssistantMessage(tool_calls=(
-                ToolCall('c2', 'edit_file', {'path': 'edited.markdown', 'edits': []}),
-                ToolCall('c3', 'edit_file', {'path': 'draft.md', 'edits': []}),
-                ToolCall('c4', 'write_file', {'path': 'notes.txt'}),
-            )),
-            ToolResultMessage('c2', 'edit_file', 'edited'),
-            ToolResultMessage('c3', 'edit_file', 'failed', is_error=True),
-            ToolResultMessage('c4', 'write_file', 'written'),
-        ], output={'sources': ['paper-1']})
-        host.attach_report_output(self.request, result, history)
+        result = RunResult(stop_reason=StopReason.STOP, output={'sources': ['paper-1']})
+        host.attach_report_output(self.request, result, 'edited.markdown')
 
         payload = host.report_payload(self.request, result)
         self.assertEqual(payload['result']['output'], {
@@ -214,49 +313,37 @@ class WorkerReportOutputTests(unittest.TestCase):
             'sources': ['paper-1'],
         })
 
-    def test_fallback_uses_largest_markdown_in_current_owner_workspace(self):
+    def test_cross_owner_path_does_not_read_another_workspace(self):
         other = agent_workspace.ensure_session_workspace('anon:unrelated', self.request['session_id'])
-        (other / 'private.md').write_text('other owner' * 20, encoding='utf-8')
-        (self.root / 'small.md').write_text('small', encoding='utf-8')
-        (self.root / 'report.MARKDOWN').write_text('largest in this session', encoding='utf-8')
-        history = [AssistantMessage(tool_calls=(ToolCall('c1', 'write_file', {'path': 'small.md'}),)),
-                   ToolResultMessage('c1', 'write_file', 'written')]
-        result = RunResult(stop_reason=StopReason.STOP, messages=[
-            *history,
-            AssistantMessage(tool_calls=(ToolCall('c2', 'write_file', {
-                'path': str(other / 'private.md'),
-            }),)),
-            ToolResultMessage('c2', 'write_file', 'written'),
-        ])
-
-        host.attach_report_output(self.request, result, history)
-
-        self.assertEqual(result.output['report_path'], 'report.MARKDOWN')
-        self.assertEqual(result.output['report'], 'largest in this session')
+        (other / 'private.md').write_text('other owner', encoding='utf-8')
+        result = RunResult(stop_reason=StopReason.STOP)
+        with self.assertLogs('agent.worker', level='WARNING'), \
+                patch.object(host, 'read_session_file') as read:
+            host.attach_report_output(self.request, result, str(other / 'private.md'))
+        read.assert_not_called()
+        self.assertIsNone(result.output)
 
     def test_existing_terminal_output_remains_unchanged(self):
         for output in ({'kind': 'report', 'report': 'existing'}, {'kind': 'question'},
                        {'kind': 'other'}, 'non-dict artifact'):
             with self.subTest(output=output), patch.object(host, 'read_session_file') as read:
                 result = RunResult(stop_reason=StopReason.STOP, output=output)
-                host.attach_report_output(self.request, result)
+                host.attach_report_output(self.request, result, 'report.md')
                 self.assertIs(result.output, output)
                 read.assert_not_called()
 
     def test_missing_report_keeps_successful_result(self):
-        result = RunResult(stop_reason=StopReason.STOP, messages=[
-            AssistantMessage(tool_calls=(ToolCall('c1', 'write_file', {'path': 'missing.md'}),)),
-            ToolResultMessage('c1', 'write_file', 'written'),
-        ])
+        (self.root / 'historical.md').write_text('old report', encoding='utf-8')
+        result = RunResult(stop_reason=StopReason.STOP)
         with self.assertLogs('agent.worker', level='WARNING'):
-            host.attach_report_output(self.request, result)
+            host.attach_report_output(self.request, result, 'missing.md')
         self.assertIsNone(result.output)
         self.assertEqual(host.report_payload(self.request, result)['status'], 'completed')
 
     def test_non_session_run_does_not_discover_workspace(self):
         result = RunResult(stop_reason=StopReason.STOP)
         with patch.object(host, 'ensure_session_workspace') as ensure_workspace:
-            host.attach_report_output({**self.request, 'session_id': None}, result)
+            host.attach_report_output({**self.request, 'session_id': None}, result, 'report.md')
         self.assertIsNone(result.output)
         ensure_workspace.assert_not_called()
 
