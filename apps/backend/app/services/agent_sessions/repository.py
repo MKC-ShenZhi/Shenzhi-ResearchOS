@@ -69,6 +69,7 @@ class AgentSessionRepository(Protocol):
     async def update_turn_settings(self, session_id: str, owner: str, turn_id: str,
                                    settings: dict[str, Any], *, worker_id: str) -> AgentTurn: ...
     async def renew_turn(self, turn_id: str, worker_id: str) -> bool | None: ...
+    async def release_turn_projection(self, turn_id: str, worker_id: str) -> None: ...
     async def claim_turn_projection(self, session_id: str, owner: str, turn_id: str,
                                     worker_id: str) -> bool: ...
     async def import_legacy(self, owner: str, payload: dict[str, Any]) -> AgentSession: ...
@@ -210,6 +211,12 @@ class MemoryAgentSessionRepository:
             turn.id == turn_id and turn.status == 'running' and turn.worker_id == worker_id
             for session in self.sessions.values() for turn in session.turns
         )
+
+    async def release_turn_projection(self, turn_id: str, worker_id: str) -> None:
+        for session in self.sessions.values():
+            for turn in session.turns:
+                if turn.id == turn_id and turn.worker_id == worker_id and turn.status == 'running':
+                    turn.worker_id = None
 
     async def claim_turn_projection(self, session_id: str, owner: str, turn_id: str,
                                     worker_id: str) -> bool:

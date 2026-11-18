@@ -54,6 +54,7 @@ class SessionRetrySseTests(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch.dict('os.environ', {'CHAT_DATABASE_URL': ''}))
         self.repo = MemoryAgentSessionRepository()
         self.enterContext(patch.object(service, 'agent_session_repository', self.repo))
+        self.enterContext(patch.object(api, 'agent_session_repository', self.repo))
         self.enterContext(patch.object(live_runs, '_live', {}))
         self.owner = 'anon:retries'
 

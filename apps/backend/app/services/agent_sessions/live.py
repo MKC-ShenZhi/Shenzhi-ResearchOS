@@ -30,6 +30,11 @@ def register(live: LiveRun) -> None:
     _live[live.session_id] = live
 
 
+def invalidate(live: LiveRun) -> None:
+    if _live.get(live.session_id) is live:
+        del _live[live.session_id]
+
+
 def append(live: LiveRun, name: str, data: dict) -> None:
     live.events.append((name, data))
     changed, live.changed = live.changed, asyncio.Event()

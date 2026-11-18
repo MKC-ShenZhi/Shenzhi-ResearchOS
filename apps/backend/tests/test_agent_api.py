@@ -241,7 +241,26 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('inline', response.headers['content-disposition'])
             # inline SVG 是活动内容：必须带关掉脚本/外链的 CSP
             self.assertEqual(response.headers['content-security-policy'],
-                             "default-src 'none'; style-src 'unsafe-inline'")
+                             "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:")
+
+    async def test_active_artifacts_are_sandboxed_on_both_file_routes(self):
+        self.asset_workspace('ses_active')
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url='http://test') as client:
+            for filename, mime in [('page.html', 'text/html'), ('plot.svg', 'image/svg+xml')]:
+                content = b'<script>fetch("/api/v1/agent/sessions")</script>'
+                self.gateway.files[('ses_active', filename)] = (content, mime)
+                for url, params in [
+                    (f'/api/v1/agent/assets/ses_active/{filename}', {}),
+                    ('/api/v1/agent/session/ses_active/file', {'path': filename}),
+                    ('/api/v1/agent/session/ses_active/file', {'path': filename, 'download': 'true'}),
+                ]:
+                    response = await client.get(url, params=params, headers=self.OWNER)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.content, content)
+                    policy = response.headers['content-security-policy'].split('; ')
+                    self.assertIn('sandbox', policy)
+                    self.assertIn("default-src 'none'", policy)
 
     async def test_session_export_html_and_jsonl(self):
         messages = [

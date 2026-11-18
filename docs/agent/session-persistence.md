@@ -49,6 +49,10 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 6. 产品 SSE 订阅与执行解耦。断开订阅后运行可继续。Backend 通过五分钟 Turn 投影租约和三十秒续租协调投影写入，Agent Worker 使用独立的 Run 租约。失去投影租约的 Backend 无法覆盖后续投影终态。
 7. `LiveRun` 与 SSE 缓冲仍在 Backend 进程内。缺少本地缓冲时，Backend 可依据 Task / Run ID 通过 Agent 持久事件恢复；活跃投影被另一 Backend 持有时返回 409。未关联 Agent Task 的运行无法从 Agent 回放。投影恢复和跨进程游标连续性仍需联调。
 
+投影读取失败不再将 Turn 标记为执行失败：流以无 result 的 EOF 结束，清除不完整缓存，按 worker_id 释放投影租约；数据库不可用时仍等待原租约到期。客户端重连后从持久事件恢复，执行终态只来自 Agent 报告。缓存订阅每次重新校验当前 Session owner 和最新 Turn；旧幂等键只回放它关联的 Turn，不替换最新订阅。
+
+Turn 内部 settings 的 `_agent_owner_id` 保存原 Agent 执行身份，不返回 Web。匿名认领在同一 Backend 事务中为旧关联 Turn 补齐该字段，产品归属检查仍使用当前 owner，再用原执行身份读取 Agent 历史。已在旧版本完成认领且没有此字段的记录不能自动推断原身份，需单独核对后修复。
+
 
 ## API
 

@@ -40,6 +40,10 @@ from app.schemas.knowledge import KnowledgeSearchRequest
 router = APIRouter(prefix='/api/v1/agent', tags=['agent'])
 logger = logging.getLogger(__name__)
 
+# Workspace bytes are untrusted documents, including HTML and SVG. Apply this
+# to both download/preview routes, regardless of the filename or MIME type.
+ARTIFACT_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+
 
 @router.post('/internal/knowledge/search', dependencies=[Depends(require_agent_service)])
 async def agent_knowledge_search(body: KnowledgeSearchRequestWire):
@@ -278,8 +282,11 @@ async def attach_agent_session_run(
     session_id: str, after: int = Query(default=0, ge=0),
     owner: str = Depends(request_owner),
 ):
+    # A cached stream is not an authorization record: deletion and anonymous
+    # claim can revoke access while its ten-minute buffer is still alive.
+    session = await agent_session_repository.get(session_id, owner)
     live = get_live(session_id, owner)
-    if live is None:
+    if live is None or not session.turns or live.turn_id != session.turns[-1].id:
         live = await resume_session_run(session_id, owner)
     return session_run_stream(live, after)
 
@@ -301,6 +308,7 @@ async def session_file(session_id: str, path: str, download: bool = False,
             'Content-Disposition': f"{disposition}; filename*=UTF-8''{quote(filename)}",
             'Cache-Control': 'private, no-store',
             'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy': ARTIFACT_CSP,
         })
 
 
@@ -313,12 +321,8 @@ async def session_asset(session_id: str, path: str, owner: str = Depends(request
     重做，仍由 read_session_file 收口（session_id 正则 + Workspace.resolve 双 resolve 后
     必须仍在工作区内），本层只定响应头。
 
-    inline SVG 的风险判断：SVG 是活动内容（可含 <script>、外链、<foreignObject>），而它的
-    字节来自模型 / 被上传文档左右的工作区，且浏览器只打同源 /api/v1（Next 微后端转发到
-    FastAPI），因此"把 /assets/.../x.svg 直接当页面打开"就是一个同源存储型 XSS 面；<img>
-    内嵌不会执行脚本，但不能只指望前端永远用 <img>。故 SVG 保留 inline（attachment 会让
-    报告缩略图/预览链路失效），同时附 CSP `default-src 'none'` 关掉脚本与外部请求，
-    只放行内联样式（图形本身的 fill/stroke/<style> 需要）；其余图片类型无活动内容，不加 CSP。
+    所有工作区产物统一附 sandbox CSP，避免直接打开 HTML/SVG 时获得站点权限。
+    图片继续 inline 展示；只放行图形所需的内联样式和 data 图片。
     """
     await agent_session_repository.get(session_id, owner)
     content, media_type = await agent_gateway.read_session_file(owner, session_id, path)
@@ -331,8 +335,7 @@ async def session_asset(session_id: str, path: str, owner: str = Depends(request
         # media_type 只看后缀（read_session_file 不做字节嗅探），禁掉嗅探避免伪装后缀被当活动内容执行
         'X-Content-Type-Options': 'nosniff',
     }
-    if media_type == 'image/svg+xml':
-        headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'"
+    headers['Content-Security-Policy'] = ARTIFACT_CSP
     return Response(content, media_type=media_type, headers=headers)
 
 

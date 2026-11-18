@@ -50,7 +50,7 @@ class AgentTurn:
             'stopped': self.stopped,
             'stop_reason': self.stop_reason,
             'status': self.status,
-            'settings': self.settings,
+            'settings': {key: value for key, value in self.settings.items() if key != '_agent_owner_id'},
             'usage': self.usage,
             'created_at': self.created_at,
             'completed_at': self.completed_at,
@@ -79,7 +79,7 @@ class AgentSession:
             'title': self.title,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
-            'settings': self.settings,
+            'settings': {key: value for key, value in self.settings.items() if key != '_agent_owner_id'},
             'branched_from': self.branched_from,
         }
 

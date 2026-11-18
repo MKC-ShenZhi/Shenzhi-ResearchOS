@@ -356,6 +356,13 @@ class PostgresAgentSessionRepository:
             )
         return claimed is not None
 
+    async def release_turn_projection(self, turn_id: str, worker_id: str) -> None:
+        async with session_scope() as db:
+            await db.execute(update(AgentTurnRow).where(
+                AgentTurnRow.id == turn_id, AgentTurnRow.worker_id == worker_id,
+                AgentTurnRow.status == 'running',
+            ).values(worker_id=None, lease_expires_at=func.clock_timestamp()))
+
     async def import_legacy(self, owner: str, payload: dict[str, Any]) -> AgentSession:
         from app.services.agent_sessions.repository import _populate_legacy_turns, new_session_id
 
@@ -430,6 +437,16 @@ class PostgresAgentSessionRepository:
                     .returning(AgentSessionRow.id)
                 )
                 moved_ids = [str(item) for item in moved.all()]
+                if moved_ids:
+                    # Agent execution records keep their original owner. Preserve
+                    # that trusted identity for replay after the product claim,
+                    # including turns created before this metadata existed.
+                    await db.execute(update(AgentTurnRow).where(
+                        AgentTurnRow.session_id.in_(moved_ids),
+                        AgentTurnRow.settings.has_key('agent_task_id'),
+                        ~AgentTurnRow.settings.has_key('_agent_owner_id'),
+                    ).values(settings=AgentTurnRow.settings.op('||')(
+                        {'_agent_owner_id': source_owner})))
         return {
             'moved_count': len(moved_ids),
             'skipped_running_count': int(skipped or 0),
