@@ -189,7 +189,7 @@ async def claim(body: ClaimBody, session: AsyncSession = Depends(get_session)):
     claimed = await repository.claim_run(session, body.worker_id)
     if claimed is None:
         return {'run': None}
-    request, lease_token = claimed
+    request, lease_token, event_seq = claimed
     return {'run': {'run_id': request.run_id, 'task_id': request.task_id,
                     'owner_id': request.owner_id, 'prompt': request.prompt,
                     'session_id': request.session_id, 'turn_id': request.turn_id,
@@ -200,7 +200,7 @@ async def claim(body: ClaimBody, session: AsyncSession = Depends(get_session)):
                     'budget': {'max_duration_s': request.budget.max_duration_s,
                                'max_tool_calls': request.budget.max_tool_calls,
                                'max_model_tokens': request.budget.max_model_tokens}},
-            'lease_token': lease_token}
+            'lease_token': lease_token, 'event_seq': event_seq}
 
 
 @router.post('/runs/{run_id}/heartbeat')

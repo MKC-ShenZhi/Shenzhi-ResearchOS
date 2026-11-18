@@ -164,6 +164,7 @@ def report_payload(request: dict[str, Any], result: RunResult | None,
 async def execute_claim(control: AgentControlClient, claim: dict[str, Any], worker_id: str) -> None:
     request = claim['run']
     token = int(claim['lease_token'])
+    event_seq = int(claim['event_seq'])
     run_id = request['run_id']
     stop = asyncio.Event()
     channel = RunChannel()
@@ -184,7 +185,8 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
         while (event := await queue.get()) is not None:
             try:
                 await control.post(f'/internal/v1/runs/{run_id}/events', {
-                    'task_id': request['task_id'], 'run_id': run_id, 'seq': event.seq,
+                    'task_id': request['task_id'], 'run_id': run_id,
+                    'seq': event_seq + event.seq,
                     'turn': event.turn, 'name': event.name, 'data': event.data,
                     'occurred_at': datetime.now(timezone.utc).isoformat(),
                     'worker_id': worker_id, 'lease_token': token,

@@ -115,7 +115,7 @@ class DeepResearchServiceTests(unittest.IsolatedAsyncioTestCase):
     async def execute_with_provider(self, provider, *, runtime_type=AgentRuntime, **session_options):
         control = AsyncMock(spec=host.AgentControlClient)
         control.get.return_value = {'controls': []}
-        claim = {'lease_token': 1, 'run': {
+        claim = {'lease_token': 1, 'event_seq': 0, 'run': {
             'run_id': 'run-1', 'task_id': 'task-1', 'owner_id': f'anon:{OWNER_ID}',
             'prompt': '研究这个领域', 'skills': ['deep-research'], **session_options,
         }}

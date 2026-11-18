@@ -153,4 +153,17 @@ class AgentGateway:
         return content, media_type
 
 
+async def read_run_update(gateway: AgentGateway, run_id: str, owner: str,
+                          after_seq: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Read status before events so a terminal report cannot truncate the tail.
+
+    Control seals a Run against event writes when it commits its report. If this
+    read observes that report, the subsequent events read includes its full tail.
+    If it does not, the caller must poll again instead of emitting a result.
+    """
+    run = await gateway.run(run_id, owner)
+    events = await gateway.events(run_id, owner, after_seq)
+    return run, events
+
+
 agent_gateway = AgentGateway()

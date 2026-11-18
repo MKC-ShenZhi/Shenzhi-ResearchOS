@@ -6,7 +6,7 @@ import logging
 
 from app.core.errors import BusinessError
 from app.core.worker_lease import current_worker_id, run_with_heartbeat
-from app.services.agent_gateway.client import agent_gateway
+from app.services.agent_gateway.client import agent_gateway, read_run_update
 from app.services.agent_attachments import resolve_agent_attachments
 from app.services.agent_sessions.entities import AgentSession, AgentTurn
 from app.services.agent_sessions.live import LiveRun, _tasks, append, finish, get_live, register
@@ -100,11 +100,10 @@ async def start_session_run(
         await _append_event(live, capture, 'run_start', {'run_id': run_id})
         try:
             while True:
-                events = await agent_gateway.events(run_id, owner, after_seq)
+                run, events = await read_run_update(agent_gateway, run_id, owner, after_seq)
                 for event in events:
                     after_seq = max(after_seq, int(event['seq']))
                     await _append_event(live, capture, event['name'], event['data'])
-                run = await agent_gateway.run(run_id, owner)
                 task_state = await agent_gateway.task(task_id, owner)
                 next_run_id = task_state.get('current_run_id')
                 if run.get('report') and next_run_id and next_run_id != run_id:
@@ -271,10 +270,10 @@ async def resume_session_run(session_id: str, owner: str) -> LiveRun:
         append(live, 'run_start', {'run_id': current_run})
         try:
             while True:
-                for event in await agent_gateway.events(current_run, owner, after_seq):
+                run, events = await read_run_update(agent_gateway, current_run, owner, after_seq)
+                for event in events:
                     after_seq = max(after_seq, int(event['seq']))
                     await _append_event(live, capture, event['name'], event['data'])
-                run = await agent_gateway.run(current_run, owner)
                 task_state = await agent_gateway.task(task_id, owner)
                 latest = task_state.get('current_run_id')
                 if run.get('report') and latest and latest != current_run:

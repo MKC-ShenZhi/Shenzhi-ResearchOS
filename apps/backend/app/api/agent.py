@@ -31,7 +31,7 @@ from app.services.agent_sessions.service import (
     get_session_detail, resume_session_run, start_session_run,
 )
 from app.services.agent_sessions import export as agent_export
-from app.services.agent_gateway.client import agent_gateway
+from app.services.agent_gateway.client import agent_gateway, read_run_update
 from app.services.agent_attachments import resolve_agent_attachments
 from app.services.agent_uploads import agent_upload_store
 from app.services.uploads.parser import parse_document
@@ -120,13 +120,12 @@ async def _agent_task_stream(owner: str, task: dict, warnings: list[str]):
     yield f"event: run_start\ndata: {json.dumps({'run_id': run_id}, ensure_ascii=False)}\n\n"
     heartbeat_at = asyncio.get_running_loop().time()
     while True:
-        events = await agent_gateway.events(run_id, owner, after_seq)
+        run, events = await read_run_update(agent_gateway, run_id, owner, after_seq)
         for event in events:
             after_seq = max(after_seq, int(event['seq']))
             event_id = f"id: {after_seq}\n"
             yield (f"{event_id}event: {event['name']}\n"
                    f"data: {json.dumps(event['data'], ensure_ascii=False)}\n\n")
-        run = await agent_gateway.run(run_id, owner)
         task_state = await agent_gateway.task(task_id, owner)
         current_run_id = task_state.get('current_run_id')
         report = run.get('report')

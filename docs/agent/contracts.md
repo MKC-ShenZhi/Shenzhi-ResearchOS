@@ -27,9 +27,13 @@ Agent Worker 的报告适配器负责把 Runtime `RunResult` 转换为 JSON 兼�
 
 ## 事件
 
-Runtime `AgentEvent(seq, turn, name, data)` 是事件来源。Worker 边界将字段复制为 `PlatformEvent(task_id, run_id, seq, turn, name, data, occurred_at)`，交给 Control 的 `EventSink.publish`；共享协议不携带 Runtime 类实例。这里 `turn` 是 Runtime 内部轮序号，不是产品 `turn_id`。
+Runtime `AgentEvent(seq, turn, name, data)` 是事件来源，其中 `seq` 从 1 开始，是本次 Runtime 执行的本地序号。Worker 将领取响应的 `event_seq` 加到本地 `seq`，形成持久 `PlatformEvent(task_id, run_id, seq, turn, name, data, occurred_at)`；其余事件字段保持原样。共享协议不携带 Runtime 类实例。这里 `turn` 是 Runtime 内部轮序号，不是产品 `turn_id`。
 
 `seq` 在单个 Run 内排序；`PlatformEvent.sequence` 与 `seq` 相同。事件标识为 `PlatformEvent.event_key == (run_id, seq)`，数据库对 `(run_id, seq)` 建唯一约束；相同事件重放幂等，冲突事件拒绝。`PlatformEventWire` 与 `EventIngestWire` 是共享 HTTP envelope，`GET /internal/v1/runs/{run_id}/events?owner_id=...&after_seq=...` 提供持久事件读取。Backend Gateway 校验提交、Task、Run 与事件响应，再将持久事件投影到产品 SSE。
+
+`POST /internal/v1/worker/claim` 在成功领取时返回 `run`、`lease_token` 与 `event_seq`。`event_seq` 是领取事务持有 Run 行锁期间查询的该 Run 最大已持久化事件序号，无事件时为 0。接管旧 Run 会提升 fencing token，新的 Worker 从 `event_seq + 1` 发布事件；旧 token 的事件、续租和首次终态报告不能再写入。Runtime 仍从头执行，这不表示 Checkpoint 恢复或工具副作用去重。
+
+Control 的事件写入与终态报告更新使用同一 Run 行锁，终态报告提交后拒绝新事件。Backend 三条产品流共用 `read_run_update`，按先读 Run、后读 events 的顺序轮询：若已观察到终态，后读的 events 包含该 Run 的完整尾部；若未观察到终态，则继续轮询，不提前发送 result。重试切换 Run 也先投影旧 Run 的事件，再切换到新 Run。
 
 产品 SSE 的 `after` 是从 0 开始的下一条事件偏移，与内部 API 的 `after_seq` 含义不同。若客户端最后完整收到的 SSE `id` 为 3，同一流续接时传 `after=4`。
 
@@ -76,7 +80,7 @@ Worker 通过独立进程入口运行；`AGENT_DATABASE_URL` 与 `AGENT_SERVICE_
 | --- | --- |
 | Agent 持有 Conversation / Message；Backend 保存展示投影和外部引用 | Backend 仍提交会话历史，Agent 保存执行请求与结果快照。 |
 | Interaction 回答形成新产品 Turn，原 Task / Run 创建新 Attempt 继续执行 | 当前后续回答仍是一次新 Task；内部 API 没有 Interaction 回答接口。 |
-| 基础设施重试在同一个 Run 下建立独立 Attempt，从安全 Checkpoint 恢复 | 失败或超时会新建 Run，过期租约可复领旧 Run。尚未接入独立 Attempt、Checkpoint 和工具执行日志；同一 Run 从头执行时可能与已有事件序号冲突。 |
+| 基础设施重试在同一个 Run 下建立独立 Attempt，从安全 Checkpoint 恢复 | 失败或超时会新建 Run；过期租约可复领旧 Run，并从已持久化的最大事件序号之后继续发布。尚未接入独立 Attempt、Checkpoint 和工具执行日志；接管仍从头执行，工具副作用可能重复。 |
 | Task 级事件游标与事务通知 Outbox | 当前游标为单 Run 的 `after_seq`；调度 Outbox 与事件存储职责不同。 |
 | Backend 可靠提交、签发 BudgetGrant，并按用量报告幂等结算 | 当前由 Backend 同步提交并提供稳定幂等键，尚无提交 Outbox、额度预留、Grant 和结算。 |
 

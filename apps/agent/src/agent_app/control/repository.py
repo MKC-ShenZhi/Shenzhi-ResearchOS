@@ -149,8 +149,13 @@ async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 
     task.status = TaskStatus.RUNNING.value
     outbox.delivered_at = outbox.delivered_at or now
     outbox.delivery_attempts += 1
+    # The Run row is still locked: earlier event writers have committed, and
+    # later writers with the previous fencing token will be rejected.
+    event_seq = int(await session.scalar(select(func.coalesce(func.max(RunEventRow.seq), 0)).where(
+        RunEventRow.run_id == run.run_id,
+    )) or 0)
     await session.commit()
-    return _run_request(run), run.lease_token
+    return _run_request(run), run.lease_token, event_seq
 
 
 async def heartbeat(session: AsyncSession, run_id: str, worker_id: str,
