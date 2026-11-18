@@ -24,7 +24,7 @@ import { ApiError } from "@/clients/backend/http";
 import { ReportDialog } from "./report-dialog";
 import { Timeline } from "./timeline-view";
 import {
-  applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, restoreEntries, visibleNotes,
+  applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, restoreEntries, visibleNotes, startRunStream,
   type Entry, type StreamState,
 } from "./timeline";
 import { ComposerShell, type ComposerSkill } from "@/components/common/composer/composer";
@@ -117,6 +117,7 @@ interface Turn {
   stopped?: boolean;
   /** 终态原因（timeout / cancelled / max_turns…）：同一句"已停止"说不清是到点了还是你停的。 */
   stopReason?: string;
+  status?: AgentStoredTurn["status"];
 }
 
 interface RunContext {
@@ -165,7 +166,7 @@ function storedTurns(turns: AgentStoredTurn[]): Turn[] {
       steers: turn.steers ?? [], report: turn.report ?? undefined,
       sources: turn.sources, question: turn.question ?? undefined,
       warnings: turn.warnings, error: turn.error ?? undefined,
-      stopped: turn.stopped, stopReason: turn.stop_reason ?? undefined },
+      stopped: turn.stopped, stopReason: turn.stop_reason ?? undefined, status: turn.status },
   ]);
 }
 
@@ -263,6 +264,8 @@ export function ShenzhiAiPage() {
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [needsRefresh, setNeedsRefresh] = useState(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [steerError, setSteerError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [workspace, setWorkspace] = useState<{ id: string; name: string; files: number } | null>(null);
@@ -349,7 +352,12 @@ export function ShenzhiAiPage() {
   ): Parameters<typeof streamAgentSessionRun>[2] => {
     const isCurrent = () => isCurrentRun(context, controller);
     return {
-      onRunStart: (runId) => { onAccepted?.(); if (isCurrent()) runIdRef.current = runId; },
+      onRunStart: (runId) => {
+        onAccepted?.();
+        if (isCurrent()) runIdRef.current = runId;
+        patchAssistant(context, (turn) => ({ ...turn, content: "", reasoning: "",
+          stream: startRunStream(turn.stream) }));
+      },
       onDelta: (text, reasoning, turn) => patchAssistant(context, (current) => {
         // 状态机全在 timeline.ts（可测）。这里只负责把它与页面的 Turn 接起来。
         return {
@@ -388,9 +396,9 @@ export function ShenzhiAiPage() {
             error: result.status === "failed" ? result.error?.message ?? "运行失败" : undefined,
             stopped: result.status === "stopped" || result.status === "timeout",
             stopReason: result.stop_reason,
-            // 超时/停止时，模型在被打断前写出的正文此前被整段丢掉（界面只剩"已停止"）：
-            // content 为空就补上 final_text（有流式正文时不重复）。
-            content: result.question ? "" : turn.content || result.final_text || "",
+            status: result.status,
+            // The persisted final_text is authoritative, including failure/timeout partials.
+            content: result.question ? "" : result.final_text || "",
           };
         });
       },
@@ -423,6 +431,9 @@ export function ShenzhiAiPage() {
       setLoadingSession(true);
       setHydratedSessionId(null);
       setRunError(null);
+      setNeedsRefresh(false);
+      setOpenReport(null);
+      setQuote(null);
       setTurns([]);
       setWorkspace(null);
       setAttachments([]);
@@ -432,6 +443,10 @@ export function ShenzhiAiPage() {
         setSessionTitle(session.title);
         const restored = storedTurns(session.turns);
         const lastTurn = session.turns.at(-1);
+        if (lastTurn?.status !== "running") {
+          pendingOperationRef.current = null;
+          setPendingOperationSessionId(null);
+        }
         if (lastTurn?.status === "running") {
           const assistant = restored.at(-1)!;
           Object.assign(assistant, {
@@ -458,6 +473,7 @@ export function ShenzhiAiPage() {
           void attachAgentSessionRun(sessionId, buildRunHandlers(context, controller), controller.signal)
             .catch(async (cause: unknown) => {
               if (!active || !isCurrentRun(context, controller) || controller.signal.aborted) return;
+              setNeedsRefresh(true);
               if (cause instanceof ApiError && cause.status === 404) {
                 // One refresh only; the service reconciles orphan turns before returning.
                 const refreshed = await getAgentSession(sessionId);
@@ -465,6 +481,8 @@ export function ShenzhiAiPage() {
                   setTurns(storedTurns(refreshed.turns));
                   if (refreshed.turns.at(-1)?.status === "running") {
                     setRunError("任务仍在其他工作进程运行，当前连接无法接续；稍后重新打开会话查看结果。");
+                  } else {
+                    setNeedsRefresh(false);
                   }
                 }
               } else if (!(cause instanceof Error && cause.name === "AbortError")) {
@@ -492,7 +510,7 @@ export function ShenzhiAiPage() {
       abortRef.current = null;
       runIdRef.current = null;
     };
-  }, [identityKey, isPending, sessionId, router, buildRunHandlers, finishRun, isCurrentRun]);
+  }, [identityKey, isPending, sessionId, router, buildRunHandlers, finishRun, isCurrentRun, refreshVersion]);
 
   useEffect(() => {
     if (stickRef.current) {
@@ -533,7 +551,7 @@ export function ShenzhiAiPage() {
   /** All normal sends and the home-page launch use this exact persisted run path. */
   const runPrompt = useCallback(async (runInput: AgentRunInput, retryOperationKey?: string) => {
     const prompt = runInput.prompt.trim();
-    if (!prompt || running || !sessionId) return;
+    if (!prompt || running || !sessionId || (needsRefresh && !retryOperationKey)) return;
     const requestBody = { ...runInput, prompt };
     const idempotencyKey = retryOperationKey ?? newTurnId("operation");
     const retry = retryOperationKey && pendingOperationRef.current?.key === retryOperationKey
@@ -550,7 +568,7 @@ export function ShenzhiAiPage() {
       reasoning: "", stream: initialStreamState(), steers: [],
     };
     const assistantTurn: Turn = {
-      id: assistantId, role: "assistant", content: "", reasoning: "", stream: initialStreamState(), steers: [],
+      id: assistantId, role: "assistant", content: "", reasoning: "", stream: initialStreamState(), steers: [], status: "running",
     };
     setTurns((previous) => {
       if (retry && previous.some((turn) => turn.id === userId)
@@ -562,6 +580,7 @@ export function ShenzhiAiPage() {
     setInput("");
     setAttachments([]);
     setRunError(null);
+    setNeedsRefresh(false);
     setSteerError(null);
     setRunning(true);
     runIdRef.current = null;
@@ -590,6 +609,8 @@ export function ShenzhiAiPage() {
         setAttachments(runInput.attachments as ComposerAttachment[]);
       }
       if (!controller.signal.aborted && (error as Error).name !== "AbortError" && isCurrent()) {
+        // A lost response can hide an accepted Task; only a same-key retry is safe.
+        setNeedsRefresh(true);
         setRunError(error instanceof ApiError && error.status === 409
           ? "该会话已有正在运行的任务，当前连接无法实时续接。稍后重新打开会话查看结果；再次重试会沿用本次操作标识。"
           : (error as Error).message || "连接失败，请稍后重试");
@@ -597,7 +618,7 @@ export function ShenzhiAiPage() {
     } finally {
       finishRun(context, controller);
     }
-  }, [running, sessionId, buildRunHandlers, finishRun, isCurrentRun]);
+  }, [running, sessionId, needsRefresh, buildRunHandlers, finishRun, isCurrentRun]);
 
   const retryPendingOperation = useCallback(() => {
     const operation = pendingOperationRef.current;
@@ -661,6 +682,8 @@ export function ShenzhiAiPage() {
   const stop = useCallback(async () => {
     const runId = runIdRef.current;
     if (!runId) {
+      setNeedsRefresh(true);
+      setRunError("提交状态待确认，请重新连接或刷新结果后继续操作。");
       abortRef.current?.abort();
       return;
     }
@@ -752,6 +775,9 @@ export function ShenzhiAiPage() {
             </button>
           </div>
         </div>
+        {agentConfig.models.some((item) => item.value === "demo/m1") && (
+          <p role="status" className="px-4 py-2 text-sm text-amber-700 dark:text-amber-400">Mock 演示：受控模拟执行，不调用真实模型或检索服务。</p>
+        )}
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto"
           onMouseUp={captureQuote}
           onScroll={(event) => {
@@ -787,6 +813,9 @@ export function ShenzhiAiPage() {
                   </div>
                 </div>
               : <div key={turn.id} className="mb-8">
+                  <p role="status" className="mb-2 text-xs text-muted">{turn.status === "running"
+                    ? running && index === turns.length - 1 ? "任务执行中…" : "执行状态待同步，请刷新结果"
+                    : ({ done: "已完成", failed: "执行失败", timeout: "执行超时", stopped: "已停止", awaiting_input: "等待你的回答" }[turn.status ?? "done"])}</p>
                   {/* 过程流：思考 / 正文 / 工具按到达顺序交错（pi 的结构）。空时不渲染任何盒子。 */}
                   <Timeline state={turn.stream} live={running && index === turns.length - 1} />
                   {visibleNotes(turn.steers).map((note, noteIndex) => (
@@ -893,13 +922,15 @@ export function ShenzhiAiPage() {
               onSelectSkill={(name) => toggleSkill(name)}
               config={composerConfig}
               busy={uploading}
-              disabled={loadingSession || !hydratedSessionId}
+              disabled={loadingSession || !hydratedSessionId || needsRefresh}
               hideStyleRow
               onStop={() => void stop()}
               skills={agentConfig.skills}
             />
             {steerError && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{steerError}</div>}
-            {runError && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{runError}</div>}
+            {runError && <div role="alert" className="mt-2 text-xs text-red-600 dark:text-red-400">{runError}</div>}
+            {!running && <button type="button" disabled={loadingSession} onClick={() => setRefreshVersion((value) => value + 1)}
+              className="mt-2 mr-4 cursor-pointer text-xs text-primary hover:underline">重新连接 / 刷新结果</button>}
             {!running && pendingOperationSessionId === sessionId && (
               <button type="button" onClick={retryPendingOperation}
                 className="mt-2 cursor-pointer text-xs text-primary hover:underline">

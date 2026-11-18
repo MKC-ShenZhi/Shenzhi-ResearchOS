@@ -17,7 +17,12 @@ class TimelineCapture:
 
     def event(self, name: str, data: dict[str, Any]) -> None:
         turn = int(data.get('turn') or 0)
-        if name == 'delta':
+        if name == 'run_start':
+            # Runtime turn numbers restart for each execution attempt.
+            self.turn = -1
+            self.reasoning_index = -1
+            self.text_index = -1
+        elif name == 'delta':
             if turn != self.turn:
                 self.turn = turn
                 self.reasoning_index = -1

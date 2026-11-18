@@ -132,3 +132,14 @@ test("previewLine 压平空白并截断", () => {
   assert.equal(previewLine("a\n\nb"), "a b");
   assert.equal(previewLine("x".repeat(100)).length, 81);
 });
+import { startRunStream } from "../../features/agent-chat/timeline";
+
+test("Run retries preserve separate segments even when runtime turn restarts at 1", () => {
+  let state = initialStreamState();
+  for (let run = 0; run < 3; run++) {
+    state = startRunStream(state);
+    state = applyDelta(state, "", "思考", 1);
+    state = applyDelta(state, "", "中", 1);
+  }
+  assert.deepEqual(state.entries, Array.from({ length: 3 }, () => ({ kind: "thinking", text: "思考中" })));
+});

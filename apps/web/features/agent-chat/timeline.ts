@@ -64,6 +64,11 @@ export function initialStreamState(): StreamState {
   return { turn: 0, entries: [], thinkingIndex: -1, textIndex: -1 };
 }
 
+/** Preserve previous attempts, but never join deltas across Run boundaries. */
+export function startRunStream(state: StreamState): StreamState {
+  return { ...state, turn: 0, thinkingIndex: -1, textIndex: -1 };
+}
+
 /**
  * 把增量片拼进**本轮**对应条目，不跨轮找。
  *

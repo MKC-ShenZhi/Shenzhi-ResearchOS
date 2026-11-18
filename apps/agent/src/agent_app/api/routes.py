@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -46,6 +47,12 @@ ReportBody = ReportIngestWire
 
 @router.get('/config')
 async def agent_config():
+    if os.getenv('AGENT_DEMO_MODE') == '1':
+        return AgentConfigWire(
+            models=[{'value': 'demo/m1', 'label': 'Mock 演示（无模型调用）',
+                     'provider': 'platform', 'enabled': True}], default_model='demo/m1',
+            skills=[{'name': 'deep-research', 'description': 'Mock 演示报告，不执行真实研究'}],
+        ).model_dump(mode='json')
     registry = load_registry()
     store = default_store()
     skills = [{'name': skill.name, 'description': skill.description}

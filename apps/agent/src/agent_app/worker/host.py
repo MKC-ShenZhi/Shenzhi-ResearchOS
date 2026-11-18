@@ -161,7 +161,8 @@ def report_payload(request: dict[str, Any], result: RunResult | None,
             'error_code': error_code, 'error_message': error_message}
 
 
-async def execute_claim(control: AgentControlClient, claim: dict[str, Any], worker_id: str) -> None:
+async def execute_claim(control: AgentControlClient, claim: dict[str, Any], worker_id: str,
+                        *, runtime_factory=None) -> None:
     request = claim['run']
     token = int(claim['lease_token'])
     event_seq = int(claim['event_seq'])
@@ -240,7 +241,7 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
         budget = request.get('budget') or {}
         if budget.get('max_model_tokens') is not None:
             raise RuntimeError('max_model_tokens is not enforceable by the configured Provider')
-        runtime = build_runtime(
+        runtime = (runtime_factory or build_runtime)(
             owner=request['owner_id'], mode=request.get('mode', 'fast'),
             model=request.get('model'), workspace_id=request.get('workspace_id'),
             session_id=request.get('session_id'), allow_shell=False,
@@ -287,7 +288,9 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
             raise
 
 
-async def run_worker_forever() -> None:
+async def run_worker_forever(*, runtime_factory=None) -> None:
+    if os.getenv('AGENT_DEMO_MODE') == '1' and runtime_factory is None:
+        raise RuntimeError('Mock 环境必须使用 agent_app.demo_worker，禁止启动真实模型 Worker')
     worker_id = os.getenv('AGENT_WORKER_ID', '').strip() or f'{socket.gethostname()}-{os.getpid()}'
     control = AgentControlClient()
     logger.info('Agent Worker started worker_id=%s', worker_id)
@@ -298,7 +301,10 @@ async def run_worker_forever() -> None:
                 if claim.get('run') is None:
                     await asyncio.sleep(1)
                     continue
-                await execute_claim(control, claim, worker_id)
+                if runtime_factory is None:
+                    await execute_claim(control, claim, worker_id)
+                else:
+                    await execute_claim(control, claim, worker_id, runtime_factory=runtime_factory)
             except asyncio.CancelledError:
                 raise
             except Exception:

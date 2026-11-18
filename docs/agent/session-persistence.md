@@ -75,6 +75,8 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 - `/agents`：深知 AI 新对话页（侧边栏「深知 AI」入口）。与发现页智能搜索共用 `features/agent-chat/use-agent-launcher.ts`，同样创建 Backend Session 后跳转 Agent 对话。
 - `/agents?session=<id>`：具体持久化会话。刷新和浏览器 back/forward 都按 URL 重新向后端加载。
 
+页面显示每轮的执行中、完成、失败、超时、停止或等待回答状态。SSE 未收到 result 就结束，或 45 秒没有收到任何数据（含心跳），视为连接问题；不推断任务已失败。用户可点击“重新连接 / 刷新结果”重新 GET Session，并在最后一轮仍为 running 时从 `after=0` 重建当前轮的增量显示。执行状态未确认时禁止新提交；结果正文使用服务端最终 `final_text`，与历史记录保持一致。产品闭环的隔离 Mock 演示见 [本地演示](local-demo.md)。
+
 ## Sidebar 分页
 
 AppSidebar 的主 `nav` 是唯一纵向滚动容器。“聊天”列表首次请求 10 条，底部 sentinel 以该 `nav` 为 `IntersectionObserver.root`；接近底部时使用 `next_cursor` 加载下 10 条，`has_more=false` 后停止。

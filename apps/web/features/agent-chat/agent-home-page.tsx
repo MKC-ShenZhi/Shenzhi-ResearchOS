@@ -29,6 +29,9 @@ export function AgentHomePage() {
             <h1 className="text-2xl font-semibold text-ink">深知 AI</h1>
             <p className="mt-2 text-sm text-muted">检索文献、梳理研究脉络、对比方法，或生成带引用的研究报告</p>
           </div>
+          {agent.config.models.some((item) => item.value === "demo/m1") && (
+            <p role="status" className="mb-4 text-center text-sm text-amber-700 dark:text-amber-400">Mock 演示：受控模拟执行，不调用真实模型或检索服务。</p>
+          )}
           <ComposerShell
             value={input}
             onChange={setInput}
