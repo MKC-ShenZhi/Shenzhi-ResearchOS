@@ -153,7 +153,7 @@ function fromStoredTurn(turn: AgentStoredTurn): StreamState {
         ? { kind: "tool" as const, tool: segment.tool }
         : { kind: segment.kind === "text" ? "text" as const : "thinking" as const, text: segment.text })
     : restoreEntries(undefined, undefined);
-  return { turn: 0, entries, thinkingIndex: -1, textIndex: -1 };
+  return { ...initialStreamState(), entries, runStartIndex: entries.length };
 }
 
 function storedTurns(turns: AgentStoredTurn[]): Turn[] {

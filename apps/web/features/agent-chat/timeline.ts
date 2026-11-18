@@ -55,18 +55,20 @@ export function isMeaningful(text: string): boolean {
 export interface StreamState {
   turn: number;
   entries: Entry[];
+  /** 当前 Run 的首个条目下标；工具结果不得回填此前的历史条目。 */
+  runStartIndex: number;
   /** 本轮思考/正文条目在 entries 中的下标；-1 表示本轮还没这类条目。 */
   thinkingIndex: number;
   textIndex: number;
 }
 
 export function initialStreamState(): StreamState {
-  return { turn: 0, entries: [], thinkingIndex: -1, textIndex: -1 };
+  return { turn: 0, entries: [], runStartIndex: 0, thinkingIndex: -1, textIndex: -1 };
 }
 
 /** Preserve previous attempts, but never join deltas across Run boundaries. */
 export function startRunStream(state: StreamState): StreamState {
-  return { ...state, turn: 0, thinkingIndex: -1, textIndex: -1 };
+  return { ...state, turn: 0, runStartIndex: state.entries.length, thinkingIndex: -1, textIndex: -1 };
 }
 
 /**
@@ -98,7 +100,7 @@ export function applyDelta(state: StreamState, text: string, reasoning: string, 
     let textIndex = -1;
     if (reasoning) { thinkingIndex = entries.length; entries.push({ kind: "thinking", text: reasoning }); }
     if (text) { textIndex = entries.length; entries.push({ kind: "text", text }); }
-    return { turn, entries, thinkingIndex, textIndex };
+    return { ...state, turn, entries, thinkingIndex, textIndex };
   }
   let { entries, thinkingIndex, textIndex } = state;
   if (reasoning) {
@@ -109,7 +111,7 @@ export function applyDelta(state: StreamState, text: string, reasoning: string, 
     if (textIndex < 0) textIndex = entries.length;
     entries = appendAt(entries, textIndex, "text", text);
   }
-  return { turn, entries, thinkingIndex, textIndex };
+  return { ...state, turn, entries, thinkingIndex, textIndex };
 }
 
 /** 工具调用到达：追加一个并列的工具条目。 */
@@ -117,15 +119,17 @@ export function applyToolCall(state: StreamState, tool: Activity): StreamState {
   return { ...state, entries: [...state.entries, { kind: "tool", tool }] };
 }
 
-/** 工具结束：把结果回填到**同一个**工具对象（页面侧的 steps 与本状态共享引用，故两处同步）。 */
+/** 工具结束：仅回填当前 Run 中最近的匹配调用，保留历史条目。 */
 export function applyToolEnd(state: StreamState, toolCallId: string, patch: Partial<Activity>): StreamState {
-  return {
-    ...state,
-    entries: state.entries.map((entry) =>
-      entry.kind === "tool" && entry.tool.toolCallId === toolCallId
-        ? { kind: "tool", tool: { ...entry.tool, ...patch } }
-        : entry),
-  };
+  for (let index = state.entries.length - 1; index >= state.runStartIndex; index--) {
+    const entry = state.entries[index];
+    if (entry.kind === "tool" && entry.tool.toolCallId === toolCallId) {
+      const entries = [...state.entries];
+      entries[index] = { kind: "tool", tool: { ...entry.tool, ...patch } };
+      return { ...state, entries };
+    }
+  }
+  return state;
 }
 
 /**

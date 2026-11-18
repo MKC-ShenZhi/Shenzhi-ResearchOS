@@ -143,3 +143,32 @@ test("Run retries preserve separate segments even when runtime turn restarts at 
   }
   assert.deepEqual(state.entries, Array.from({ length: 3 }, () => ({ kind: "thinking", text: "思考中" })));
 });
+
+test("retry Runs with the same tool ID only complete the current Run's tool", () => {
+  let state = initialStreamState();
+  const historical: Entry[] = [];
+  for (let run = 0; run < 3; run++) {
+    state = startRunStream(state);
+    state = applyDelta(state, "", "思考", 1);
+    state = applyDelta(state, "", "下一轮", 2);
+    state = applyToolCall(state, tool("shared", "paper_search"));
+    const patch = { done: true, isError: run === 1, durationMs: run + 1, summary: `Run ${run}` };
+    const expected = { ...tool("shared", "paper_search"), ...patch };
+    state = applyToolEnd(state, "shared", patch);
+    assert.deepEqual(state.entries.slice(0, historical.length), historical);
+    historical.forEach((entry, index) => assert.equal(state.entries[index], entry));
+    assert.deepEqual(state.entries.at(-1), { kind: "tool", tool: expected });
+    historical.push(...state.entries.slice(historical.length));
+  }
+});
+
+test("tool_end without a matching call in the current Run leaves history untouched", () => {
+  let state = applyToolCall(initialStreamState(), tool("shared", "paper_search"));
+  // A failed attempt may leave its tool unfinished.
+  const historical = state.entries;
+  state = startRunStream(state);
+  state = applyDelta(state, "", "新 Run", 1);
+  state = applyToolEnd(state, "shared", { done: true, isError: true, durationMs: 99, summary: "unmatched" });
+  assert.deepEqual(state.entries.slice(0, historical.length), historical);
+  assert.equal(state.entries[0], historical[0]);
+});
