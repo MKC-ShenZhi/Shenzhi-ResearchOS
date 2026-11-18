@@ -23,6 +23,8 @@ uv run --no-sync --offline python ../../scripts/agent_m1_demo.py
 
 四个服务分别为 Web `13000`、Backend `18000`、Agent API `18101` 与 `agent_app.demo_worker`。仅绑定 loopback。Windows 演示使用 Next 的 `--webpack`，避免本机 Turbopack 的 pg junction 冲突；不修改仓库默认开发脚本。日志、自动化 JSON 和截图位于 `apps/backend/.venv/m1-demo-logs/`，Workspace 位于 `apps/agent/workspace/m1-demo/`，均被现有 Git 规则忽略。
 
+Agent API 按 `AGENT_DEMO_MODE` 拒绝混用的提交与 Worker 领取；Worker 领取请求携带 `demo_mode`（默认 false）。Control 的 SQL 领取同时按 `demo/m1` 过滤首次任务和过期租约，正式 Worker 也拒绝执行 Mock 请求。升级时同步重启 API 和 Worker；隔离数据库与启动器检查仍须保留。
+
 ## 产品负责人操作表
 
 | 操作 | 预期界面与结果 |

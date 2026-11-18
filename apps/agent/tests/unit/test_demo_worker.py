@@ -2,6 +2,7 @@
 import asyncio
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -10,11 +11,18 @@ from agent_contracts import AgentConfigWire, ExecutionReportWire
 from agent_app.demo_worker import DEMO_WARNING, DemoRuntime
 from agent_app.execution.types import RunChannel
 from agent_app.extensions.workspace import read_session_file
+from agent_app.extensions.workspace import copy_session_workspace
 from agent_app.main import app
 from agent_app.worker.host import report_payload, run_worker_forever
 
 
 class DemoWorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_empty_session_does_not_block_workspace_claim(self):
+        with tempfile.TemporaryDirectory() as root, patch(
+            'agent_app.extensions.workspace.WORKSPACE_ROOT', Path(root)
+        ):
+            self.assertTrue(copy_session_workspace('anon:empty', 'user:claimed', 'ses_empty'))
+
     async def test_report_matches_file_and_shared_contract_without_providers(self):
         with tempfile.TemporaryDirectory() as root, patch.dict('os.environ', {'AGENT_WORKSPACE_ROOT': root}), \
                 patch('agent_app.demo_worker.asyncio.sleep', new_callable=AsyncMock):

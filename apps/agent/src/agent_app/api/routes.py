@@ -39,6 +39,7 @@ SubmitBody = TaskSubmissionWire
 
 class ClaimBody(BaseModel):
     worker_id: str = Field(min_length=1, max_length=255)
+    demo_mode: bool = False
 
 
 EventBody = EventIngestWire
@@ -131,6 +132,9 @@ def _task_json(record) -> dict[str, Any]:
 
 @router.post('/tasks')
 async def submit_task(body: SubmitBody, session: AsyncSession = Depends(get_session)):
+    demo_mode = os.getenv('AGENT_DEMO_MODE') == '1'
+    if (body.model == 'demo/m1') != demo_mode or (demo_mode and not body.session_id):
+        raise BusinessError(20001, 'Mock 与正式任务不可混用', 409)
     submission = TaskSubmission(
         owner_id=body.owner_id, prompt=body.prompt, session_id=body.session_id,
         turn_id=body.turn_id, input_ref=body.input_ref,
@@ -199,7 +203,10 @@ async def read_events(run_id: str, owner_id: str,
 
 @router.post('/worker/claim')
 async def claim(body: ClaimBody, session: AsyncSession = Depends(get_session)):
-    claimed = await repository.claim_run(session, body.worker_id)
+    demo_mode = os.getenv('AGENT_DEMO_MODE') == '1'
+    if body.demo_mode != demo_mode:
+        raise BusinessError(20001, 'Worker 与 Agent API 运行模式不匹配', 409)
+    claimed = await repository.claim_run(session, body.worker_id, demo_mode=demo_mode)
     if claimed is None:
         return {'run': None}
     request, lease_token, event_seq = claimed

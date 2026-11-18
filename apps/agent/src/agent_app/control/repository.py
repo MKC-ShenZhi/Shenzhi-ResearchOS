@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from agent_app.errors import BusinessError
 from agent_app.infrastructure.models import (
@@ -98,7 +99,18 @@ async def submit(session: AsyncSession, submission: TaskSubmission) -> TaskRecor
     )
     session.add(task)
     # Flush each parent before adding its FK-dependent row, without committing.
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        if submission.idempotency_key and await session.scalar(select(TaskRow.task_id).where(
+            TaskRow.owner_id == submission.owner_id,
+            TaskRow.idempotency_key == submission.idempotency_key,
+        )):
+            # A concurrent submit won the unique key. Reuse the same request
+            # validation as the normal replay path after rolling back our insert.
+            return await submit(session, submission)
+        raise
     session.add(RunRow(run_id=run_id, task_id=task_id, attempt=1,
                        status=RunStatus.PENDING.value, request_json=_request_dict(request),
                        created_at=now, lease_token=0))
@@ -135,7 +147,8 @@ async def list_task_runs(session: AsyncSession, task_id: str, owner_id: str) -> 
         .order_by(RunRow.attempt))).all())
 
 
-async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 45):
+async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 45,
+                    *, demo_mode: bool = False):
     now = _now()
     query = (select(RunRow, TaskRow, OutboxRow).join(TaskRow, TaskRow.task_id == RunRow.task_id)
              .join(OutboxRow, OutboxRow.run_id == RunRow.run_id)
@@ -145,17 +158,23 @@ async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 
                         and_(RunRow.status == RunStatus.RUNNING.value,
                              TaskRow.status.in_((TaskStatus.RUNNING.value, TaskStatus.CANCELLING.value)),
                              RunRow.lease_expires_at <= now)))
-             .order_by(RunRow.created_at).with_for_update(skip_locked=True).limit(1))
+             .where((RunRow.request_json['model'].as_string() == 'demo/m1') if demo_mode else
+                    or_(RunRow.request_json['model'].as_string().is_(None),
+                        RunRow.request_json['model'].as_string() != 'demo/m1'))
+             .order_by(RunRow.created_at).with_for_update(of=TaskRow, skip_locked=True).limit(1))
     found = (await session.execute(query)).first()
     if found is None:
         return None
     run, task, outbox = found
+    # All operations needing both locks use Task -> Run (including cancel and
+    # report). Locking the joined rows in planner order can deadlock PostgreSQL.
+    run = await session.scalar(select(RunRow).where(RunRow.run_id == run.run_id).with_for_update())
     run.status = RunStatus.RUNNING.value
     run.worker_id = worker_id
     run.lease_token += 1
     run.lease_expires_at = now + timedelta(seconds=lease_seconds)
     run.started_at = run.started_at or now
-    task.status = TaskStatus.RUNNING.value
+    task.status = (TaskStatus.CANCELLING.value if task.cancel_requested else TaskStatus.RUNNING.value)
     outbox.delivered_at = outbox.delivered_at or now
     outbox.delivery_attempts += 1
     # The Run row is still locked: earlier event writers have committed, and
@@ -218,7 +237,7 @@ async def append_steer(session: AsyncSession, run_id: str, owner_id: str,
                        message: str) -> dict[str, Any]:
     run = await session.scalar(select(RunRow).join(TaskRow).where(
         RunRow.run_id == run_id, TaskRow.owner_id == owner_id,
-    ).with_for_update())
+    ).with_for_update(of=RunRow))
     if run is None:
         raise BusinessError(20004, '运行不存在', 404)
     if run.status != RunStatus.RUNNING.value or run.report_json is not None:
@@ -243,6 +262,8 @@ async def list_controls(session: AsyncSession, run_id: str, owner_id: str, after
 
 async def record_report(session: AsyncSession, report: ExecutionReport,
                         worker_id: str, lease_token: int) -> None:
+    task = await session.scalar(select(TaskRow).where(
+        TaskRow.task_id == report.task_id).with_for_update())
     run = await session.scalar(select(RunRow).where(
         RunRow.run_id == report.run_id, RunRow.task_id == report.task_id).with_for_update())
     if run is None:
@@ -266,7 +287,6 @@ async def record_report(session: AsyncSession, report: ExecutionReport,
     run.report_json = json.loads(json.dumps(payload, ensure_ascii=False, default=str))
     run.completed_at = now
     run.lease_expires_at = None
-    task = await session.scalar(select(TaskRow).where(TaskRow.task_id == run.task_id).with_for_update())
     if task is None or task.current_run_id != run.run_id:
         raise BusinessError(20009, '运行已不是任务当前尝试', 409)
     terminal_task_status = {
@@ -276,7 +296,8 @@ async def record_report(session: AsyncSession, report: ExecutionReport,
         RunStatus.TIMED_OUT: TaskStatus.FAILED,
         RunStatus.AWAITING_INPUT: TaskStatus.AWAITING_INPUT,
     }[report.status]
-    if report.status in (RunStatus.FAILED, RunStatus.TIMED_OUT) and run.attempt < 3:
+    if (report.status in (RunStatus.FAILED, RunStatus.TIMED_OUT) and run.attempt < 3
+            and not task.cancel_requested):
         previous_request = _run_request(run)
         next_run_id = uuid.uuid4().hex
         next_request = RunRequest(

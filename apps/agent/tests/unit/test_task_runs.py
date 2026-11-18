@@ -80,6 +80,53 @@ class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
         allowed = await self.history(owner='other', task_id=other.task_id)
         self.assertEqual(allowed.json(), {'run_ids': [other.current_run_id]})
 
+    async def test_cancelled_execution_failure_does_not_create_retry(self):
+        for status in (RunStatus.FAILED, RunStatus.TIMED_OUT):
+            task = await repository.submit(self.db, TaskSubmission(owner_id='owner', prompt='cancel'))
+            request, token, _ = await repository.claim_run(self.db, 'worker')
+            # The fixture's original task may be first; use the actual claim.
+            await repository.request_cancel(self.db, request.task_id, 'owner')
+            await repository.record_report(self.db, ExecutionReport(
+                run_id=request.run_id, task_id=request.task_id, status=status,
+            ), 'worker', token)
+            self.assertEqual(await repository.list_task_runs(self.db, request.task_id, 'owner'),
+                             [request.run_id])
+            current = await repository.get_task(self.db, request.task_id, 'owner')
+            self.assertNotEqual(current.status.value, 'queued')
+
+    async def test_claim_filters_mock_and_real_runs_including_expired_leases(self):
+        demo = await repository.submit(self.db, TaskSubmission(
+            owner_id='owner', prompt='mock', model='demo/m1', session_id='ses_demo', turn_id='turn_demo'))
+        real, _, _ = await repository.claim_run(self.db, 'real')
+        mock, _, _ = await repository.claim_run(self.db, 'demo', demo_mode=True)
+        self.assertEqual(real.task_id, self.task.task_id)
+        self.assertEqual(mock.task_id, demo.task_id)
+        self.assertIsNone(await repository.claim_run(self.db, 'real'))
+        self.assertIsNone(await repository.claim_run(self.db, 'demo', demo_mode=True))
+        await repository.request_cancel(self.db, real.task_id, 'owner')
+        self.now += timedelta(seconds=46)
+        taken, _, _ = await repository.claim_run(self.db, 'demo-2', demo_mode=True)
+        self.assertEqual(taken.task_id, demo.task_id)
+        taken, _, _ = await repository.claim_run(self.db, 'real-2')
+        self.assertEqual(taken.task_id, self.task.task_id)
+        current = await repository.get_task(self.db, taken.task_id, 'owner')
+        self.assertEqual(current.status.value, 'cancelling')
+
+    async def test_api_rejects_mixed_mode_submission_and_worker(self):
+        for demo_mode in ('0', '1'):
+            with patch.dict('os.environ', {'AGENT_DEMO_MODE': demo_mode}):
+                rejected = await self.client.post('/internal/v1/tasks', json={
+                    'owner_id': 'owner', 'prompt': 'wrong mode',
+                    'model': 'real/model' if demo_mode == '1' else 'demo/m1',
+                    'session_id': 'ses_demo',
+                    'turn_id': 'turn_demo',
+                })
+                self.assertEqual(rejected.status_code, 409)
+                rejected = await self.client.post('/internal/v1/worker/claim', json={
+                    'worker_id': 'wrong-mode', 'demo_mode': demo_mode != '1',
+                })
+                self.assertEqual(rejected.status_code, 409)
+
     async def test_service_credential_is_required_and_read_does_not_mutate_task(self):
         before = await repository.get_task(self.db, self.task.task_id, 'owner')
         response = await self.client.get(f'/internal/v1/tasks/{self.task.task_id}/runs',

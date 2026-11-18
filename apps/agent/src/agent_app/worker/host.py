@@ -44,7 +44,9 @@ class AgentControlClient:
         return response.json()
 
     async def claim(self, worker_id: str):
-        return await self.post('/internal/v1/worker/claim', {'worker_id': worker_id})
+        return await self.post('/internal/v1/worker/claim', {
+            'worker_id': worker_id, 'demo_mode': os.getenv('AGENT_DEMO_MODE') == '1',
+        })
 
     async def heartbeat(self, run_id: str, worker_id: str,
                         lease_token: int) -> WorkerHeartbeatResponseWire:
@@ -236,6 +238,8 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
     result: RunResult | None = None
     execution_error: Exception | None = None
     try:
+        if runtime_factory is None and request.get('model') == 'demo/m1':
+            raise RuntimeError('正式 Worker 禁止执行 Mock 任务')
         if request.get('input_ref'):
             raise RuntimeError('Agent Platform input_ref adapter is not configured')
         budget = request.get('budget') or {}
