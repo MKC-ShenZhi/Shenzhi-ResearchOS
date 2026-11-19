@@ -2,6 +2,7 @@
 import json
 import logging
 import asyncio
+import os
 from pathlib import PurePosixPath
 from typing import Literal
 from urllib.parse import quote
@@ -40,6 +41,26 @@ from app.schemas.knowledge import KnowledgeSearchRequest
 router = APIRouter(prefix='/api/v1/agent', tags=['agent'])
 logger = logging.getLogger(__name__)
 
+
+def product_gateway(owner):
+    if owner.startswith('user:') and os.getenv('AGENT_V2_ADMISSION') == 'authorized':
+        from app.services.agent_gateway.v2 import AgentGatewayV2
+        return AgentGatewayV2()
+    return agent_gateway
+
+
+async def gateway_for_run(run_id, owner):
+    gateway = product_gateway(owner)
+    if gateway is not agent_gateway:
+        try:
+            return gateway, await gateway.run(run_id, owner)
+        except BusinessError as exc:
+            if exc.status != 404:
+                raise
+            # Read-only lookup of legacy runs during drain. This never retries
+            # a submission or changes its authorization/metering context.
+    return agent_gateway, await agent_gateway.run(run_id, owner)
+
 # Workspace bytes are untrusted documents, including HTML and SVG. Apply this
 # to both download/preview routes, regardless of the filename or MIME type.
 ARTIFACT_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:"
@@ -53,7 +74,8 @@ async def agent_knowledge_search(body: KnowledgeSearchRequestWire):
     request = KnowledgeSearchRequest.model_validate(body.model_dump(mode='json', by_alias=True))
     result = await knowledge_service.search(request)
     return KnowledgeSearchResponseWire.model_validate(
-        result.model_dump(mode='json', by_alias=True),
+        # Product topic navigation is not part of the Agent wire contract.
+        result.model_dump(mode='json', by_alias=True, exclude={'results': {'__all__': {'topics'}}}),
     ).model_dump(mode='json', by_alias=True)
 
 
@@ -64,7 +86,7 @@ async def agent_knowledge_paper(paper_id: str):
 
     result = await knowledge_service.get_paper(paper_id)
     return KnowledgePaperDetailWire.model_validate(
-        result.model_dump(mode='json', by_alias=True),
+        result.model_dump(mode='json', by_alias=True, exclude={'topics'}),
     ).model_dump(mode='json', by_alias=True)
 
 
@@ -93,29 +115,38 @@ async def config(_credential: None = Depends(require_bff)):
 
 
 @router.post('/run')
-async def run(body: AgentRunBody, owner: str = Depends(request_owner)):
+async def run(body: AgentRunBody, owner: str = Depends(request_owner),
+              idempotency_key: str | None = Header(default=None, alias='Idempotency-Key')):
+    gateway = product_gateway(owner)
+    key = validate_idempotency_key(idempotency_key)
+    if gateway is not agent_gateway and key is None:
+        raise BusinessError(20001, 'Idempotency-Key 必填', 422)
     try:
         validate_history(body.history)
     except ValueError as exc:
         raise BusinessError(20001, '历史消息格式无效', 400) from exc
     attachment_text, warnings, files = await resolve_agent_attachments(body.attachments, owner)
-    task = await agent_gateway.submit({
+    payload = {
         'owner_id': owner, 'prompt': body.prompt + attachment_text,
         'session_id': body.session_id, 'mode': body.mode, 'model': body.model,
         'workspace_id': body.workspace_id,
         'skills': body.skills, 'history': body.history,
-    })
+    }
+    if key is not None:
+        payload['idempotency_key'] = key
+    task = await gateway.submit(payload)
     if files:
         try:
             await agent_upload_store.consume(owner, list(files))
         except Exception:
             logger.exception('Failed to consume Agent attachments after submit')
-    return StreamingResponse(_agent_task_stream(owner, task, warnings), media_type='text/event-stream',
+    return StreamingResponse(_agent_task_stream(owner, task, warnings, gateway=gateway), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache, no-transform',
                                       'X-Accel-Buffering': 'no'})
 
 
-async def _agent_task_stream(owner: str, task: dict, warnings: list[str]):
+async def _agent_task_stream(owner: str, task: dict, warnings: list[str], *, gateway=None):
+    gateway = gateway or agent_gateway
     task_id = task['task_id']
     run_id = task['current_run_id']
     after_seq = 0
@@ -124,13 +155,13 @@ async def _agent_task_stream(owner: str, task: dict, warnings: list[str]):
     yield f"event: run_start\ndata: {json.dumps({'run_id': run_id}, ensure_ascii=False)}\n\n"
     heartbeat_at = asyncio.get_running_loop().time()
     while True:
-        run, events = await read_run_update(agent_gateway, run_id, owner, after_seq)
+        run, events = await read_run_update(gateway, run_id, owner, after_seq)
         for event in events:
             after_seq = max(after_seq, int(event['seq']))
             event_id = f"id: {after_seq}\n"
             yield (f"{event_id}event: {event['name']}\n"
                    f"data: {json.dumps(event['data'], ensure_ascii=False)}\n\n")
-        task_state = await agent_gateway.task(task_id, owner)
+        task_state = await gateway.task(task_id, owner)
         current_run_id = task_state.get('current_run_id')
         report = run.get('report')
         if report and current_run_id and current_run_id != run_id:
@@ -182,15 +213,16 @@ async def steer(run_id: str, body: SteerBody, owner: str = Depends(request_owner
     """运行中插话：下一模型请求前注入（不打断当前工具批）。"""
     if not body.text.strip():
         raise BusinessError(20001, '插话内容不能为空')
-    await agent_gateway.steer(run_id, owner, body.text.strip())
+    gateway, _ = await gateway_for_run(run_id, owner)
+    await gateway.steer(run_id, owner, body.text.strip())
     return ok({'injected': True})
 
 
 @router.post('/run/{run_id}/stop')
 async def stop(run_id: str, owner: str = Depends(request_owner)):
     """Cleanly stop the active run so its partial result remains recoverable."""
-    run = await agent_gateway.run(run_id, owner)
-    task = await agent_gateway.cancel(run['task_id'], owner)
+    gateway, run = await gateway_for_run(run_id, owner)
+    task = await gateway.cancel(run['task_id'], owner)
     return ok({'stopping': task.get('cancel_requested', False)})
 
 
@@ -252,12 +284,16 @@ async def run_agent_session(
     owner: str = Depends(request_owner),
 ):
     key = validate_idempotency_key(idempotency_key)
+    gateway = product_gateway(owner)
+    if gateway is not agent_gateway and key is None:
+        raise BusinessError(20001, 'Idempotency-Key 必填', 422)
     live = await start_session_run(
         owner=owner, session_id=session_id, prompt=body.prompt, model=body.model,
         mode=body.mode, attachments=body.attachments, workspace_id=body.workspace_id,
         skills=body.skills, allow_shell=False, idempotency_key=key,
         idempotency_fingerprint=(request_fingerprint(body.model_dump(mode='json'))
                                  if key is not None else None),
+        gateway=gateway,
     )
 
     return session_run_stream(live)

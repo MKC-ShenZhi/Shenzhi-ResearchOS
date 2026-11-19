@@ -54,8 +54,11 @@ class Entitlements:
         self.allow_test_policy = allow_test_policy
 
     async def owner(self, db, owner_id, *, active=True):
+        if active and owner_id.startswith('user:') and await db.get(OwnerEntitlementRow, owner_id) is None:
+            from .defaults import initialize_free
+            await initialize_free(db, owner_id[5:])
         owner = await db.scalar(select(OwnerEntitlementRow).where(
-            OwnerEntitlementRow.owner_id == owner_id).with_for_update())
+            OwnerEntitlementRow.owner_id == owner_id).with_for_update().execution_options(populate_existing=True))
         require(owner is not None and (owner.enabled or not active), 'ENTITLEMENT_UNAVAILABLE', 403)
         return owner
 
@@ -325,6 +328,10 @@ class Entitlements:
         for a in applicable:
             requested_a = requested.get(a.allocation_id)
             allocation = await db.get(ReservationAllocationRow, a.allocation_id)
+            counter = await db.get(WindowCounterRow, allocation.window_id)
+            await self.refresh_rolling(db, counter, now)
+            if counter.used + counter.held > counter.limit_units:
+                reason = reason or 'QUOTA_EXHAUSTED'
             rule = next(r for r in policy.rules if r.rule_id == a.rule_id)
             if requested_a is None or (requested_a.metric, requested_a.unit) != (a.metric, a.unit):
                 reason = reason or 'ALLOCATION_MISMATCH'
@@ -383,6 +390,11 @@ class Entitlements:
                 for k, v in permission.dependency_versions.items()), 'DEPENDENCY_NOT_AUTHORIZED', 403)
         now = now_utc()
         limit = datetime.fromisoformat(permit.response['permit']['start_before'])
+        for allocation_id in sorted(permit.held):
+            allocation = await db.get(ReservationAllocationRow, allocation_id)
+            counter = await db.get(WindowCounterRow, allocation.window_id)
+            await self.refresh_rolling(db, counter, now)
+            require(counter.used + counter.held <= counter.limit_units, 'QUOTA_EXHAUSTED', 403)
         policy_row = await db.get(EntitlementPolicyRow, grant.policy_revision)
         require(policy_row.approved and (not policy_row.test_only or self.allow_test_policy), 'POLICY_NOT_APPROVED', 403)
         policy = EntitlementPolicy.model_validate(policy_row.payload)

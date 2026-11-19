@@ -45,6 +45,17 @@ class MeteringControl:
         self.issuer, self.audience, self.public_keys = issuer, audience, public_keys
         self.outbox_capacity = outbox_capacity
 
+    async def require_settlement(self, db, profile):
+        if profile.context != 'authorized':
+            return
+        pending = await db.scalar(select(ObservationRow.measurement_id).join(
+            UsageOutboxRow, UsageOutboxRow.measurement_id == ObservationRow.measurement_id).join(
+            TaskRow, TaskRow.task_id == ObservationRow.task_id).join(
+            TaskMeteringRow, TaskMeteringRow.task_id == TaskRow.task_id).where(
+            TaskRow.owner_id == profile.owner_id, TaskMeteringRow.context == 'authorized',
+            ObservationRow.revision > 1, UsageOutboxRow.state != 'delivered').limit(1))
+        check(pending is None, 'USAGE_SETTLEMENT_UNCONFIRMED')
+
     def verify_grant(self, grant):
         verify_signed(grant, issuer=self.issuer, audience=self.audience, public_keys=self.public_keys)
         check(grant.not_before <= now_utc() < grant.expires_at, 'GRANT_EXPIRED')
@@ -84,6 +95,7 @@ class MeteringControl:
 
     async def intent(self, db, run_id: str, body: CallIntent):
         execution, task, run, profile = await self.lock_execution(db, body, run_id=run_id)
+        await self.require_settlement(db, profile)
         from sqlalchemy import func
         backlog = await db.scalar(select(func.count()).select_from(UsageOutboxRow).where(
             UsageOutboxRow.state != 'delivered'))
@@ -173,7 +185,8 @@ class MeteringControl:
         return True
 
     async def prepare_start(self, db, call_id, identity: WorkerIdentity):
-        await self.lock_execution(db, identity)
+        _, _, _, profile = await self.lock_execution(db, identity)
+        await self.require_settlement(db, profile)
         row = await db.scalar(select(CallRow).where(CallRow.call_id == call_id).with_for_update().execution_options(populate_existing=True))
         check(row is not None and row.execution_id == identity.execution_id, 'CALL_EXECUTION_CONFLICT')
         if row.start_fact:
@@ -190,6 +203,7 @@ class MeteringControl:
         check(row is not None and row.execution_id == identity.execution_id, 'CALL_EXECUTION_CONFLICT')
         if row.start_fact:
             return {'schema_version': 1, 'may_send': False, 'already_started': True, 'fact': row.start_fact}
+        await self.require_settlement(db, profile)
         check(row.state == 'starting', 'CALL_NOT_STARTING')
         now = now_utc()
         grant = None

@@ -35,6 +35,9 @@ test("quick theme buttons select their IDs; all links close and more colors scro
   const state = { mode: "system", preset: selected, setMode: () => {}, setPreset: (id: string) => { selected = id; } };
   const loaded = load("components/common/layout/settings-menu.tsx", {
     react: { useId: () => "settings-menu", useSyncExternalStore: () => true },
+    "@tanstack/react-query": { useQuery: () => ({ data: undefined }) },
+    "@/components/auth/auth-provider": { useAuth: () => ({ session: null }) },
+    "@/clients/backend/http": { apiJson: () => Promise.resolve({ read_only: false }) },
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "next/link": { default: "a" },
     "next/navigation": { usePathname: () => "/settings" },

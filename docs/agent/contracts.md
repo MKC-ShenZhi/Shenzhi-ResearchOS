@@ -45,6 +45,8 @@ Session 首次投影与无缓存恢复都从 Task 最早的 Run 开始，依次�
 
 Agent Knowledge Adapter 使用共享 `KnowledgeSearchRequestWire`、`KnowledgeSearchResponseWire`、`KnowledgePaperDetailWire` 与 `KnowledgePaperGraphWire`。Backend 保留产品 Knowledge Schema 和上游实现，在内部 API 边界映射到共享 Wire Model；Agent 不安装或导入 Backend Python 包。
 
+论文检索与详情的产品 Schema 包含用于主题导航的 `topics`；当前 Agent Wire 不包含该字段，Backend 内部接口在序列化时显式排除它，再执行严格契约校验。产品知识库接口继续返回 `topics`。
+
 ## Protocol 边界
 
 所有接口均为 `async` Protocol，只依赖共享契约类型，不依赖 Control 或 Execution 的具体类。

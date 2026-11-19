@@ -27,6 +27,96 @@ from app.services.agent_entitlements.service import EntitlementError
 @unittest.skipUnless(os.getenv('AGENT_A_LINE_TEST_DATABASE_URL') and os.getenv('BACKEND_A_LINE_TEST_DATABASE_URL'),
                      'two isolated local A-line PostgreSQL databases not selected')
 class PostgresALineTests(suite.ALinePersistenceTests):
+    async def seed_users(self):
+        from app.services.agent_entitlements.free_policy import build, REVISION
+        from app.models.agent_entitlements import EntitlementPolicyRow
+        from agent_contracts.canonical import digest
+        payload = build({'capabilities': [{'identity': self.identity.model_dump(mode='json'),
+                                          'version': digest(self.identity.model_dump(mode='json'))}]})
+        async with self.backend() as db, db.begin():
+            await db.execute(text('''CREATE TABLE "user" (id text PRIMARY KEY, name text, email text,
+                "emailVerified" boolean, image text, "createdAt" timestamptz, "updatedAt" timestamptz)'''))
+            await db.execute(text('''INSERT INTO "user" (id,name,email,"createdAt") VALUES
+                ('new','新用户','new@example.test',now()), ('test','Special','special@example.test',now()),
+                ('missing','待初始化','missing@example.test',now())'''))
+            db.add(EntitlementPolicyRow(policy_revision=REVISION, approved=True, test_only=False, payload=payload['policy']))
+        return REVISION
+
+    async def test_free_backfill_is_atomic_and_preserves_special_assignment(self):
+        from unittest.mock import patch
+        from app.services.agent_entitlements.defaults import initialize_free
+        from app.models.agent_entitlements import OwnerEntitlementRow
+        revision = await self.seed_users()
+        with patch.dict(os.environ, {'SHENZHI_FREE_POLICY_REVISION': revision}):
+            async def initialize():
+                async with self.backend() as db, db.begin():
+                    return await initialize_free(db)
+            counts = await asyncio.gather(initialize(), initialize())
+            self.assertEqual(sum(counts), 2)
+            self.assertEqual(await initialize(), 0)
+        async with self.backend() as db:
+            self.assertEqual((await db.get(OwnerEntitlementRow, 'user:test')).plan_id, 'test-plan')
+            new = await db.get(OwnerEntitlementRow, 'user:new')
+            self.assertEqual((new.plan_id, new.policy_revision, new.enabled), ('free', revision, True))
+            self.assertIsNone(await db.get(OwnerEntitlementRow, 'anon:new'))
+
+    async def test_admin_api_search_pagination_and_settled_usage(self):
+        from contextlib import asynccontextmanager
+        from unittest.mock import patch
+        import httpx
+        from fastapi import FastAPI
+        from app.api import admin
+        from app.core.errors import BusinessError
+        from app.core.responses import fail
+        from app.services.agent_entitlements.defaults import initialize_free
+        from app.models.agent_entitlements import OwnerEntitlementRow, EntitlementPolicyRow
+        from app.services.agent_entitlements.policy import EntitlementPolicy
+        from app.services.agent_entitlements.service import now_utc
+        revision = await self.seed_users()
+        with patch.dict(os.environ, {'SHENZHI_FREE_POLICY_REVISION': revision}):
+            async with self.backend() as db, db.begin():
+                await initialize_free(db, 'new')
+                policy = EntitlementPolicy.model_validate((await db.get(EntitlementPolicyRow, revision)).payload)
+                rule = policy.rules[0]
+                window = rule.window('user:new', revision, now_utc())
+                db.add(WindowCounterRow(window_id=window.window_id, owner_id='user:new', rule_id=rule.rule_id,
+                    window_ref=window.model_dump(mode='json'), limit_units=rule.limit_units, used=37, held=100))
+        app = FastAPI()
+        app.include_router(admin.router)
+        @app.exception_handler(BusinessError)
+        async def business_error(request, exc):
+            return fail(exc.code, exc.message, exc.status)
+        @asynccontextmanager
+        async def scope():
+            async with self.backend() as db, db.begin():
+                yield db
+        with patch.object(admin, 'session_scope', scope), patch.dict(os.environ, {
+            'BACKEND_BFF_SECRET': 'bff-test', 'SHENZHI_ADMIN_USER_IDS': 'admin'}):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://backend.invalid',
+                headers={'x-shenzhi-bff-secret': 'bff-test', 'x-shenzhi-user-id': 'admin'}) as browser:
+                response = await browser.get('/api/v1/admin/users?search=new%40example.test&page_size=1')
+                self.assertEqual(response.status_code, 200, response.text)
+                data = response.json()['data']
+                self.assertEqual(data['total'], 1)
+                self.assertEqual(data['stats'], {'total_users': 3, 'free_users': 1, 'abnormal_users': 2})
+                tokens = data['items'][0]['usage_windows'][0]
+                self.assertEqual((tokens['limit'], tokens['used'], tokens['held'], tokens['remaining']),
+                                 (200000, 37, 100, 199863))
+                response = await browser.get('/api/v1/admin/users?plan_id=__missing__')
+                self.assertEqual(response.json()['data']['items'][0]['entitlement_status'], 'pending_initialization')
+                response = await browser.get('/api/v1/admin/users?page=2&page_size=2')
+                self.assertEqual(len(response.json()['data']['items']), 1)
+                response = await browser.get('/api/v1/admin/users?plan_id=free')
+                self.assertEqual(response.json()['data']['total'], 1)
+                response = await browser.get('/api/v1/admin/users?search=%25')
+                self.assertEqual(response.json()['data']['total'], 0)
+                browser.headers['x-shenzhi-user-id'] = 'ordinary'
+                self.assertEqual((await browser.get('/api/v1/admin/users')).status_code, 403)
+                browser.headers['x-shenzhi-admin'] = 'true'
+                self.assertEqual((await browser.get('/api/v1/admin/users')).status_code, 403)
+                del browser.headers['x-shenzhi-bff-secret']
+                self.assertEqual((await browser.get('/api/v1/admin/users')).status_code, 401)
+
     async def create_databases(self):
         urls=[os.environ['AGENT_A_LINE_TEST_DATABASE_URL'],os.environ['BACKEND_A_LINE_TEST_DATABASE_URL']]
         for url in urls:

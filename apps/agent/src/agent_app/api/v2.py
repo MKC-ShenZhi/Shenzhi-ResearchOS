@@ -265,6 +265,9 @@ async def start(call_id: str, body: WorkerIdentity, db=Depends(get_session), con
 async def observe(body: ObservationSubmission, db=Depends(get_session), control=Depends(metering_control)):
     usage = await control.observe(db, body)
     await db.commit()
+    if usage.metering_context == 'authorized':
+        from agent_app.control.usage_delivery import settle_observation
+        await settle_observation(db, EntitlementClient(), usage)
     return usage.model_dump(mode='json')
 
 

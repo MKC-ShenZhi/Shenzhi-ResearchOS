@@ -12,6 +12,8 @@ from app.core.request_context import (
 )
 from app.core.database import dispose_engine
 from app.api.agent_v2 import router as agent_v2_router
+from app.api.admin import router as admin_router
+from app.services.agent_entitlements.service import EntitlementError
 from app.services.agent_sessions.repository import agent_session_repository
 
 
@@ -28,6 +30,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title='ShenZhi AI API', version='1.0.0', lifespan=lifespan)
 app.include_router(agent_v2_router)
+app.include_router(admin_router)
 configure_logging()
 logger = logging.getLogger(__name__)
 for router in (
@@ -59,6 +62,11 @@ app.middleware('http')(http_logging_middleware)
 @app.exception_handler(BusinessError)
 async def business_error(_request: Request, error: BusinessError):
     return fail(error.code, error.message, error.status)
+
+
+@app.exception_handler(EntitlementError)
+async def entitlement_error(_request: Request, error: EntitlementError):
+    return fail(20004, error.reason, error.status)
 
 
 @app.exception_handler(RequestValidationError)

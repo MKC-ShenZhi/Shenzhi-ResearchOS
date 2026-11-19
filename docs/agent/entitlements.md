@@ -1,6 +1,6 @@
 # 用户权益与执行权限（v2 候选实现）
 
-本页描述当前代码及运行约束，不批准设计文档中的 Conditional/Deferred 项，不提供生产套餐或收费默认值。v1 Wire 保持原样；v2 不支持时不得删除字段改调 v1，也不得把 authorized 失败请求转成 observation_only。
+本页描述当前代码及运行约束，不批准设计文档中的 Conditional/Deferred 项。V1 演示 Free 规则见下文，不代表最终商业套餐。v1 Wire 保持原样；v2 不支持时不得删除字段改调 v1，也不得把 authorized 失败请求转成 observation_only。
 
 ## 服务边界与实现
 
@@ -75,6 +75,38 @@ Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 
 回滚先禁用新准入并停止新 claim，保留 v2 Control/事实查询/Inbox/Usage Worker，排空与对账，导出审计后才允许数据库 downgrade。不能删除 unknown、未投递 Outbox 或未结算预留来强行回滚；有存量时应保留 v2 接收服务。新迁移 downgrade 只删除自身表，Agent 原始 Task/Run 表保留。真实两库集成测试覆盖新迁移 up/down/up，但不代表生产历史数据可直接销毁。
 
 运维使用 `python -m app.services.agent_entitlements.manage ACTION --file <reviewed.json>`：install-policy、assign、revoke、revise、recover-submission、reprocess-usage、adjust。安装/分配/修订须 operation_id/principal/approval_ref；人工调整须原因、证据引用、有效启动时间和幂等操作 ID。只追加审计/调整，不覆盖 Inbox。死信及冲突须保留证据并处理原 ID，不能改 payload 重投旧 measurement；生产审查须进一步确认数据留存、操作授权与告警接入。
+
+## V1 Free 与只读管理员
+
+Web `DATABASE_URL` 与 Backend `CHAT_DATABASE_URL` 在 V1 部署中连接同一个 `shenzhi` PostgreSQL 库，分别保留各自配置。Better Auth `"user"` 是唯一正式用户来源；Backend 以 `owner_id='user:' || id` 读取权益。Agent 持久库仍独立。
+
+`SHENZHI_FREE_POLICY_REVISION` 指向已安装、approved 且非 test_only 的 Free Policy。注册后的 Better Auth 生命周期调用 Backend `POST /api/v1/identity/entitlements/initialize`，身份由服务端 BFF 凭据和真实 user ID 传递，不接受浏览器选择 owner。Backend 不可用或注册事务尚未可见时不破坏注册；首次正式权益访问及批量补齐修复缺失记录。使用 `INSERT … ON CONFLICT DO NOTHING`，不覆盖特殊套餐、禁用状态或人工分配；匿名身份不分配正式 Free。
+
+用户批准的演示规则：revision `free-demo-v1-20261119`、plan `free`、上海自然日 200,000 Token、每 Task 预留 100,000、每次模型调用上界 16,000，计量 prompt＋completion 的 Provider 实测。Tool/Skill 使用显式零收费规则，不设调用次数限制。批准定义保存在 `apps/backend/app/data/agent_free_demo_policy.json`，由 Policy 生成/安装工具消费，运行时从数据库读取。Grant/Permit/Start 技术 TTL 分别为 3600/60/10 秒，时钟安全偏差 1000ms。
+
+能力快照必须在**最终部署的 Worker 源码、锁文件和运行环境**生成。`python -m agent_app.export_capabilities --output workspace/free-capabilities.json` 复用公开模型目录、普通 Web Runtime（allow_shell=false）、工具/Skill 的真实 identity/digest，不调用 Provider 或工具。导出命令会创建一个空的、无用户数据的导出工作区。模型路由修订 `AGENT_MODEL_ROUTE_REVISION`、工具非敏感配置修订 `AGENT_TOOL_CONFIGURATION_RELEASE` 需要由部署者设置，API/Worker 配置必须一致。代码、资源或配置变动后身份会变化，需新的 Policy Revision；不得覆盖已签权限来绕过版本检查。
+
+在 Backend 目录依次执行（使用正确服务环境的本地 `.env`）：
+
+```powershell
+uv run --env-file .env python -m app.services.agent_entitlements.free_policy --capabilities ../agent/workspace/free-capabilities.json --output workspace/free-demo-policy.json
+uv run --env-file .env python -m app.services.agent_entitlements.manage install-policy --file workspace/free-demo-policy.json
+uv run --env-file .env python -m app.services.agent_entitlements.defaults
+```
+
+生成器默认 `model_risk_profile=null`，**不会把 Free 数值批准当成模型风险批准**。已知没有可信输入 Token 上界验证器时，模型 Permit 继续返回 `TOKEN_BOUND_UNPROVEN`。只有部署负责人提供真实批准的风险配置和审查引用，才可在生成时传 `--risk-profile <APPROVED_PROFILE> --risk-approval-ref <APPROVAL_REF>`。此批准接受调用上界可能被真实消耗超过的风险，不是精确 Token 上界证明。不应为演示随意填写字符串。若已安装 null-risk 的不可变修订，后续风险变更应另建、审批并安装新修订，显式管理分配，不覆盖现存记录。
+
+安装前核验生成 JSON。既有 install-policy 对重复 revision 保持不可变拒绝；批量 defaults 可反复执行，且只补缺失用户。部署后先补齐历史用户，再开放注册/流量；注册补偿日志 `auth.entitlement_initialization_pending` 表示需修复，不表示成功分配。
+
+模型完成观察在 Agent 事务提交事实和 Outbox 后，沿原 `usage-deltas:batch` 同步投递原 measurement_id 及该 Task 尚未确认的前序观察；Backend 核验持久启动事实并提交结算，Agent 校验逐项 durable Ack 后才确认观察。已确认历史不重复全量重放，避免长任务投递成本累积。失败保留原 Outbox/Worker spool，后续新增调用在用户范围的已完成但未确认观察存在时拒绝。该保护在 intent、prepare_start 和 commit_start 三处检查；不撤销已经发出的 HTTP 请求。独立 Usage Worker 继续负责投递、恢复和关闭，不能取消部署。
+
+Backend Permit/Start 继续按 owner→grant 锁序检查 Grant overage，并再次检查其权益窗口 used＋held 是否超限，覆盖其他 Task 的迟到超额结算。新 Submission 保留原有 owner 级窗口原子预留。unknown 保留预留，partial 只入账已知下界并保留未决预留；不当作零。
+
+现有 Web `/api/v1/agent/run` 与 Session run 在 Backend `AGENT_V2_ADMISSION=authorized` 且正式登录时选择 V2 Gateway，继续输出原 SSE；必须有 Idempotency-Key。浏览器不能选择准入模式。停止/插话按可信 run 查询识别 V2，只有只读 404 才查询历史 V1 run，不能将拒绝的提交退回 V1。Session 回放沿用持久 `_agent_protocol`。关闭 authorized 时原 V1 路径保持不变；匿名保持既有身份和准入约束，不自动分配 Free。
+
+管理员配置仅为 Backend `SHENZHI_ADMIN_USER_IDS`（逗号分隔 Better Auth user ID，无 `user:` 前缀）。API 使用 `require_user`，先验证 BFF、再验证白名单；空白名单拒绝所有人。`GET /api/v1/admin/access` 供菜单发现，`GET /api/v1/admin/users?page=1&page_size=20&search=…&plan_id=…` 返回全站统计和分页明细；page_size 上限 100，plan_id=`__missing__` 查缺失权益。搜索仅用户名/邮箱，按大小写不敏感字面子串匹配。普通登录用户返回 403，匿名 401，不接受 admin 标记。
+
+页面 `/admin/users` 在现有 AppShell 中显示统计、搜索、套餐筛选、分页、刷新和展开权益详情。数据经现有同源 BFF，无新用户表、同步系统或管理写接口。自然/固定窗口读取现有计数器，滚动窗口按相同 trusted-start 账本口径只读计算；used、held、remaining 分列，多个规则分别显示，未初始化/不可用 Policy 不伪装成零额度。数据标注 Backend 查询时间与近实时状态，不保证尚未上传的 Provider 消耗已结算。`model_calls_enabled` 只表示用户/Policy 的模型风险门禁配置齐备，不表示剩余额度充足、上游健康或所有单次调用均会获准。
 
 ## 测试入口
 

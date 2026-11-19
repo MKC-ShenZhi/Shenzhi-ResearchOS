@@ -6,6 +6,7 @@ and NOT a real Provider. No production database or runtime keys are used.
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 import sys
 from pathlib import Path
@@ -173,6 +174,17 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         await self.bind()
         await self.claim()
 
+    async def flush_usage(self):
+        suite = self
+        from agent_contracts.v2 import UsageBatch, UsageBatchAck
+        class Bridge:
+            async def request(self, method, path, payload):
+                batch = UsageBatch.model_validate(payload)
+                results = [await suite.ingest(item) for item in batch.items]
+                return UsageBatchAck(schema_version=1, batch_id=batch.batch_id, results=results).model_dump(mode='json')
+        await deliver_once(self.agent, Bridge(), producer_id='agent-test', batch_size=200,
+                           max_attempts=5, retry_base_seconds=1, retry_max_seconds=10)
+
     async def test_pending_cannot_claim_and_v1_worker_cannot_see_v2(self):
         await self.submit()
         async with self.agent() as db:
@@ -271,6 +283,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         completed,_=await self.finish_call()
         await self.ingest(completed)
         self.worker=new_worker
+        await self.flush_usage()
         await self.start_call('new-call')
         self.assertNotEqual(self.worker.execution_id,old_worker.execution_id)
 
@@ -314,6 +327,78 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(root.overage)
             request=self.permit_request_value.model_copy(update={'call_id':'later'})
             self.assertEqual((await self.service.permit(db,request))['decision'],'denied')
+
+    async def test_sync_settlement_requires_backend_ack_and_keeps_original_outbox(self):
+        from agent_app.control.usage_delivery import settle_observation
+        from agent_contracts.v2 import UsageBatch, UsageBatchAck
+        await self.prepare()
+        await self.start_call()
+        completed, _ = await self.finish_call()
+        class Unavailable:
+            async def request(self, *args):
+                raise TimeoutError('offline test')
+        async with self.agent() as db:
+            with self.assertRaises(TimeoutError):
+                await settle_observation(db, Unavailable(), completed)
+        with self.assertRaises(GateDenied):
+            await self.start_call('before-ack')
+        async with self.agent() as db:
+            self.assertEqual((await db.get(UsageOutboxRow, completed.measurement_id)).state, 'pending')
+        suite = self
+        class Bridge:
+            async def request(self, method, path, payload):
+                batch = UsageBatch.model_validate(payload)
+                return UsageBatchAck(schema_version=1, batch_id=batch.batch_id,
+                    results=[await suite.ingest(item) for item in batch.items]).model_dump(mode='json')
+        for _ in range(2):
+            async with self.agent() as db:
+                await settle_observation(db, Bridge(), completed)
+        async with self.backend() as db:
+            counter = await db.scalar(select(WindowCounterRow))
+            self.assertEqual((counter.used, counter.held), (10, 30))
+        await self.start_call('after-ack')
+
+    async def test_partial_retains_unmeasured_reservation(self):
+        await self.prepare()
+        await self.start_call()
+        usage, _ = await self.finish_call(status='partial')
+        await self.ingest(usage)
+        async with self.backend() as db:
+            counter = await db.scalar(select(WindowCounterRow))
+            self.assertEqual((counter.used, counter.held), (7, 43))
+
+    async def test_other_task_permit_and_preissued_start_observe_owner_window_overage(self):
+        await self.prepare()
+        await self.start_call()
+        first_call = self.call
+        first_request = self.permit_request_value
+        # Two distinct Tasks may reserve the same owner window before settlement.
+        await self.submit(key='second-task')
+        await self.bind()
+        from agent_contracts.v2 import RequestedAllocation, PermitStart
+        second_request = first_request.model_copy(update={
+            'call_id': 'second-call', 'control_attestation_id': 'second-attestation',
+            'grant_id': self.grant.grant_id, 'submission_id': self.grant.submission_id,
+            'reservation_id': self.grant.reservation_id, 'task_id': self.task_id,
+            'binding_receipt_id': self.receipt.receipt_id,
+            'requested_allocations': [RequestedAllocation(schema_version=1, allocation_id=self.grant.allocations[0].allocation_id,
+                metric='tokens', unit='token', upper_bound_units=20)]})
+        async with self.backend() as db, db.begin():
+            response = await self.service.permit(db, second_request)
+            self.assertEqual(response['decision'], 'authorized')
+        usage, _ = await self.finish_call(tokens=120, call=first_call)
+        await self.ingest(usage)
+        async with self.backend() as db, db.begin():
+            root = await db.get(GrantRootRow, self.grant.grant_id)
+            self.assertFalse(root.overage)  # Only the other Task crossed its bound.
+            denied = await self.service.permit(db, second_request.model_copy(update={'call_id': 'third-call'}))
+            self.assertEqual(denied['reason_code'], 'QUOTA_EXHAUSTED')
+        with self.assertRaises(EntitlementError) as error:
+            async with self.backend() as db, db.begin():
+                await self.service.start(db, response['permit']['permit_id'], PermitStart(schema_version=1,
+                    start_operation_id='second-start', execution_id=second_request.execution_id,
+                    control_attestation_id='second-attestation'))
+        self.assertEqual(error.exception.reason, 'QUOTA_EXHAUSTED')
 
     async def test_close_missing_usage_never_releases_reservation(self):
         await self.prepare()
@@ -384,6 +469,12 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                 await self.service.revise(db,self.grant.grant_id,expected_revision=1,expected_binding_revision=1,expires_at=revision.expires_at)
 
     async def test_http_submit_permit_provider_delivery_close_and_trusted_query(self):
+        await self.http_flow()
+
+    async def test_http_overage_returns_current_result_and_blocks_next_provider_and_task(self):
+        await self.http_flow(overage=True)
+
+    async def http_flow(self, overage=False):
         """Two ASGI services + separate SQL DBs + actual MockTransport sends."""
         from contextlib import asynccontextmanager
         import os
@@ -426,7 +517,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         def provider_send(request):
             sends.append(request)
             return httpx.Response(200,text='data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\n'
-                'data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}\n\ndata: [DONE]\n\n')
+                + 'data: ' + json.dumps({'choices': [], 'usage': {'prompt_tokens': 120 if overage else 7, 'completion_tokens': 3}}) + '\n\ndata: [DONE]\n\n')
         with tempfile.TemporaryDirectory() as spool,patch.dict(os.environ,{
             'AGENT_GATEWAY_TOKEN':'gateway-test','AGENT_FACT_READER_TOKEN':'reader-test',
             'AGENT_WORKER_TOKEN':'worker-test','AGENT_CONTROL_TOKEN':'control-test','AGENT_SERVICE_TOKEN':'legacy-test',
@@ -479,6 +570,22 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                         current_meter.reset(token)
                     self.assertEqual(len(sends),1)
                     self.assertFalse(list(Path(spool).glob('*.json')))
+                    if overage:
+                        from agent_app.errors import BusinessError
+                        # No asynchronous delivery worker runs between calls.
+                        # Completion's synchronous fast path must already block.
+                        token=current_meter.set(meter)
+                        try:
+                            with self.assertRaises(BusinessError):
+                                _=[event async for event in provider.stream(ModelRequest(resolved.spec.id,[]))]
+                        finally:
+                            current_meter.reset(token)
+                        self.assertEqual(len(sends),1)
+                        browser.headers['Idempotency-Key']='cannot-bypass-by-new-task'
+                        denied=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'another','model':resolved.spec.id})
+                        self.assertEqual(denied.status_code,403,denied.text)
+                        self.assertEqual(denied.json()['error']['reason_code'],'QUOTA_EXHAUSTED')
+                        return
                     await deliver_once(self.agent,Bridge(),producer_id='agent-test',batch_size=20,max_attempts=5,
                                        retry_base_seconds=1,retry_max_seconds=10)
                     projected=await browser.get(f"/api/v2/agent/tasks/{task['task_id']}/usage")
@@ -621,6 +728,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         old_run=self.run.run_id
         await self.claim('retry-worker')
         self.assertNotEqual(self.run.run_id,old_run)
+        await self.flush_usage()
         await self.start_call('retry-call')
         usage,_=await self.finish_call(key='retry-completion')
         await self.ingest(usage)

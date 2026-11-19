@@ -222,6 +222,14 @@ export const auth = betterAuth({
       },
       create: {
         after: async (user, context) => {
+          try {
+            const { initializeUserEntitlement } = await import("./entitlements");
+            await initializeUserEntitlement(user.id);
+          } catch {
+            // Do not break Better Auth registration on Backend unavailability.
+            // First authorized use and the idempotent backfill repair this state.
+            console.error("auth.entitlement_initialization_pending");
+          }
           // 仅在 OAuth 回调首次创建用户时补齐 credential 凭证。
           // 邮箱/密码注册路径由 sign-up/email 自行写入 credential,
           // 这里避免重复创建。

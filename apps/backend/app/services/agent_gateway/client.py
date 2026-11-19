@@ -33,6 +33,9 @@ class AgentGateway:
         try:
             async with httpx.AsyncClient(base_url=self.base_url, timeout=20.0,
                                          transport=self.transport,
+                                         # Internal service traffic must not inherit the
+                                         # editor's Internet proxy (or leak its Bearer).
+                                         trust_env=False,
                                          headers={'Authorization': f'Bearer {self.token}'}) as client:
                 response = await client.request(method, path, params=params, json=payload)
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
