@@ -9,6 +9,8 @@ import { LATEX_LINK_PLACEHOLDER, replaceLatexLinks, splitLatexLinks } from "./la
 type LatexRendererProps = {
   content: string;
   className?: string;
+  /** Render phrasing content without links, for use inside headings or links. */
+  inline?: boolean;
   "aria-label"?: string;
 };
 
@@ -31,7 +33,7 @@ function createLink(text: string, href: string) {
 }
 
 /** Restore URLs using their original source text. */
-function restoreLinks(container: HTMLElement, links: ReturnType<typeof replaceLatexLinks>["links"]) {
+function restoreLinks(container: DocumentFragment, links: ReturnType<typeof replaceLatexLinks>["links"]) {
   if (!links.length) return;
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
   const textNodes: Text[] = [];
@@ -50,51 +52,78 @@ function restoreLinks(container: HTMLElement, links: ReturnType<typeof replaceLa
   }
 }
 
-export function LatexRenderer({ content, className, "aria-label": ariaLabel }: LatexRendererProps) {
-  const renderedRef = useRef<HTMLDivElement>(null);
-  const fallbackRef = useRef<HTMLParagraphElement>(null);
+function toInlineContent(fragment: DocumentFragment) {
+  const body = fragment.firstElementChild;
+  if (!body || fragment.childElementCount !== 1) return null;
+
+  // LaTeX.js wraps the text in a body div and paragraphs. Wrapper elements
+  // would interfere with heading line clamps and produce invalid inline markup.
+  const paragraphs = Array.from(body.children);
+  if (paragraphs.some((paragraph) => paragraph.tagName !== "P")) return null;
+
+  const inline = document.createDocumentFragment();
+  paragraphs.forEach((paragraph, index) => {
+    if (index > 0) inline.append(" ");
+    inline.append(...paragraph.childNodes);
+  });
+  for (const link of inline.querySelectorAll("a")) link.replaceWith(...link.childNodes);
+  return inline;
+}
+
+export function LatexRenderer({ content, className, inline = false, "aria-label": ariaLabel }: LatexRendererProps) {
+  const renderedRef = useRef<HTMLElement>(null);
+  const fallbackRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const container = renderedRef.current;
     const fallback = fallbackRef.current;
     if (!container || !fallback) return;
 
+    let rendered: DocumentFragment | null = null;
     try {
-      const { source, links } = replaceLatexLinks(content);
-      const generator = new HtmlGenerator({ hyphenate: false, CustomMacros: LatexTextMacros });
-      parse(source, { generator });
-      container.replaceChildren(generator.domFragment());
-      restoreLinks(container, links);
-      container.hidden = false;
-      fallback.hidden = true;
+      if (!inline || /[\\$]/.test(content)) {
+        const { source, links } = replaceLatexLinks(content);
+        const generator = new HtmlGenerator({ hyphenate: false, CustomMacros: LatexTextMacros });
+        parse(source, { generator });
+        const fragment = generator.domFragment();
+        restoreLinks(fragment, links);
+        rendered = inline ? toInlineContent(fragment) : fragment;
+      }
     } catch (error) {
       // LaTeX.js uses its own SyntaxError class for malformed source.
       if (!(error instanceof Error && error.name === "SyntaxError")) {
         console.error("Failed to render content with LaTeX.js.", error);
       }
-      container.replaceChildren();
-      container.hidden = true;
-      fallback.hidden = false;
     }
+    if (rendered) container.replaceChildren(rendered);
+    else container.replaceChildren();
+    container.hidden = !rendered;
+    fallback.hidden = Boolean(rendered);
 
     return () => container.replaceChildren();
-  }, [content]);
+  }, [content, inline]);
+
+  const Rendered = inline ? "span" : "div";
+  const Fallback = inline ? "span" : "p";
 
   return (
     <>
-      <div
-        ref={renderedRef}
+      <Rendered
+        ref={(element) => { renderedRef.current = element; }}
         aria-label={ariaLabel}
-        className={cn("latex-renderer max-w-full overflow-x-auto whitespace-pre-wrap", className)}
+        className={cn("latex-renderer", !inline && "max-w-full overflow-x-auto whitespace-pre-wrap", className)}
         hidden
       />
-      <p ref={fallbackRef} className={cn("whitespace-pre-wrap", className)}>
+      <Fallback
+        ref={(element) => { fallbackRef.current = element; }}
+        className={cn(!inline && "whitespace-pre-wrap", className)}
+      >
         {splitLatexLinks(content).map((segment, index) => (
-          segment.type === "link"
+          segment.type === "link" && !inline
             ? <a key={index} href={segment.href} target="_blank" rel="noreferrer" className={LINK_CLASS_NAME}>{segment.text}</a>
             : segment.text
         ))}
-      </p>
+      </Fallback>
     </>
   );
 }

@@ -38,7 +38,7 @@ export function PaperAbstractView({
           </div>
         )}
         <h1 className="text-2xl font-semibold leading-snug tracking-tight text-ink text-balance lg:text-[1.875rem] lg:leading-[1.3]">
-          {paper.title}
+          <LatexRenderer content={paper.title} inline />
         </h1>
         <PaperAuthors authors={paper.authors} />
         {(stats.length > 0 || doiUrl || (onOpenPaper && paper.pdfUrl)) && (

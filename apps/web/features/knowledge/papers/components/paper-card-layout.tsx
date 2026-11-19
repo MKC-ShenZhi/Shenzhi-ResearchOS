@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { ExpandableAbstract } from "@/components/common/expandable-abstract";
 import { PaperThumbnail } from "@/components/common/paper-thumbnail";
 import { PAPER_CARD_INTERACTION_CLASS, usePaperCardNavigation } from "@/components/common/use-paper-card-navigation";
+import { LatexRenderer } from "@/components/renderers/latex-renderer";
 import { Badge } from "@/components/ui/badge";
 import { PaperReadBadge } from "@/features/knowledge/papers/components/paper-read-badge";
 import { usePaperReadStatus } from "@/features/knowledge/papers/use-paper-read-status";
@@ -42,6 +43,7 @@ export function PaperCardLayout({
   const userId = detailHref ? session?.user.id ?? "" : "";
   const status = usePaperReadStatus(paper.id, Boolean(detailHref));
   const cardNavigation = usePaperCardNavigation(detailHref, paper.title, onNavigate);
+  const title = <LatexRenderer content={paper.title} inline />;
 
   return (
     <motion.article
@@ -69,9 +71,9 @@ export function PaperCardLayout({
           <h3 title={paper.title} className="mt-2 line-clamp-2 text-[17px] font-bold leading-snug text-ink">
             {detailHref ? (
               <Link href={detailHref} onClick={onNavigate} className="transition-colors hover:text-primary">
-                {paper.title}
+                {title}
               </Link>
-            ) : paper.title}
+            ) : title}
           </h3>
           {/* 摘要 */}
           <ExpandableAbstract
