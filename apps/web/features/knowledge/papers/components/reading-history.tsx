@@ -1,26 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiJson, ApiError } from "@/clients/backend/http";
+import { apiJson, isSessionMismatchError } from "@/clients/backend/http";
+import { useAuth } from "@/components/auth/auth-provider";
 import type { KnowledgePaperHit, ReadingHistoryResponse } from "@/clients/knowledge";
 import { KnowledgeResultCard } from "@/features/knowledge/search/components/result-card";
 
 const MAX_PAGE = 5;
 
 export function ReadingHistory() {
+  const { session, isPending: isAuthPending } = useAuth();
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ReadingHistoryResponse["items"]>([]);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [pending, setPending] = useState(true);
   const [error, setError] = useState<unknown>(null);
-  const [unauthenticated, setUnauthenticated] = useState(false);
   const loadingMore = useRef(false);
   const requestId = useRef(0);
   const sentinel = useRef<HTMLDivElement>(null);
 
   const loadPage = useCallback(async (nextPage: number, replace: boolean) => {
-    if ((!replace && loadingMore.current) || nextPage > MAX_PAGE) return;
+    if (!session || isAuthPending || (!replace && loadingMore.current) || nextPage > MAX_PAGE) return;
     const currentRequest = replace ? ++requestId.current : requestId.current;
     loadingMore.current = true;
     setPending(true);
@@ -33,18 +34,16 @@ export function ReadingHistory() {
       setItems((current) => replace ? response.items : [...current, ...response.items]);
       setPage(response.page);
       setTotal(response.total);
-      setUnauthenticated(false);
     } catch (reason) {
       if (currentRequest !== requestId.current) return;
-      if (reason instanceof ApiError && reason.status === 401) setUnauthenticated(true);
-      else setError(reason);
+      if (!isSessionMismatchError(reason)) setError(reason);
     } finally {
       if (currentRequest === requestId.current) {
         loadingMore.current = false;
         setPending(false);
       }
     }
-  }, [query]);
+  }, [isAuthPending, query, session]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadPage(1, true), 250);
@@ -91,7 +90,7 @@ export function ReadingHistory() {
         className="mt-5 h-10 w-full max-w-[460px] rounded-xl border border-line bg-card px-4 text-sm text-ink outline-none placeholder:text-faint focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
       />
 
-      {unauthenticated ? (
+      {!isAuthPending && !session ? (
         <div className="mt-8 rounded-2xl bg-card p-12 text-center text-sm text-muted shadow-card">该功能需要登录后使用，请先登录</div>
       ) : error ? (
         <div className="mt-8 rounded-2xl bg-card p-12 text-center text-sm text-muted shadow-card">

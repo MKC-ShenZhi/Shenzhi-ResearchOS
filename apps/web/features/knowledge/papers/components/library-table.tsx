@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useInteractionIdentity } from "@/features/knowledge/interactions/use-interaction-identity";
 import { useRefreshPaperInteraction } from "@/features/knowledge/interactions/use-refresh-paper-interaction";
 import { MoreHorizontal, Search, Upload } from "lucide-react";
-import { apiJson, ApiError, expectedUserHeaders } from "@/clients/backend/http";
+import { apiJson, ApiError, expectedUserHeaders, isSessionMismatchError } from "@/clients/backend/http";
 import { deletePrivatePaper, listPrivatePapers, privatePaperFileHref, uploadPrivatePaper, type PrivatePaper } from "@/clients/backend/private-papers";
 import type { CollectionPaperListResponse } from "@/clients/knowledge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,6 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
-  const [unauthenticated, setUnauthenticated] = useState(false);
   const [menu, setMenu] = useState<string | null>(null);
   const [privateMenu, setPrivateMenu] = useState<number | null>(null);
   const [privatePapers, setPrivatePapers] = useState<PrivatePaper[]>([]);
@@ -41,8 +40,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
   });
   const data = papers.data;
   const isLoading = papers.isFetching;
-  const queryError = papers.error instanceof ApiError && papers.error.status === 401
-    ? "该功能需要登录后使用，请先登录" : papers.isError ? "文件夹内容加载失败" : "";
+  const queryError = papers.isError && !isSessionMismatchError(papers.error) ? "文件夹内容加载失败" : "";
   const visibleError = error || queryError;
 
   useEffect(() => {
@@ -51,10 +49,9 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
     void listPrivatePapers(folderId).then((result) => {
       if (!cancelled) setPrivatePapers(result.items);
     }).catch((reason) => {
-      if (!cancelled) {
+      if (!cancelled && !isSessionMismatchError(reason)) {
         setPrivateTabOpen(true);
-        setUploadError(reason instanceof ApiError && reason.status === 401
-          ? "请先登录后查看私有论文" : "私有论文加载失败，请刷新重试");
+        setUploadError("私有论文加载失败，请刷新重试");
       }
     });
     return () => { cancelled = true; };
@@ -74,6 +71,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
       setPrivateTabOpen(true);
       await loadFolders();
     } catch (reason) {
+      if (isSessionMismatchError(reason)) return;
       setUploadError(reason instanceof ApiError ? reason.message : "上传失败，请稍后重试");
     } finally {
       setUploading(false);
@@ -88,6 +86,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
       setPrivateMenu(null);
       await loadFolders();
     } catch (reason) {
+      if (isSessionMismatchError(reason)) return;
       setPrivateTabOpen(true);
       setUploadError(reason instanceof ApiError ? reason.message : "删除失败，请重试");
     }
@@ -108,8 +107,8 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
       void refreshCollectorCounts();
       setMenu(null);
     } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 401) setUnauthenticated(true);
-      else setError(reason instanceof ApiError && reason.status === 403 ? "无权访问该文件夹" : "操作失败，请重试");
+      if (isSessionMismatchError(reason)) return;
+      setError(reason instanceof ApiError && reason.status === 403 ? "无权访问该文件夹" : "操作失败，请重试");
     }
   }
 
@@ -126,8 +125,8 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
       void refreshCollectorCounts();
       setMenu(null);
     } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 401) setUnauthenticated(true);
-      else setError(reason instanceof ApiError ? reason.message : "移动失败，请重试");
+      if (isSessionMismatchError(reason)) return;
+      setError(reason instanceof ApiError ? reason.message : "移动失败，请重试");
     }
   }
 
@@ -145,7 +144,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
       <section className="mt-5 rounded-2xl bg-card p-3 sm:p-5 shadow-card" aria-label="深知论文">
       <h2 className="text-base font-semibold text-ink">深知论文</h2>
       {visibleError && <div className="mt-4 rounded-xl bg-danger-soft p-4 text-sm text-danger">{visibleError}<button type="button" onClick={() => void loadPage(page)} className="ml-3 underline">重试</button></div>}
-      {unauthenticated || (!isSessionPending && !identityKey) ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-muted">该功能需要登录后使用，请先登录</div> : !folderId ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-faint">暂无文件夹</div> : isLoading ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-muted">加载中...</div> : visibleError ? null : data && data.items.length === 0 ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-faint">当前文件夹暂无深知论文</div> : !visibleError && <>
+      {!isSessionPending && !identityKey ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-muted">该功能需要登录后使用，请先登录</div> : !folderId ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-faint">暂无文件夹</div> : isLoading ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-muted">加载中...</div> : visibleError ? null : data && data.items.length === 0 ? <div className="mt-4 rounded-xl bg-panel p-6 text-center text-sm text-faint">当前文件夹暂无深知论文</div> : !visibleError && <>
         <div className="mt-4 hidden lg:grid grid-cols-[minmax(0,1fr)_220px_100px_36px] items-center gap-4 border-b border-line px-3 py-2 text-xs text-faint"><span>论文</span><span>作者</span><span>添加时间</span><span /></div>
         <div className="divide-y divide-line">
           {items.map((item) => (
@@ -161,7 +160,7 @@ export function LibraryTable({ folderId }: { folderId: number | null }) {
         {pageCount > 1 && <div className="mt-3 flex justify-center gap-1">{Array.from({ length: Math.min(pageCount, 5) }, (_, index) => index + 1).map((number) => <button key={number} type="button" onClick={() => void loadPage(number)} className={`size-8 rounded-lg text-xs ${number === page ? "bg-primary text-white" : "text-muted hover:bg-chip"}`}>{number}</button>)}</div>}
       </>}
       </section>
-      {!unauthenticated && folderId !== null && folderId > 0 && (
+      {!isSessionPending && identityKey && folderId !== null && folderId > 0 && (
         <section className="mt-5 rounded-2xl bg-card p-3 sm:p-5 shadow-card" aria-label="私有论文">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <h2><button

@@ -2,7 +2,7 @@
 
 基础层（不依赖具体模块）：
 
-- `http.ts`：同源 `/api/v1`、请求头、匿名身份首次握手、统一错误。
+- `http.ts`：同源 `/api/v1`、请求头、匿名身份首次握手、统一错误和 BFF 身份同步。BFF 响应中的 `X-ShenZhi-Identity` 标记本次使用的身份类型（`authenticated` 或 `anonymous`）。当该类型与 AuthProvider 的登录状态不一致时，AuthProvider 重查 Better Auth Session。确认会话失效后统一弹出登录框，已匿名的用户后台请求收到 401 时保持现有状态。
 - `sse.ts`：UTF-8、CRLF、多行数据与游标通信。
 - `types.ts`、`model-types.ts`：通用响应与模型类型。
 - `forward.ts` / `identity.ts`：仅 Next.js BFF 导入；Better Auth 身份注入、匿名/鉴权异常分界、去除 Cookie / 伪造身份头、取消上游连接。

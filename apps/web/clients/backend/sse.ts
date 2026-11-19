@@ -1,4 +1,4 @@
-import { ApiError, requestHeaders } from "./http";
+import { ApiError, fetchBackend, requestHeaders } from "./http";
 
 export interface SseEvent { id?: string; event: string; data: string }
 
@@ -18,7 +18,7 @@ export async function readSseStream(
   headers.set("Accept", "text/event-stream");
   if (options.body !== undefined) headers.set("Content-Type", "application/json");
   if (options.lastEventId) headers.set("Last-Event-ID", options.lastEventId);
-  const res = await fetch(url, {
+  const { response: res, sessionMismatch } = await fetchBackend(url, {
     method: options.body === undefined ? "GET" : "POST",
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -27,7 +27,7 @@ export async function readSseStream(
   });
   const requestId = res.headers.get("X-Request-ID");
   options.onRequestId?.(requestId);
-  if (!res.ok || !res.body) throw new ApiError(20004, `SSE 连接失败 (${res.status})`, res.status, { requestId });
+  if (!res.ok || !res.body) throw new ApiError(20004, `SSE 连接失败 (${res.status})`, res.status, { requestId, sessionMismatch });
   if (!res.headers.get("content-type")?.includes("text/event-stream")) {
     throw new ApiError(20004, "生成服务未返回 SSE 数据", res.status, { requestId });
   }

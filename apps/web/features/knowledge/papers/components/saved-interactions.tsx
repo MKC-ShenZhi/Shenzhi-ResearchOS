@@ -6,8 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Search, Shapes } from "lucide-react";
 import { fetchMyCollectedPapers, fetchMyLikes, fetchMyTopicFollows } from "@/clients/backend/interactions";
 import type { LikedPaperItem } from "@/clients/backend/interactions";
-import { ApiError } from "@/clients/backend/http";
-import { useAuth } from "@/components/auth/auth-provider";
+import { isSessionMismatchError } from "@/clients/backend/http";
 import { getKnowledgeClient } from "@/clients/knowledge";
 import type { CollectionPaperItem, KnowledgeTopic } from "@/clients/knowledge";
 import { usePaperLike } from "@/features/knowledge/interactions/use-paper-like";
@@ -93,7 +92,7 @@ export function SavedInteractions({ userId }: { userId: string | null }) {
         </div>
 
         {!userId ? <Status>登录后可查看自己的点赞、收藏和关注记录。</Status>
-          : active.isPending || (tab === "topics" && follows.data?.items.length && topics.isPending) ? <Status>正在加载…</Status>
+          : active.isPending || isSessionMismatchError(active.error) || (tab === "topics" && follows.data?.items.length && topics.isPending) ? <Status>正在加载…</Status>
           : active.isError || (tab === "topics" && follows.data?.items.length && topics.isError) ? <Status>加载失败，请稍后重试。<button type="button" onClick={() => void (tab === "topics" && topics.isError ? topics.refetch() : active.refetch())} className="ml-2 font-medium text-primary underline underline-offset-2">重试</button></Status>
           : tab === "topics" ? <div className="mt-6 space-y-2">{visibleTopics.length ? visibleTopics.map((item) => <TopicRow key={item.topic_id} topicId={item.topic_id} topic={topicById.get(item.topic_id)} userId={userId} />) : <Status>{term ? "当前页没有匹配的主题" : "还没有关注的主题"}</Status>}</div>
           : <div className="mt-6 space-y-2">{visiblePapers.length ? visiblePapers.map((paper) => <PaperRow key={paper.paper_id} paper={paper} liked={tab === "likes"} userId={userId} onRemoved={handlePaperRemoved} />) : <Status>{term ? "当前页没有匹配的论文" : tab === "likes" ? "还没有点赞的论文" : "还没有收藏的论文"}</Status>}</div>}
@@ -111,7 +110,6 @@ function PaperRow({ paper, liked, userId, onRemoved }: {
   onRemoved: () => void;
 }) {
   const queryClient = useQueryClient();
-  const { openLogin } = useAuth();
   const { toggle, isSaving: isLikeSaving } = usePaperLike(paper.paper_id);
   const updatePaperFolders = useCollections((state) => state.updatePaperFolders);
   const refreshInteraction = useRefreshPaperInteraction(paper.paper_id);
@@ -135,8 +133,7 @@ function PaperRow({ paper, liked, userId, onRemoved }: {
         await queryClient.invalidateQueries({ queryKey: ["my-collected-papers", userId] });
       }
     } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 401) openLogin({ notice: "登录状态已失效，请重新登录" });
-      setError("取消失败，请重试");
+      if (!isSessionMismatchError(reason)) setError("取消失败，请重试");
     } finally {
       setCollectionSaving(false);
     }
@@ -155,7 +152,6 @@ function PaperRow({ paper, liked, userId, onRemoved }: {
 
 function TopicRow({ topicId, topic, userId }: { topicId: string; topic: KnowledgeTopic | undefined; userId: string | null }) {
   const queryClient = useQueryClient();
-  const { openLogin } = useAuth();
   const { toggle, isSaving } = useTopicFollow(topicId);
   const [error, setError] = useState("");
 
@@ -166,8 +162,7 @@ function TopicRow({ topicId, topic, userId }: { topicId: string; topic: Knowledg
       await toggle(true);
       await queryClient.invalidateQueries({ queryKey: ["my-topic-follows", userId] });
     } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 401) openLogin({ notice: "登录状态已失效，请重新登录" });
-      setError("取消失败，请重试");
+      if (!isSessionMismatchError(reason)) setError("取消失败，请重试");
     }
   }
 

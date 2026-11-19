@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bookmark, Check, LoaderCircle, MoreHorizontal, Plus, X } from "lucide-react";
-import { ApiError } from "@/clients/backend/http";
+import { ApiError, isSessionMismatchError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { usePaperInteraction } from "@/features/knowledge/interactions/use-paper-interaction";
@@ -56,36 +56,24 @@ function CollectionPickerContent({
     onOpenChange?.(nextOpen);
   }, [onOpenChange, setOpen]);
 
-  const promptLogin = useCallback(() => {
-    changeOpen(false);
-    setMessage("");
-    openLogin({
-      notice: "登录后即可收藏论文",
-      // 登录成功只把论文上下文带回选择器，收藏仍需用户确认。
-      onSuccess: () => changeOpen(true),
-    });
-  }, [openLogin, changeOpen]);
-
   useEffect(() => {
     if (!open || isAuthPending || !session || collections.identityKey !== session.user.id) return;
     let cancelled = false;
     void Promise.all([loadFolders(), refetchInteraction()])
       .then(([, result]) => {
         if (cancelled) return;
-        if (result.isError || !result.data?.folderIds) throw new Error("收藏信息加载失败");
+        if (result.isError) throw result.error;
+        if (!result.data?.folderIds) throw new Error("收藏信息加载失败");
         setSelected(result.data.folderIds);
         setReady(true);
       })
       .catch((error) => {
         if (cancelled) return;
-        if (error instanceof ApiError && error.status === 401) {
-          promptLogin();
-          return;
-        }
-        setMessage("收藏信息加载失败");
+        if (isSessionMismatchError(error)) changeOpen(false);
+        else setMessage("收藏信息加载失败");
       });
     return () => { cancelled = true; };
-  }, [collections.identityKey, isAuthPending, loadFolders, open, promptLogin, refetchInteraction, session]);
+  }, [changeOpen, collections.identityKey, isAuthPending, loadFolders, open, refetchInteraction, session]);
 
   useEffect(() => {
     if (!open) return;
@@ -107,7 +95,7 @@ function CollectionPickerContent({
       setName("");
       setMessage("");
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) promptLogin();
+      if (isSessionMismatchError(error)) changeOpen(false);
       else setMessage(error instanceof ApiError && error.status === 409 ? "名称已存在" : "创建文件夹失败");
     }
   }
@@ -122,7 +110,7 @@ function CollectionPickerContent({
       // 人数以服务端重新统计的结果为准。
       void refreshInteraction();
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) promptLogin();
+      if (isSessionMismatchError(error)) changeOpen(false);
       else setMessage("操作失败，请重试");
     } finally {
       setSaving(false);

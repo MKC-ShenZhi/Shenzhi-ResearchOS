@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, BellRing } from "lucide-react";
-import { ApiError } from "@/clients/backend/http";
+import { isSessionMismatchError } from "@/clients/backend/http";
 import type { ConferenceDeadlineDto } from "@/clients/backend/conferences";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -37,11 +37,7 @@ export function ConferenceFollowButton({
     try {
       await toggle.mutateAsync({ conference, following, userId });
     } catch (caught) {
-      if (caught instanceof ApiError && caught.status === 401) {
-        openLogin({ notice: "登录状态已失效，请重新登录" });
-        return;
-      }
-      setError("操作失败，请重试");
+      if (!isSessionMismatchError(caught)) setError("操作失败，请重试");
     }
   }
 

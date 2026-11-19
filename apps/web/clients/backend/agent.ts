@@ -1,5 +1,5 @@
 import type { ModelOption } from "./model-types";
-import { apiJson, apiPath } from "./http";
+import { apiJson, apiPath, fetchBackend } from "./http";
 import { readSseStream, type SseEvent } from "./sse";
 
 /**
@@ -178,7 +178,7 @@ export function importLegacyAgentSession(body: {
 export async function exportAgentSession(
   body: { title: string; messages: Array<Record<string, unknown>>; format: "html" | "jsonl" },
 ): Promise<{ blob: Blob; filename: string }> {
-  const res = await fetch(apiPath("/agent/session/export"), {
+  const { response: res } = await fetchBackend(apiPath("/agent/session/export"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
