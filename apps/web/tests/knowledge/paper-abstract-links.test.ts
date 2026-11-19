@@ -51,3 +51,19 @@ test("LaTeX source replaces URLs with placeholders that map back to the original
   const restored = source.replace(new RegExp(LATEX_LINK_PLACEHOLDER, "g"), (_, index) => found[Number(index)].text);
   assert.equal(restored, "See https://github.com/a_b/diff%20x~y and https://x.org/q.");
 });
+
+test("LaTeX URL commands are replaced as a whole so inline math can still render", () => {
+  const input = String.raw`The parameter is $\beta$. Code: \url{https://example.org/a_b%20c~d!}.`;
+  const url = "https://example.org/a_b%20c~d!";
+  const link = { type: "link", text: url, href: url };
+
+  assert.deepEqual(replaceLatexLinks(input), {
+    source: String.raw`The parameter is $\beta$. Code: SZLINK0TOKEN.`,
+    links: [link],
+  });
+  assert.deepEqual(splitLatexLinks(input), [
+    { type: "text", text: String.raw`The parameter is $\beta$. Code: ` },
+    link,
+    { type: "text", text: "." },
+  ]);
+});
