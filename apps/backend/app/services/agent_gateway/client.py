@@ -58,6 +58,8 @@ class AgentGateway:
         return AgentConfigWire.model_validate(result).model_dump(mode='json')
 
     async def submit(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if os.getenv('AGENT_V2_ADMISSION') == 'authorized':
+            raise BusinessError(20004, '正式权益准入已启用，请使用 v2 提交', 409)
         body = TaskSubmissionWire.model_validate(payload)
         result = await self.request('POST', '/internal/v1/tasks',
                                     payload=body.model_dump(mode='json'))

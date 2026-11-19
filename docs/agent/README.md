@@ -1,5 +1,7 @@
 # Agent Platform 与产品接入
 
+用户权益、调用级计量及独立 v2 候选协议见 [权益与执行权限](entitlements.md)。v2 默认关闭，以下原有产品路径仍描述 v1；不以新实现替代契约和生产策略审批。
+
 Web 的 `/agents` 和论文问答继续访问 Backend 产品 API。Backend 校验 BFF 与 owner，保存 Session / Turn，解析附件，并通过 `app/services/agent_gateway/` 向独立 Agent API 提交任务。匿名身份和认领沿用 [认证架构](../auth/ARCHITECTURE.md#anonymous-identity-and-claim)。
 
 ## 执行边界

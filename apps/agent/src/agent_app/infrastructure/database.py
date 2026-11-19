@@ -20,7 +20,7 @@ SessionFactory = None
 async def get_session():
     global engine, SessionFactory
     if SessionFactory is None:
-        engine = create_async_engine(_database_url(), pool_pre_ping=True)
+        engine = create_async_engine(_database_url(), pool_pre_ping=True, hide_parameters=True)
         SessionFactory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
     async with SessionFactory() as session:
         yield session

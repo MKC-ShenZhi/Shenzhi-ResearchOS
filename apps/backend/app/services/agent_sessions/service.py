@@ -21,9 +21,10 @@ async def start_session_run(
     *, owner: str, session_id: str, prompt: str, model: str | None, mode: str,
     attachments: list[dict], workspace_id: str | None, skills: list[str],
     allow_shell: bool = True, idempotency_key: str | None = None,
-    idempotency_fingerprint: str | None = None,
+    idempotency_fingerprint: str | None = None, gateway=None,
 ) -> LiveRun:
     """Validate ownership and concurrency before starting an independent run task."""
+    gateway = gateway or agent_gateway
     if idempotency_key is not None:
         existing = await agent_session_repository.find_idempotent_turn(
             session_id, owner, idempotency_key, idempotency_fingerprint or '',
@@ -49,7 +50,7 @@ async def start_session_run(
     settings = {
         'model': model, 'mode': mode, 'attachments': display_attachments,
         'workspace_id': workspace_id, 'skills': skills,
-        '_agent_owner_id': owner,
+        '_agent_owner_id': owner, '_agent_protocol': getattr(gateway, 'protocol_version', 1),
     }
     worker_id = current_worker_id()
     turn, created = await agent_session_repository.start_turn(
@@ -65,7 +66,7 @@ async def start_session_run(
     capture = TimelineCapture(warnings)
     task = None
     try:
-        task = await agent_gateway.submit({
+        task = await gateway.submit({
             'owner_id': owner, 'prompt': prompt + attachment_text,
             'session_id': session_id, 'turn_id': turn.id,
             'idempotency_key': f'backend-turn:{turn.id}', 'mode': mode,
@@ -77,9 +78,15 @@ async def start_session_run(
             session_id, owner, turn.id, settings, worker_id=worker_id,
         )
     except Exception as cause:
+        if getattr(gateway, 'protocol_version', 1) == 2:
+            # A remote timeout is not evidence of failure or unused reserve.
+            finish(live)
+            invalidate(live)
+            await agent_session_repository.release_turn_projection(turn.id, worker_id)
+            raise
         if task is not None:
             try:
-                await agent_gateway.cancel(task['task_id'], owner)
+                await gateway.cancel(task['task_id'], owner)
             except Exception:
                 logger.exception('Failed to cancel unlinked Agent task: %s', task.get('task_id'))
         error = f'Agent 服务提交失败：{cause}'
@@ -98,14 +105,14 @@ async def start_session_run(
         after_seq = 0
         transcript: list[dict] = []
         try:
-            run_id = await _next_task_run(task_id, owner)
+            run_id = await _next_task_run(task_id, owner, gateway=gateway)
             await _append_event(live, capture, 'run_start', {'run_id': run_id})
             while True:
-                run, events = await read_run_update(agent_gateway, run_id, owner, after_seq)
+                run, events = await read_run_update(gateway, run_id, owner, after_seq)
                 for event in events:
                     after_seq = max(after_seq, int(event['seq']))
                     await _append_event(live, capture, event['name'], event['data'])
-                next_run_id = (await _next_task_run(task_id, owner, run_id)
+                next_run_id = (await _next_task_run(task_id, owner, run_id, gateway=gateway)
                                if run.get('report') else None)
                 if next_run_id:
                     run_id, after_seq = next_run_id, 0
@@ -135,6 +142,9 @@ async def start_session_run(
                         )},
                         'transcript': transcript,
                     }
+                    if getattr(gateway, 'protocol_version', 1) == 2:
+                        payload['usage'].update(await gateway.usage(task_id, owner))
+                        payload['usage'].update(prompt_tokens=None, completion_tokens=None)
                     await agent_session_repository.finish_turn(
                         session_id, owner, turn.id, payload, worker_id=worker_id,
                     )
@@ -193,14 +203,14 @@ async def _finish_projection(live: LiveRun, worker_id: str) -> None:
             logger.exception('Failed to release Agent projection lease: %s', live.turn_id)
 
 
-async def _next_task_run(task_id: str, owner: str, current_run_id: str | None = None) -> str | None:
+async def _next_task_run(task_id: str, owner: str, current_run_id: str | None = None, *, gateway=None) -> str | None:
     """Walk the complete attempt order, including retries finished between polls.
 
     A terminal report and its retry Run are committed atomically by Control.
     Advance only after draining that terminal Run's events, so each sealed prefix
     has the same length (and thus SSE IDs) in live and reconstructed streams.
     """
-    run_ids = await agent_gateway.task_runs(task_id, owner)
+    run_ids = await (gateway or agent_gateway).task_runs(task_id, owner)
     index = run_ids.index(current_run_id) + 1 if current_run_id is not None else 0
     return run_ids[index] if index < len(run_ids) else None
 
@@ -210,6 +220,17 @@ async def _reuse_turn(turn: AgentTurn, owner: str) -> LiveRun:
     live = get_live(turn.session_id, owner)
     if live is not None and live.turn_id == turn.id:
         return live
+    if turn.settings.get('_agent_protocol') == 2 and not turn.settings.get('agent_task_id'):
+        from app.services.agent_gateway.v2 import AgentGatewayV2
+        restored = await AgentGatewayV2().recover_submission(
+            turn.settings.get('_agent_owner_id', owner), f'backend-turn:{turn.id}')
+        worker_id = current_worker_id()
+        if not await agent_session_repository.claim_turn_projection(turn.session_id, owner, turn.id, worker_id):
+            raise BusinessError(20009, '会话投影正在恢复', 409)
+        settings = dict(turn.settings, agent_task_id=restored['task_id'], agent_run_id=restored['current_run_id'])
+        await agent_session_repository.update_turn_settings(turn.session_id, owner, turn.id, settings, worker_id=worker_id)
+        await agent_session_repository.release_turn_projection(turn.id, worker_id)
+        turn.settings = settings
     task_id = turn.settings.get('agent_task_id')
     run_id = turn.settings.get('agent_run_id')
     if task_id and run_id:
@@ -264,6 +285,10 @@ async def resume_session_run(session_id: str, owner: str, *, turn_id: str | None
         raise BusinessError(20004, '当前没有可回放的 Agent 运行', 404)
     if not (turn.settings.get('agent_task_id') and turn.settings.get('agent_run_id')):
         return await _reuse_turn(turn, owner)
+    gateway = agent_gateway
+    if turn.settings.get('_agent_protocol') == 2:
+        from app.services.agent_gateway.v2 import AgentGatewayV2
+        gateway = AgentGatewayV2()
     task_id = turn.settings.get('agent_task_id')
     worker_id = current_worker_id()
     execution_owner = turn.settings.get('_agent_owner_id', owner)
@@ -282,14 +307,14 @@ async def resume_session_run(session_id: str, owner: str, *, turn_id: str | None
     async def drive() -> None:
         after_seq = 0
         try:
-            current_run = await _next_task_run(task_id, execution_owner)
+            current_run = await _next_task_run(task_id, execution_owner, gateway=gateway)
             append(live, 'run_start', {'run_id': current_run})
             while True:
-                run, events = await read_run_update(agent_gateway, current_run, execution_owner, after_seq)
+                run, events = await read_run_update(gateway, current_run, execution_owner, after_seq)
                 for event in events:
                     after_seq = max(after_seq, int(event['seq']))
                     await _append_event(live, capture, event['name'], event['data'])
-                next_run_id = (await _next_task_run(task_id, execution_owner, current_run)
+                next_run_id = (await _next_task_run(task_id, execution_owner, current_run, gateway=gateway)
                                if run.get('report') else None)
                 if next_run_id:
                     current_run, after_seq = next_run_id, 0
@@ -306,6 +331,9 @@ async def resume_session_run(session_id: str, owner: str, *, turn_id: str | None
                         ('prompt_tokens', 0), ('completion_tokens', 0), ('turns', 0),
                         ('duration_ms', 0), ('truncated', False),
                     )}
+                    if getattr(gateway, 'protocol_version', 1) == 2:
+                        usage.update(await gateway.usage(task_id, execution_owner))
+                        usage.update(prompt_tokens=None, completion_tokens=None)
                     final_text = result.get('final_text', '')
                     if active_turn:
                         await agent_session_repository.finish_turn(session_id, owner, turn.id, {
@@ -360,7 +388,8 @@ async def get_session_detail(session_id: str, owner: str) -> AgentSession:
     history: list[dict] = []
     reconciled = False
     for turn in session.turns:
-        if turn.status == 'running' and not turn.settings.get('agent_task_id'):
+        if (turn.status == 'running' and not turn.settings.get('agent_task_id')
+                and turn.settings.get('_agent_protocol') != 2):
             payload = {
                 'status': 'stopped', 'stop_reason': 'interrupted', 'stopped': True,
                 'error': '运行已中断（服务重启或异常退出），请重新发送',

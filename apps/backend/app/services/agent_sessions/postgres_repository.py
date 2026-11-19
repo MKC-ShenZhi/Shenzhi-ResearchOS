@@ -76,6 +76,8 @@ class PostgresAgentSessionRepository:
         statement = update(AgentTurnRow).where(
             AgentTurnRow.status == 'running',
             ~AgentTurnRow.settings.has_key('agent_task_id'),
+            or_(AgentTurnRow.settings['_agent_protocol'].as_integer().is_(None),
+                AgentTurnRow.settings['_agent_protocol'].as_integer() != 2),
         )
         if worker_id is None:
             statement = statement.where(AgentTurnRow.lease_expires_at <= func.clock_timestamp())

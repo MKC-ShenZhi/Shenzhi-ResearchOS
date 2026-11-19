@@ -48,6 +48,7 @@ class Skill:
     root: Path  # 技能目录（read_file 的禁闭边界）
     executable: bool  # 第一方=True；vendor 永为 False
     disable_model_invocation: bool = False  # pi 扩展字段：不进清单，仅可常驻
+    resource_content_digest: str | None = None
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,8 @@ def _name_problems(name: str, dirname: str) -> list[str]:
 
 
 def _load_skill(directory: Path, executable: bool) -> Skill:
+    from agent_app.execution.metering import controlled_resource_digest
+    resource_digest = controlled_resource_digest(directory)
     skill_md = directory / 'SKILL.md'
     front, body = _parse_frontmatter(skill_md.read_text(encoding='utf-8'))
     name = front.get('name') if isinstance(front.get('name'), str) else ''
@@ -114,9 +117,12 @@ def _load_skill(directory: Path, executable: bool) -> Skill:
         errors.append(f'正文超过 {MAX_BODY_CHARS} 字符')
     if errors:
         raise ValueError(f'技能 {directory} 无效：' + '；'.join(errors))
+    if controlled_resource_digest(directory) != resource_digest:
+        raise ValueError('技能资源在装载期间发生变化')
     return Skill(name=name, description=description.strip(), body=body, path=skill_md,
                  root=directory, executable=executable,
-                 disable_model_invocation=front.get('disable-model-invocation') is True)
+                 disable_model_invocation=front.get('disable-model-invocation') is True,
+                 resource_content_digest=resource_digest)
 
 
 def _import_module(module_name: str, path: Path):
@@ -356,6 +362,10 @@ def read_skill_tool(store: SkillStore) -> Tool:
           params=ReadSkillArgs,
           snippet='装载 available_skills 清单中某技能的完整说明（或其 references/ 参考文件）')
     async def read_skill(args: ReadSkillArgs) -> str:
+        from agent_app.execution.metering import current_meter
+        meter = current_meter.get()
+        if meter is not None:
+            await meter.activate(store._require(args.name))
         if args.file is None:
             return store.read_body(args.name)
         return store.read_file(args.name, args.file)

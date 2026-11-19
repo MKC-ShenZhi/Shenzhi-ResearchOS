@@ -9,6 +9,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from agent_app.infrastructure.models import Base
+from agent_app.infrastructure import metering_models as _metering_models
 
 config = context.config
 if config.config_file_name:

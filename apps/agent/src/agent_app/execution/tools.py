@@ -16,6 +16,8 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, ValidationError
 
+from agent_app.execution.metering import actual_call, tool_identity, current_meter
+from agent_contracts.canonical import request_digest_v1
 from agent_app.errors import BusinessError
 from agent_app.execution.types import ToolCall, ToolResult
 
@@ -193,8 +195,12 @@ class ToolRegistry:
         """执行已准备好的调用（每工具超时 → is_error）+ after 钩子（可改写结果）。"""
         call, target = prepared.call, prepared.tool
         try:
-            async with asyncio.timeout(target.spec.timeout_s):
-                output = await target.execute(call, prepared.args)
+            async with actual_call(lambda: tool_identity(target), purpose='tool',
+                                   invocation='model_selected', request_digest=request_digest_v1(call.arguments) if current_meter.get() else None) as measurement:
+                async with asyncio.timeout(target.spec.timeout_s):
+                    measurement.ensure_send()
+                    output = await target.execute(call, prepared.args)
+                measurement.outcome, measurement.successful_units = 'succeeded', 1
         except TimeoutError:
             return ToolResult(call.call_id, call.name,
                               f'工具执行超时（{target.spec.timeout_s:.0f}s），请调整参数或放弃该步骤',

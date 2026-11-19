@@ -11,6 +11,7 @@ from app.core.request_context import (
     get_request_id,
 )
 from app.core.database import dispose_engine
+from app.api.agent_v2 import router as agent_v2_router
 from app.services.agent_sessions.repository import agent_session_repository
 
 
@@ -26,6 +27,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title='ShenZhi AI API', version='1.0.0', lifespan=lifespan)
+app.include_router(agent_v2_router)
 configure_logging()
 logger = logging.getLogger(__name__)
 for router in (

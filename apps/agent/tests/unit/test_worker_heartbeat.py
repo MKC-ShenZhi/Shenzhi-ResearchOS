@@ -20,7 +20,7 @@ class WorkerHeartbeatTests(unittest.IsolatedAsyncioTestCase):
         renew = AsyncMock(side_effect=[(True, False), (True, True), (False, False)])
         with (
             patch.dict(os.environ, {'AGENT_SERVICE_TOKEN': 'test-token'}),
-            patch.dict(app.dependency_overrides, {get_session: fake_session}),
+            patch.dict(app.dependency_overrides, {get_session: fake_session, routes.require_v1_record: lambda: None}),
             patch.object(routes.repository, 'heartbeat', renew),
         ):
             control = AgentControlClient(transport=httpx.ASGITransport(app=app))

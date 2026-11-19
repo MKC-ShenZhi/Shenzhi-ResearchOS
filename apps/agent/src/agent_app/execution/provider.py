@@ -16,6 +16,7 @@ class ModelRequest:
     tools: list[dict] = field(default_factory=list)
     temperature: float | None = None
     max_tokens: int = MAX_OUTPUT_TOKENS
+    purpose: str = field(default='main', kw_only=True)
     deadline_at: float | None = None  # time.monotonic() 截止点；剩余不足时不再重试
 
 

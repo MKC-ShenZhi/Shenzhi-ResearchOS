@@ -14,6 +14,7 @@ from agent_app.errors import BusinessError
 from agent_app.infrastructure.models import (
     OutboxRow, RunControlRow, RunEventRow, RunRow, TaskRow,
 )
+from agent_app.infrastructure.metering_models import TaskMeteringRow, ExecutionRow
 from agent_contracts import BudgetLimits, ExecutionReport, PlatformEvent, RunRequest, RunStatus
 from agent_contracts.tasks import TaskRecord, TaskStatus, TaskSubmission
 
@@ -61,7 +62,7 @@ def _request_dict(request: RunRequest) -> dict[str, Any]:
             'input_ref': request.input_ref, 'history': list(request.history)}
 
 
-async def submit(session: AsyncSession, submission: TaskSubmission) -> TaskRecord:
+async def submit(session: AsyncSession, submission: TaskSubmission, *, metering=None) -> TaskRecord:
     if submission.idempotency_key:
         existing = await session.scalar(select(TaskRow).where(
             TaskRow.owner_id == submission.owner_id,
@@ -109,7 +110,7 @@ async def submit(session: AsyncSession, submission: TaskSubmission) -> TaskRecor
         )):
             # A concurrent submit won the unique key. Reuse the same request
             # validation as the normal replay path after rolling back our insert.
-            return await submit(session, submission)
+            return await submit(session, submission, metering=metering)
         raise
     session.add(RunRow(run_id=run_id, task_id=task_id, attempt=1,
                        status=RunStatus.PENDING.value, request_json=_request_dict(request),
@@ -117,24 +118,34 @@ async def submit(session: AsyncSession, submission: TaskSubmission) -> TaskRecor
     await session.flush()
     session.add(OutboxRow(run_id=run_id, created_at=now, available_at=now,
                           delivery_attempts=0))
+    if metering is not None:
+        session.add(TaskMeteringRow(task_id=task_id, owner_id=submission.owner_id,
+                    submission_id=metering.submission_id or 'obs:' + uuid.uuid4().hex,
+                    profile_id=metering.metering_profile_id, context=metering.metering_context,
+                    binding_status='pending', envelope=metering.model_dump(mode='json'),
+                    revoked=False, usage_sequence=0))
     await session.commit()
     return _task_record(task)
 
 
-async def get_task(session: AsyncSession, task_id: str, owner_id: str) -> TaskRecord:
+async def get_task(session: AsyncSession, task_id: str, owner_id: str, *, v2=False) -> TaskRecord:
     row = await session.scalar(select(TaskRow).where(
         TaskRow.task_id == task_id, TaskRow.owner_id == owner_id))
     if row is None:
         raise BusinessError(20004, '任务不存在', 404)
+    if (await session.scalar(select(TaskMeteringRow).where(TaskMeteringRow.task_id == task_id)) is not None) != v2:
+        raise BusinessError(20004, '任务协议不匹配', 404)
     return _task_record(row)
 
 
-async def get_run(session: AsyncSession, run_id: str, owner_id: str) -> tuple[RunRow, TaskRow]:
+async def get_run(session: AsyncSession, run_id: str, owner_id: str, *, v2=False) -> tuple[RunRow, TaskRow]:
     found = (await session.execute(select(RunRow, TaskRow).join(
         TaskRow, TaskRow.task_id == RunRow.task_id).where(
             RunRow.run_id == run_id, TaskRow.owner_id == owner_id))).first()
     if found is None:
         raise BusinessError(20004, '运行不存在', 404)
+    if (await session.scalar(select(TaskMeteringRow).where(TaskMeteringRow.task_id == found[0].task_id)) is not None) != v2:
+        raise BusinessError(20004, '运行协议不匹配', 404)
     return found
 
 
@@ -148,7 +159,7 @@ async def list_task_runs(session: AsyncSession, task_id: str, owner_id: str) -> 
 
 
 async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 45,
-                    *, demo_mode: bool = False):
+                    *, demo_mode: bool = False, v2=False):
     now = _now()
     query = (select(RunRow, TaskRow, OutboxRow).join(TaskRow, TaskRow.task_id == RunRow.task_id)
              .join(OutboxRow, OutboxRow.run_id == RunRow.run_id)
@@ -161,6 +172,9 @@ async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 
              .where((RunRow.request_json['model'].as_string() == 'demo/m1') if demo_mode else
                     or_(RunRow.request_json['model'].as_string().is_(None),
                         RunRow.request_json['model'].as_string() != 'demo/m1'))
+             .where(TaskRow.task_id.in_(select(TaskMeteringRow.task_id).where(
+                 TaskMeteringRow.binding_status == 'bound', TaskMeteringRow.revoked.is_(False))) if v2 else
+                    ~TaskRow.task_id.in_(select(TaskMeteringRow.task_id)))
              .order_by(RunRow.created_at).with_for_update(of=TaskRow, skip_locked=True).limit(1))
     found = (await session.execute(query)).first()
     if found is None:
@@ -168,11 +182,18 @@ async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 
     run, task, outbox = found
     # All operations needing both locks use Task -> Run (including cancel and
     # report). Locking the joined rows in planner order can deadlock PostgreSQL.
-    run = await session.scalar(select(RunRow).where(RunRow.run_id == run.run_id).with_for_update())
+    run = await session.scalar(select(RunRow).where(RunRow.run_id == run.run_id).with_for_update().execution_options(populate_existing=True))
     run.status = RunStatus.RUNNING.value
     run.worker_id = worker_id
     run.lease_token += 1
     run.lease_expires_at = now + timedelta(seconds=lease_seconds)
+    if v2:
+        # Sealing a superseded execution never deletes its historical calls.
+        for previous in (await session.scalars(select(ExecutionRow).where(
+                ExecutionRow.run_id == run.run_id))).all():
+            previous.sealed = True
+        session.add(ExecutionRow(execution_id=uuid.uuid4().hex, run_id=run.run_id,
+                    task_id=task.task_id, worker_id=worker_id, lease_token=run.lease_token, sealed=False))
     run.started_at = run.started_at or now
     task.status = (TaskStatus.CANCELLING.value if task.cancel_requested else TaskStatus.RUNNING.value)
     outbox.delivered_at = outbox.delivered_at or now
@@ -192,7 +213,7 @@ async def heartbeat(session: AsyncSession, run_id: str, worker_id: str,
     row = await session.scalar(select(RunRow).where(
         RunRow.run_id == run_id, RunRow.worker_id == worker_id,
         RunRow.lease_token == lease_token, RunRow.status == RunStatus.RUNNING.value,
-        RunRow.lease_expires_at > now).with_for_update())
+        RunRow.lease_expires_at > now).with_for_update().execution_options(populate_existing=True))
     if row is None:
         return False, False
     row.lease_expires_at = now + timedelta(seconds=lease_seconds)
@@ -208,7 +229,7 @@ async def append_event(session: AsyncSession, event: PlatformEvent,
     run = await session.scalar(select(RunRow).where(
         RunRow.run_id == event.run_id, RunRow.task_id == event.task_id,
         RunRow.status == RunStatus.RUNNING.value, RunRow.worker_id == worker_id,
-        RunRow.lease_token == lease_token, RunRow.lease_expires_at > now).with_for_update())
+        RunRow.lease_token == lease_token, RunRow.lease_expires_at > now).with_for_update().execution_options(populate_existing=True))
     if run is None:
         raise BusinessError(20009, 'Worker 租约已失效，事件被拒绝', 409)
     existing = await session.scalar(select(RunEventRow).where(
@@ -263,9 +284,9 @@ async def list_controls(session: AsyncSession, run_id: str, owner_id: str, after
 async def record_report(session: AsyncSession, report: ExecutionReport,
                         worker_id: str, lease_token: int) -> None:
     task = await session.scalar(select(TaskRow).where(
-        TaskRow.task_id == report.task_id).with_for_update())
+        TaskRow.task_id == report.task_id).with_for_update().execution_options(populate_existing=True))
     run = await session.scalar(select(RunRow).where(
-        RunRow.run_id == report.run_id, RunRow.task_id == report.task_id).with_for_update())
+        RunRow.run_id == report.run_id, RunRow.task_id == report.task_id).with_for_update().execution_options(populate_existing=True))
     if run is None:
         raise BusinessError(20004, '运行不存在', 404)
     payload = {'run_id': report.run_id, 'task_id': report.task_id,
@@ -281,12 +302,16 @@ async def record_report(session: AsyncSession, report: ExecutionReport,
         return
     now = _now()
     if (run.worker_id != worker_id or run.lease_token != lease_token
-            or run.lease_expires_at is None or run.lease_expires_at <= now):
+            or run.lease_expires_at is None
+            or run.lease_expires_at.replace(tzinfo=timezone.utc) <= now.replace(tzinfo=timezone.utc)):
         raise BusinessError(20009, 'Worker 租约已失效，报告被拒绝', 409)
     run.status = report.status.value
     run.report_json = json.loads(json.dumps(payload, ensure_ascii=False, default=str))
     run.completed_at = now
     run.lease_expires_at = None
+    for execution in (await session.scalars(select(ExecutionRow).where(
+            ExecutionRow.run_id == run.run_id))).all():
+        execution.sealed = True
     if task is None or task.current_run_id != run.run_id:
         raise BusinessError(20009, '运行已不是任务当前尝试', 409)
     terminal_task_status = {
@@ -297,7 +322,7 @@ async def record_report(session: AsyncSession, report: ExecutionReport,
         RunStatus.AWAITING_INPUT: TaskStatus.AWAITING_INPUT,
     }[report.status]
     if (report.status in (RunStatus.FAILED, RunStatus.TIMED_OUT) and run.attempt < 3
-            and not task.cancel_requested):
+            and not task.cancel_requested and report.error_code != 'authorization_denied'):
         previous_request = _run_request(run)
         next_run_id = uuid.uuid4().hex
         next_request = RunRequest(
@@ -326,7 +351,7 @@ async def record_report(session: AsyncSession, report: ExecutionReport,
 
 async def request_cancel(session: AsyncSession, task_id: str, owner_id: str) -> TaskRecord:
     task_row = await session.scalar(select(TaskRow).where(
-        TaskRow.task_id == task_id, TaskRow.owner_id == owner_id).with_for_update())
+        TaskRow.task_id == task_id, TaskRow.owner_id == owner_id).with_for_update().execution_options(populate_existing=True))
     if task_row is None:
         raise BusinessError(20004, '任务不存在', 404)
     if task_row.status in {TaskStatus.COMPLETED.value, TaskStatus.FAILED.value,
@@ -335,7 +360,7 @@ async def request_cancel(session: AsyncSession, task_id: str, owner_id: str) -> 
     now = _now()
     if task_row.status == TaskStatus.QUEUED.value:
         run = await session.scalar(select(RunRow).where(
-            RunRow.run_id == task_row.current_run_id).with_for_update())
+            RunRow.run_id == task_row.current_run_id).with_for_update().execution_options(populate_existing=True))
         task_row.status = TaskStatus.CANCELLED.value
         task_row.cancel_requested = True
         if run is not None:
