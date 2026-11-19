@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import katex from "katex";
-import { normalizeMathDelimiters } from "../../features/agent-chat/math-delimiters";
+import { normalizeMathDelimiters } from "../../components/renderers/math-delimiters";
 
 test("Agent markdown enables KaTeX rendering for inline and display dollar math", () => {
-  const source = readFileSync("features/agent-chat/shenzhi-ai-page.tsx", "utf8");
+  const page = readFileSync("features/agent-chat/shenzhi-ai-page.tsx", "utf8");
+  const source = readFileSync("components/renderers/markdown-renderer.tsx", "utf8");
   const inline = "The distance is $d(x,y)=\\sqrt{x^2+y^2}$.";
   const display = "$$\n\\sum_{i=1}^{n} x_i\n$$";
 
+  assert.match(page, /<MarkdownRenderer content=\{turn\.content\}/);
   assert.match(source, /remarkPlugins=\{\[remarkGfm, remarkMath\]\}/);
   assert.match(source, /rehypePlugins=\{\[\[rehypeKatex,/);
   assert.match(source, /import "katex\/dist\/katex\.min\.css"/);

@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  ABSTRACT_LINK_PLACEHOLDER,
-  replaceAbstractLinks,
-  splitAbstractLinks,
-} from "../../features/papers/[id]/abstract-links";
+  LATEX_LINK_PLACEHOLDER,
+  replaceLatexLinks,
+  splitLatexLinks,
+} from "../../components/renderers/latex-links";
 
 function links(text: string) {
-  return splitAbstractLinks(text).filter((segment) => segment.type === "link").map((segment) => segment.text);
+  return splitLatexLinks(text).filter((segment) => segment.type === "link").map((segment) => segment.text);
 }
 
 test("abstract links drop sentence punctuation after the URL", () => {
@@ -34,20 +34,20 @@ test("abstract links keep project pages and multiple URLs as plain links", () =>
     "https://YukinoWan.github.io/Speech-Hands/",
     "https://github.com/a/b_c#readme",
   ]);
-  assert.equal(splitAbstractLinks(text).map((segment) => segment.text).join(""), text);
+  assert.equal(splitLatexLinks(text).map((segment) => segment.text).join(""), text);
 });
 
 test("abstract links ignore text without a usable http URL", () => {
   assert.deepEqual(links("We use ftp://example.org and javascript:alert(1)"), []);
   assert.deepEqual(links("Visit https:// later"), []);
-  assert.deepEqual(splitAbstractLinks("No links here."), [{ type: "text", text: "No links here." }]);
+  assert.deepEqual(splitLatexLinks("No links here."), [{ type: "text", text: "No links here." }]);
 });
 
 test("LaTeX source replaces URLs with placeholders that map back to the original text", () => {
-  const { source, links: found } = replaceAbstractLinks("See https://github.com/a_b/diff%20x~y and https://x.org/q.");
+  const { source, links: found } = replaceLatexLinks("See https://github.com/a_b/diff%20x~y and https://x.org/q.");
   assert.doesNotMatch(source, /https?:/);
   assert.doesNotMatch(source, /[_%~]/);
   assert.deepEqual(found.map((link) => link.text), ["https://github.com/a_b/diff%20x~y", "https://x.org/q"]);
-  const restored = source.replace(new RegExp(ABSTRACT_LINK_PLACEHOLDER, "g"), (_, index) => found[Number(index)].text);
+  const restored = source.replace(new RegExp(LATEX_LINK_PLACEHOLDER, "g"), (_, index) => found[Number(index)].text);
   assert.equal(restored, "See https://github.com/a_b/diff%20x~y and https://x.org/q.");
 });

@@ -529,7 +529,11 @@ features/{module}/types.ts
 ```text
 components/ui/       # 基础 UI
 components/common/   # 跨 Feature 通用组件
+components/renderers/ # 跨 Feature 正文渲染组件
 ```
+
+`MarkdownRenderer` 用于带数学公式的 Markdown 正文，`LatexRenderer` 用于 LaTeX 文本片段。
+两个组件均接收 `content` 和可选的 `className`。
 
 搜索导航恢复、搜索草稿与 AppShell 响应式布局属于 Web 框架级能力，分别位于
 `lib/navigation/` 与 `components/common/layout/`，维护说明见
