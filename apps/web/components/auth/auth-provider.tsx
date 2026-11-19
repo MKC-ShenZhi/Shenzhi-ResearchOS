@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { BACKEND_IDENTITY_EVENT } from "@/clients/backend/identity-response";
 import {
   AUTH_SESSION_INVALID_EVENT,
   authClient,
@@ -173,16 +174,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [isPending, openLogin, session]);
 
   React.useEffect(() => {
+    let refreshing = false;
+    const refreshSession = () => {
+      if (refreshing) return;
+      refreshing = true;
+      // Read the current cookie so a late response cannot sign out a newer session.
+      void refetchSession({ query: { disableCookieCache: true } }).finally(() => {
+        refreshing = false;
+      });
+    };
     const handleInvalidSession = () => {
-      if (previousSessionRef.current) void refetchSession();
+      if (previousSessionRef.current) refreshSession();
+    };
+    const handleBackendIdentity = (event: Event) => {
+      if (!sessionInitializedRef.current) return;
+      const kind = (event as CustomEvent<"anonymous" | "authenticated">).detail;
+      const authenticated = Boolean(previousSessionRef.current);
+      if (authenticated === (kind === "authenticated")) return;
+      if (authenticated) event.preventDefault();
+      refreshSession();
     };
 
     window.addEventListener(AUTH_SESSION_INVALID_EVENT, handleInvalidSession);
-    return () =>
-      window.removeEventListener(
-        AUTH_SESSION_INVALID_EVENT,
-        handleInvalidSession,
-      );
+    window.addEventListener(BACKEND_IDENTITY_EVENT, handleBackendIdentity);
+    return () => {
+      window.removeEventListener(AUTH_SESSION_INVALID_EVENT, handleInvalidSession);
+      window.removeEventListener(BACKEND_IDENTITY_EVENT, handleBackendIdentity);
+    };
   }, [refetchSession]);
 
   React.useEffect(() => {

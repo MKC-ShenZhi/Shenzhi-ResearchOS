@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, Plus } from "lucide-react";
-import { ApiError } from "@/clients/backend/http";
+import { isSessionMismatchError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { useTopicInteraction } from "../use-topic-interaction";
@@ -36,19 +36,14 @@ export function TopicFollowButton({
     }
     if (interaction?.isFollowing === null || interaction?.isFollowing === undefined) {
       const result = await refetch();
-      if (result.isError) setError("关注状态加载失败，请重试");
-      else setError("");
+      setError(result.isError && !isSessionMismatchError(result.error) ? "关注状态加载失败，请重试" : "");
       return;
     }
     setError("");
     try {
       await toggle(following);
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        openLogin({ notice: "登录状态已失效，请重新登录" });
-        return;
-      }
-      setError("操作失败，请重试");
+      if (!isSessionMismatchError(error)) setError("操作失败，请重试");
     }
   }
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRefreshPaperInteraction } from "@/features/knowledge/interactions/use-refresh-paper-interaction";
 import { Heart, History, LoaderCircle, Network, Square } from "lucide-react";
-import { ApiError } from "@/clients/backend/http";
+import { ApiError, isSessionMismatchError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -34,7 +34,7 @@ export function LibraryPanel({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
-  const { session, isPending } = useAuth();
+  const { session, isPending, requireAuth } = useAuth();
   const sessionUserId = session?.user?.id ?? null;
   const folders = !isPending && identityKey === sessionUserId ? storedFolders : [];
 
@@ -43,9 +43,27 @@ export function LibraryPanel({
     loadFolders().catch(() => {});
   }, [identityKey, isPending, loadFolders, sessionUserId]);
 
-  function openCreate() { setName(""); setError(""); setDialog("create"); }
-  function openRename(folderId: number, currentName: string) { setEditingId(folderId); setName(currentName); setError(""); setDialog("rename"); }
-  function openDelete(folderId: number) { setEditingId(folderId); setError(""); setDialog("delete"); }
+  function openCreate() {
+    if (isPending || !requireAuth()) return;
+    setName("");
+    setError("");
+    setDialog("create");
+  }
+
+  function openRename(folderId: number, currentName: string) {
+    if (!requireAuth()) return;
+    setEditingId(folderId);
+    setName(currentName);
+    setError("");
+    setDialog("rename");
+  }
+
+  function openDelete(folderId: number) {
+    if (!requireAuth()) return;
+    setEditingId(folderId);
+    setError("");
+    setDialog("delete");
+  }
 
   async function submitDialog() {
     if (dialog === "delete" && editingId !== null) {
@@ -55,8 +73,10 @@ export function LibraryPanel({
         void refreshInteractions();
         if (selectedFolderId === editingId) onFolderClick(folders.find((folder) => folder.id !== editingId)?.id ?? 0);
         setDialog(null);
+      } catch (reason) {
+        if (isSessionMismatchError(reason)) setDialog(null);
+        else setError("删除失败，请重试");
       }
-      catch (reason) { setError(reason instanceof ApiError && reason.status === 401 ? "该功能需要登录后使用，请先登录" : "删除失败，请重试"); }
       return;
     }
     if (!name.trim()) { setError("文件夹名称不能为空"); return; }
@@ -69,7 +89,7 @@ export function LibraryPanel({
       }
       setDialog(null);
     } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 401) setError("该功能需要登录后使用，请先登录");
+      if (isSessionMismatchError(reason)) setDialog(null);
       else setError(reason instanceof ApiError && reason.status === 409 ? "名称已存在，请更换" : "操作失败，请重试");
     }
   }

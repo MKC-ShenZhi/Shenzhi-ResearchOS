@@ -58,7 +58,7 @@ export const useCollections = create<CollectionState>((set, get) => ({
     } catch (error) {
       // 未登录：固定展示三个默认文件夹占位，使展示与上次登录状态无关；
       // 点击文件夹后由内容区给出“请先登录”提示。
-      if (error instanceof ApiError && error.status === 401) {
+      if (!identityKey && error instanceof ApiError && error.status === 401) {
         if (get().generation === generation) set({ folders: UNAUTHENTICATED_FOLDERS });
         return;
       }

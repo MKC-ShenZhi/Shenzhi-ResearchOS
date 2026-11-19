@@ -33,6 +33,29 @@ test("BFF forwards and returns the same request ID", async (t) => {
 
   assert.equal(outgoingHeaders?.get("X-Request-ID"), "request-forward-1");
   assert.equal(response.headers.get("X-Request-ID"), "request-forward-1");
+  assert.equal(response.headers.get("X-ShenZhi-Identity"), "anonymous");
+});
+
+test("BFF reports its resolved identity independently of the upstream status and headers", async (t) => {
+  t.mock.method(identity, "resolveBackendIdentity", async () => ({ kind: "authenticated", userId: "user-a" }));
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    assert.equal(new Headers(init.headers).get("X-ShenZhi-User-Id"), "user-a");
+    return Response.json({ code: 10001 }, { status: 401, headers: { "X-ShenZhi-Identity": "anonymous" } });
+  });
+
+  const response = await forwardToBusinessBackend(request(), "http://backend.test", ["collections", "folders"]);
+  assert.equal(response.status, 401);
+  assert.equal(response.headers.get("X-ShenZhi-Identity"), "authenticated");
+});
+
+test("BFF leaves the response identity unset when Better Auth is unavailable", async (t) => {
+  t.mock.method(identity, "resolveBackendIdentity", async () => { throw new Error("unavailable"); });
+  const upstream = t.mock.method(globalThis, "fetch", async () => new Response());
+
+  const response = await forwardToBusinessBackend(request(), "http://backend.test", ["collections", "folders"]);
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("X-ShenZhi-Identity"), null);
+  assert.equal(upstream.mock.callCount(), 0);
 });
 
 test("BFF forwards the idempotency key without treating it as a request ID", async (t) => {

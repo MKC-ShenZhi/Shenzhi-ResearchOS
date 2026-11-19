@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ThumbsUp } from "lucide-react";
-import { ApiError } from "@/clients/backend/http";
+import { isSessionMismatchError } from "@/clients/backend/http";
 import { useAuth } from "@/components/auth/auth-provider";
 import { usePaperInteraction } from "../use-paper-interaction";
 import { usePaperLike } from "../use-paper-like";
@@ -36,19 +36,14 @@ export function PaperLikeButton({
     }
     if (interaction?.liked === null || interaction?.liked === undefined) {
       const result = await refetch();
-      setError(result.isError ? "点赞状态加载失败，请重试" : "");
+      setError(result.isError && !isSessionMismatchError(result.error) ? "点赞状态加载失败，请重试" : "");
       return;
     }
     setError("");
     try {
       await toggle(liked);
     } catch (error) {
-      // 会话在此期间失效时重新走登录窗口，而不是静默失败。
-      if (error instanceof ApiError && error.status === 401) {
-        openLogin({ notice: "登录状态已失效，请重新登录" });
-        return;
-      }
-      setError("操作失败，请重试");
+      if (!isSessionMismatchError(error)) setError("操作失败，请重试");
     }
   }
 

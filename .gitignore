@@ -33,6 +33,7 @@ pnpm-debug.log*
 # env files
 .env*
 !.env.example
+scripts/ops/ops.env
 
 # typescript
 *.tsbuildinfo

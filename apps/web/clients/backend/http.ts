@@ -1,3 +1,4 @@
+import { BACKEND_IDENTITY_EVENT, BACKEND_IDENTITY_HEADER } from "./identity-response";
 import type { ApiEnvelope } from "./types";
 
 /** 浏览器一律打同源 `/api/v1`，由 Next 微后端转发到 FastAPI（BUSINESS_BACKEND_URL） */
@@ -6,6 +7,7 @@ export const API_PREFIX = "/api/v1";
 export interface ApiErrorOptions {
   retryable?: boolean;
   requestId?: string | null;
+  sessionMismatch?: boolean;
 }
 
 export class ApiError extends Error {
@@ -13,6 +15,7 @@ export class ApiError extends Error {
   status: number;
   retryable: boolean | undefined;
   requestId: string | null;
+  sessionMismatch: boolean;
 
   constructor(
     code: number | string,
@@ -26,11 +29,16 @@ export class ApiError extends Error {
     this.status = status;
     this.retryable = options.retryable;
     this.requestId = options.requestId ?? null;
+    this.sessionMismatch = options.sessionMismatch ?? false;
   }
 }
 
 export function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
+}
+
+export function isSessionMismatchError(error: unknown): boolean {
+  return error instanceof ApiError && error.sessionMismatch;
 }
 
 export function requestIdForApiError(error: unknown): string | undefined {
@@ -54,14 +62,37 @@ export function expectedUserHeaders(userId: string): HeadersInit {
   return { "x-shenzhi-expected-user-id": userId };
 }
 
+export async function fetchBackend(url: string, init: RequestInit) {
+  const response = await fetch(url, init);
+  const kind = response.headers.get(BACKEND_IDENTITY_HEADER);
+  let sessionMismatch = false;
+  if (
+    typeof window !== "undefined" &&
+    url.startsWith(`${API_PREFIX}/`) &&
+    !response.redirected &&
+    (kind === "authenticated" || kind === "anonymous")
+  ) {
+    // The provider claims anonymous 401s that it is handling as a session mismatch.
+    sessionMismatch = !window.dispatchEvent(new CustomEvent(BACKEND_IDENTITY_EVENT, {
+      detail: kind,
+      cancelable: kind === "anonymous" && response.status === 401,
+    }));
+  }
+  return { response, sessionMismatch };
+}
+
 // Serialize first contact so parallel config/history/upload requests cannot issue
 // different anonymous cookies. This is transport bootstrap, not an account system.
 let identityReady: Promise<void> | undefined;
 async function ensureBackendIdentity() {
   if (typeof window === "undefined") return;
-  identityReady ??= fetch(apiPath("/identity/bootstrap"), { cache: "no-store", signal: AbortSignal.timeout(30000) }).then((response) => {
+  identityReady ??= fetchBackend(apiPath("/identity/bootstrap"), {
+    cache: "no-store",
+    signal: AbortSignal.timeout(30000),
+  }).then(({ response, sessionMismatch }) => {
     if (!response.ok) throw new ApiError(20004, "无法连接生成服务", response.status, {
       requestId: response.headers.get("X-Request-ID"),
+      sessionMismatch,
     });
   }).catch((error) => { identityReady = undefined; throw error; });
   await identityReady;
@@ -79,7 +110,12 @@ export async function apiJson<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(apiPath(path), { ...init, headers, signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000) });
+  const timeout = AbortSignal.timeout(30000);
+  const { response: res, sessionMismatch } = await fetchBackend(apiPath(path), {
+    ...init,
+    headers,
+    signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
+  });
   const requestId = res.headers.get("X-Request-ID");
   if (res.status === 204) return undefined as T;
   let payload: unknown;
@@ -90,7 +126,7 @@ export async function apiJson<T>(
       20004,
       res.ok ? "响应无法解析" : `请求失败 (${res.status})`,
       res.status,
-      { requestId },
+      { requestId, sessionMismatch },
     );
   }
 
@@ -98,6 +134,7 @@ export async function apiJson<T>(
     throw new ApiError(payload.code, payload.message, res.status, {
       retryable: payload.retryable,
       requestId: payload.requestId ?? requestId,
+      sessionMismatch,
     });
   }
 
@@ -107,7 +144,7 @@ export async function apiJson<T>(
       envelope?.code ?? 20004,
       envelope?.message || "生成服务暂不可用",
       res.status,
-      { requestId },
+      { requestId, sessionMismatch },
     );
   }
 

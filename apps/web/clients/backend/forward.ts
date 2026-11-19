@@ -4,6 +4,7 @@ import { ANONYMOUS_TTL_SECONDS, backendConfig } from "../../config/backend";
 import { logError, logInfo } from "../../lib/observability/logger";
 import { REQUEST_ID_HEADER, resolveRequestId } from "../../lib/observability/request-id";
 import { attachIdentity, resolveBackendIdentity } from "./identity";
+import { BACKEND_IDENTITY_HEADER } from "./identity-response";
 
 const FORWARDED_REQUEST_HEADERS = [
   "accept", "content-type", "idempotency-key", "last-event-id", "range", "x-shenzhi-expected-user-id",
@@ -94,6 +95,7 @@ export async function forwardToBusinessBackend(
   out.delete("set-cookie");
   out.set("Cache-Control", "no-store, no-transform");
   out.set(REQUEST_ID_HEADER, requestId);
+  out.set(BACKEND_IDENTITY_HEADER, identity.kind);
 
   logInfo("bff.backend.completed", {
     request_id: requestId,
