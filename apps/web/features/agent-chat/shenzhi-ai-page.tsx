@@ -26,7 +26,7 @@ import { ComposerShell, type ComposerSkill } from "@/components/common/composer/
 import type { WorkspaceFile } from "@/components/common/composer/attachment-menu";
 import { AppShell } from "@/components/common/layout/app-shell";
 import { useAuth } from "@/components/auth/auth-provider";
-import { MarkdownRenderer } from "@/components/renderers/markdown-renderer";
+import { StreamdownRenderer } from "@/components/renderers/streamdown-renderer";
 import type { ComposerAttachment, ComposerConfig } from "@/types/ai-search";
 import { takeAgentLaunch } from "./launch-store";
 import { notifyAgentSessionsChanged } from "./session-events";
@@ -780,7 +780,9 @@ export function ShenzhiAiPage() {
                     <AssistantAvatar />
                     <div className="min-w-0 flex-1" data-quote-source>
                       {/* 只有标点的正文不渲染：模型常在工具轮之间吐孤立的 "."。 */}
-                      {turn.content && isMeaningful(turn.content) && <MarkdownRenderer content={turn.content} />}
+                      {turn.content && isMeaningful(turn.content) && (
+                        <StreamdownRenderer content={turn.content} isStreaming={running && index === turns.length - 1} />
+                      )}
                       {turn.report && (
                         // 报告只在按钮里看全文：正文内联渲染会把几十页 markdown 铺满对话。
                         <ReportSummary
