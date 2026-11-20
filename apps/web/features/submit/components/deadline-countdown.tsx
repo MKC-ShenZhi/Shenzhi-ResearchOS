@@ -3,14 +3,12 @@
 import type { ConferenceTimelinePoint } from "@/clients/backend/conferences";
 import { useNow } from "@/features/submit/hooks/use-now";
 import {
-  deadlineUrgency,
   formatInstant,
   formatOfficialTime,
   milestoneLabel,
   remainingUntil,
   upcomingMilestone,
 } from "@/features/submit/lib/deadline-time";
-import { cn } from "@/lib/utils";
 
 const UNITS = ["天", "小时", "分", "秒"] as const;
 
@@ -31,7 +29,6 @@ export function DeadlineCountdown({
   if (!target?.at) return <p className="text-sm font-medium text-muted sm:col-start-2 sm:row-start-1 sm:row-span-2 sm:text-right">{fallback}</p>;
 
   const at = Date.parse(target.at);
-  const urgency = deadlineUrgency(at, now);
   const { days, hours, minutes, seconds } = remainingUntil(at, now);
   const derived = "is_derived" in target && target.is_derived;
   const label = milestoneLabel(target);
@@ -54,16 +51,13 @@ export function DeadlineCountdown({
             {derived ? "推算时间" : "官方时间"} {formatOfficialTime(target.local, timezone)}
           </p>
         )}
-        {urgency === "passed" ? (
+        {at <= now ? (
           <p className="text-sm font-semibold text-muted">已过该时间点</p>
         ) : (
           <div
             role="timer"
             aria-label={`距${label}还有 ${days} 天 ${hours} 小时 ${minutes} 分钟 ${seconds} 秒`}
-            className={cn(
-              "flex flex-wrap items-baseline gap-x-2 text-[22px] font-bold leading-none tabular-nums sm:justify-end",
-              urgency === "day" ? "text-danger" : urgency === "week" ? "text-[#B45309] dark:text-[#f0c94e]" : "text-ink",
-            )}
+            className="flex flex-wrap items-baseline gap-x-2 text-[22px] font-bold leading-none text-ink tabular-nums sm:justify-end"
           >
             {[days, hours, minutes, seconds].map((value, index) => (
               <span aria-hidden key={UNITS[index]} className="whitespace-nowrap">

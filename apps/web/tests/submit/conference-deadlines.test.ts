@@ -146,17 +146,17 @@ test("web calendar links prefill one milestone with title, UTC time and official
 
 test("filters toggle rank chips per system and hide closed venues by default", () => {
   const ccfA = RANK_CHIPS.find((chip) => chip.label === "CCF-A")!;
-  const coreAStar = RANK_CHIPS.find((chip) => chip.label === "CORE-A*")!;
+  const thcplA = RANK_CHIPS.find((chip) => chip.label === "TH-CPL A")!;
+  assert.deepEqual([...new Set(RANK_CHIPS.map((chip) => chip.system))], ["ccf", "thcpl"]);
   let state = toggleRankChip(EMPTY_CONFERENCE_FILTERS, ccfA);
-  state = toggleRankChip(state, coreAStar);
+  state = toggleRankChip(state, thcplA);
   state = toggleCategory(state, "AI");
   assert.equal(isRankChipActive(state, ccfA), true);
   assert.equal(hasActiveFilters(state), true);
   assert.deepEqual(toDeadlineQuery({ ...state, q: "  neurips " }), {
     categories: ["AI"],
     ccf: ["A"],
-    core: ["A*"],
-    thcpl: [],
+    thcpl: ["A"],
     statuses: ["open", "tbd"],
     q: "neurips",
     followed: false,
