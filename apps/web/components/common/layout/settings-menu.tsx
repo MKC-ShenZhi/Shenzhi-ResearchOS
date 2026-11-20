@@ -3,9 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useId, useSyncExternalStore } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/components/auth/auth-provider";
-import { apiJson } from "@/clients/backend/http";
 import {
   BarChart3,
   ArrowUpRight,
@@ -60,14 +57,6 @@ export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean
   );
   const setCollapsed = useSidebarStore((s) => s.setCollapsed);
   const pathname = usePathname();
-  const { session } = useAuth();
-  const admin = useQuery({
-    queryKey: ["admin-access", session?.user.id],
-    queryFn: ({ signal }) => apiJson<{ read_only: boolean }>("/admin/access", { signal, cache: "no-store" }),
-    enabled: !!session?.user.id,
-    retry: false,
-    staleTime: 60_000,
-  });
   return (
     <div ref={rootRef} onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave} onFocusCapture={onFocus} onBlurCapture={onBlur} className="relative mt-4 shrink-0">
       {collapsed ? (
@@ -107,7 +96,7 @@ export function SettingsMenu({ collapsed, mobile = false }: { collapsed: boolean
       {/* 悬停选项栏:出现在条目右侧,底部对齐向上展开 */}
       <div id={menuId} hidden={!open} className="absolute bottom-0 left-full z-50 pl-2">
         <div ref={menuRef} aria-label="设置快捷入口" className="w-52 rounded-2xl border border-line bg-card p-2 shadow-pop">
-          {[...MENU_ITEMS, ...(admin.data?.read_only ? [{ label: "用户管理", icon: UserRound, href: "/admin/users" }] : [])].map((item) => (
+          {MENU_ITEMS.map((item) => (
             <Link
               key={item.label}
               href={item.href}

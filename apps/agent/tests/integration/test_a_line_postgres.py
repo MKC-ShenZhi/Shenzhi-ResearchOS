@@ -65,7 +65,7 @@ class PostgresALineTests(suite.ALinePersistenceTests):
         from unittest.mock import patch
         import httpx
         from fastapi import FastAPI
-        from app.api import admin
+        from app.api import admin_console as admin
         from app.core.errors import BusinessError
         from app.core.responses import fail
         from app.services.agent_entitlements.defaults import initialize_free
@@ -91,10 +91,13 @@ class PostgresALineTests(suite.ALinePersistenceTests):
             async with self.backend() as db, db.begin():
                 yield db
         with patch.object(admin, 'session_scope', scope), patch.dict(os.environ, {
-            'BACKEND_BFF_SECRET': 'bff-test', 'SHENZHI_ADMIN_USER_IDS': 'admin'}):
-            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://backend.invalid',
-                headers={'x-shenzhi-bff-secret': 'bff-test', 'x-shenzhi-user-id': 'admin'}) as browser:
-                response = await browser.get('/api/v1/admin/users?search=new%40example.test&page_size=1')
+            'ADMIN_AUTH_MODE': 'local_password', 'ADMIN_LOCAL_USERNAME': 'admin',
+            'ADMIN_LOCAL_PASSWORD': 'test-password', 'ADMIN_SESSION_SECRET': 's' * 32,
+            'ADMIN_SESSION_TTL_SECONDS': '28800', 'ADMIN_AUTH_LOCAL_ONLY': 'true'}):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=('127.0.0.1', 123)), base_url='http://backend.invalid') as browser:
+                login = await browser.post('/api/v1/admin-console/auth/login', json={'username': 'admin', 'password': 'test-password'})
+                self.assertEqual(login.status_code, 200, login.text)
+                response = await browser.get('/api/v1/admin-console/users?search=new%40example.test&page_size=1')
                 self.assertEqual(response.status_code, 200, response.text)
                 data = response.json()['data']
                 self.assertEqual(data['total'], 1)
@@ -102,20 +105,19 @@ class PostgresALineTests(suite.ALinePersistenceTests):
                 tokens = data['items'][0]['usage_windows'][0]
                 self.assertEqual((tokens['limit'], tokens['used'], tokens['held'], tokens['remaining']),
                                  (200000, 37, 100, 199863))
-                response = await browser.get('/api/v1/admin/users?plan_id=__missing__')
+                response = await browser.get('/api/v1/admin-console/users?plan_id=__missing__')
                 self.assertEqual(response.json()['data']['items'][0]['entitlement_status'], 'pending_initialization')
-                response = await browser.get('/api/v1/admin/users?page=2&page_size=2')
+                response = await browser.get('/api/v1/admin-console/users?page=2&page_size=2')
                 self.assertEqual(len(response.json()['data']['items']), 1)
-                response = await browser.get('/api/v1/admin/users?plan_id=free')
+                response = await browser.get('/api/v1/admin-console/users?plan_id=free')
                 self.assertEqual(response.json()['data']['total'], 1)
-                response = await browser.get('/api/v1/admin/users?search=%25')
+                response = await browser.get('/api/v1/admin-console/users?search=%25')
                 self.assertEqual(response.json()['data']['total'], 0)
-                browser.headers['x-shenzhi-user-id'] = 'ordinary'
-                self.assertEqual((await browser.get('/api/v1/admin/users')).status_code, 403)
+                browser.cookies.clear()
+                self.assertEqual((await browser.get('/api/v1/admin-console/users')).status_code, 401)
                 browser.headers['x-shenzhi-admin'] = 'true'
-                self.assertEqual((await browser.get('/api/v1/admin/users')).status_code, 403)
-                del browser.headers['x-shenzhi-bff-secret']
-                self.assertEqual((await browser.get('/api/v1/admin/users')).status_code, 401)
+                browser.headers['x-shenzhi-user-id'] = 'admin'
+                self.assertEqual((await browser.get('/api/v1/admin-console/users')).status_code, 401)
 
     async def create_databases(self):
         urls=[os.environ['AGENT_A_LINE_TEST_DATABASE_URL'],os.environ['BACKEND_A_LINE_TEST_DATABASE_URL']]

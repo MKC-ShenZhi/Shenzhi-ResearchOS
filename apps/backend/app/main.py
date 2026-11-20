@@ -12,7 +12,7 @@ from app.core.request_context import (
 )
 from app.core.database import dispose_engine
 from app.api.agent_v2 import router as agent_v2_router
-from app.api.admin import router as admin_router
+from app.api.admin_console import router as admin_console_router
 from app.services.agent_entitlements.service import EntitlementError
 from app.services.agent_sessions.repository import agent_session_repository
 
@@ -30,7 +30,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title='ShenZhi AI API', version='1.0.0', lifespan=lifespan)
 app.include_router(agent_v2_router)
-app.include_router(admin_router)
+app.include_router(admin_console_router)
 configure_logging()
 logger = logging.getLogger(__name__)
 for router in (
@@ -92,6 +92,8 @@ async def unexpected_error(request: Request, error: Exception):
         error,
     )
     response = fail(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE, 500)
+    if request.url.path.startswith('/api/v1/admin-console'):
+        response.headers['Cache-Control'] = 'no-store'
     response.headers[REQUEST_ID_HEADER] = request_id
     return response
 
@@ -105,3 +107,11 @@ def health() -> dict[str, str]:
 def versioned_health() -> dict[str, str]:
     """Expose the health probe under the same prefix used by the Web BFF."""
     return health()
+
+
+@app.middleware('http')
+async def admin_console_no_store(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith('/api/v1/admin-console'):
+        response.headers['Cache-Control'] = 'no-store'
+    return response

@@ -104,9 +104,7 @@ Backend Permit/Start 继续按 owner→grant 锁序检查 Grant overage，并再
 
 现有 Web `/api/v1/agent/run` 与 Session run 在 Backend `AGENT_V2_ADMISSION=authorized` 且正式登录时选择 V2 Gateway，继续输出原 SSE；必须有 Idempotency-Key。浏览器不能选择准入模式。停止/插话按可信 run 查询识别 V2，只有只读 404 才查询历史 V1 run，不能将拒绝的提交退回 V1。Session 回放沿用持久 `_agent_protocol`。关闭 authorized 时原 V1 路径保持不变；匿名保持既有身份和准入约束，不自动分配 Free。
 
-管理员配置仅为 Backend `SHENZHI_ADMIN_USER_IDS`（逗号分隔 Better Auth user ID，无 `user:` 前缀）。API 使用 `require_user`，先验证 BFF、再验证白名单；空白名单拒绝所有人。`GET /api/v1/admin/access` 供菜单发现，`GET /api/v1/admin/users?page=1&page_size=20&search=…&plan_id=…` 返回全站统计和分页明细；page_size 上限 100，plan_id=`__missing__` 查缺失权益。搜索仅用户名/邮箱，按大小写不敏感字面子串匹配。普通登录用户返回 403，匿名 401，不接受 admin 标记。
-
-页面 `/admin/users` 在现有 AppShell 中显示统计、搜索、套餐筛选、分页、刷新和展开权益详情。数据经现有同源 BFF，无新用户表、同步系统或管理写接口。自然/固定窗口读取现有计数器，滚动窗口按相同 trusted-start 账本口径只读计算；used、held、remaining 分列，多个规则分别显示，未初始化/不可用 Policy 不伪装成零额度。数据标注 Backend 查询时间与近实时状态，不保证尚未上传的 Provider 消耗已结算。`model_calls_enabled` 只表示用户/Policy 的模型风险门禁配置齐备，不表示剩余额度充足、上游健康或所有单次调用均会获准。
+管理界面统一使用独立 `apps/admin`，通过 `/api/v1/admin-console/users` 访问同一用户权益只读 Service。认证采用独立管理员会话；配置、启动方式与本地访问限制见 [Admin README](../../apps/admin/README.md)。旧 Web 页面、旧 `/api/v1/admin/*` API 与 Better Auth 用户 ID 白名单配置已移除。搜索、套餐筛选、分页和权益详情由独立控制台提供。自然/固定窗口读取现有计数器，滚动窗口按相同 trusted-start 账本口径只读计算；used、held、remaining 分列，多个规则分别显示，未初始化/不可用 Policy 不伪装成零额度。数据标注 Backend 查询时间与近实时状态，不保证尚未上传的 Provider 消耗已结算。`model_calls_enabled` 只表示用户/Policy 的模型风险门禁配置齐备，不表示剩余额度充足、上游健康或所有单次调用均会获准。
 
 ## 测试入口
 

@@ -681,3 +681,7 @@ Agent 通过 `apps/agent/src/agent_app/integrations/llm` 的 Model Registry / Re
 `agent_app.integrations.llm.agent_stream` 负责。协议类型位于 `agent_app.execution.provider`。模型品牌只用于展示，实际路由由
 `provider_id` 决定；Provider 凭据仅在服务端加载。接入规则、兼容策略及声明示例见
 [LLM API Foundation](llm-api-foundation.md)。
+
+## 独立 Admin Console
+
+`apps/admin` 使用独立 Vite / React 工程与 3101 开发进程。其同源 `/api/v1/admin-console/*` 直接进入 FastAPI 独立管理认证边界，不经过 Web BFF / Better Auth；用户只读投影复用现有 Service。Agent 运行配置通过 Backend Integration 服务端读取。local_password 模式仅限本机，远程生产管理须替换认证适配层。配置与部署约束见 [Admin README](../../apps/admin/README.md)。Web 内的旧用户管理页面、菜单入口与专用 Client 已移除，管理界面统一使用独立 Admin Console；旧 Backend `/api/v1/admin/*` API 与 `SHENZHI_ADMIN_USER_IDS` 配置已移除。

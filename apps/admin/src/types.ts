@@ -1,5 +1,3 @@
-import { apiJson } from "./http";
-
 export type UsageWindow = {
   rule_id: string; metric: string; purpose: string; capability_id: string | null;
   limit: number; used: number; held: number; remaining: number;
@@ -16,6 +14,3 @@ export type AdminUsers = {
   stats: { total_users: number; free_users: number; abnormal_users: number };
   updated_at: string; usage_status: string; usage_note: string;
 };
-export function getAdminUsers(params: { page: number; search: string; plan_id: string }, signal?: AbortSignal) {
-  return apiJson<AdminUsers>(`/admin/users?${new URLSearchParams({ ...params, page: String(params.page) })}`, { signal, cache: "no-store" });
-}

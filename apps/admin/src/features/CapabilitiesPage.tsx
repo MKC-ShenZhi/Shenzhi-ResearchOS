@@ -1,0 +1,6 @@
+import { useResource } from '../useResource';
+type Config = {models:{value:string;label:string;provider?:string;enabled:boolean}[];skills:{name:string;description?:string}[];default_model:string|null;source:string};
+export function CapabilitiesPage() {
+ const q=useResource<Config>('/capabilities');
+ return <><header><div><h1>能力管理</h1><p>当前运行配置的只读视图，不等同于完整的能力授权管理。</p></div><button onClick={q.refresh} disabled={q.loading}>刷新</button></header>{q.loading&&<p role="status">正在读取 Agent 配置…</p>}{q.error&&<p className="error" role="alert">{q.error}</p>}{q.data&&<><p className="note">来源：{q.data.source} · 默认模型：{q.data.default_model??'未提供'}</p><h2>Model · 模型</h2><div className="cards">{q.data.models.map(m=><article key={m.value}><small>MODEL</small><h3>{m.label}</h3><code>{m.value}</code><p>状态：{m.enabled?'启用':'未启用'}</p><p>Provider：{m.provider??'未提供'}</p></article>)}</div>{!q.data.models.length&&<p>当前未暴露模型</p>}<h2>Skill · 技能</h2><div className="cards">{q.data.skills.map(s=><article key={s.name}><small>SKILL</small><h3>{s.name}</h3><p>{s.description||'未提供描述'}</p><p>状态：当前配置已暴露</p></article>)}</div>{!q.data.skills.length&&<p>当前未暴露技能</p>}</>}<h2>Tool · 工具</h2><article><h3>目录尚未接入</h3><p>当前配置接口没有统一 Tool 目录来源。</p></article></>;
+}
