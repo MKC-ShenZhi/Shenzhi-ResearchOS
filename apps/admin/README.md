@@ -63,7 +63,9 @@ pnpm dev --host 127.0.0.1 --port 3101
 
 Cookie 为 HttpOnly、SameSite=Strict，Path 限制 `/api/v1/admin-console`，HTTPS 请求设置 Secure，不写入 localStorage。不信任管理员身份 Header。登录通过凭据校验，其余路由通过管理会话校验。
 
-生产构建 `dist/` 由 Nginx 提供，`/api/v1/admin-console/` 同源代理至 Backend，SPA 回退到 index.html。必须使用 HTTPS，正确传递受信任的 scheme，禁止将任意客户端转发头作为身份来源；Backend 不得公网暴露。当前 local_password 仅供本机，代理也必须限制为本机访问，不能用 loopback 代理把远程访问转换成本地身份。上线远程管理需先替换独立认证适配层（未来 mTLS / 客户端证书），本次未实现；不能关闭 local-only 绕过限制。无需开放 CORS。
+生产部署已确定采用 **SSH 密钥＋本地隧道，目标为 Admin 免账号密码**，完整拓扑、命令模板及上线条件见 [部署文档：Admin 管理入口](../../docs/engineering/deployment.md#四admin-管理入口ssh-密钥与隧道)。管理入口只监听服务器 loopback，提供 `dist/` 静态构建并同源代理管理 API；公网入口必须阻断管理路径。两端本机 HTTP 链路之间由 SSH 加密，不对公网提供 HTTP 管理入口，不开放 CORS。
+
+**当前代码仍为 `local_password`＋Cookie，免密码模式尚未实现。** 部署前必须在现有认证边界完成隧道模式、可信入口校验、同源写保护及审计身份适配。不能仅删登录页、关闭 local-only 或把公网代理转换成 loopback 来绕过认证。上文环境变量及启动命令描述的是当前本地开发方式。
 
 ## 数据与后续边界
 
