@@ -49,8 +49,6 @@ from app.schemas.admin_plans import PublishPlans, AssignPlans, MigrationPreview
 from app.schemas.admin_plans import ReconcileGrant
 from app.services.agent_entitlements.reconciliation import reconcile
 from app.services.agent_entitlements import admin as plan_admin
-from app.models.agent_entitlements import EntitlementAuditRow
-from sqlalchemy import select
 
 
 @router.get('/plans')
@@ -92,9 +90,4 @@ async def reconcile_close(grant_id: str, body: ReconcileGrant,
 async def audit(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
                 _admin=Depends(admin_auth.require_admin)):
     async with session_scope() as db:
-        rows=(await db.scalars(select(EntitlementAuditRow).where(
-            EntitlementAuditRow.principal.startswith('local-admin:')).order_by(
-            EntitlementAuditRow.created_at.desc(), EntitlementAuditRow.audit_id.desc())
-            .offset((page-1)*page_size).limit(page_size))).all()
-        return ok({'items':[dict(operation_id=r.operation_id, principal=r.principal, reason=r.reason,
-            created_at=r.created_at.isoformat(), payload=r.payload) for r in rows], 'page':page})
+        return ok(await plan_admin.list_audit(db, page=page, page_size=page_size))

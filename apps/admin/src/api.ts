@@ -3,7 +3,7 @@ export class ApiError extends Error {
 }
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   let response: Response;
-  try { response = await fetch('/api/v1/admin-console' + path, { ...options, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', ...options.headers } }); }
+  try { response = await fetch('/api/v1/admin-console' + path, { ...options, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Admin-Request': '1', ...options.headers } }); }
   catch (error) { if (error instanceof DOMException && error.name === 'AbortError') throw error; throw new ApiError(503, '无法连接管理后端，请稍后刷新'); }
   let body;
   try { body = await response.json(); } catch { throw new ApiError(response.status, '管理后端响应无效'); }

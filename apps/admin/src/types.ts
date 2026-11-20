@@ -14,3 +14,4 @@ export type AdminUsers = {
   stats: { total_users: number; free_users: number; abnormal_users: number };
   updated_at: string; usage_status: string; usage_note: string;
 };
+export type Plan = {plan_id: 'basic'|'pro'|'research'; name:string; daily_tokens:number; deep_research:boolean; policy_revision:string|null; published:boolean; model_risk_ready:boolean; capabilities:string[]; published_at:string|null};

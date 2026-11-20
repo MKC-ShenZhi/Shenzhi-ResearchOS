@@ -1,12 +1,40 @@
 """Audited Admin-only plan operations. Each caller owns a database transaction."""
 from datetime import datetime
-from sqlalchemy import select, text
+from sqlalchemy import bindparam, select, text
 from agent_contracts.canonical import digest
 from app.models.agent_entitlements import (PlanReleaseRow, EntitlementPolicyRow, OwnerEntitlementRow,
     EntitlementAuditRow, GrantRootRow, SubmissionRow, WindowCounterRow)
 from .policy import EntitlementPolicy
 from .plans import PLANS, POOL, build
 from .service import require, uid, now_utc
+
+
+async def list_audit(db, *, page, page_size):
+    rows = (await db.scalars(select(EntitlementAuditRow).where(
+        EntitlementAuditRow.principal.startswith('local-admin:')).order_by(
+        EntitlementAuditRow.created_at.desc(), EntitlementAuditRow.audit_id.desc())
+        .offset((page - 1) * page_size).limit(page_size))).all()
+    targets = []
+    for row in rows:
+        payload = row.payload if isinstance(row.payload, dict) else {}
+        request = payload.get('request')
+        request = request if isinstance(request, dict) else {}
+        ids = request.get('user_ids', [])
+        ids = [value for value in ids if isinstance(value, str) and value] if isinstance(ids, list) else []
+        owner = payload.get('owner_id')
+        if not ids and isinstance(owner, str) and owner.startswith('user:') and owner[5:]:
+            ids = [owner[5:]]
+        targets.append(list(dict.fromkeys(ids)))
+    user_ids = sorted({user_id for ids in targets for user_id in ids})
+    emails = {}
+    if user_ids:
+        users = (await db.execute(text('SELECT id, email FROM "user" WHERE id IN :ids')
+            .bindparams(bindparam('ids', expanding=True)), {'ids': user_ids})).mappings().all()
+        emails = {user['id']: user['email'] for user in users}
+    return {'items': [dict(operation_id=row.operation_id, principal=row.principal, reason=row.reason,
+        created_at=row.created_at.isoformat(), payload=row.payload,
+        target_accounts=[{'user_id': user_id, 'email': emails.get(user_id)} for user_id in ids])
+        for row, ids in zip(rows, targets)], 'page': page}
 
 
 async def admin_lock(db):
