@@ -39,21 +39,14 @@ async def execute(action, payload):
     async with session_scope() as db:
         if action == 'install-policy':
             policy = EntitlementPolicy.model_validate(payload['policy'])
+            require(policy.plan_id not in ('basic','pro','research'), 'FORMAL_PUBLICATION_REQUIRES_ADMIN_CONSOLE', 403)
             require(payload.get('approved') is True and payload.get('approval_ref'), 'POLICY_NOT_APPROVED')
             existing = await db.get(EntitlementPolicyRow, policy.policy_revision)
             require(existing is None, 'POLICY_REVISION_IMMUTABLE')
             db.add(EntitlementPolicyRow(policy_revision=policy.policy_revision, approved=True,
                 test_only=payload.get('test_only', True), payload=policy.model_dump(mode='json')))
         elif action == 'assign':
-            policy = await db.get(EntitlementPolicyRow, payload['policy_revision'])
-            require(policy is not None and policy.approved and not policy.test_only, 'POLICY_NOT_APPROVED')
-            owner = await db.get(OwnerEntitlementRow, payload['owner_id'], with_for_update=True)
-            if owner is None:
-                owner = OwnerEntitlementRow(owner_id=payload['owner_id'], policy_revision=payload['policy_revision'],
-                                             plan_id=payload['plan_id'], enabled=payload['enabled'])
-                db.add(owner)
-            else:
-                owner.policy_revision, owner.plan_id, owner.enabled = payload['policy_revision'], payload['plan_id'], payload['enabled']
+            require(False, 'ASSIGNMENT_REQUIRES_ADMIN_CONSOLE', 403)
         elif action == 'revoke':
             await service.revoke(db, payload['grant_id'], payload['operation_id'], payload['principal'], payload['reason'],
                                  capability_id=payload.get('capability_id'), capability_version=payload.get('capability_version'))

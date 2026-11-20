@@ -35,6 +35,8 @@ class AgentGatewayV2(AgentGateway):
                 MeteringProfileRow.client_key == request.idempotency_key))
             if original_profile:
                 mode = original_profile.context
+        if original_profile is None and request.owner_id.startswith('user:'):
+            require(mode == 'authorized', 'AUTHORIZED_ADMISSION_DISABLED', 503)
         if mode == 'observation_only':
             return await self.submit_observation(request, client_request_digest=client_request_digest)
         require(mode == 'authorized', 'AUTHORIZED_ADMISSION_DISABLED', 503)
@@ -142,6 +144,10 @@ class AgentGatewayV2(AgentGateway):
         # Only the configured Agent environment is queried, never an event URL.
         reader = AgentGateway(base_url=self.base_url, token=os.getenv('AGENT_FACT_READER_TOKEN', '').strip(), transport=self.transport)
         return CallStartFact.model_validate(await reader.request('GET', f'/internal/v2/tasks/{task_id}/call-facts/{call_id}'))
+
+    async def close_facts(self, task_id):
+        reader = AgentGateway(base_url=self.base_url, token=os.getenv('AGENT_FACT_READER_TOKEN', '').strip(), transport=self.transport)
+        return await reader.request('GET', f'/internal/v2/tasks/{task_id}/close-facts')
 
     async def usage(self, task_id, owner):
         from app.services.agent_entitlements.usage import UsageSettlement

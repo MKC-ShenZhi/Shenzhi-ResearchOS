@@ -267,6 +267,9 @@ async def current_entitlements(owner: str = Depends(request_owner), service=Depe
             if counter:
                 await service.refresh_rolling(db, counter, now_utc())
             held, used = (counter.held, counter.used) if counter else (0, 0)
+            if rule.quota_pool:
+                from app.services.agent_entitlements.admin import daily_balance
+                used, held = await daily_balance(db, owner, window)
             windows.append(dict(window_ref=window.model_dump(mode='json'), rule_id=rule.rule_id,
                 metric=rule.metric, unit=rule.unit, limit_units=rule.limit_units, held_units=held,
                 used_units=used, remaining_units=max(0, rule.limit_units-held-used)))

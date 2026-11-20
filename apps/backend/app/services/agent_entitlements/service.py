@@ -54,9 +54,6 @@ class Entitlements:
         self.allow_test_policy = allow_test_policy
 
     async def owner(self, db, owner_id, *, active=True):
-        if active and owner_id.startswith('user:') and await db.get(OwnerEntitlementRow, owner_id) is None:
-            from .defaults import initialize_free
-            await initialize_free(db, owner_id[5:])
         owner = await db.scalar(select(OwnerEntitlementRow).where(
             OwnerEntitlementRow.owner_id == owner_id).with_for_update().execution_options(populate_existing=True))
         require(owner is not None and (owner.enabled or not active), 'ENTITLEMENT_UNAVAILABLE', 403)
@@ -144,6 +141,9 @@ class Entitlements:
         policy = await self.policy(db, owner)
         require(owner.plan_id == policy.plan_id, 'PLAN_POLICY_CONFLICT', 403)
         require(request.get('owner_id') == owner_id, 'OWNER_CONFLICT', 403)
+        for skill in request.get('skills', []):
+            require(any(p.capability_id == 'skill:' + skill for p in policy.permission_snapshot.capabilities),
+                    'CAPABILITY_NOT_AUTHORIZED', 403)
         submission_id = uid()
         profile = await self.prepare_profile(db, owner_id=owner_id, request_digest=request_digest,
                                              admission_revision=policy.policy_revision,
@@ -169,19 +169,24 @@ class Entitlements:
                 db.add(counter)
                 await db.flush()
             await self.refresh_rolling(db, counter, now)
-            require(counter.used + counter.held + rule.reservation_units <= counter.limit_units, 'QUOTA_EXHAUSTED', 403)
+            reserved = 0 if policy.reservation_mode == 'per_call' else rule.reservation_units
+            used, held = counter.used, counter.held
+            if rule.quota_pool:
+                from .admin import daily_balance
+                used, held = await daily_balance(db, owner_id, window)
+            require(used + held + reserved <= counter.limit_units, 'QUOTA_EXHAUSTED', 403)
             allocation = Allocation(schema_version=1, allocation_id=uid(), rule_id=rule.rule_id, metric=rule.metric,
                                     unit=rule.unit, scope='owner_window' if rule.capability_id is None else 'capability_window',
                                     capability_id=rule.capability_id, purpose=rule.purpose,
-                                    reserved_units=rule.reservation_units, window_ref=window)
+                                    reserved_units=reserved, window_ref=window)
             allocations.append(allocation)
             db.add(ReservationAllocationRow(allocation_id=allocation.allocation_id, grant_id=root.grant_id,
                                            window_id=window.window_id, allocation=allocation.model_dump(mode='json'),
-                                           task_held=rule.reservation_units))
-            counter.held += rule.reservation_units
+                                           task_held=reserved))
+            counter.held += reserved
             await db.flush()
             await self.ledger(db, owner=owner_id, root=root, allocation=allocation.allocation_id,
-                              key=f'reserve:{allocation.allocation_id}', kind='held', held=rule.reservation_units)
+                              key=f'reserve:{allocation.allocation_id}', kind='held', held=reserved)
         grant = self.sign(dict(
             schema_version=1, grant_id=root.grant_id, reservation_id=root.reservation_id, revision=1,
             issuer=self.issuer, audience=self.audience, owner_id=owner_id, submission_id=submission_id,
@@ -191,7 +196,9 @@ class Entitlements:
             permission_snapshot_digest=digest(policy.permission_snapshot.model_dump(mode='json')),
             issued_at=now, not_before=now, expires_at=now + timedelta(seconds=policy.grant_ttl_seconds),
             capabilities=[c.model_dump(mode='json') for c in policy.permission_snapshot.capabilities],
-            allocations=[a.model_dump(mode='json') for a in allocations], execution_constraints={}), BudgetGrant)
+            allocations=[a.model_dump(mode='json') for a in allocations],
+            execution_constraints={'reservation_mode': policy.reservation_mode,
+                **({'model_call_budget':'dynamic_v1'} if policy.dynamic_model_budget else {})}), BudgetGrant)
         db.add(GrantRevisionRow(grant_id=root.grant_id, revision=1, payload=grant.model_dump(mode='json'),
                                payload_digest=digest(grant.model_dump(mode='json', exclude={'signature'}))))
         return submission, grant
@@ -285,6 +292,8 @@ class Entitlements:
         require(policy_row is not None and policy_row.approved and (not policy_row.test_only or self.allow_test_policy), 'POLICY_NOT_APPROVED', 403)
         policy = EntitlementPolicy.model_validate(policy_row.payload)
         now = now_utc()
+        if policy.disable_scope == 'every_start' and owner.policy_revision != grant.policy_revision:
+            reason = 'POLICY_REVOKED'
         if not owner.enabled or root.status != 'active' or root.overage or not grant.not_before <= now < grant.expires_at:
             reason = 'GRANT_INACTIVE'
         elif (request.owner_id, request.submission_id, request.reservation_id, request.task_id,
@@ -324,6 +333,13 @@ class Entitlements:
         if len(requested) != len(request.requested_allocations) or set(requested) != {a.allocation_id for a in applicable}:
             reason = reason or 'ALLOCATION_MISMATCH'
         held = {}
+        model_budget = None
+        is_model = request.purpose in ('main', 'summary')
+        dynamic = policy.dynamic_model_budget and is_model
+        if dynamic and request.model_budget is None:
+            reason = reason or 'MODEL_BUDGET_REQUIRED'
+        if request.model_budget is not None and not dynamic:
+            reason = reason or 'DYNAMIC_BUDGET_REQUIRES_NEW_POLICY'
         deadlines = [now + timedelta(seconds=policy.permit_ttl_seconds), grant.expires_at]
         for a in applicable:
             requested_a = requested.get(a.allocation_id)
@@ -337,7 +353,34 @@ class Entitlements:
                 reason = reason or 'ALLOCATION_MISMATCH'
                 continue
             units = requested_a.upper_bound_units
-            if units > rule.call_upper_bound or units > allocation.task_held:
+            balance_used, balance_held = counter.used, counter.held
+            if rule.quota_pool:
+                from .admin import daily_balance
+                balance_used, balance_held = await daily_balance(db, owner.owner_id, a.window_ref)
+            available = (counter.limit_units - balance_used - balance_held
+                         if policy.reservation_mode == 'per_call' else allocation.task_held)
+            if dynamic and a.unit == 'token':
+                budget = request.model_budget
+                profile = policy.model_budget_profiles.get(request.capability_id)
+                if budget is None:
+                    reason = reason or 'MODEL_BUDGET_REQUIRED'
+                elif profile is None or budget.basis != profile.input_basis:
+                    reason = reason or 'MODEL_BUDGET_UNCONFIGURED'
+                else:
+                    # Deliberately a deployment-approved RISK estimate, not a
+                    # tokenizer proof. Full payload bytes cover messages/tools;
+                    # reviewed overhead covers provider framing assumptions.
+                    input_tokens = budget.input_bytes + profile.input_overhead_tokens
+                    context = min(profile.context_window_tokens, budget.model_context_window or profile.context_window_tokens)
+                    output_tokens = min(budget.requested_output_tokens, budget.model_max_output_tokens,
+                        profile.max_output_tokens, context - input_tokens, available - input_tokens)
+                    if output_tokens <= 0:
+                        reason = reason or 'MODEL_INPUT_BUDGET_EXHAUSTED'
+                    else:
+                        units = input_tokens + output_tokens
+                        model_budget = dict(schema_version=1, basis=profile.input_basis,
+                            input_tokens=input_tokens, output_tokens=output_tokens, reserved_tokens=units)
+            elif units > rule.call_upper_bound or units > available:
                 reason = reason or 'QUOTA_EXHAUSTED'
             if a.window_ref.accounting_basis != 'free' and a.metric in ('attempted_units', 'successful_units') and units < 1:
                 reason = reason or 'CALL_BOUND_INVALID'
@@ -356,6 +399,8 @@ class Entitlements:
                                              'task_id', 'run_id', 'execution_id', 'capability_id', 'capability_version', 'invocation_mode', 'purpose')},
                        policy_revision=grant.policy_revision, issued_at=now.isoformat(), expires_at=min(deadlines).isoformat(),
                        start_before=start_before.isoformat(), allocations=[dict(a.model_dump(mode='json'), held_units=held.get(a.allocation_id, 0)) for a in applicable])
+        if model_budget is not None:
+            payload['model_budget'] = model_budget
         response = dict(schema_version=1, call_id=request.call_id, request_digest=request.request_digest,
                         decision='denied' if reason else 'authorized', reason_code=reason, retryable=False,
                         current_grant_revision=root.current_revision, permit=None if reason else payload)
@@ -366,7 +411,13 @@ class Entitlements:
         if reason is None:
             for allocation_id, units in held.items():
                 allocation = await db.get(ReservationAllocationRow, allocation_id)
-                allocation.task_held -= units  # task-held -> call-held, no second window debit
+                if policy.reservation_mode == 'per_call':
+                    counter = await db.get(WindowCounterRow, allocation.window_id)
+                    counter.held += units
+                    await self.ledger(db, owner=owner.owner_id, root=root, allocation=allocation_id,
+                        key=f'permit-reserve:{permit_id}:{allocation_id}', kind='held', held=units)
+                else:
+                    allocation.task_held -= units  # task-held -> call-held, no second window debit
         return response
 
     async def start(self, db, permit_id, operation: PermitStart):
@@ -394,7 +445,14 @@ class Entitlements:
             allocation = await db.get(ReservationAllocationRow, allocation_id)
             counter = await db.get(WindowCounterRow, allocation.window_id)
             await self.refresh_rolling(db, counter, now)
-            require(counter.used + counter.held <= counter.limit_units, 'QUOTA_EXHAUSTED', 403)
+            used, held = counter.used, counter.held
+            if (grant.execution_constraints.get('reservation_mode') == 'per_call'
+                    and allocation.allocation['metric'] == 'tokens'):
+                from .admin import daily_balance
+                from agent_contracts.v2 import Allocation
+                ref = Allocation.model_validate(allocation.allocation).window_ref
+                used, held = await daily_balance(db, owner.owner_id, ref)
+            require(used + held <= counter.limit_units, 'QUOTA_EXHAUSTED', 403)
         policy_row = await db.get(EntitlementPolicyRow, grant.policy_revision)
         require(policy_row.approved and (not policy_row.test_only or self.allow_test_policy), 'POLICY_NOT_APPROVED', 403)
         policy = EntitlementPolicy.model_validate(policy_row.payload)
@@ -425,7 +483,13 @@ class Entitlements:
         for allocation_id, units in permit.held.items():
             allocation = await db.get(ReservationAllocationRow, allocation_id)
             # Return to task reserve, not spendable owner balance until task close.
-            allocation.task_held += units
+            if grant.execution_constraints.get('reservation_mode') == 'per_call':
+                counter = await db.get(WindowCounterRow, allocation.window_id)
+                counter.held -= units
+                await self.ledger(db, owner=owner.owner_id, root=root, allocation=allocation_id,
+                    key=f'void:{permit.permit_id}:{allocation_id}', kind='released', held=-units)
+            else:
+                allocation.task_held += units
         permit.held, permit.state, permit.void_proof = {}, 'void', raw
 
     async def abandon_request(self, db, body):
@@ -451,7 +515,13 @@ class Entitlements:
                 require(old.start is None and old.state in ('authorized', 'expired', 'denied'), 'VOID_NOT_PROVEN')
                 for allocation_id, units in old.held.items():
                     allocation = await db.get(ReservationAllocationRow, allocation_id)
-                    allocation.task_held += units
+                    if grant.execution_constraints.get('reservation_mode') == 'per_call':
+                        counter = await db.get(WindowCounterRow, allocation.window_id)
+                        counter.held -= units
+                        await self.ledger(db, owner=owner.owner_id, root=root, allocation=allocation_id,
+                            key=f'abandon:{old.permit_id}:{allocation_id}', kind='released', held=-units)
+                    else:
+                        allocation.task_held += units
                 old.held, old.state, old.void_proof = {}, 'void', proof
         else:
             response = CallPermitResponse(schema_version=1, call_id=request.call_id, request_digest=request.request_digest,

@@ -1,6 +1,6 @@
 import { backendConfig, backendConnectionIsAllowed } from "@/config/backend";
 
-/** Better Auth lifecycle adapter. Backend owns all entitlement business logic. */
+/** Compatibility notification only; Backend leaves new accounts unassigned. Admin assigns plans. */
 export async function initializeUserEntitlement(userId: string): Promise<void> {
   if (!backendConfig.url || !backendConnectionIsAllowed(backendConfig)) {
     throw new Error("Entitlement backend unavailable");

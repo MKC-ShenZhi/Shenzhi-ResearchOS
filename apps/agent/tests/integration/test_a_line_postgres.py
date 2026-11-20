@@ -42,7 +42,7 @@ class PostgresALineTests(suite.ALinePersistenceTests):
             db.add(EntitlementPolicyRow(policy_revision=REVISION, approved=True, test_only=False, payload=payload['policy']))
         return REVISION
 
-    async def test_free_backfill_is_atomic_and_preserves_special_assignment(self):
+    async def test_retired_free_backfill_preserves_pending_and_special_assignment(self):
         from unittest.mock import patch
         from app.services.agent_entitlements.defaults import initialize_free
         from app.models.agent_entitlements import OwnerEntitlementRow
@@ -52,12 +52,12 @@ class PostgresALineTests(suite.ALinePersistenceTests):
                 async with self.backend() as db, db.begin():
                     return await initialize_free(db)
             counts = await asyncio.gather(initialize(), initialize())
-            self.assertEqual(sum(counts), 2)
+            self.assertEqual(sum(counts), 0)
             self.assertEqual(await initialize(), 0)
         async with self.backend() as db:
             self.assertEqual((await db.get(OwnerEntitlementRow, 'user:test')).plan_id, 'test-plan')
             new = await db.get(OwnerEntitlementRow, 'user:new')
-            self.assertEqual((new.plan_id, new.policy_revision, new.enabled), ('free', revision, True))
+            self.assertIsNone(new)
             self.assertIsNone(await db.get(OwnerEntitlementRow, 'anon:new'))
 
     async def test_admin_api_search_pagination_and_settled_usage(self):
@@ -75,7 +75,9 @@ class PostgresALineTests(suite.ALinePersistenceTests):
         revision = await self.seed_users()
         with patch.dict(os.environ, {'SHENZHI_FREE_POLICY_REVISION': revision}):
             async with self.backend() as db, db.begin():
-                await initialize_free(db, 'new')
+                # Historical Free fixture, not a registration side effect.
+                db.add(OwnerEntitlementRow(owner_id='user:new',plan_id='free',policy_revision=revision,enabled=True))
+                await db.flush()
                 policy = EntitlementPolicy.model_validate((await db.get(EntitlementPolicyRow, revision)).payload)
                 rule = policy.rules[0]
                 window = rule.window('user:new', revision, now_utc())

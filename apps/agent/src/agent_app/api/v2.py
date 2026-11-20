@@ -183,6 +183,17 @@ async def fact(task_id: str, call_id: str, db=Depends(get_session)):
     return row.start_fact
 
 
+@router.get('/tasks/{task_id}/close-facts', dependencies=[Depends(fact_reader)])
+async def close_facts(task_id: str, db=Depends(get_session), control=Depends(metering_control)):
+    task = await db.scalar(select(TaskRow).where(TaskRow.task_id == task_id)
+                           .with_for_update().execution_options(populate_existing=True))
+    if task is None:
+        raise GateDenied('TASK_NOT_FOUND', 404)
+    # This read creates no manifest/outbox records and does not seal anything.
+    manifest = await control.close_manifest(db, task_id)
+    return dict(task_status=task.status, manifest=manifest.model_dump(mode='json'))
+
+
 @router.post('/worker/claim', dependencies=[Depends(worker)])
 async def claim(body: dict, db=Depends(get_session), control=Depends(metering_control)):
     check(set(body) == {'schema_version', 'worker_id'} and body['schema_version'] == 1 and bool(body['worker_id']), 'PROTOCOL_INVALID')
@@ -215,7 +226,9 @@ async def claim(body: dict, db=Depends(get_session), control=Depends(metering_co
     return dict(schema_version=1, run=repository._request_dict(request), lease_token=lease_token,
                 event_seq=event_seq, execution_id=execution.execution_id,
                 metering_context=profile.context, metering_profile_id=profile.profile_id,
-                risk_profile=state['model_risk_profile'] if profile.context == 'authorized' else None)
+                risk_profile=state['model_risk_profile'] if profile.context == 'authorized' else None,
+                dynamic_model_budget=(grant.execution_constraints.get('model_call_budget') == 'dynamic_v1'
+                                      if profile.context == 'authorized' else False))
 
 
 @router.post('/runs/{run_id}/call-intents', dependencies=[Depends(worker)])
@@ -243,7 +256,9 @@ async def intent(run_id: str, body: CallIntent, request: Request, db=Depends(get
         accepted = await control.attach_permit(db, row.call_id, response)
         await db.commit()
         check(accepted, response.get('reason_code') or 'CALL_DENIED')
-    return dict(schema_version=1, call_id=row.call_id, state=row.state, activation_already_recorded=False)
+    return dict(schema_version=1, call_id=row.call_id, state=row.state, activation_already_recorded=False,
+        **({'model_budget': row.permit['permit']['model_budget']}
+           if row.permit and row.permit.get('permit', {}).get('model_budget') else {}))
 
 
 @router.post('/calls/{call_id}/start', dependencies=[Depends(worker)])

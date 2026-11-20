@@ -1,9 +1,9 @@
 """Worker-Control envelopes. Lease tokens stay inside this service boundary."""
 from typing import Literal
-from pydantic import AwareDatetime, model_validator, field_validator
+from pydantic import AwareDatetime, Field, model_validator, field_validator
 from .wire import EventIngestWire, ReportIngestWire, RunSteerRequestWire
 
-from .v2 import ID, Digest, Identity, Invocation, Positive, Purpose, Units, V2, CallPermitRequest
+from .v2 import ID, Digest, Identity, Invocation, Positive, Purpose, Units, V2, CallPermitRequest, ModelCallBudgetRequest
 
 
 class WorkerIdentity(V2):
@@ -13,6 +13,7 @@ class WorkerIdentity(V2):
 
 
 class CallIntent(WorkerIdentity):
+    model_budget: ModelCallBudgetRequest | None = Field(default=None, exclude_if=lambda v: v is None)
     call_id: ID
     logical_call_id: ID
     capability_identity: Identity

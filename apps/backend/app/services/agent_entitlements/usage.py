@@ -214,6 +214,30 @@ class UsageSettlement:
         require((manifest.owner_id, manifest.submission_id, manifest.task_id, manifest.agent_audience) ==
                 (owner.owner_id, root.submission_id, root.bound_task_id, self.entitlements.audience), 'CLOSE_IDENTITY_CONFLICT')
         root.settlement_status = 'draining'
+        complete = await self.close_complete(db, manifest, root)
+        policy_row = await db.get(EntitlementPolicyRow, grant.policy_revision)
+        policy = EntitlementPolicy.model_validate(policy_row.payload)
+        status = 'reconciliation_required'
+        if complete and not root.overage and policy_row.approved and policy.unused_release_strategy == 'sealed_complete_only':
+            allocations = (await db.scalars(select(ReservationAllocationRow).where(
+                ReservationAllocationRow.grant_id == root.grant_id).order_by(ReservationAllocationRow.allocation_id))).all()
+            for allocation in allocations:
+                units = allocation.task_held
+                if units:
+                    counter = await db.get(WindowCounterRow, allocation.window_id)
+                    counter.held -= units
+                    allocation.task_held = 0
+                    await self.entitlements.ledger(db, owner=owner.owner_id, root=root, allocation=allocation.allocation_id,
+                        key=f'close:{root.grant_id}:{allocation.allocation_id}', kind='released', held=-units,
+                        evidence={'manifest_id': manifest.manifest_id})
+            root.status = 'closed'
+            status = 'settled'
+        root.settlement_status = status
+        db.add(TaskCloseRow(manifest_id=manifest.manifest_id, grant_id=root.grant_id, payload=raw, status=status))
+        return status
+
+    async def close_complete(self, db, manifest, root):
+        """Re-evaluate live settlement rows; never trust a cached close status."""
         permits = (await db.scalars(select(CallPermitRow).where(CallPermitRow.grant_id == root.grant_id,
                                                               CallPermitRow.state != 'denied'))).all()
         permits = [p for p in permits if p.response.get('permit') is not None]
@@ -239,26 +263,7 @@ class UsageSettlement:
         complete = complete and not unknown and not manifest.unknown_call_ids and not manifest.missing_sequences
         complete = complete and manifest.outbox_ack_high_watermark == manifest.last_task_usage_sequence
         complete = complete and all(p.state in ('void', 'completed') and not any(p.held.values()) for p in permits)
-        policy_row = await db.get(EntitlementPolicyRow, grant.policy_revision)
-        policy = EntitlementPolicy.model_validate(policy_row.payload)
-        status = 'reconciliation_required'
-        if complete and not root.overage and policy_row.approved and policy.unused_release_strategy == 'sealed_complete_only':
-            allocations = (await db.scalars(select(ReservationAllocationRow).where(
-                ReservationAllocationRow.grant_id == root.grant_id).order_by(ReservationAllocationRow.allocation_id))).all()
-            for allocation in allocations:
-                units = allocation.task_held
-                if units:
-                    counter = await db.get(WindowCounterRow, allocation.window_id)
-                    counter.held -= units
-                    allocation.task_held = 0
-                    await self.entitlements.ledger(db, owner=owner.owner_id, root=root, allocation=allocation.allocation_id,
-                        key=f'close:{root.grant_id}:{allocation.allocation_id}', kind='released', held=-units,
-                        evidence={'manifest_id': manifest.manifest_id})
-            root.status = 'closed'
-            status = 'settled'
-        root.settlement_status = status
-        db.add(TaskCloseRow(manifest_id=manifest.manifest_id, grant_id=root.grant_id, payload=raw, status=status))
-        return status
+        return complete
 
     async def task_usage(self, db, *, task_id, owner_id):
         profile = await db.scalar(select(MeteringProfileRow).where(MeteringProfileRow.task_id == task_id,

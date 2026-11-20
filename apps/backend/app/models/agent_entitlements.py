@@ -193,3 +193,10 @@ class TaskCloseRow(Base):
     grant_id: Mapped[str] = mapped_column(ForeignKey('agent_grant_roots.grant_id'), index=True)
     payload: Mapped[dict] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(40))
+
+class PlanReleaseRow(Base):
+    """Current publication pointer; immutable policy and historical audits remain."""
+    __tablename__ = 'agent_plan_releases'
+    plan_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    policy_revision: Mapped[str] = mapped_column(ForeignKey('agent_entitlement_policies.policy_revision'))
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

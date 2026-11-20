@@ -17,6 +17,7 @@ ANOMALY = '''(e.owner_id IS NULL OR NOT e.enabled OR p.policy_revision IS NULL
 
 
 async def list_users(db, *, page, page_size, search, plan_id):
+    from app.services.agent_entitlements.admin import daily_balance
     now = now_utc()
     stats = (await db.execute(text(f'''SELECT count(*) AS total_users,
         count(*) FILTER (WHERE e.plan_id = 'free') AS free_users,
@@ -52,6 +53,8 @@ async def list_users(db, *, page, page_size, search, plan_id):
                     window = rule.window(owner, policy.policy_revision, now)
                     counter = await db.get(WindowCounterRow, window.window_id)
                     used, held = (counter.used, counter.held) if counter else (0, 0)
+                    if rule.quota_pool:
+                        used, held = await daily_balance(db, owner, window)
                     if counter and window.window_type == 'rolling':
                         # Same trusted-start ledger basis as Entitlements.refresh_rolling;
                         # this read endpoint must not mutate counters or acquire write locks.
@@ -67,5 +70,5 @@ async def list_users(db, *, page, page_size, search, plan_id):
                         accounting_basis=window.accounting_basis))
         items.append(item)
     plans = (await db.execute(text('SELECT DISTINCT plan_id FROM agent_owner_entitlements ORDER BY plan_id'))).scalars().all()
-    return dict(items=items, total=total, page=page, page_size=page_size, stats=dict(stats), plans=plans,
+    return dict(items=items, total=total, page=page, page_size=page_size, stats=dict(stats), plans=sorted(set(plans) | {'basic', 'pro', 'research'}),
                 updated_at=now, usage_status='near_realtime', usage_note='已入账实测值（Partial 为已知下界）与未释放预留分列；未结算/未知用量保留预留，不代表零消耗。')

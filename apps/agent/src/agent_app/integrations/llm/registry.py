@@ -33,6 +33,8 @@ class Capabilities(Definition):
     chat_max_tokens: int = Field(default=4096, gt=0)
     agent_max_tokens: int = Field(default=32768, gt=0)
     max_output_tokens: int = Field(default=4096, gt=0)
+    # No invented context default; unknown deployments require reviewed risk constraints.
+    context_window_tokens: int | None = Field(default=None, gt=0)
 
     def supports(self, purpose: Purpose) -> bool:
         return self.chat and self.streaming and (purpose != 'agent' or self.tool_calling)

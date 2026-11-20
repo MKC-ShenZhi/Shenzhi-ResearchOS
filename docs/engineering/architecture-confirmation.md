@@ -685,3 +685,6 @@ Agent 通过 `apps/agent/src/agent_app/integrations/llm` 的 Model Registry / Re
 ## 独立 Admin Console
 
 `apps/admin` 使用独立 Vite / React 工程与 3101 开发进程。其同源 `/api/v1/admin-console/*` 直接进入 FastAPI 独立管理认证边界，不经过 Web BFF / Better Auth；用户只读投影复用现有 Service。Agent 运行配置通过 Backend Integration 服务端读取。local_password 模式仅限本机，远程生产管理须替换认证适配层。配置与部署约束见 [Admin README](../../apps/admin/README.md)。Web 内的旧用户管理页面、菜单入口与专用 Client 已移除，管理界面统一使用独立 Admin Console；旧 Backend `/api/v1/admin/*` API 与 `SHENZHI_ADMIN_USER_IDS` 配置已移除。
+
+
+正式套餐 Assignment 仅经 Admin 独立会话写入，注册与首次使用不自动授予权益；Backend 复用现有 Policy/Grant/Permit/Usage Ledger。新增发布指针表由迁移028维护，正式每调用预留与历史任务固定预留并存，上海自然日余额跨套餐版本共享。实现及风险审批要求见 [Admin README](../../apps/admin/README.md)。

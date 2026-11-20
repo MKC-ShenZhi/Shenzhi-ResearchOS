@@ -17,7 +17,7 @@ import json
 import httpx
 
 from agent_contracts.canonical import digest, request_digest_v1
-from agent_contracts.v2 import ModelIdentity, SkillIdentity, ToolIdentity
+from agent_contracts.v2 import ModelIdentity, SkillIdentity, ToolIdentity, ModelCallBudgetApproval
 from agent_app.errors import BusinessError
 
 current_meter: ContextVar['WorkerMeter | None'] = ContextVar('agent_execution_meter', default=None)
@@ -90,6 +90,12 @@ def model_identity(resolved):
             'adapter_build': implementation_digest(), 'usage_frame_semantics': 'cumulative'}), dependency_digests=[])
 
 
+def model_payload_digest(payload):
+    # Dynamic budget protocol binds the body WITHOUT the negotiated max_tokens;
+    # the approved output cap is bound separately in the durable Permit.
+    return request_digest_v1({k:v for k,v in payload.items() if k != 'max_tokens'})
+
+
 class Measurement:
     def __init__(self, *, is_model=True):
         self.prompt_tokens = self.completion_tokens = None
@@ -100,10 +106,11 @@ class Measurement:
         self.inconsistent = False
         self.complete_snapshot = False
         self.send_guard = None
+        self.output_tokens = None
 
-    def ensure_send(self):
+    def ensure_send(self, payload=None):
         if self.send_guard is not None:
-            self.send_guard()
+            self.send_guard(payload)
 
     def cumulative_usage(self, raw):
         self.complete_snapshot = all(type(raw.get(k)) is int and raw[k] >= 0
@@ -134,11 +141,14 @@ class Measurement:
 
 class WorkerMeter:
     def __init__(self, control, *, run_id, execution_id, worker_id, lease_token, context, stop,
-                 risk_profile=None):
+                 risk_profile=None, dynamic_budget=True):
         self.control, self.run_id, self.context, self.stop = control, run_id, context, stop
         self.worker = dict(schema_version=1, execution_id=execution_id, worker_id=worker_id, lease_token=lease_token)
         self.risk_profile = risk_profile
+        self.dynamic_budget = dynamic_budget
         self.receipts = {}
+        self.model_budgets = {}
+        self.payload_bindings = {}
         spool_root = os.getenv('AGENT_USAGE_SPOOL_ROOT', '').strip()
         if not spool_root:
             raise BusinessError(20004, 'Worker 持久用量目录未配置', 503)
@@ -146,7 +156,7 @@ class WorkerMeter:
         self.spool_root.mkdir(parents=True, exist_ok=True)
 
     async def begin(self, identity, *, purpose, invocation='internal', logical_id=None, request_digest=None,
-                    logical_attempt=1, transport_attempt=1, activation_id=None):
+                    logical_attempt=1, transport_attempt=1, activation_id=None, model_budget=None):
         if self.stop.is_set():
             raise asyncio.CancelledError()
         call_id = uuid.uuid4().hex
@@ -157,16 +167,29 @@ class WorkerMeter:
                        provider_id=identity.provider_id if identity.kind == 'model' else None,
                        request_digest=request_digest or digest([identity.capability_id, purpose]),
                        input_bound_evidence_ref=None, output_bound_evidence_ref=None, risk_profile=self.risk_profile)
+        if model_budget is not None:
+            payload['model_budget'] = model_budget.model_dump(mode='json')
         path = 'calls/authorize' if self.context == 'authorized' else 'call-intents'
         try:
             intent = await self.control.post(f'/internal/v2/runs/{self.run_id}/{path}', payload)
             if intent.get('activation_already_recorded'):
                 return None
+            if self.context == 'authorized' and model_budget is not None:
+                approved = ModelCallBudgetApproval.model_validate(intent.get('model_budget'))
+                if (approved.basis != model_budget.basis or approved.output_tokens > min(
+                        model_budget.requested_output_tokens, model_budget.model_max_output_tokens)):
+                    raise BusinessError(20004, 'MODEL_BUDGET_CONFLICT', 403)
+                self.model_budgets[call_id] = approved
+                self.payload_bindings[call_id] = request_digest
             start = await self.control.post(f'/internal/v2/calls/{call_id}/start', self.worker)
+            if call_id in self.model_budgets and start.get('model_budget') != self.model_budgets[call_id].model_dump(mode='json'):
+                raise BusinessError(20004, 'MODEL_BUDGET_CONFLICT', 403)
         except Exception as exc:
             self.stop.set()
             # A Control timeout is not a provider failure and must never enter
             # the provider's HTTP retry loop or create a second sending right.
+            if isinstance(exc, BusinessError):
+                raise
             raise BusinessError(20004, '调用授权或启动未获可信回执', 503) from exc
         if not start.get('may_send'):
             self.stop.set()
@@ -178,7 +201,14 @@ class WorkerMeter:
         self.receipts[call_id] = [cutoff, False]
         return call_id
 
-    def consume_send(self, call_id):
+    def consume_send(self, call_id, payload=None):
+        if call_id in self.model_budgets:
+            approved = self.model_budgets[call_id]
+            if (payload is None or type(payload.get("max_tokens")) is not int
+                    or payload["max_tokens"] != approved.output_tokens
+                    or model_payload_digest(payload) != self.payload_bindings[call_id]):
+                self.stop.set()
+                raise BusinessError(20004, "MODEL_PAYLOAD_BUDGET_CONFLICT", 403)
         cutoff, used = self.receipts[call_id]
         if used or self.stop.is_set() or (cutoff and datetime.now(timezone.utc) >= datetime.fromisoformat(cutoff)):
             self.stop.set()
@@ -236,7 +266,7 @@ async def replay_observation_spool(control):
 
 @asynccontextmanager
 async def actual_call(identity_factory, *, purpose, logical_id=None, request_digest=None,
-                      logical_attempt=1, transport_attempt=1, invocation='internal'):
+                      logical_attempt=1, transport_attempt=1, invocation='internal', model_budget=None):
     meter = current_meter.get()
     measurement = Measurement()
     if meter is None:
@@ -246,9 +276,13 @@ async def actual_call(identity_factory, *, purpose, logical_id=None, request_dig
     measurement.is_model = identity.kind == 'model'
     call_id = await meter.begin(identity, purpose=purpose, logical_id=logical_id,
                                request_digest=request_digest, logical_attempt=logical_attempt,
-                               transport_attempt=transport_attempt, invocation=invocation)
+                               transport_attempt=transport_attempt, invocation=invocation,
+                               **({"model_budget":model_budget} if model_budget is not None else {}))
     if hasattr(meter, 'consume_send'):
-        measurement.send_guard = lambda: meter.consume_send(call_id)
+        measurement.send_guard = lambda payload=None: meter.consume_send(call_id, payload=payload)
+    approved = getattr(meter, "model_budgets", {}).get(call_id)
+    if approved is not None:
+        measurement.output_tokens = approved.output_tokens
     token = current_parent_call.set(call_id)
     try:
         yield measurement

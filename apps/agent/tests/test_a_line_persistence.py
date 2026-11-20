@@ -98,7 +98,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
             self.profile_id = submission.profile_id
         envelope = TaskSubmissionV2(schema_version=1, metering_profile_id=self.profile_id, metering_context='authorized',
             agent_audience='agent-test', owner_id=owner, request_digest=grant.request_digest, submission_id=self.submission_id,
-            budget_grant=grant, permission_snapshot=self.policy.permission_snapshot, call_bounds={'test-tokens':20}, request=request)
+            budget_grant=grant, permission_snapshot=self.policy.permission_snapshot, call_bounds={r.rule_id:r.call_upper_bound for r in self.policy.rules}, request=request)
         async with self.agent() as db:
             task = await repository.submit(db, TaskSubmission(owner_id=owner, prompt=prompt, model='test/m1',
                         idempotency_key='v2:'+self.profile_id), metering=envelope)
@@ -129,7 +129,8 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         body = CallIntent(**self.worker.model_dump(), call_id=call, logical_call_id='logical', capability_identity=self.identity,
             invocation_mode='internal', purpose='main', parent_call_id=None, activation_id=None, logical_attempt=1,
             transport_attempt=1, provider_id='test', request_digest=digest(['request',call]), input_bound_evidence_ref=None,
-            output_bound_evidence_ref=None, risk_profile='test-risk-explicitly-approved')
+            output_bound_evidence_ref=None, risk_profile='test-risk-explicitly-approved',
+            model_budget=getattr(self,'model_budget',None))
         async with self.agent() as db, db.begin():
             await self.control.intent(db, self.run.run_id, body)
         async with self.agent() as db:
@@ -328,6 +329,212 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
             request=self.permit_request_value.model_copy(update={'call_id':'later'})
             self.assertEqual((await self.service.permit(db,request))['decision'],'denied')
 
+    async def reconciliation_fixture(self):
+        await self.prepare()
+        await self.start_call()
+        await self.finish_call(tokens=30)
+        await self.flush_usage()
+        async with self.agent() as db, db.begin():
+            (await db.get(TaskRow, self.task_id)).status = 'completed'
+            (await db.get(ExecutionRow, self.worker.execution_id)).sealed = True
+            manifest = await self.control.close_manifest(db, self.task_id)
+        async with self.backend() as db, db.begin():
+            self.assertEqual(await self.usage.close(db, manifest), 'reconciliation_required')
+        return {'task_status': 'completed', 'manifest': manifest.model_dump(mode='json')}
+
+    async def test_admin_reconcile_overage_preview_close_and_replay(self):
+        from app.services.agent_entitlements.reconciliation import apply
+        from app.schemas.admin_plans import ReconcileGrant
+        from app.models.agent_entitlements import EntitlementAuditRow
+        facts = await self.reconciliation_fixture()
+        preview = ReconcileGrant(operation_id='reconcile-preview', reason='reviewed', evidence_ref='test-evidence')
+        async with self.backend() as db, db.begin():
+            result = await apply(db, self.service, self.grant.grant_id, preview, 'local-admin:test', facts)
+            self.assertTrue(result['eligible'])
+            self.assertEqual(sum(result['released'].values()), 30)
+            self.assertEqual((await db.scalar(select(WindowCounterRow))).held, 30)
+        body = preview.model_copy(update={'preview': False, 'operation_id': 'reconcile-execute'})
+        async with self.backend() as db, db.begin():
+            before = (await db.scalars(select(UsageLedgerRow))).all()
+            history = [(e.entry_id, e.held_delta, e.used_delta, e.evidence) for e in before]
+            result = await apply(db, self.service, self.grant.grant_id, body, 'local-admin:test', facts)
+            self.assertTrue(result['eligible'])
+            root = await db.get(GrantRootRow, self.grant.grant_id)
+            self.assertEqual(root.status, 'closed')
+            self.assertTrue(root.overage)
+            counter = await db.scalar(select(WindowCounterRow))
+            self.assertEqual((counter.used, counter.held), (33, 0))
+        async with self.backend() as db, db.begin():
+            self.assertEqual(await apply(db, self.service, self.grant.grant_id, body, 'local-admin:test', {}), result)
+            after = (await db.scalars(select(UsageLedgerRow))).all()
+            self.assertEqual(len(after), len(history) + 1)
+            for entry_id, held, used, evidence in history:
+                entry = await db.get(UsageLedgerRow, entry_id)
+                self.assertEqual((entry.held_delta, entry.used_delta, entry.evidence), (held, used, evidence))
+            self.assertEqual(await db.scalar(select(func.count()).select_from(EntitlementAuditRow).where(
+                EntitlementAuditRow.operation_id == body.operation_id)), 1)
+            with self.assertRaises(EntitlementError):
+                await apply(db, self.service, self.grant.grant_id, body.model_copy(update={'reason':'changed'}), 'local-admin:test', facts)
+
+    async def test_admin_reconcile_rejects_unsafe_conditions_and_audits(self):
+        from app.services.agent_entitlements.reconciliation import apply
+        from app.schemas.admin_plans import ReconcileGrant
+        from app.models.agent_entitlements import EntitlementAuditRow
+        facts = await self.reconciliation_fixture()
+        body = ReconcileGrant(operation_id='reject-not-complete', reason='reviewed', evidence_ref='test', preview=False)
+        for suffix, patch_manifest, reason in [
+            ('stale', {'closed_at':(datetime.now(timezone.utc)-timedelta(minutes=2)).isoformat()}, 'CLOSE_FACTS_STALE'),
+            ('manifest', {'last_task_usage_sequence':99}, 'FINAL_CLOSE_MANIFEST_NOT_SUBMITTED'),
+        ]:
+            async with self.backend() as db, db.begin():
+                result = await apply(db, self.service, self.grant.grant_id,
+                    body.model_copy(update={'operation_id':'reject-'+suffix}), 'local-admin:test',
+                    {**facts, 'manifest':{**facts['manifest'], **patch_manifest}})
+                self.assertEqual(result['reason'], reason)
+        async with self.backend() as db, db.begin():
+            result = await apply(db, self.service, self.grant.grant_id, body, 'local-admin:test',
+                                 {**facts, 'task_status':'running'})
+            self.assertEqual(result['reason'], 'TASK_NOT_COMPLETED')
+            self.assertIsNotNone(await db.scalar(select(EntitlementAuditRow).where(EntitlementAuditRow.operation_id == body.operation_id)))
+        async with self.backend() as db, db.begin():
+            permit = await db.get(CallPermitRow, self.response['permit']['permit_id'])
+            permit.state = 'unknown'
+        async with self.backend() as db, db.begin():
+            result = await apply(db, self.service, self.grant.grant_id, body.model_copy(update={'operation_id':'reject-unknown-call'}), 'local-admin:test', facts)
+            self.assertEqual(result['reason'], 'CLOSE_INCOMPLETE_OR_CALLS_UNSETTLED')
+        async with self.backend() as db, db.begin():
+            (await db.get(CallPermitRow, self.response['permit']['permit_id'])).state = 'completed'
+            (await db.scalar(select(WindowCounterRow))).held += 1
+        async with self.backend() as db, db.begin():
+            result = await apply(db, self.service, self.grant.grant_id, body.model_copy(update={'operation_id':'reject-ledger-conflict'}), 'local-admin:test', facts)
+            self.assertEqual(result['reason'], 'WINDOW_HELD_LEDGER_CONFLICT')
+            self.assertEqual((await db.get(GrantRootRow, self.grant.grant_id)).status, 'active')
+
+    async def historical_carry_fixture(self):
+        from app.models.agent_entitlements import EntitlementAuditRow
+        rule = self.policy.rules[0].model_copy(update={
+            'rule_id':'daily-tokens', 'window_type':'natural', 'timezone':'Asia/Shanghai',
+            'duration_seconds':None, 'anchor':None})
+        self.policy = self.policy.model_copy(update={'rules':[rule]})
+        async with self.backend() as db, db.begin():
+            (await db.get(EntitlementPolicyRow, self.policy.policy_revision)).payload = self.policy.model_dump(mode='json')
+        await self.prepare()
+        await self.start_call('carry-source-call')
+        await self.finish_call(tokens=7)
+        await self.flush_usage()
+        source_grant = self.grant.grant_id
+        async with self.agent() as db, db.begin():
+            (await db.get(TaskRow, self.task_id)).status = 'completed'
+            (await db.get(ExecutionRow, self.worker.execution_id)).sealed = True
+            manifest = await self.control.close_manifest(db, self.task_id)
+        async with self.backend() as db, db.begin():
+            self.assertEqual(await self.usage.close(db, manifest), 'settled')
+            source = await db.scalar(select(WindowCounterRow))
+            source_id = source.window_id
+        self.policy = self.policy.model_copy(update={
+            'policy_revision':'carry-target-policy',
+            'permission_snapshot':self.policy.permission_snapshot.model_copy(update={'policy_revision':'carry-target-policy'})})
+        async with self.backend() as db, db.begin():
+            db.add(EntitlementPolicyRow(policy_revision=self.policy.policy_revision, approved=True,
+                test_only=True, payload=self.policy.model_dump(mode='json')))
+            await db.flush()
+            (await db.get(OwnerEntitlementRow, 'user:test')).policy_revision = self.policy.policy_revision
+        await self.submit(key='carry-target-task')
+        await self.bind()
+        await self.claim()
+        await self.start_call('carry-target-call')
+        await self.finish_call(tokens=30)
+        await self.flush_usage()
+        async with self.agent() as db, db.begin():
+            (await db.get(TaskRow, self.task_id)).status = 'completed'
+            (await db.get(ExecutionRow, self.worker.execution_id)).sealed = True
+            manifest = await self.control.close_manifest(db, self.task_id)
+        async with self.backend() as db, db.begin():
+            self.assertEqual(await self.usage.close(db, manifest), 'reconciliation_required')
+            target = await db.scalar(select(WindowCounterRow).where(WindowCounterRow.window_id != source_id))
+            target.used += 10  # Reproduce legacy audited carry without moving historical Usage.
+            target_id = target.window_id
+            db.add(EntitlementAuditRow(audit_id='historical-carry-audit', operation_id='historical-assignment',
+                principal='reviewed-operator', reason='assign', created_at=datetime.now(timezone.utc), payload={
+                    'owner_id':'user:test', 'source_policy_revision':'test-policy',
+                    'policy_revision':self.policy.policy_revision, 'history_preserved':True,
+                    'carried_window_usage':[{'rule_id':'daily-tokens', 'source_window_id':source_id,
+                                            'target_window_id':target_id, 'used':10, 'held':0}]}))
+        return {'task_status':'completed', 'manifest':manifest.model_dump(mode='json')}, source_id, target_id, source_grant
+
+    async def test_admin_reconcile_accepts_proven_carry_without_changing_usage(self):
+        from app.services.agent_entitlements.reconciliation import apply
+        from app.schemas.admin_plans import ReconcileGrant
+        facts, source_id, target_id, _ = await self.historical_carry_fixture()
+        body = ReconcileGrant(operation_id='carry-preview', reason='reviewed', evidence_ref='test')
+        async with self.backend() as db, db.begin():
+            before = await db.scalar(select(func.count()).select_from(UsageLedgerRow))
+            result = await apply(db, self.service, self.grant.grant_id, body, 'local-admin:test', facts)
+            self.assertTrue(result['eligible'])
+            self.assertEqual(result['historical_carries'][target_id]['used'], 10)
+            self.assertEqual((await db.get(WindowCounterRow, target_id)).held, 30)
+            self.assertEqual(await db.scalar(select(func.count()).select_from(UsageLedgerRow)), before)
+        # Execution exercised only in this isolated fixture, never against real Grants.
+        async with self.backend() as db, db.begin():
+            result = await apply(db, self.service, self.grant.grant_id,
+                body.model_copy(update={'operation_id':'carry-execute', 'preview':False}), 'local-admin:test', facts)
+            self.assertTrue(result['eligible'])
+            self.assertEqual((await db.get(WindowCounterRow, source_id)).used, 10)
+            target = await db.get(WindowCounterRow, target_id)
+            self.assertEqual((target.used, target.held), (43, 0))
+            entry = await db.scalar(select(UsageLedgerRow).where(UsageLedgerRow.operation_key.startswith('reconcile-close:')))
+            self.assertEqual(entry.evidence['historical_carry']['audit_id'], 'historical-carry-audit')
+            self.assertEqual(entry.used_delta, 0)
+            self.assertTrue((await db.get(GrantRootRow, self.grant.grant_id)).overage)
+
+    async def test_admin_reconcile_rejects_unproven_or_ambiguous_carries(self):
+        from copy import deepcopy
+        from app.models.agent_entitlements import EntitlementAuditRow
+        from app.services.agent_entitlements.reconciliation import apply
+        from app.schemas.admin_plans import ReconcileGrant
+        facts, source_id, target_id, source_grant = await self.historical_carry_fixture()
+        cases = [('missing','CARRY_AUDIT_MISSING_OR_AMBIGUOUS'),
+                 ('duplicate','CARRY_AUDIT_MISSING_OR_AMBIGUOUS'),
+                 ('amount','CARRY_AMOUNT_CONFLICT'), ('owner','CARRY_IDENTITY_CONFLICT'),
+                 ('day','CARRY_WINDOW_CONFLICT'), ('source-ledger','CARRY_SOURCE_LEDGER_CONFLICT'),
+                 ('late-source-entry','CARRY_SOURCE_CHANGED_OR_UNVERIFIED'),
+                 ('source-active','CARRY_SOURCE_GRANT_UNSETTLED'),
+                 ('source-unknown','CARRY_SOURCE_CLOSE_INCOMPLETE')]
+        for case, reason in cases:
+            with self.subTest(case=case):
+                async with self.backend() as db:
+                    audit = await db.get(EntitlementAuditRow, 'historical-carry-audit')
+                    source = await db.get(WindowCounterRow, source_id)
+                    if case == 'missing':
+                        await db.delete(audit)
+                    elif case == 'duplicate':
+                        db.add(EntitlementAuditRow(audit_id='duplicate-carry', operation_id='duplicate-carry',
+                            principal=audit.principal, reason=audit.reason, created_at=audit.created_at, payload=deepcopy(audit.payload)))
+                    elif case == 'amount':
+                        payload = deepcopy(audit.payload); payload['carried_window_usage'][0]['used'] = 11
+                        audit.payload = payload
+                    elif case == 'owner':
+                        source.owner_id = 'user:other'
+                    elif case == 'day':
+                        source.window_ref = {**source.window_ref, 'end':'2030-01-02T00:00:00Z'}
+                    elif case == 'source-ledger':
+                        source.used += 1
+                    elif case == 'late-source-entry':
+                        entry = await db.scalar(select(UsageLedgerRow).where(UsageLedgerRow.grant_id == source_grant))
+                        entry.created_at = datetime.now(timezone.utc) + timedelta(minutes=1)
+                    elif case == 'source-active':
+                        (await db.get(GrantRootRow, source_grant)).status = 'active'
+                    elif case == 'source-unknown':
+                        projection = await db.scalar(select(UsageProjectionRow).where(UsageProjectionRow.call_id == 'carry-source-call'))
+                        projection.settlement_status = 'reconciliation_required'
+                    result = await apply(db, self.service, self.grant.grant_id,
+                        ReconcileGrant(operation_id='reject-carry-'+case, reason='test', evidence_ref='test'),
+                        'local-admin:test', facts)
+                    self.assertFalse(result['eligible'])
+                    self.assertEqual(result['reason'], reason)
+                    self.assertEqual((await db.get(WindowCounterRow, target_id)).held, 30)
+                    await db.rollback()
+
     async def test_sync_settlement_requires_backend_ack_and_keeps_original_outbox(self):
         from agent_app.control.usage_delivery import settle_observation
         from agent_contracts.v2 import UsageBatch, UsageBatchAck
@@ -471,10 +678,13 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
     async def test_http_submit_permit_provider_delivery_close_and_trusted_query(self):
         await self.http_flow()
 
+    async def test_http_dynamic_budget_reaches_provider_and_settles(self):
+        await self.http_flow(dynamic=True)
+
     async def test_http_overage_returns_current_result_and_blocks_next_provider_and_task(self):
         await self.http_flow(overage=True)
 
-    async def http_flow(self, overage=False):
+    async def http_flow(self, overage=False, dynamic=False):
         """Two ASGI services + separate SQL DBs + actual MockTransport sends."""
         from contextlib import asynccontextmanager
         import os
@@ -516,6 +726,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         sends=[]
         def provider_send(request):
             sends.append(request)
+            if dynamic:self.assertEqual(json.loads(request.content)['max_tokens'],100)
             return httpx.Response(200,text='data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\n'
                 + 'data: ' + json.dumps({'choices': [], 'usage': {'prompt_tokens': 120 if overage else 7, 'completion_tokens': 3}}) + '\n\ndata: [DONE]\n\n')
         with tempfile.TemporaryDirectory() as spool,patch.dict(os.environ,{
@@ -533,6 +744,13 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
             permission=self.policy.permission_snapshot.capabilities[0].model_copy(update={
                 'capability_id':identity.capability_id,'capability_version':digest(identity.model_dump(mode='json'))})
             self.policy=self.policy.model_copy(update={'permission_snapshot':self.policy.permission_snapshot.model_copy(update={'capabilities':[permission]})})
+            if dynamic:
+                from app.services.agent_entitlements.policy import ModelBudgetProfile
+                self.policy=self.policy.model_copy(update={'dynamic_model_budget':True,'reservation_mode':'per_call',
+                    'rules':[r.model_copy(update={'limit_units':100000}) for r in self.policy.rules],
+                    'model_budget_profiles':{identity.capability_id:ModelBudgetProfile(schema_version=1,
+                        input_basis='risk_assessed_utf8_v1',input_overhead_tokens=10,context_window_tokens=4096,
+                        max_output_tokens=100,output_limit_semantics='completion_including_reasoning')}})
             async with self.backend() as db,db.begin():
                 row=await db.get(EntitlementPolicyRow,'test-policy')
                 row.payload=self.policy.model_dump(mode='json')
@@ -562,7 +780,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                     control_client.execution_id=claim['execution_id']
                     meter=WorkerMeter(control_client,run_id=claim['run']['run_id'],execution_id=claim['execution_id'],
                         worker_id='http-worker',lease_token=claim['lease_token'],context='authorized',stop=asyncio.Event(),
-                        risk_profile='test-risk-explicitly-approved')
+                        risk_profile='test-risk-explicitly-approved',dynamic_budget=claim.get('dynamic_model_budget',False))
                     token=current_meter.set(meter)
                     try:
                         events=[event async for event in provider.stream(ModelRequest(resolved.spec.id,[]))]

@@ -361,7 +361,30 @@ class RequestedAllocation(V2):
     upper_bound_units: Units
 
 
+class ModelCallBudgetRequest(V2):
+    """Measured bytes are NOT a proven Token bound; risk approval is mandatory."""
+    basis: Literal['risk_assessed_utf8_v1']
+    input_bytes: Units
+    requested_output_tokens: Positive
+    model_max_output_tokens: Positive
+    model_context_window: Positive | None
+
+
+class ModelCallBudgetApproval(V2):
+    basis: Literal['risk_assessed_utf8_v1']
+    input_tokens: Units
+    output_tokens: Positive
+    reserved_tokens: Positive
+
+    @model_validator(mode='after')
+    def total(self):
+        if self.reserved_tokens != self.input_tokens + self.output_tokens:
+            raise ValueError('model budget total mismatch')
+        return self
+
+
 class CallPermitRequest(V2):
+    model_budget: ModelCallBudgetRequest | None = Field(default=None, exclude_if=lambda v: v is None)
     call_id: ID
     logical_call_id: ID
     request_digest: Digest
@@ -396,6 +419,7 @@ class PermitAllocation(Allocation):
 
 
 class CallPermit(V2):
+    model_budget: ModelCallBudgetApproval | None = Field(default=None, exclude_if=lambda v: v is None)
     permit_id: ID
     call_id: ID
     status: Literal['authorized', 'start_committed', 'completed', 'unknown', 'void', 'expired']

@@ -171,7 +171,8 @@ class MeteringBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 calls.append(path)
                 if path.endswith('/start'):
                     raise httpx.ReadTimeout('lost start receipt')
-                return {'call_id':body['call_id']}
+                return {'call_id':body['call_id'],'model_budget':dict(schema_version=1,
+                    basis='risk_assessed_utf8_v1',input_tokens=10,output_tokens=10,reserved_tokens=20)}
         with tempfile.TemporaryDirectory() as root,patch.dict(os.environ,{'AGENT_USAGE_SPOOL_ROOT':root}):
             stop=asyncio.Event()
             current_meter.set(WorkerMeter(Control(),run_id='run',execution_id='execution',worker_id='worker',
@@ -191,3 +192,42 @@ class MeteringBoundaryTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200,text=stream({'prompt_tokens':2,'completion_tokens':1}))
         events=[e async for e in self.provider(send).stream(ModelRequest('qwen-plus',[],temperature=0.25))]
         self.assertEqual(len(self.meter.started),1)
+
+    async def test_dynamic_output_cap_binds_retries_degradation_summary_and_body(self):
+        import json
+        from agent_app.execution.metering import WorkerMeter
+        from agent_app.errors import BusinessError
+        calls=[]; sends=[]; approvals=[]
+        class Control:
+            async def post(inner,path,body):
+                calls.append((path,body))
+                if path.endswith('/authorize'):
+                    budget=body['model_budget']
+                    approval=dict(schema_version=1,basis=budget['basis'],input_tokens=budget['input_bytes']+3,
+                                  output_tokens=7,reserved_tokens=budget['input_bytes']+10)
+                    approvals.append(approval)
+                    return {'model_budget':approval}
+                if path.endswith('/start'):
+                    return dict(may_send=True,model_budget=approvals[-1])
+                return {}
+        def send(request):
+            body=json.loads(request.content);sends.append(body)
+            self.assertEqual(body['max_tokens'],7)
+            if len(sends)==1:return httpx.Response(503,text='unavailable')
+            if len(sends)==2:return httpx.Response(400,text='stream_options unsupported')
+            return httpx.Response(200,text=stream({'prompt_tokens':3,'completion_tokens':2}))
+        with tempfile.TemporaryDirectory() as root,patch.dict(os.environ,{'AGENT_USAGE_SPOOL_ROOT':root}):
+            meter=WorkerMeter(Control(),run_id='run',execution_id='execution',worker_id='worker',lease_token=1,
+                              context='authorized',stop=asyncio.Event(),risk_profile='test-reviewed-risk')
+            current_meter.set(meter)
+            provider=self.provider(send)
+            _=[e async for e in provider.stream(ModelRequest('qwen-plus',[{'role':'user','content':'hello'}]))]
+            await summarize(provider,'qwen-plus',[UserMessage('context')])
+            requests=[b for p,b in calls if p.endswith('/authorize')]
+            self.assertEqual(len(requests),len(sends))
+            self.assertEqual(requests[-1]['purpose'],'summary')
+            self.assertTrue(all(r['input_bound_evidence_ref'] is None for r in requests))
+            self.assertTrue(all(r['model_budget']['input_bytes']>0 for r in requests))
+            # Tampering is rejected before a sending right is consumed.
+            call_id=next(iter(meter.receipts))
+            with self.assertRaises(BusinessError):meter.consume_send(call_id,{'max_tokens':8,'messages':[]})

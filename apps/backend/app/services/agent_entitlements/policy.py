@@ -23,6 +23,7 @@ class EntitlementRule(V2):
     duration_seconds: Positive | None
     timezone: ID | None
     anchor: AwareDatetime | None
+    quota_pool: ID | None = None
 
     @model_validator(mode='after')
     def constraints(self):
@@ -52,14 +53,26 @@ class EntitlementRule(V2):
             offset = int((now - self.anchor).total_seconds()) // self.duration_seconds
             start = self.anchor + timedelta(seconds=offset * self.duration_seconds)
             end = start + timedelta(seconds=self.duration_seconds)
-        key = digest([owner, revision, self.rule_id, start, end])
+        key = digest([owner, self.quota_pool or revision, self.rule_id, start, end])
         return WindowRef(schema_version=1, window_id=key, rule_revision=revision, window_type=self.window_type,
                          accounting_basis=self.accounting_basis, start=start, end=end,
                          duration_seconds=self.duration_seconds, timezone=self.timezone,
                          anchor=self.anchor, ledger_ref=key if self.window_type == 'rolling' else None)
 
 
+class ModelBudgetProfile(V2):
+    """Deployment-reviewed assumptions, never a tokenizer proof or plan quota."""
+    input_basis: Literal['risk_assessed_utf8_v1']
+    input_overhead_tokens: Positive
+    context_window_tokens: Positive
+    max_output_tokens: Positive
+    output_limit_semantics: Literal['completion_including_reasoning']
+
+
 class EntitlementPolicy(V2):
+    reservation_mode: Literal['task_fixed', 'per_call'] = 'task_fixed'
+    dynamic_model_budget: bool = False
+    model_budget_profiles: dict[str, ModelBudgetProfile] = Field(default_factory=dict)
     policy_revision: ID
     plan_id: ID
     permission_snapshot: PermissionSnapshot

@@ -57,6 +57,8 @@ class MeteringControl:
         check(pending is None, 'USAGE_SETTLEMENT_UNCONFIRMED')
 
     def verify_grant(self, grant):
+        check(grant.execution_constraints.get('reservation_mode', 'task_fixed') in ('task_fixed', 'per_call'),
+              'RESERVATION_MODE_UNSUPPORTED')
         verify_signed(grant, issuer=self.issuer, audience=self.audience, public_keys=self.public_keys)
         check(grant.not_before <= now_utc() < grant.expires_at, 'GRANT_EXPIRED')
 
@@ -148,7 +150,9 @@ class MeteringControl:
             return CallPermitRequest.model_validate(row.backend_request)
         grant = BudgetGrant.model_validate(profile.current_grant or profile.envelope['budget_grant'])
         receipt = GrantBindingReceipt.model_validate(profile.receipt)
-        # Upper bounds come from a server-approved deployment policy, not Worker-supplied units.
+        # Legacy upper bounds come from the deployment policy. In dynamic_v1,
+        # Token allocations identify the bucket only; Backend computes held units
+        # from model_budget under the owner lock (zero here is NOT a free call).
         bounds = profile.envelope.get('call_bounds', {})
         allocations = [a for a in grant.allocations if (a.capability_id is None or a.capability_id == body.capability_identity.capability_id)
                        and a.purpose in ('all', body.purpose)
@@ -166,7 +170,7 @@ class MeteringControl:
             requested_allocations=[RequestedAllocation(schema_version=1, allocation_id=a.allocation_id, metric=a.metric,
                 unit=a.unit, upper_bound_units=bounds[a.rule_id]) for a in allocations],
             input_bound_evidence_ref=body.input_bound_evidence_ref, output_bound_evidence_ref=body.output_bound_evidence_ref,
-            risk_profile=body.risk_profile)
+            risk_profile=body.risk_profile, model_budget=body.model_budget)
         row.backend_request = request.model_dump(mode='json')
         return request
 
@@ -181,6 +185,14 @@ class MeteringControl:
             return False
         if row.permit is not None:
             check(row.permit == response, 'PERMIT_RESPONSE_CONFLICT')
+        budget = response['permit'].get('model_budget')
+        if budget:
+            check(body.model_budget is not None and budget['basis'] == body.model_budget.basis
+                  and budget['output_tokens'] <= min(body.model_budget.requested_output_tokens, body.model_budget.model_max_output_tokens),
+                  'MODEL_BUDGET_CONFLICT')
+            token_allocations = [a for a in response['permit']['allocations'] if a['unit'] == 'token']
+            check(bool(token_allocations) and all(a['held_units'] == budget['reserved_tokens'] for a in token_allocations),
+                  'MODEL_BUDGET_CONFLICT')
         row.permit, row.state = response, 'authorized'
         return True
 
@@ -242,7 +254,9 @@ class MeteringControl:
             missing_reason='pending_completion' if is_model else None, attempted_units=1, successful_units=None,
             provider_request_id=None, ended_at=None), phase='started')
         return {'schema_version': 1, 'may_send': True, 'already_started': False, 'fact': row.start_fact,
-                'start_before': row.start_before.isoformat() if row.start_before else None}
+                'start_before': row.start_before.isoformat() if row.start_before else None,
+                **({'model_budget': row.permit['permit']['model_budget']}
+                   if row.permit and row.permit.get('permit', {}).get('model_budget') else {})}
 
     async def append(self, db, row, profile, key, observation, *, phase='completed'):
         content_digest = digest(observation)

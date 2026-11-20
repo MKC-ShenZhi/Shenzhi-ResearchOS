@@ -41,6 +41,14 @@ class AgentControlClient:
             if '/worker/claim' not in path and self.execution_id is not None:
                 body.setdefault('execution_id', self.execution_id)
         response = await self.client.post(path, json=body)
+        if response.is_error and self.protocol == 2:
+            try:
+                error = response.json().get('error', {})
+                reason = error.get('reason_code')
+            except (ValueError, AttributeError):
+                reason = None
+            if isinstance(reason, str):
+                raise BusinessError(20004, reason, response.status_code)
         response.raise_for_status()
         return response.json()
 
@@ -252,7 +260,7 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
     from agent_app.execution.metering import WorkerMeter, current_meter
     meter = (WorkerMeter(control, run_id=run_id, execution_id=claim['execution_id'],
              worker_id=worker_id, lease_token=token, context=claim['metering_context'], stop=stop,
-             risk_profile=claim.get('risk_profile')) if protocol == 2 else None)
+             risk_profile=claim.get('risk_profile'), dynamic_budget=claim.get('dynamic_model_budget', False)) if protocol == 2 else None)
     meter_token = current_meter.set(meter)
     publisher = asyncio.create_task(publish_events())
     heartbeat = asyncio.create_task(maintain_lease())

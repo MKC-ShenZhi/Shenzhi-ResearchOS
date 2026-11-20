@@ -100,10 +100,48 @@ class AdminConsoleTests(unittest.TestCase):
         self.assertEqual(response.json()['data']['stats'], payload['stats'])
         service.assert_awaited_once_with('db', page=2, page_size=20, search='name', plan_id='free')
 
+    def test_write_routes_require_independent_session_and_same_origin_header(self):
+        paths=['/plans/publish','/entitlements/assign','/migration/preview','/grants/test-grant/reconcile-close']
+        for path in paths:
+            r=self.client.post(PATH+path,json={},headers={'x-shenzhi-user-id':'admin','x-admin-request':'1'})
+            self.assertEqual(r.status_code,401)
+        self.login()
+        for path in paths:
+            self.assertEqual(self.client.post(PATH+path,json={}).status_code,403)
+            self.assertEqual(self.client.post(PATH+path,json={},headers={'x-admin-request':'1','sec-fetch-site':'cross-site'}).status_code,403)
+
+    def test_admin_assignment_route_preserves_principal_and_operation(self):
+        self.login()
+        body=dict(operation_id='test-write-operation',reason='test assignment',user_ids=['test-user'],
+                  plan_id='basic',policy_revision='basic-v1-test',preview=False)
+        scope=MagicMock();scope.__aenter__=AsyncMock(return_value='db');scope.__aexit__=AsyncMock(return_value=False)
+        result={'preview':False,'items':[{'user_id':'test-user','status':'success'}]}
+        with patch('app.api.admin_console.session_scope',return_value=scope), patch(
+                'app.api.admin_console.plan_admin.assign',new=AsyncMock(return_value=result)) as assign:
+            response=self.client.post(PATH+'/entitlements/assign',json=body,headers={'x-admin-request':'1'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json()['data'],result)
+        self.assertEqual(assign.call_args.args[2],'local-admin:admin')
+        self.assertEqual(assign.call_args.args[1].operation_id,body['operation_id'])
+        self.assertEqual(response.headers['cache-control'],'no-store')
+
     def test_old_admin_routes_removed(self):
         self.login()
         for path in ['/api/v1/admin/users', '/api/v1/admin/access']:
             self.assertEqual(self.client.get(path).status_code, 404)
+
+    def test_reconcile_route_rejects_with_reason_and_preserves_admin_identity(self):
+        self.login()
+        body = dict(operation_id='reconcile-test-op', reason='reviewed', evidence_ref='test-evidence')
+        result = dict(eligible=False, reason='WINDOW_USED_LEDGER_CONFLICT', preview=True, grant_id='test-grant')
+        with patch('app.api.admin_console.reconcile', new=AsyncMock(return_value=result)) as reconcile:
+            response = self.client.post(PATH + '/grants/test-grant/reconcile-close', json=body,
+                                        headers={'x-admin-request':'1'})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()['data'], result)
+        self.assertEqual(reconcile.call_args.args[0], 'test-grant')
+        self.assertTrue(reconcile.call_args.args[1].preview)
+        self.assertEqual(reconcile.call_args.args[2], 'local-admin:admin')
 
 
 if __name__ == '__main__':

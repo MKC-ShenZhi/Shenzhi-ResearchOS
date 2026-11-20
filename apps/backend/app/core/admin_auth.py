@@ -63,3 +63,12 @@ def require_admin(request: Request):
     except (ValueError, TypeError):
         raise BusinessError(10001, '需要管理员登录', 401) from None
     return username
+
+
+def require_admin_write(request: Request):
+    username = require_admin(request)
+    # Non-simple same-origin request: cross-origin browsers require a CORS
+    # preflight, which this application does not grant. Cookie alone is insufficient.
+    if request.headers.get('x-admin-request') != '1' or request.headers.get('sec-fetch-site') == 'cross-site':
+        raise BusinessError(10001, '管理员写操作必须通过同源控制台提交', 403)
+    return 'local-admin:' + username

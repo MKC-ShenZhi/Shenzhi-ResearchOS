@@ -64,7 +64,7 @@ TaskCloseManifest 核对 Permit/call、Run/execution、所有 sequence/revision�
 
 ## 部署和回滚
 
-分别在 Backend、Agent 执行已有 Alembic `upgrade head`，新增版本为 Backend `027_agent_entitlements`、Agent `0003_agent_metering`。迁移冻结建表定义，分别含 15 和 8 张新表；原 Task/Run/Session 表不加新协议字段。新增唯一约束、FK、状态/关联/投递索引随各库独立维护。生产连接隐藏 SQL 参数，避免日志包含租约/签名封套。
+分别在 Backend、Agent 执行已有 Alembic `upgrade head`，当前版本为 Backend `028_formal_plans`（授权基础表始于 `027_agent_entitlements`）、Agent `0003_agent_metering`。迁移冻结建表定义，分别含 15 和 8 张新表；原 Task/Run/Session 表不加新协议字段。新增唯一约束、FK、状态/关联/投递索引随各库独立维护。生产连接隐藏 SQL 参数，避免日志包含租约/签名封套。
 
 API/Worker/Backend 的角色 Token 必须互不相同，并与旧 AGENT_SERVICE_TOKEN 隔离。Backend 私钥/Agent 公钥文件、issuer/audience、Agent 的模型路由和工具非敏感配置修订、持久 spool、Usage Worker 的容量/退避/批量参数均需显式配置；见各 `.env.example`。`BACKEND_ENTITLEMENTS_URL` 是服务 origin，不能复用带 `/api/v1/agent` 的 Knowledge `BACKEND_INTERNAL_URL`。
 
@@ -76,35 +76,29 @@ Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 
 
 运维使用 `python -m app.services.agent_entitlements.manage ACTION --file <reviewed.json>`：install-policy、assign、revoke、revise、recover-submission、reprocess-usage、adjust。安装/分配/修订须 operation_id/principal/approval_ref；人工调整须原因、证据引用、有效启动时间和幂等操作 ID。只追加审计/调整，不覆盖 Inbox。死信及冲突须保留证据并处理原 ID，不能改 payload 重投旧 measurement；生产审查须进一步确认数据留存、操作授权与告警接入。
 
-## V1 Free 与只读管理员
+## V1 正式套餐与 Admin
 
-Web `DATABASE_URL` 与 Backend `CHAT_DATABASE_URL` 在 V1 部署中连接同一个 `shenzhi` PostgreSQL 库，分别保留各自配置。Better Auth `"user"` 是唯一正式用户来源；Backend 以 `owner_id='user:' || id` 读取权益。Agent 持久库仍独立。
+正式套餐为 basic/pro/research，上海自然日 Token 额度分别 200000/1000000/3000000，暂时免费，prompt_plus_completion。新用户待分配，initialize_free 与注册通知兼容入口不再写入权益；唯一业务分配入口是独立 Admin。历史 Free Policy、Grant 与用量记录保留，但不再作为注册默认值。历史初始化须在 Admin 按截止时间预览并确认，仅补缺失，不覆盖显式分配。
 
-`SHENZHI_FREE_POLICY_REVISION` 指向已安装、approved 且非 test_only 的 Free Policy。注册后的 Better Auth 生命周期调用 Backend `POST /api/v1/identity/entitlements/initialize`，身份由服务端 BFF 凭据和真实 user ID 传递，不接受浏览器选择 owner。Backend 不可用或注册事务尚未可见时不破坏注册；首次正式权益访问及批量补齐修复缺失记录。使用 `INSERT … ON CONFLICT DO NOTHING`，不覆盖特殊套餐、禁用状态或人工分配；匿名身份不分配正式 Free。
+Admin 发布三档不可变 Policy，固定 daily quota_pool 跨 plan/revision，共享同日使用和预留。旧的上海日 daily-tokens 余额也纳入统一检查，不把多规则限额相加。发布指针位于迁移028新增的 agent_plan_releases；改变指针不改变既有 Assignment。
 
-用户批准的演示规则：revision `free-demo-v1-20261119`、plan `free`、上海自然日 200,000 Token、每 Task 预留 100,000、每次模型调用上界 16,000，计量 prompt＋completion 的 Provider 实测。Tool/Skill 使用显式零收费规则，不设调用次数限制。批准定义保存在 `apps/backend/app/data/agent_free_demo_policy.json`，由 Policy 生成/安装工具消费，运行时从数据库读取。Grant/Permit/Start 技术 TTL 分别为 3600/60/10 秒，时钟安全偏差 1000ms。
+新 Policy 使用 per_call，初始 Grant allocation 预留为0，签名 execution_constraints 显式声明模式。Permit 在现有 owner→grant 锁内按需预留并写入原账本；实际 start 与计量安全门禁保留。无需追加 Grant 余额或重签任务，每个调用仍需 Permit。task_fixed 是历史默认，不改变已签历史任务语义。真实未启动封闭证明可归还 call-held；Unknown/Partial 和已启动失败继续沿原持有/对账机制。
 
-能力快照必须在**最终部署的 Worker 源码、锁文件和运行环境**生成。`python -m agent_app.export_capabilities --output workspace/free-capabilities.json` 复用公开模型目录、普通 Web Runtime（allow_shell=false）、工具/Skill 的真实 identity/digest，不调用 Provider 或工具。导出命令会创建一个空的、无用户数据的导出工作区。模型路由修订 `AGENT_MODEL_ROUTE_REVISION`、工具非敏感配置修订 `AGENT_TOOL_CONFIGURATION_RELEASE` 需要由部署者设置，API/Worker 配置必须一致。代码、资源或配置变动后身份会变化，需新的 Policy Revision；不得覆盖已签权限来绕过版本检查。
+正式套餐不再依赖固定 call_upper_bound。dynamic_model_budget=true 时，逐模型审批约束与请求预算进入 Permit，在 owner 锁内按输入风险预算、模型上下文/输出及每日余额计算批准输出，并绑定 Provider max_tokens。risk_assessed_utf8_v1 明确是完整正文 UTF-8 字节数加审核封装余量的风险估算，不是严格 Token 证明；没有独立风险 profile/审批或对应模型约束时拒绝。若 Provider 无法确认 max_tokens 覆盖输出及思考 Token，则保持阻断。历史 Grant 保留原 call_upper_bound 语义及结算。重试、参数降级和摘要逐次重新授权；仍没有跨日自动续签或无限 TTL。
 
-在 Backend 目录依次执行（使用正确服务环境的本地 `.env`）：
+改变 Policy 时若有未关闭 Grant，拒绝 ACTIVE_GRANTS_REQUIRE_DRAIN；先排空任务，不自动把新权限塞进旧签名。停用拒绝后续 Permit/start，已启动调用继续按历史授权结算。Assignment、幂等 operation_id、原因与审批引用写入现有追加审计。
 
-```powershell
-uv run --env-file .env python -m app.services.agent_entitlements.free_policy --capabilities ../agent/workspace/free-capabilities.json --output workspace/free-demo-policy.json
-uv run --env-file .env python -m app.services.agent_entitlements.manage install-policy --file workspace/free-demo-policy.json
-uv run --env-file .env python -m app.services.agent_entitlements.defaults
-```
+历史单次 overage 可通过受保护的 `POST /api/v1/admin-console/grants/{grant_id}/reconcile-close` 显式对账。请求包含 `operation_id`、`reason`、`evidence_ref` 和默认 `true` 的 `preview`；复用独立 Admin Session 与 `x-admin-request: 1` 同源校验。不增加自动关闭或套餐切换旁路。预览与执行使用不同 operation_id，同 ID/同请求回放原结果，异请求返回幂等冲突。
 
-生成器默认 `model_risk_profile=null`，**不会把 Free 数值批准当成模型风险批准**。已知没有可信输入 Token 上界验证器时，模型 Permit 继续返回 `TOKEN_BOUND_UNPROVEN`。只有部署负责人提供真实批准的风险配置和审查引用，才可在生成时传 `--risk-profile <APPROVED_PROFILE> --risk-approval-ref <APPROVAL_REF>`。此批准接受调用上界可能被真实消耗超过的风险，不是精确 Token 上界证明。不应为演示随意填写字符串。若已安装 null-risk 的不可变修订，后续风险变更应另建、审批并安装新修订，显式管理分配，不覆盖现存记录。
+Backend 使用独立 Fact Reader 从 Agent 的只读 `/internal/v2/tasks/{task_id}/close-facts` 取得新快照，网络请求在账本锁外；在 owner→grant 锁内要求 active 历史 overage、任务 completed、30 秒内快照、已有对应完整 Manifest、所有观察序列/修订已核验、全部调用已结算、执行已封口且无可启动 Permit。继续核对最新 Inbox/Projection/采纳用量、allocation 和共享 window 的 held/used 追加账本；滚动窗口按原 trusted-start 规则重算使用量。任何不一致均拒绝，正常业务拒绝返回 HTTP 409 与具体 reason，记录成功/预览/拒绝审计及实时事实。事实服务不可用或协议失败保持关闭。
 
-安装前核验生成 JSON。既有 install-policy 对重复 revision 保持不可变拒绝；批量 defaults 可反复执行，且只补缺失用户。部署后先补齐历史用户，再开放注册/流量；注册补偿日志 `auth.entitlement_initialization_pending` 表示需修复，不表示成功分配。
+历史 assign 审计若以 `carried_window_usage` 保存了同一用户、同一自然日的 daily-tokens 结转，可将经验证的金额作为目标窗口已有使用基线：必须恰有一条结转记录，源/目标策略和窗口身份一致，held=0，源计数与源账本金额完全匹配，源 Grant 已关闭且调用/Manifest 当前仍完整结算，并且源账本在结转后未新增或变更。不支持推测补差、重复结转或链式结转。结果中的 `historical_carries` 保存源审计及账本引用，未来实际释放也记录该证据；不向目标 Usage 伪造一次新调用，不增加或减去结转金额。`preview=true` 时 `released` 仅表示拟释放金额，真实预留保持原值。
 
-模型完成观察在 Agent 事务提交事实和 Outbox 后，沿原 `usage-deltas:batch` 同步投递原 measurement_id 及该 Task 尚未确认的前序观察；Backend 核验持久启动事实并提交结算，Agent 校验逐项 durable Ack 后才确认观察。已确认历史不重复全量重放，避免长任务投递成本累积。失败保留原 Outbox/Worker spool，后续新增调用在用户范围的已完成但未确认观察存在时拒绝。该保护在 intent、prepare_start 和 commit_start 三处检查；不撤销已经发出的 HTTP 请求。独立 Usage Worker 继续负责投递、恢复和关闭，不能取消部署。
+实际关闭仅将经证明的 task_held 追加为 released 账本并扣减当前持有计数，根状态改为 closed/settled；不改 Inbox、历史 UsageLedger、既有 Manifest、真实消耗和 overage 标记。该操作确认历史超额已对账，不减免用量、不增加额度、不修改套餐。部署时 Backend 与 Agent 须同时更新以提供新事实接口，无新增数据库迁移。
 
-Backend Permit/Start 继续按 owner→grant 锁序检查 Grant overage，并再次检查其权益窗口 used＋held 是否超限，覆盖其他 Task 的迟到超额结算。新 Submission 保留原有 owner 级窗口原子预留。unknown 保留预留，partial 只入账已知下界并保留未决预留；不当作零。
+Deep Research 由正式 snapshot 中精确 skill:deep-research identity/digest 区分：Basic/Pro 不包含，Research 包含。Backend 提交检查强制 skills；Agent Control intent 对模型选择/forced 都核对签名权限，Worker 在 forced 注入前激活，read_skill 在正文/参考/脚本暴露前激活；Backend Permit/start 再校验。普通 Tool/Skill 规则免费但仍过授权与系统安全门禁。Web Deep Research 演示工作台没有因此变成生产研究执行入口。
 
-现有 Web `/api/v1/agent/run` 与 Session run 在 Backend `AGENT_V2_ADMISSION=authorized` 且正式登录时选择 V2 Gateway，继续输出原 SSE；必须有 Idempotency-Key。浏览器不能选择准入模式。停止/插话按可信 run 查询识别 V2，只有只读 404 才查询历史 V1 run，不能将拒绝的提交退回 V1。Session 回放沿用持久 `_agent_protocol`。关闭 authorized 时原 V1 路径保持不变；匿名保持既有身份和准入约束，不自动分配 Free。
-
-管理界面统一使用独立 `apps/admin`，通过 `/api/v1/admin-console/users` 访问同一用户权益只读 Service。认证采用独立管理员会话；配置、启动方式与本地访问限制见 [Admin README](../../apps/admin/README.md)。旧 Web 页面、旧 `/api/v1/admin/*` API 与 Better Auth 用户 ID 白名单配置已移除。搜索、套餐筛选、分页和权益详情由独立控制台提供。自然/固定窗口读取现有计数器，滚动窗口按相同 trusted-start 账本口径只读计算；used、held、remaining 分列，多个规则分别显示，未初始化/不可用 Policy 不伪装成零额度。数据标注 Backend 查询时间与近实时状态，不保证尚未上传的 Provider 消耗已结算。`model_calls_enabled` 只表示用户/Policy 的模型风险门禁配置齐备，不表示剩余额度充足、上游健康或所有单次调用均会获准。
+正式版本生成、发布、Admin 操作、迁移与回滚及安全配置见 [Admin README](../../apps/admin/README.md#正式套餐与-admin-操作)。未提交真实风险审批时，模型权限保持拒绝，不伪造可用性。
 
 ## 测试入口
 

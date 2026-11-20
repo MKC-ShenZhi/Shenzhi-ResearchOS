@@ -43,3 +43,58 @@ async def users(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=
 @router.get('/capabilities')
 async def capabilities(_admin=Depends(admin_auth.require_admin)):
     return ok(await get_capabilities())
+
+
+from app.schemas.admin_plans import PublishPlans, AssignPlans, MigrationPreview
+from app.schemas.admin_plans import ReconcileGrant
+from app.services.agent_entitlements.reconciliation import reconcile
+from app.services.agent_entitlements import admin as plan_admin
+from app.models.agent_entitlements import EntitlementAuditRow
+from sqlalchemy import select
+
+
+@router.get('/plans')
+async def plans(_admin=Depends(admin_auth.require_admin)):
+    async with session_scope() as db:
+        return ok(await plan_admin.plans_view(db))
+
+
+@router.post('/plans/publish')
+async def publish_plans(body: PublishPlans, principal=Depends(admin_auth.require_admin_write)):
+    runtime = await get_capabilities()
+    async with session_scope() as db:
+        return ok(await plan_admin.publish(db, body, principal, runtime))
+
+
+@router.post('/entitlements/assign')
+async def assign_plans(body: AssignPlans, principal=Depends(admin_auth.require_admin_write)):
+    async with session_scope() as db:
+        return ok(await plan_admin.assign(db, body, principal))
+
+
+@router.post('/migration/preview')
+async def migration_preview(body: MigrationPreview, _admin=Depends(admin_auth.require_admin_write)):
+    async with session_scope() as db:
+        return ok(await plan_admin.migration_preview(db, body.before, body.limit))
+
+
+@router.post('/grants/{grant_id}/reconcile-close')
+async def reconcile_close(grant_id: str, body: ReconcileGrant,
+                          principal=Depends(admin_auth.require_admin_write)):
+    result = await reconcile(grant_id, body, principal)
+    if not result['eligible']:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=409, content={'data': result})
+    return ok(result)
+
+
+@router.get('/audit')
+async def audit(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+                _admin=Depends(admin_auth.require_admin)):
+    async with session_scope() as db:
+        rows=(await db.scalars(select(EntitlementAuditRow).where(
+            EntitlementAuditRow.principal.startswith('local-admin:')).order_by(
+            EntitlementAuditRow.created_at.desc(), EntitlementAuditRow.audit_id.desc())
+            .offset((page-1)*page_size).limit(page_size))).all()
+        return ok({'items':[dict(operation_id=r.operation_id, principal=r.principal, reason=r.reason,
+            created_at=r.created_at.isoformat(), payload=r.payload) for r in rows], 'page':page})

@@ -15,7 +15,8 @@ from typing import Any
 
 import httpx
 
-from agent_app.execution.metering import actual_call, model_identity, current_meter
+from agent_app.execution.metering import actual_call, model_identity, current_meter, model_payload_digest
+from agent_contracts.v2 import ModelCallBudgetRequest
 from agent_contracts.canonical import request_digest_v1
 from agent_app.errors import BusinessError
 from agent_app.integrations.llm.registry import ModelRegistry, ResolvedModel
@@ -314,12 +315,25 @@ class OpenAICompatProvider:
             finish_text: str | None = None
             finished = False
             self._observe(self.on_payload, payload)
+            # Count the complete serialized body (messages, tools, schemas and
+            # thinking settings), not just user text. This is RISK input, not
+            # a proven tokenizer bound; Backend requires reviewed assumptions.
+            budget = None
+            if current_meter.get() is not None and getattr(current_meter.get(), 'dynamic_budget', True):
+                input_body = {k:v for k,v in payload.items() if k != 'max_tokens'}
+                input_bytes = len(json.dumps(input_body, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode('utf-8'))
+                budget = ModelCallBudgetRequest(schema_version=1, basis='risk_assessed_utf8_v1',
+                    input_bytes=input_bytes, requested_output_tokens=payload['max_tokens'],
+                    model_max_output_tokens=resolved.spec.capabilities.max_output_tokens,
+                    model_context_window=resolved.spec.capabilities.context_window_tokens)
             async with actual_call(lambda: model_identity(resolved), purpose=request.purpose,
-                                   logical_id=logical_id, request_digest=request_digest_v1(payload) if current_meter.get() else None,
+                                   logical_id=logical_id, request_digest=(model_payload_digest(payload) if budget is not None else request_digest_v1(payload)) if current_meter.get() else None, model_budget=budget,
                                    logical_attempt=logical_attempt, transport_attempt=len(dropped) + 1) as measurement:
+                if measurement.output_tokens is not None:
+                    payload['max_tokens'] = measurement.output_tokens
                 try:
                     async with httpx.AsyncClient(timeout=timeout, transport=self.transport or httpx.AsyncHTTPTransport(retries=0)) as client:
-                        measurement.ensure_send()
+                        measurement.ensure_send(payload)
                         async with client.stream(
                             'POST', f'{resolved.base_url}/chat/completions',
                             headers={'Authorization': f'Bearer {resolved.key}', 'Accept': 'text/event-stream'},

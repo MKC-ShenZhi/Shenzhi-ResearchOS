@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 def product_gateway(owner):
-    if owner.startswith('user:') and os.getenv('AGENT_V2_ADMISSION') == 'authorized':
+    if owner.startswith('user:'):
         from app.services.agent_gateway.v2 import AgentGatewayV2
         return AgentGatewayV2()
     return agent_gateway
