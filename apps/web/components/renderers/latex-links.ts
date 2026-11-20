@@ -1,15 +1,10 @@
-import { paperExternalUrl } from "../../../lib/navigation/paper";
-
-/**
- * 摘要正文中的网址识别，仅用于展示层把纯文本网址渲染为可点击链接，
- * 不推断链接含义（代码仓库、项目主页等由后端字段承载）。
- */
-export type AbstractSegment =
+type LatexSegment =
   | { type: "text"; text: string }
   | { type: "link"; text: string; href: string };
 
 // 全角标点不会出现在论文网址中，视为网址边界。
 const URL_PATTERN = /https?:\/\/[^\s<>"'`{}|\\^，。；：！？、（）【】「」《》“”‘’]+/gi;
+const URL_COMMAND_PREFIX = "\\url{";
 const TRAILING_PUNCTUATION = new Set([".", ",", ";", ":", "!", "?", "'", "\""]);
 const CLOSING_BRACKETS: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
 
@@ -32,31 +27,47 @@ function trimUrl(raw: string): string {
   return url;
 }
 
-export function splitAbstractLinks(text: string): AbstractSegment[] {
-  const segments: AbstractSegment[] = [];
+export function splitLatexLinks(text: string): LatexSegment[] {
+  const segments: LatexSegment[] = [];
   let cursor = 0;
   for (const match of text.matchAll(URL_PATTERN)) {
-    const url = trimUrl(match[0]);
-    const href = paperExternalUrl(url);
-    const start = match.index ?? 0;
-    if (!href || url.length <= "https://".length) continue;
+    const raw = match[0];
+    const urlStart = match.index ?? 0;
+    const urlEnd = urlStart + raw.length;
+    const commandStart = urlStart - URL_COMMAND_PREFIX.length;
+    // The braces give an explicit URL boundary, including any final punctuation.
+    const wrapped = commandStart >= cursor
+      && text[commandStart - 1] !== "\\"
+      && text.startsWith(URL_COMMAND_PREFIX, commandStart)
+      && text[urlEnd] === "}";
+    const url = wrapped ? raw : trimUrl(raw);
+    if (url.length <= "https://".length) continue;
+
+    let href: string;
+    try {
+      href = new URL(url).href;
+    } catch {
+      continue;
+    }
+
+    const start = wrapped ? commandStart : urlStart;
     if (start > cursor) segments.push({ type: "text", text: text.slice(cursor, start) });
     segments.push({ type: "link", text: url, href });
-    cursor = start + url.length;
+    cursor = wrapped ? urlEnd + 1 : urlStart + url.length;
   }
   if (cursor < text.length) segments.push({ type: "text", text: text.slice(cursor) });
   return segments;
 }
 
 /** LaTeX 渲染前用占位符替换网址：网址中的 `_`、`%`、`~` 会破坏解析，连字也会改写网址文本。 */
-export const ABSTRACT_LINK_PLACEHOLDER = /SZLINK(\d+)TOKEN/;
+export const LATEX_LINK_PLACEHOLDER = /SZLINK(\d+)TOKEN/;
 
-export function replaceAbstractLinks(text: string): {
+export function replaceLatexLinks(text: string): {
   source: string;
-  links: Extract<AbstractSegment, { type: "link" }>[];
+  links: Extract<LatexSegment, { type: "link" }>[];
 } {
-  const links: Extract<AbstractSegment, { type: "link" }>[] = [];
-  const source = splitAbstractLinks(text)
+  const links: Extract<LatexSegment, { type: "link" }>[] = [];
+  const source = splitLatexLinks(text)
     .map((segment) => {
       if (segment.type === "text") return segment.text;
       links.push(segment);
