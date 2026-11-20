@@ -36,7 +36,7 @@ def settings(request: Request):
 
 def signature(payload, secret, username, password):
     # Credential rotation also invalidates existing sessions.
-    key = hmac.digest(secret.encode(), (username + '\0' + password).encode(), 'sha256')
+    key = hashlib.pbkdf2_hmac('sha256', (username + '\0' + password).encode(), secret.encode(), 120_000)
     return hmac.new(key, payload.encode(), hashlib.sha256).hexdigest()
 
 
