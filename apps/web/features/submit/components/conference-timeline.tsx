@@ -7,11 +7,11 @@ import { cn } from "@/lib/utils";
 import { DeadlineCountdown } from "./deadline-countdown";
 
 const POINT_COLOR: Record<ConferenceTimelinePoint["kind"], string> = {
-  abstract: "text-sky-600 dark:text-sky-400",
-  full: "text-primary",
-  rebuttal: "text-amber-600 dark:text-amber-400",
-  decision: "text-emerald-600 dark:text-emerald-400",
-  opening: "text-violet-600 dark:text-violet-400",
+  abstract: "border-[#B2C2CC] bg-[#EAF0F4] dark:border-slate-500 dark:bg-slate-800",
+  full: "border-[#A7BAC9] bg-[#E5EDF4] dark:border-slate-400 dark:bg-slate-800",
+  rebuttal: "border-[#BCC6CD] bg-[#EDF0F3] dark:border-slate-500 dark:bg-slate-800",
+  decision: "border-[#AEC4C5] bg-[#E8F0F0] dark:border-slate-500 dark:bg-slate-800",
+  opening: "border-[#BBC0CF] bg-[#ECEEF4] dark:border-slate-500 dark:bg-slate-800",
 };
 
 export function ConferenceTimeline({
@@ -43,7 +43,7 @@ export function ConferenceTimeline({
       {dated.length ? (
         <div className="min-w-0 overflow-x-auto px-1 sm:mt-2 sm:self-start" aria-label={label} role="group">
           <div className="relative flex w-full items-start py-1" style={{ minWidth: `${stops.length * 2.625}rem` }}>
-            <span aria-hidden className="pointer-events-none absolute inset-x-[1.25rem] top-4 h-0.5 rounded-full bg-primary/30" />
+            <span aria-hidden className="pointer-events-none absolute inset-x-[1.25rem] top-4 h-0.5 rounded-full bg-slate-200 dark:bg-slate-700" />
             {stops.map(({ point, index, at }, i) => (
               <Fragment key={index}>
                 {i > 0 && <span aria-hidden style={{ flexGrow: (at - stops[i - 1].at) / duration }} />}
@@ -61,16 +61,16 @@ export function ConferenceTimeline({
                       }
                     }}
                     aria-label={`${milestoneLabel(point)}${point.comment ? ` · ${point.comment}` : ""} · ${formatInstant(point.at)}${"is_derived" in point && point.is_derived ? "（推算）" : ""}`}
-                    className={cn("relative flex w-[2.625rem] shrink-0 cursor-pointer flex-col items-center rounded-md py-1 text-xs focus-visible:outline-2 focus-visible:outline-primary", at <= now ? "text-faint" : POINT_COLOR[point.kind])}
+                    className={cn("relative flex w-[2.625rem] shrink-0 cursor-pointer flex-col items-center rounded-md py-1 text-xs focus-visible:outline-2 focus-visible:outline-primary", at <= now ? "text-faint" : "text-muted")}
                   >
                     <span className="flex h-4 items-center">
-                      <span className={cn("size-2.5 rounded-full border-2 border-current bg-card", (activeIndex === index || (activeIndex === null && next?.index === index)) && "bg-current ring-2 ring-current/20")} />
+                      <span className={cn("size-2.5 rounded-full border-2", POINT_COLOR[point.kind], (activeIndex === index || (activeIndex === null && next?.index === index)) && "ring-2 ring-slate-300/50 dark:ring-slate-500/50")} />
                     </span>
                     <span className="whitespace-nowrap text-[10px] tabular-nums">{formatTimelineDate(point.at)}</span>
                   </button>
                 ) : (
-                  <span aria-label="现在" className="relative flex w-[2.625rem] shrink-0 flex-col items-center py-1 text-amber-600 dark:text-amber-400">
-                    <span className="flex h-4 items-center"><span className="size-2.5 rounded-full bg-current ring-2 ring-current/20" /></span>
+                  <span aria-label="现在" className="relative flex w-[2.625rem] shrink-0 flex-col items-center py-1 text-muted">
+                    <span className="flex h-4 items-center"><span className="size-2.5 rounded-full border-2 border-slate-400 bg-slate-200 ring-2 ring-slate-200/60 dark:border-slate-400 dark:bg-slate-600 dark:ring-slate-600/50" /></span>
                     <span className="text-[10px]">现在</span>
                   </span>
                 )}

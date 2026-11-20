@@ -11,24 +11,12 @@ import { AddToCalendarMenu } from "./add-to-calendar-menu";
 import { ConferenceFollowButton } from "./conference-follow-button";
 import { ConferenceTimeline } from "./conference-timeline";
 import {
-  deadlineUrgency,
   formatInstant,
   formatOfficialTime,
   milestoneLabel,
   timelinePoints,
   upcomingMilestone,
 } from "@/features/submit/lib/deadline-time";
-
-function accentClass(conference: ConferenceDeadlineDto, now: number): string {
-  const next = conference.status === "open"
-    ? upcomingMilestone(conference.edition.milestones, now)
-    : null;
-  if (!next) return conference.status === "tbd" ? "bg-primary/60" : "bg-line";
-  const urgency = deadlineUrgency(Date.parse(next.at), now);
-  if (urgency === "day") return "bg-danger";
-  if (urgency === "week") return "bg-[#F59E0B]";
-  return "bg-success";
-}
 
 /**
  * 会议截稿卡片 —— 沿用投稿页卡片视觉，数据来自 FastAPI 会议截稿快照。
@@ -101,18 +89,15 @@ export const ConferenceCard = memo(function ConferenceCard({
         hasDetails && "cursor-pointer",
       )}
     >
-      <span className={cn("absolute inset-y-0 left-0 w-1 rounded-l-2xl", accentClass(conference, now))} />
-
-      <div className={cn("p-4 pl-5 transition-opacity duration-300 motion-reduce:transition-none sm:px-5 sm:pl-6", subdued && "opacity-60")}>
+      <div className={cn("p-4 transition-opacity duration-300 motion-reduce:transition-none sm:px-5", subdued && "opacity-60")}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h3 className="text-xl font-bold leading-tight text-ink">
             {conference.title} <span className="font-semibold text-muted">{edition.year}</span>
           </h3>
           <div className="flex flex-wrap justify-end gap-2">
-            {rank.ccf && <Badge variant="plain">CCF {rank.ccf}</Badge>}
-            {rank.core && <Badge variant="plain">CORE {rank.core}</Badge>}
-            {rank.thcpl && <Badge variant="plain">TH-CPL {rank.thcpl}</Badge>}
-            {!rank.ccf && <Badge variant="plain">非 CCF</Badge>}
+            {rank.ccf && <Badge className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">CCF {rank.ccf}</Badge>}
+            {rank.thcpl && <Badge className="bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300">TH-CPL {rank.thcpl}</Badge>}
+            {!rank.ccf && <Badge variant="gray">非 CCF</Badge>}
           </div>
         </div>
 
@@ -180,7 +165,7 @@ export const ConferenceCard = memo(function ConferenceCard({
                       {conference.accept_rates?.map((rate, index) => {
                         const showCounts = rate.rate !== null || !rate.str;
                         return (
-                          <li key={index} className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-panel px-3 py-2.5">
+                          <li key={index} className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-card px-3 py-2.5">
                             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                               <span className="text-xs font-medium text-muted">{rate.year} 年</span>
                               {rate.rate !== null ? (
@@ -236,7 +221,7 @@ export const ConferenceCard = memo(function ConferenceCard({
               href={edition.link}
               target="_blank"
               rel="noopener noreferrer"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
+              className={buttonVariants({ variant: "soft", size: "sm" })}
             >
               <ExternalLink />
               会议官网
