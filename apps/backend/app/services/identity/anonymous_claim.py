@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from app.services.agent import workspace as agent_workspace
+from app.services.agent_gateway.client import agent_gateway
 from app.services.agent_sessions.repository import agent_session_repository
 from app.services.agent_uploads import agent_upload_store
 
@@ -17,35 +17,25 @@ logger = logging.getLogger(__name__)
 
 async def claim_anonymous_sessions(source_owner: str, target_owner: str) -> dict:
     prepared_ids = await agent_session_repository.claimable_session_ids(source_owner)
-    for session_id in prepared_ids:
-        # Copy/merge is intentionally non-destructive. A failed copy or DB
-        # commit leaves the anonymous workspace available for a safe retry.
-        agent_workspace.copy_session_workspace(source_owner, target_owner, session_id)
+    # Copy/merge is intentionally non-destructive. A failed copy or DB commit
+    # leaves the anonymous workspace available for a safe retry.
+    prepared = await agent_gateway.prepare_workspace_claim(
+        source_owner, target_owner, prepared_ids,
+    )
+    prepared_ids = list(prepared.get('prepared_session_ids') or [])
 
     agent_result = await agent_session_repository.claim_anonymous_sessions(
         source_owner, target_owner, session_ids=prepared_ids,
     )
     await agent_upload_store.claim_owner(source_owner, target_owner)
     moved_ids = [str(item) for item in agent_result.get('moved_session_ids', [])]
-    for session_id in moved_ids:
-        try:
-            agent_workspace.cleanup_session_workspace(source_owner, session_id)
-        except Exception:
-            # Ownership and the target copy are already committed. Retaining an
-            # old anonymous directory is safer than reporting a false failure.
-            logger.warning(
-                'failed to clean claimed Agent session workspace %s',
-                session_id,
-                exc_info=True,
-            )
-
-    # Uploaded workspaces have a process-local registration lifecycle distinct
-    # from session-id workspaces. Preserve their existing owner migration, but
-    # do not turn a committed DB migration into a failed claim if cleanup fails.
+    # Uploaded workspace directories are moved after the Backend ownership
+    # transaction commits. Agent retains the owner-scoped registry and performs
+    # this filesystem operation inside its own boundary.
     try:
-        agent_workspace.migrate_owner_workspaces(source_owner, target_owner)
+        await agent_gateway.commit_workspace_claim(source_owner, target_owner, moved_ids)
     except Exception:
-        logger.warning('failed to migrate process-local uploaded workspaces', exc_info=True)
+        logger.warning('failed to finalize Agent workspace ownership claim', exc_info=True)
     return {
         'moved_count': int(agent_result.get('moved_count', 0)),
         'skipped_streaming_count': int(agent_result.get('skipped_running_count', 0)),

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { recordPaperBehavior } from "@/clients/backend/behavior";
+import { LatexRenderer } from "@/components/renderers/latex-renderer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +25,7 @@ export function ExpandableAbstract({
   collapsedClassName: string;
 }) {
   const abstractId = useId();
-  const abstractRef = useRef<HTMLParagraphElement>(null);
+  const abstractRef = useRef<HTMLDivElement>(null);
   const reportedRef = useRef(false);
   const [expanded, setExpanded] = useState(false);
   const [canExpand, setCanExpand] = useState(false);
@@ -47,6 +48,8 @@ export function ExpandableAbstract({
   }, [abstract, collapsedClassName, expanded]);
 
   if (!abstract.trim()) return null;
+  // Plain abstracts can contain literal TeX characters such as a percentage sign.
+  const hasLatex = /[\\$]/.test(abstract);
 
   const toggleExpanded = () => {
     if (source && userId && !expanded && !reportedRef.current) {
@@ -58,13 +61,15 @@ export function ExpandableAbstract({
 
   return (
     <div>
-      <p
+      <div
         ref={abstractRef}
         id={abstractId}
         className={cn(className, !expanded && collapsedClassName)}
       >
-        {abstract}
-      </p>
+        {hasLatex ? (
+          <LatexRenderer content={abstract} className="overflow-visible whitespace-normal [--latex-paragraph-gap:0px]" />
+        ) : abstract}
+      </div>
       {canExpand && (
         <Button
           type="button"

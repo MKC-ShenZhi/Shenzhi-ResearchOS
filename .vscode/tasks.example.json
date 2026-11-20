@@ -21,7 +21,7 @@
     {
       "label": "ShenZhi: 后端开发",
       "type": "shell",
-      "command": "uv run uvicorn app.main:app --env-file .env --host 127.0.0.1 --port 8000 --reload",
+      "command": "uv run --locked --env-file .env uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload",
       "options": {
         "cwd": "${workspaceFolder}/apps/backend"
       },
@@ -39,10 +39,108 @@
       "label": "ShenZhi: 全栈开发",
       "dependsOn": [
         "ShenZhi: 后端开发",
-        "ShenZhi: 前端开发"
+        "ShenZhi: 前端开发",
+        "ShenZhi: Agent API",
+        "ShenZhi: Agent Worker",
+        "ShenZhi: Agent Usage Worker"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
+    },
+    {
+      "label": "ShenZhi: Agent API",
+      "type": "shell",
+      "command": "uv run --locked --env-file .env uvicorn agent_app.main:app --host 127.0.0.1 --port 8101",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/agent"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      },
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "ShenZhi: Agent Worker",
+      "type": "shell",
+      "command": "uv run --locked --env-file .env python -m agent_app.worker_main",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/agent"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      },
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "ShenZhi: Agent Usage Worker",
+      "type": "shell",
+      "command": "uv run --locked --env-file .env python -m agent_app.usage_worker",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/agent"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      },
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "ShenZhi: Agent 开发",
+      "dependsOn": [
+        "ShenZhi: Agent API",
+        "ShenZhi: Agent Worker",
+        "ShenZhi: Agent Usage Worker"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "ShenZhi: Agent 数据库迁移",
+      "type": "shell",
+      "command": "uv run --locked --env-file .env alembic upgrade head",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/agent"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "ShenZhi: 数据库迁移",
+      "type": "shell",
+      "command": "uv run --locked --env-file .env alembic upgrade head",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/backend"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "runOptions": {
+        "instanceLimit": 1
+      }
     },
     {
       "label": "ShenZhi: 更新依赖",

@@ -8,6 +8,7 @@
  * 收起时也看得出 agent 正在干什么。
  */
 import { Loader2 } from "lucide-react";
+import { StreamdownRenderer } from "@/components/renderers/streamdown-renderer";
 
 import { previewLine, renderEntries, type Activity, type Entry, type StreamState } from "./timeline";
 
@@ -52,16 +53,18 @@ function ThinkingBlock({ text, live }: { text: string; live: boolean }) {
         <span className="shrink-0">{live ? "正在思考" : "思考"}</span>
         <span className="min-w-0 flex-1 truncate text-faint">{previewLine(text)}</span>
       </summary>
-      <div className="mt-1 whitespace-pre-wrap border-l-2 border-line pl-3 text-xs italic leading-6 text-muted">
-        {text}
-      </div>
+      <StreamdownRenderer
+        content={text}
+        isStreaming={live}
+        className="mt-1 border-l-2 border-line pl-3 text-xs italic leading-6 text-muted [&_p]:whitespace-pre-line"
+      />
     </details>
   );
 }
 
 /** 正文块：一轮的正文。过程区里用稍弱的字号与色，避免与最终答案抢注意力。 */
-function TextBlock({ text }: { text: string }) {
-  return <div className="whitespace-pre-wrap text-[13px] leading-6 text-ink-2">{text}</div>;
+function TextBlock({ text, live }: { text: string; live: boolean }) {
+  return <StreamdownRenderer content={text} isStreaming={live} className="text-[13px] leading-6 text-ink-2" />;
 }
 
 /** 折叠态 summary 的最新动作预览：工具给"名字(参数)"，思考/正文给单行文本。 */
@@ -96,7 +99,7 @@ export function Timeline({ state, live }: { state: StreamState; live: boolean })
           if (entry.kind === "thinking") {
             return <ThinkingBlock key={`k${index}`} text={entry.text} live={live && index === lastIndex} />;
           }
-          return <TextBlock key={`x${index}`} text={entry.text} />;
+          return <TextBlock key={`x${index}`} text={entry.text} live={live && index === lastIndex} />;
         })}
         {live && entries.length === 0 && (
           <div className="flex items-center gap-2 text-xs italic text-muted">

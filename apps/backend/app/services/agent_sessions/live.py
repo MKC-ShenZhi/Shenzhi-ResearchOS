@@ -1,4 +1,4 @@
-"""Single-process run ownership and replay, independent of HTTP subscribers."""
+"""Ephemeral per-process SSE subscriber buffer; Agent Gateway remains authoritative."""
 from __future__ import annotations
 
 import asyncio
@@ -28,6 +28,11 @@ def get_live(session_id: str, owner: str) -> LiveRun | None:
 
 def register(live: LiveRun) -> None:
     _live[live.session_id] = live
+
+
+def invalidate(live: LiveRun) -> None:
+    if _live.get(live.session_id) is live:
+        del _live[live.session_id]
 
 
 def append(live: LiveRun, name: str, data: dict) -> None:

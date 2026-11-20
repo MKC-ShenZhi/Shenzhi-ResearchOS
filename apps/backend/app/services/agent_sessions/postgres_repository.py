@@ -73,7 +73,12 @@ class PostgresAgentSessionRepository:
 
     async def _recover_expired_turns(self, db, *, session_id: str | None = None,
                                      worker_id: str | None = None) -> None:
-        statement = update(AgentTurnRow).where(AgentTurnRow.status == 'running')
+        statement = update(AgentTurnRow).where(
+            AgentTurnRow.status == 'running',
+            ~AgentTurnRow.settings.has_key('agent_task_id'),
+            or_(AgentTurnRow.settings['_agent_protocol'].as_integer().is_(None),
+                AgentTurnRow.settings['_agent_protocol'].as_integer() != 2),
+        )
         if worker_id is None:
             statement = statement.where(AgentTurnRow.lease_expires_at <= func.clock_timestamp())
         else:
@@ -296,6 +301,23 @@ class PostgresAgentSessionRepository:
             raise BusinessError(20004, 'Agent 轮次不存在或已经结束', 404)
         return _turn_from_row(row)
 
+    async def update_turn_settings(self, session_id: str, owner: str, turn_id: str,
+                                   settings: dict[str, Any], *, worker_id: str) -> AgentTurn:
+        owner_exists = select(AgentSessionRow.id).where(
+            AgentSessionRow.id == session_id, AgentSessionRow.owner == owner,
+        ).exists()
+        async with session_scope() as db:
+            row = await db.scalar(
+                update(AgentTurnRow)
+                .where(AgentTurnRow.id == turn_id, AgentTurnRow.session_id == session_id,
+                       AgentTurnRow.status == 'running', AgentTurnRow.worker_id == worker_id,
+                       AgentTurnRow.lease_expires_at > func.clock_timestamp(), owner_exists)
+                .values(settings=dict(settings)).returning(AgentTurnRow)
+            )
+        if row is None:
+            raise BusinessError(20004, 'Agent 轮次不存在或已经结束', 404)
+        return _turn_from_row(row)
+
     async def renew_turn(self, turn_id: str, worker_id: str) -> bool | None:
         async with session_scope() as db:
             renewed = await db.scalar(
@@ -316,6 +338,32 @@ class PostgresAgentSessionRepository:
         if row is not None and row.status != 'running' and row.worker_id == worker_id:
             return None
         return False
+
+    async def claim_turn_projection(self, session_id: str, owner: str, turn_id: str,
+                                    worker_id: str) -> bool:
+        owner_exists = select(AgentSessionRow.id).where(
+            AgentSessionRow.id == session_id, AgentSessionRow.owner == owner,
+        ).exists()
+        async with session_scope() as db:
+            claimed = await db.scalar(
+                update(AgentTurnRow)
+                .where(AgentTurnRow.id == turn_id, AgentTurnRow.session_id == session_id,
+                       AgentTurnRow.status == 'running', owner_exists,
+                       or_(AgentTurnRow.lease_expires_at.is_(None),
+                           AgentTurnRow.lease_expires_at <= func.clock_timestamp()))
+                .values(worker_id=worker_id,
+                        lease_expires_at=func.clock_timestamp()
+                        + text(f"INTERVAL '{LEASE_SECONDS} seconds'"))
+                .returning(AgentTurnRow.id)
+            )
+        return claimed is not None
+
+    async def release_turn_projection(self, turn_id: str, worker_id: str) -> None:
+        async with session_scope() as db:
+            await db.execute(update(AgentTurnRow).where(
+                AgentTurnRow.id == turn_id, AgentTurnRow.worker_id == worker_id,
+                AgentTurnRow.status == 'running',
+            ).values(worker_id=None, lease_expires_at=func.clock_timestamp()))
 
     async def import_legacy(self, owner: str, payload: dict[str, Any]) -> AgentSession:
         from app.services.agent_sessions.repository import _populate_legacy_turns, new_session_id
@@ -391,6 +439,16 @@ class PostgresAgentSessionRepository:
                     .returning(AgentSessionRow.id)
                 )
                 moved_ids = [str(item) for item in moved.all()]
+                if moved_ids:
+                    # Agent execution records keep their original owner. Preserve
+                    # that trusted identity for replay after the product claim,
+                    # including turns created before this metadata existed.
+                    await db.execute(update(AgentTurnRow).where(
+                        AgentTurnRow.session_id.in_(moved_ids),
+                        AgentTurnRow.settings.has_key('agent_task_id'),
+                        ~AgentTurnRow.settings.has_key('_agent_owner_id'),
+                    ).values(settings=AgentTurnRow.settings.op('||')(
+                        {'_agent_owner_id': source_owner})))
         return {
             'moved_count': len(moved_ids),
             'skipped_running_count': int(skipped or 0),

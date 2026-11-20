@@ -11,14 +11,15 @@ from app.core.request_context import (
     get_request_id,
 )
 from app.core.database import dispose_engine
+from app.api.agent_v2 import router as agent_v2_router
+from app.api.admin_console import router as admin_console_router
+from app.services.agent_entitlements.service import EntitlementError
 from app.services.agent_sessions.repository import agent_session_repository
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    from app.integrations.llm.resolver import load_registry
     from app.services.discovery_pool.scheduler import start_home_feed_scheduler, stop_home_feed_scheduler
-    load_registry()
     await agent_session_repository.recover()
     home_feed_scheduler = start_home_feed_scheduler()
     yield
@@ -28,6 +29,8 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title='ShenZhi AI API', version='1.0.0', lifespan=lifespan)
+app.include_router(agent_v2_router)
+app.include_router(admin_console_router)
 configure_logging()
 logger = logging.getLogger(__name__)
 for router in (
@@ -61,8 +64,18 @@ async def business_error(_request: Request, error: BusinessError):
     return fail(error.code, error.message, error.status)
 
 
+@app.exception_handler(EntitlementError)
+async def entitlement_error(_request: Request, error: EntitlementError):
+    return fail(20004, error.reason, error.status)
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_error(_request: Request, _error: RequestValidationError):
+    if _request.url.path.startswith('/api/v1/admin-console/'):
+        # Report field locations only, never raw submitted values or payloads.
+        fields = list(dict.fromkeys('.'.join(str(part) for part in error['loc'])
+                                    for error in _error.errors()))[:8]
+        return fail(20001, '请求参数不合法：' + '、'.join(fields), 422)
     return fail(20001, '请求参数不合法，请检查字段格式与长度', 422)
 
 
@@ -84,6 +97,8 @@ async def unexpected_error(request: Request, error: Exception):
         error,
     )
     response = fail(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE, 500)
+    if request.url.path.startswith('/api/v1/admin-console'):
+        response.headers['Cache-Control'] = 'no-store'
     response.headers[REQUEST_ID_HEADER] = request_id
     return response
 
@@ -97,3 +112,11 @@ def health() -> dict[str, str]:
 def versioned_health() -> dict[str, str]:
     """Expose the health probe under the same prefix used by the Web BFF."""
     return health()
+
+
+@app.middleware('http')
+async def admin_console_no_store(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith('/api/v1/admin-console'):
+        response.headers['Cache-Control'] = 'no-store'
+    return response

@@ -224,7 +224,8 @@ export async function streamAgentRun(
   },
   signal?: AbortSignal,
 ): Promise<void> {
-  await streamAgentEndpoint(apiPath("/agent/run"), body, handlers, signal);
+  await streamAgentEndpoint(apiPath("/agent/run"), body, handlers, signal,
+    { "Idempotency-Key": crypto.randomUUID() });
 }
 
 export async function streamAgentSessionRun(
@@ -258,12 +259,18 @@ async function streamAgentEndpoint(
   signal?: AbortSignal,
   headers?: HeadersInit,
 ): Promise<void> {
+  let completed = false;
   await readSseStream(url, {
     body,
     headers,
     signal,
-    onEvent: (event) => dispatchAgentEvent(event, handlers),
+    idleTimeoutMs: 45_000,
+    onEvent: (event) => {
+      dispatchAgentEvent(event, handlers);
+      if (event.event === "result") completed = true;
+    },
   });
+  if (!completed) throw new Error("连接已中断，尚未收到最终结果。任务可能仍在执行，请重新连接或刷新结果。");
 }
 
 function dispatchAgentEvent(event: SseEvent, handlers: Parameters<typeof streamAgentRun>[1]): void {
