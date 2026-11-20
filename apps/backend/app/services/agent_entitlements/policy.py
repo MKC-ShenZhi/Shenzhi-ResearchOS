@@ -68,6 +68,9 @@ class ModelBudgetProfile(V2):
     # Token; 2 reduces conservative over-reservation without changing the wire
     # measurement, the daily limit or the real-usage settlement.
     input_bytes_per_token: Literal[1, 2] = 1
+    # Historical local window retained for Policy JSON compatibility. It is
+    # not a verified model limit and no longer acts as a second input quota.
+    # Real context limits, if known, come from the Worker model registry.
     context_window_tokens: Positive
     max_output_tokens: Positive
     output_limit_semantics: Literal['completion_including_reasoning']

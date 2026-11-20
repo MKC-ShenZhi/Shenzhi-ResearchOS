@@ -88,7 +88,7 @@ Admin 发布三档不可变 Policy，固定 daily quota_pool 跨 plan/revision�
 
 新 Policy 使用 per_call，初始 Grant allocation 预留为0，签名 execution_constraints 显式声明模式。Permit 在现有 owner→grant 锁内按需预留并写入原账本；实际 start 与计量安全门禁保留。无需追加 Grant 余额或重签任务，每个调用仍需 Permit。task_fixed 是历史默认，不改变已签历史任务语义。真实未启动封闭证明可归还 call-held；Unknown/Partial 和已启动失败继续沿原持有/对账机制。
 
-正式套餐不再依赖固定 call_upper_bound。dynamic_model_budget=true 时，逐模型审批约束与请求预算进入 Permit，在 owner 锁内按输入风险预算、模型上下文/输出及每日余额计算批准输出，并绑定 Provider max_tokens。risk_assessed_utf8_v1 测量完整正文 UTF-8 字节数；输入预留为 `ceil(input_bytes / input_bytes_per_token) + input_overhead_tokens`。逐模型 Policy 的 `input_bytes_per_token` 缺省为1，兼容历史算法；可显式选择2降低字节估算的过度预留。两者都是部署风险估算，不是严格 Token 证明，2对特殊文本可能低估，不能承诺真实消耗绝不超过估算；没有模型实测依据时保持1。余量只加一次，现有上下文压缩用的字符/4启发式不作为计费保证。真实用量按原幂等账本及时结算并释放多余预留，未知成本保留，超额记录并阻断后续调用；没有独立风险 profile 或对应模型约束时拒绝。若 Provider 无法确认 max_tokens 覆盖输出及思考 Token，则保持阻断。历史 Grant 保留原 call_upper_bound 语义及结算。重试、参数降级和摘要逐次重新授权；仍没有跨日自动续签或无限 TTL。
+正式套餐不再依赖固定 call_upper_bound。dynamic_model_budget=true 时，逐模型审批约束与请求预算进入 Permit，在 owner 锁内按输入风险预算、Registry已声明的模型上下文/输出及每日余额计算批准输出，并绑定 Provider max_tokens。risk_assessed_utf8_v1 测量完整正文 UTF-8 字节数；输入预留为 `ceil(input_bytes / input_bytes_per_token) + input_overhead_tokens`。逐模型 Policy 的 `input_bytes_per_token` 缺省为1，兼容历史算法；可显式选择2降低字节估算的过度预留。两者都是部署风险估算，不是严格 Token 证明，2对特殊文本可能低估，不能承诺真实消耗绝不超过估算；没有模型实测依据时保持1。余量只加一次，现有上下文压缩用的字符/4启发式不作为计费保证。真实用量按原幂等账本及时结算并释放多余预留，未知成本保留，超额记录并阻断后续调用；没有独立风险 profile 或对应模型约束时拒绝。若 Provider 无法确认 max_tokens 覆盖输出及思考 Token，则保持阻断。历史 Grant 保留原 call_upper_bound 语义及结算。重试、参数降级和摘要逐次重新授权；仍没有跨日自动续签或无限 TTL。
 
 改变 Policy 时若有未关闭 Grant，拒绝 ACTIVE_GRANTS_REQUIRE_DRAIN；先排空任务，不自动把新权限塞进旧签名。停用拒绝后续 Permit/start，已启动调用继续按历史授权结算。Assignment、幂等 operation_id、原因与审批引用写入现有追加审计。
 
@@ -132,7 +132,7 @@ uv run --env-file .env python -m app.services.agent_entitlements.plans --capabil
 uv run --env-file .env python -m app.services.agent_entitlements.plans --capabilities ../agent/workspace/formal-capabilities.json --previous-bundle workspace/formal-plans-availability.json --model-budgets app/data/agent_deepseek_model_budget.json --risk-profile autodl-deepseek-bounded-v1 --release 20261120-availability-deepseek-budget-r1 --output workspace/formal-plans-deepseek-budget.json
 ```
 
-此配置将 DeepSeek 的输出上限设为4096，单次上下文预算32768，输入UTF-8字节按1:1加1024封装余量预留。上下文数值是应用预算边界，不声明上游真实上下文长度。风险ID本身不证明Provider语义；现有Provider必须遵守max_tokens覆盖completion（含思考）的接入契约。Policy预算O经Permit/start回传后覆盖实际请求max_tokens，发送前再次核对正文摘要、O与唯一发送权；不修改模型身份，因此单纯补Policy预算不需重新导出能力。复用现有Admin风险记录和发布/分配流程，不自动修改已发布Policy。
+此配置将 DeepSeek 的输出上限设为4096，输入UTF-8字节按1:1加1024封装余量预留。历史兼容字段context_window_tokens=32768保留在Policy中，但不再作为额外的单次输入限额；真实模型上下文上限只采用Worker Registry明确声明的值，未知时不编造上限。风险ID本身不证明Provider语义；现有Provider必须遵守max_tokens覆盖completion（含思考）的接入契约。Policy预算O经Permit/start回传后覆盖实际请求max_tokens，发送前再次核对正文摘要、O与唯一发送权；不修改模型身份，因此单纯补Policy预算不需重新导出能力。复用现有Admin风险记录和发布/分配流程，不自动修改已发布Policy。
 
 开发环境可显式设置 `ENVIRONMENT=development` 与 `AGENT_ALLOW_TEST_POLICY=true` 使用已批准并已分配的 test_only Policy；不自动创建用户、分配权益或绕过认证。生产环境必须保持该开关为false；在非显式development环境开启会拒绝服务。开发联调也可直接复用上述正式发布包生成方式，使用现有 Admin 分配，不必建立第二套注册或授权流程。
 

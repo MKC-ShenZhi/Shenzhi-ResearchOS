@@ -379,11 +379,23 @@ class Entitlements:
                     # reviewed overhead covers provider framing assumptions.
                     ratio = profile.input_bytes_per_token
                     input_tokens = (budget.input_bytes + ratio - 1) // ratio + profile.input_overhead_tokens
-                    context = min(profile.context_window_tokens, budget.model_context_window or profile.context_window_tokens)
+                    # The historical profile window was a local risk budget,
+                    # not a verified Provider context limit. Do not turn it
+                    # into a second quota that rejects otherwise affordable
+                    # requests after tools add evidence. Only a context limit
+                    # explicitly declared by the Worker model registry applies.
+                    context = budget.model_context_window
                     output_tokens = min(budget.requested_output_tokens, budget.model_max_output_tokens,
-                        profile.max_output_tokens, context - input_tokens, available - input_tokens)
+                        profile.max_output_tokens, available - input_tokens)
+                    if context is not None:
+                        output_tokens = min(output_tokens, context - input_tokens)
                     if output_tokens <= 0:
-                        reason = reason or 'MODEL_INPUT_BUDGET_EXHAUSTED'
+                        reason = reason or ('QUOTA_EXHAUSTED' if available <= input_tokens
+                                            else 'MODEL_CONTEXT_WINDOW_EXCEEDED')
+                        logging.getLogger('app.agent.authorization').warning(
+                            'Model budget denied call_id=%s input_estimate=%s available=%s '
+                            'registry_context=%s reason=%s',
+                            request.call_id, input_tokens, available, context, reason)
                     else:
                         units = input_tokens + output_tokens
                         model_budget = dict(schema_version=1, basis=profile.input_basis,
