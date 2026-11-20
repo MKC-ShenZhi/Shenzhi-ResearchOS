@@ -18,6 +18,8 @@ from agent_app.infrastructure.metering_models import TaskMeteringRow, ExecutionR
 from agent_contracts import BudgetLimits, ExecutionReport, PlatformEvent, RunRequest, RunStatus
 from agent_contracts.tasks import TaskRecord, TaskStatus, TaskSubmission
 
+WORKER_LEASE_SECONDS = 90
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -158,7 +160,7 @@ async def list_task_runs(session: AsyncSession, task_id: str, owner_id: str) -> 
         .order_by(RunRow.attempt))).all())
 
 
-async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 45,
+async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = WORKER_LEASE_SECONDS,
                     *, demo_mode: bool = False, v2=False):
     now = _now()
     query = (select(RunRow, TaskRow, OutboxRow).join(TaskRow, TaskRow.task_id == RunRow.task_id)
@@ -208,7 +210,7 @@ async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 
 
 
 async def heartbeat(session: AsyncSession, run_id: str, worker_id: str,
-                    lease_token: int, lease_seconds: int = 45) -> tuple[bool, bool]:
+                    lease_token: int, lease_seconds: int = WORKER_LEASE_SECONDS) -> tuple[bool, bool]:
     now = _now()
     row = await session.scalar(select(RunRow).where(
         RunRow.run_id == run_id, RunRow.worker_id == worker_id,

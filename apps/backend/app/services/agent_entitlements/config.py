@@ -16,4 +16,8 @@ def entitlement_service():
     if key_path and kid:
         key = serialization.load_pem_private_key(Path(key_path).read_bytes(), password=None)
         require(isinstance(key, Ed25519PrivateKey), 'SIGNING_ALGORITHM_INVALID', 503)
-    return Entitlements(issuer=issuer, audience=audience, kid=kid or None, private_key=key)
+    development_policy = os.getenv('AGENT_ALLOW_TEST_POLICY', '').strip().lower() == 'true'
+    require(not development_policy or os.getenv('ENVIRONMENT', '').strip().lower() == 'development',
+            'TEST_POLICY_REQUIRES_DEVELOPMENT', 503)
+    return Entitlements(issuer=issuer, audience=audience, kid=kid or None, private_key=key,
+                        allow_test_policy=development_policy)

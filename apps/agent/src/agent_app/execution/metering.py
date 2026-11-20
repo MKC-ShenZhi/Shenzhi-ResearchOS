@@ -14,6 +14,7 @@ import hashlib
 import os
 import uuid
 import json
+import logging
 import httpx
 
 from agent_contracts.canonical import digest, request_digest_v1
@@ -61,7 +62,9 @@ def tool_identity(target):
     if not configuration_release:
         raise BusinessError(20004, '工具非敏感配置修订未配置，拒绝计量执行', 503)
     return ToolIdentity(schema_version=1, kind='tool', capability_id='tool:' + target.spec.name,
-        implementation_build_digest=implementation_digest(),
+        # Wire field retained for historical identities. Authorization tracks
+        # the execution contract, not unrelated Python files or the lockfile.
+        implementation_build_digest=digest({'execution_contract': 'workspace_bounded_no_shell_v1'}),
         parameter_schema_digest=request_digest_v1(target.spec.parameters),
         dependency_digests=[digest({'configuration_release': configuration_release})])
 
@@ -87,7 +90,8 @@ def model_identity(resolved):
             'request_params': resolved.spec.request_params,
             'route_revision': route_revision,
             'thinking_disabled': os.getenv('AGENT_DISABLE_THINKING', '').strip().lower() == 'true',
-            'adapter_build': implementation_digest(), 'usage_frame_semantics': 'cumulative'}), dependency_digests=[])
+            'adapter_contract': 'openai_chat_completions_metered_v1',
+            'usage_frame_semantics': 'cumulative'}), dependency_digests=[])
 
 
 def model_payload_digest(payload):
@@ -238,10 +242,17 @@ class WorkerMeter:
                 error = exc
                 if attempt < 2:
                     await asyncio.sleep(0.1 * 2**attempt)
-        # Durable started fact still exists; stop further calls rather than lose
-        # accounting silently. Recovery exposes unknown if completion is lost.
-        self.stop.set()
-        raise BusinessError(20004, '调用观察未获持久回执，停止新增调用', 503) from error
+        # The started fact and fsynced spool preserve the cost. Keep its reserve
+        # held; later permits still reserve against the same daily hard limit.
+        # Never turn a transient completion delivery failure into lost output.
+        transient = (isinstance(error, (httpx.TransportError,))
+                     or isinstance(error, BusinessError) and error.status >= 500
+                     or isinstance(error, httpx.HTTPStatusError) and error.response.status_code >= 500)
+        if not transient:
+            self.stop.set()
+            raise error
+        logging.getLogger('agent.metering').warning(
+            'Usage completion queued for spool recovery call_id=%s reason=%s', call_id, type(error).__name__)
 
 
     async def activate(self, skill, invocation='model_selected'):

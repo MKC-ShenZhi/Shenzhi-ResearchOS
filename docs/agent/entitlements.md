@@ -14,7 +14,7 @@ Grant/Receipt 使用 cryptography Ed25519、compact JWS，固定不同 typ、EdD
 
 OpenAICompatProvider 每次 `_stream_once` 内真实发送前独立登记，包括外层重试和参数降级。底层 HTTP Transport 显式 retries=0；自定义 Transport 必须声明 `metering_no_hidden_retries=True`，MockTransport 仅用于测试。摘要通过相同 Provider，purpose=summary。累计 usage 帧不相加；部分最终帧保留下界证据并标 partial，回退冲突标 unknown。没有 usage 的失败、超时、取消不填零。
 
-ToolRegistry 在 `execute_prepared` 登记，prepare/校验失败不登记。顺序和并行共享此边界。forced_skills 在装配注入前激活，read_skill 在正文/参考读取前激活；Control 对 Task＋精确 Skill 版本去重。Skill 的完整受控目录内容参与摘要；装载后资源发生变化时拒绝把旧正文标成新版本。Tool 的受控源码/依赖锁、参数 Schema 及非敏感配置发布引用形成身份；Model 固化 Provider、registry ID、upstream、能力/参数/路由修订及 Adapter 构建摘要。Worker 部署代码、锁和受控资源必须只读，更新时排空旧任务或保留对应版本 Worker。
+ToolRegistry 在 `execute_prepared` 登记，prepare/校验失败不登记。顺序和并行共享此边界。forced_skills 在装配注入前激活，read_skill 在正文/参考读取前激活；Control 对 Task＋精确 Skill 版本去重。Skill 的完整受控目录内容参与摘要；装载后资源发生变化时拒绝把旧正文标成新版本。Tool 身份包含稳定执行契约 `workspace_bounded_no_shell_v1`、参数 Schema 和非敏感配置修订；Model 固化 Provider、registry ID、upstream、能力/参数/路由修订、思考开关及 `openai_chat_completions_metered_v1` 协议契约。两者均不再绑定全量 Python 源码或依赖锁。改变安全边界或调用语义时必须更新契约/配置修订；普通实现修复无需重新批准能力。全量构建摘要保留在离线能力导出的顶层 `implementation_build_digest`，仅供追踪。Worker 部署代码、锁和受控资源必须只读，更新时排空旧任务或保留对应版本 Worker。
 
 真实调用必须取得本进程首次 start 回执并在实际发送/执行前再检查截止；重复 start 只有 may_send=false。持久 start 与观察/Outbox 同一 Agent 事务，失败不能外调。Control HTTP 错误不会进入 Provider 的上游重试分支。网络发送与数据库不是原子操作；已发启动回执后崩溃保留 unknown，不承诺外部 Exactly Once。
 
@@ -56,7 +56,11 @@ Backend start 与 revoke 使用同一根锁；撤销先提交则后续 start 拒
 
 Worker 完成观察在持久目录先 fsync/原子 rename，再送 Control；响应丢失重试相同 observation_submission_id，重启先重放该目录。该目录需持久挂载、限制本机读权限，不属于可公开 Workspace 文件。Control 分配 revision/measurement/Task sequence；相同补报不增修订。Worker 崩溃早于完成观察落盘时仍有持久 started，保守 unknown。
 
+完成观察已写入持久 spool 后，网络/服务端暂时性失败保留 spool 并记录日志，不覆盖已生成的回答；协议或权限拒绝仍停止。Control 已持久化观察和 Outbox 后，暂时性结算失败返回已入库观察，由 Usage Worker 继续投递。未确认调用继续占用 Backend 预留，不把 unknown 当零，不再因某一条完成回执阻塞同一用户的全部新任务；每次 Permit/start 仍在 owner 锁内检查额度，Outbox 容量上限保留。Worker Lease 为90秒，心跳仍每12秒，暂时性心跳失败允许下个周期再试一次；明确拒绝、取消、失租仍停止执行。
+
 Usage Outbox 在网络前提交领取/退避时刻；回执按每项身份校验。accepted/duplicate durable 才 delivered；quarantined 保留独立待核验状态并重试，永久拒绝/超限进入 dead_letter。容量统计包括所有未解决项，达到配置上限阻止新调用。`python -m agent_app.usage_worker` 独立运行投递、失效执行恢复、封闭、void 及关闭清单重投，不能省略部署此进程。
+
+网络故障导致重试耗尽时，在 Agent 目录执行 `uv run --env-file .env python -m agent_app.usage_worker --requeue-transient`，仅将没有永久拒绝回执的 dead_letter 返回待投递队列，然后退出。重复执行不重复处理已返回队列的项；原 ID、payload、Ack 和额度预留不变，操作记录到日志。已知永久拒绝不重排，需按原证据对账。用量批次失败、单条 Permit 恢复或 Grant 关闭失败分别记录日志，不再让该失败阻断后续恢复项。
 
 Inbox 对 measurement、call/revision、Task sequence 唯一，保存原始观察；投影前从预配 Gateway 查询 CallStartFact，核验全部身份、能力摘要、启动摘要及 Permit。404、超时或冲突保持隔离。后续 revision 采用绝对值，账本只追加采纳差额。partial 保留下界和未决持有；estimated 不自动作为实测扣费；unknown 不记零。超额原值入账并阻止该 Grant 后续调用，不自动追扣现金。RunReport 只作结果展示，不二次结算。
 
@@ -84,7 +88,7 @@ Admin 发布三档不可变 Policy，固定 daily quota_pool 跨 plan/revision�
 
 新 Policy 使用 per_call，初始 Grant allocation 预留为0，签名 execution_constraints 显式声明模式。Permit 在现有 owner→grant 锁内按需预留并写入原账本；实际 start 与计量安全门禁保留。无需追加 Grant 余额或重签任务，每个调用仍需 Permit。task_fixed 是历史默认，不改变已签历史任务语义。真实未启动封闭证明可归还 call-held；Unknown/Partial 和已启动失败继续沿原持有/对账机制。
 
-正式套餐不再依赖固定 call_upper_bound。dynamic_model_budget=true 时，逐模型审批约束与请求预算进入 Permit，在 owner 锁内按输入风险预算、模型上下文/输出及每日余额计算批准输出，并绑定 Provider max_tokens。risk_assessed_utf8_v1 明确是完整正文 UTF-8 字节数加审核封装余量的风险估算，不是严格 Token 证明；没有独立风险 profile/审批或对应模型约束时拒绝。若 Provider 无法确认 max_tokens 覆盖输出及思考 Token，则保持阻断。历史 Grant 保留原 call_upper_bound 语义及结算。重试、参数降级和摘要逐次重新授权；仍没有跨日自动续签或无限 TTL。
+正式套餐不再依赖固定 call_upper_bound。dynamic_model_budget=true 时，逐模型审批约束与请求预算进入 Permit，在 owner 锁内按输入风险预算、模型上下文/输出及每日余额计算批准输出，并绑定 Provider max_tokens。risk_assessed_utf8_v1 测量完整正文 UTF-8 字节数；输入预留为 `ceil(input_bytes / input_bytes_per_token) + input_overhead_tokens`。逐模型 Policy 的 `input_bytes_per_token` 缺省为1，兼容历史算法；可显式选择2降低字节估算的过度预留。两者都是部署风险估算，不是严格 Token 证明，2对特殊文本可能低估，不能承诺真实消耗绝不超过估算；没有模型实测依据时保持1。余量只加一次，现有上下文压缩用的字符/4启发式不作为计费保证。真实用量按原幂等账本及时结算并释放多余预留，未知成本保留，超额记录并阻断后续调用；没有独立风险 profile 或对应模型约束时拒绝。若 Provider 无法确认 max_tokens 覆盖输出及思考 Token，则保持阻断。历史 Grant 保留原 call_upper_bound 语义及结算。重试、参数降级和摘要逐次重新授权；仍没有跨日自动续签或无限 TTL。
 
 改变 Policy 时若有未关闭 Grant，拒绝 ACTIVE_GRANTS_REQUIRE_DRAIN；先排空任务，不自动把新权限塞进旧签名。停用拒绝后续 Permit/start，已启动调用继续按历史授权结算。Assignment、幂等 operation_id、原因与审批引用写入现有追加审计。
 
@@ -99,6 +103,38 @@ Backend 使用独立 Fact Reader 从 Agent 的只读 `/internal/v2/tasks/{task_i
 Deep Research 由正式 snapshot 中精确 skill:deep-research identity/digest 区分：Basic/Pro 不包含，Research 包含。Backend 提交检查强制 skills；Agent Control intent 对模型选择/forced 都核对签名权限，Worker 在 forced 注入前激活，read_skill 在正文/参考/脚本暴露前激活；Backend Permit/start 再校验。普通 Tool/Skill 规则免费但仍过授权与系统安全门禁。Web Deep Research 演示工作台没有因此变成生产研究执行入口。
 
 正式版本生成、发布、Admin 操作、迁移与回滚及安全配置见 [Admin README](../../apps/admin/README.md#正式套餐与-admin-操作)。未提交真实风险审批时，模型权限保持拒绝，不伪造可用性。
+
+## 部署时的能力同步与资源默认值
+
+新生成的正式套餐 Grant/Permit/启动窗口为7200/120/30秒；已签历史 Grant 和旧 Policy 不修改。启动期限只限制实际发送前的开始动作，不是已开始模型调用的执行超时。快速模式运行300秒、工具预算20次；Deep/Idea/Doubt运行1800秒、工具预算150次；最大执行轮数60，已有上下文压缩不变。套餐每日额度仍为20万/100万/300万。
+
+从旧的全源码身份首次升级，必须同步一次新的模型/工具摘要；不能仅按能力名称接受任意旧版本，因为历史签名只含摘要，无法证明配置兼容。技能身份算法不变，无需单独重注册。后续普通实现修改不会改变模型/工具授权；参数 Schema、路由、安全契约、技能内容等授权相关变更仍需同步。
+
+升级顺序：停止新任务进入，保留旧 Worker/API/Usage Worker 完成任务和结算，排空并关闭旧 Grant；切换 Backend 与三个 Agent 进程到同一份新代码；用最终 Worker 环境导出，再经现有 Admin 发布/分配；恢复新任务进入。不对历史任务自动重签或修改其用量。若存在 unknown/overage，先用原有对账路径处理，不能直接清理账本或强制解除预留。保留旧公钥。
+
+以下离线准备命令不写数据库、不调用模型，可重复生成同一发布包。先在 `apps/agent` 执行：
+
+```powershell
+uv run --env-file .env python -m agent_app.export_capabilities --output workspace/formal-capabilities.json
+```
+
+然后在 `apps/backend` 执行（`--previous-bundle` 指向之前实际使用的发布包；新修订号须未发布）：
+
+```powershell
+uv run --env-file .env python -m app.services.agent_entitlements.plans --capabilities ../agent/workspace/formal-capabilities.json --previous-bundle workspace/formal-plans-20261120.json --release 20261120-availability --output workspace/formal-plans-availability.json
+```
+
+这会复用现有逐模型预算与风险配置，不伪造审批。如果旧包的风险引用或逐模型预算为空，命令提前报错，不再生成到运行时才失败的包。`--model-budgets` 按模型ID合并覆盖旧配置；允许只配置要启用的模型，其余没有预算的模型仍拒绝调用。只有决定采用较宽松的输入估算时才追加 `--input-bytes-per-token 2`，并记录该风险参数的依据；不追加则保持原值。无旧发布包时继续使用原 `--model-budgets`、`--risk-profile` 参数。生成文件在现有 Admin「套餐管理」上传发布，再在「用户管理」预览并分配新修订；发布不自动迁移用户，也不重置当日余额。不需要数据库迁移或新增服务。
+
+仅补齐 DeepSeek 风险预算时，在 Backend 目录使用：
+
+```powershell
+uv run --env-file .env python -m app.services.agent_entitlements.plans --capabilities ../agent/workspace/formal-capabilities.json --previous-bundle workspace/formal-plans-availability.json --model-budgets app/data/agent_deepseek_model_budget.json --risk-profile autodl-deepseek-bounded-v1 --release 20261120-availability-deepseek-budget-r1 --output workspace/formal-plans-deepseek-budget.json
+```
+
+此配置将 DeepSeek 的输出上限设为4096，单次上下文预算32768，输入UTF-8字节按1:1加1024封装余量预留。上下文数值是应用预算边界，不声明上游真实上下文长度。风险ID本身不证明Provider语义；现有Provider必须遵守max_tokens覆盖completion（含思考）的接入契约。Policy预算O经Permit/start回传后覆盖实际请求max_tokens，发送前再次核对正文摘要、O与唯一发送权；不修改模型身份，因此单纯补Policy预算不需重新导出能力。复用现有Admin风险记录和发布/分配流程，不自动修改已发布Policy。
+
+开发环境可显式设置 `ENVIRONMENT=development` 与 `AGENT_ALLOW_TEST_POLICY=true` 使用已批准并已分配的 test_only Policy；不自动创建用户、分配权益或绕过认证。生产环境必须保持该开关为false；在非显式development环境开启会拒绝服务。开发联调也可直接复用上述正式发布包生成方式，使用现有 Admin 分配，不必建立第二套注册或授权流程。
 
 ## 测试入口
 

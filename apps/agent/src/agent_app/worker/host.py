@@ -14,7 +14,7 @@ import httpx
 from agent_contracts import WorkerHeartbeatRequestWire, WorkerHeartbeatResponseWire
 
 from agent_app.application.composition import build_runtime
-from agent_app.application.policies import run_deadline_s, tool_call_budget
+from agent_app.application.policies import MAX_EXECUTION_TURNS, run_deadline_s, tool_call_budget
 from agent_app.errors import BusinessError
 from agent_app.execution.types import (
     TOOL_CALL, TOOL_END, AgentEvent, RunChannel, RunResult, message_from_dict, message_to_dict,
@@ -224,16 +224,29 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
         queue.task_done()
 
     async def maintain_lease() -> None:
+        failures = 0
         while not stop.is_set():
             await asyncio.sleep(12)
             if stop.is_set():
                 return
             try:
                 state = await control.heartbeat(run_id, worker_id, token)
-            except Exception:
+            except (httpx.TransportError, httpx.HTTPStatusError, BusinessError) as exc:
                 logger.exception('Agent Worker heartbeat failed run_id=%s', run_id)
+                failures += 1
+                rejected = (isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code < 500
+                            or isinstance(exc, BusinessError) and exc.status < 500)
+                if rejected or failures >= 2:
+                    stop.set()
+                    return
+                # Retry once on the next heartbeat. Control still rejects all
+                # new calls after the persisted lease actually expires.
+                continue
+            except Exception:
+                logger.exception('Agent Worker heartbeat rejected run_id=%s', run_id)
                 stop.set()
                 return
+            failures = 0
             if not state.active or state.cancel_requested:
                 stop.set()
                 return
@@ -283,7 +296,7 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
             model=request.get('model'), workspace_id=request.get('workspace_id'),
             session_id=request.get('session_id'), allow_shell=False,
             forced_skills=request.get('skills') or (),
-            max_turns=360,
+            max_turns=MAX_EXECUTION_TURNS,
             deadline_s=min(run_deadline_s(request.get('mode', 'fast')),
                            float(budget.get('max_duration_s') or run_deadline_s(
                                request.get('mode', 'fast')))),

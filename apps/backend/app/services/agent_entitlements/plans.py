@@ -30,8 +30,10 @@ def build(capabilities, *, release, model_budgets=None, risk_profile=None):
     if 'tool:run_command' in ids:
         raise ValueError('shell is outside this product release')
     model_ids = {i.capability_id for i, _ in identities if i.kind == 'model'}
-    if risk_profile and set(model_budgets or {}) != model_ids:
-        raise ValueError('reviewed budget constraints required for every published model')
+    if risk_profile and not model_budgets:
+        raise ValueError('model risk profile requires at least one reviewed model budget')
+    # A model without a budget remains denied by Permit. Do not require
+    # enabling unrelated models just to configure one supported model.
     if set(model_budgets or {}) - model_ids:
         raise ValueError('model budget profile has an unknown model identity')
     policies = []
@@ -54,7 +56,7 @@ def build(capabilities, *, release, model_budgets=None, risk_profile=None):
             model_budget_profiles=model_budgets or {}, policy_revision=revision,
             plan_id=plan, permission_snapshot=dict(schema_version=1, permission_snapshot_id=revision+':snapshot',
                 policy_revision=revision, catalog_revision=digest(capabilities), capabilities=permissions), rules=rules,
-            grant_ttl_seconds=3600, permit_ttl_seconds=60, start_ttl_seconds=10, conservative_clock_skew_ms=1000,
+            grant_ttl_seconds=7200, permit_ttl_seconds=120, start_ttl_seconds=30, conservative_clock_skew_ms=1000,
             token_scope='prompt_plus_completion', missing_usage_strategy='hold_and_reconcile', overage_strategy='record_and_block',
             unused_release_strategy='sealed_complete_only', model_risk_profile=risk_profile,
             disable_scope='every_start', emergency_scope='grant_root'))
@@ -66,9 +68,26 @@ if __name__ == '__main__':
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--capabilities',required=True); p.add_argument('--release',required=True)
     p.add_argument('--model-budgets', help='Reviewed per-model deployment risk constraints JSON'); p.add_argument('--risk-profile')
+    p.add_argument('--previous-bundle', help='Reuse budget/risk settings from an existing formal bundle; no database writes')
+    p.add_argument('--input-bytes-per-token', type=int, choices=[1, 2],
+                   help='Explicit input risk estimate: 1 preserves historical behavior, 2 reduces byte-based reservation')
     p.add_argument('--output',required=True)
     a=p.parse_args()
+    previous = None
+    if a.previous_bundle:
+        previous = EntitlementPolicy.model_validate(
+            json.loads(Path(a.previous_bundle).read_text(encoding='utf-8'))['policies'][0])
+    budgets = ({k:v.model_dump(mode='json') for k,v in previous.model_budget_profiles.items()}
+               if previous else {})
+    if a.model_budgets:
+        budgets.update(json.loads(Path(a.model_budgets).read_text(encoding='utf-8')))
+    if a.input_bytes_per_token is not None:
+        for profile in budgets.values():
+            profile['input_bytes_per_token'] = a.input_bytes_per_token
+    risk_profile = a.risk_profile if a.risk_profile is not None else previous.model_risk_profile if previous else None
+    if not risk_profile or not budgets:
+        p.error('model_risk_profile/model_budget_profiles missing: provide --risk-profile and --model-budgets; '
+                '--previous-bundle does not create missing risk configuration')
     bundle=build(json.loads(Path(a.capabilities).read_text(encoding='utf-8')),release=a.release,
-                 model_budgets=json.loads(Path(a.model_budgets).read_text(encoding='utf-8')) if a.model_budgets else None,
-                 risk_profile=a.risk_profile)
+                 model_budgets=budgets, risk_profile=risk_profile)
     Path(a.output).write_text(json.dumps(bundle,ensure_ascii=False,indent=2),encoding='utf-8')

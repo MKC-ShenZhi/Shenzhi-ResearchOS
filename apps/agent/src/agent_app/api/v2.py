@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -282,7 +283,17 @@ async def observe(body: ObservationSubmission, db=Depends(get_session), control=
     await db.commit()
     if usage.metering_context == 'authorized':
         from agent_app.control.usage_delivery import settle_observation
-        await settle_observation(db, EntitlementClient(), usage)
+        try:
+            await settle_observation(db, EntitlementClient(), usage)
+        except GateDenied as exc:
+            if exc.status < 500 and exc.reason != 'USAGE_SETTLEMENT_UNCONFIRMED':
+                raise
+            await db.rollback()
+            # Observation and Outbox were committed above. Acknowledge durable
+            # ingestion; pending reserves remain held until delivery settles.
+            logging.getLogger('agent.usage').warning(
+                'Settlement deferred to Outbox task_id=%s measurement_id=%s reason=%s',
+                usage.task_id, usage.measurement_id, exc.reason)
     return usage.model_dump(mode='json')
 
 

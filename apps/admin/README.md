@@ -114,7 +114,9 @@ uv run --env-file .env python -m app.services.agent_entitlements.plans --capabil
 
 输入预算取完整请求正文（不含协商的 max_tokens）的 UTF-8 字节数＋审批的封装余量，仅是 risk_assessed_utf8_v1 风险估算，绝不是 tokenizer 证明。只有负责人确认模型/Provider 的上下文、输出参数和思考 Token 均受该输出限制时才能配置该模型；不支持此语义的 Provider 保持阻断。批准风险策略接受估算及 Provider 超额风险，不承诺数学意义上不超支。
 
-默认 model_risk_profile=null，模型调用仍拒绝 TOKEN_BOUND_UNPROVEN。真实独立审批后可增加 `--risk-profile <APPROVED_PROFILE>`，并在控制台填写模型风险审批引用；启用风险 profile 时必须为全部已发布模型提供审核后的约束，否则生成失败。没有模型约束时，动态调用拒绝 MODEL_BUDGET_UNCONFIGURED，不能仅填风险字符串放行。
+`model_risk_profile=null` 的历史包会拒绝 TOKEN_BOUND_UNPROVEN；生成命令现在提前拒绝风险配置或逐模型预算为空的发布包。指定 `--risk-profile <APPROVED_PROFILE>` 和 `--model-budgets <BUDGET_JSON>`，并在控制台填写对应风险记录。允许仅为本次要启用的模型提供约束；其他模型仍拒绝 MODEL_BUDGET_UNCONFIGURED，不因共享风险引用而放行。`--model-budgets` 按模型ID合并覆盖旧包配置，保留未指定的其他模型预算。
+
+DeepSeek 的有限预算配置见 `apps/backend/app/data/agent_deepseek_model_budget.json`：输出最多4096 Token、输入按完整请求UTF-8字节加1024余量预留、任务内单次上下文预算32768。32768是本地保守预算边界，不声明上游真实上下文长度；输出限制语义仍依赖已接入Provider的max_tokens契约，不代表本次做过新的实测。使用时须确认现有Provider遵守包含思考Token的completion输出上限。
 
 3. Admin → 套餐管理 → 发布与迁移 → 发布套餐新版本 → 上传发布包 → 填写原因、Policy 审批引用、模型风险审批引用（如有）→ 确认发布。Backend 校验受控身份摘要、固定三档规则与当前 Agent 的公开 Model/Skill 集合。Tool build 身份由离线导出和管理员审批保证，当前配置 HTTP 接口无法远程验证 build 摘要。
 4. 用户管理 → 勾选一个/多个用户 → 选择套餐、原因 → 预览 → 确认执行。成功、失败和部分成功均分用户返回；失败不覆盖该用户权益。网络失败保留操作 ID 供原请求重试。

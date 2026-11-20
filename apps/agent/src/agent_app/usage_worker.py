@@ -1,5 +1,6 @@
 """Dedicated usage recovery/delivery process: python -m agent_app.usage_worker."""
 import asyncio
+import argparse
 import logging
 import os
 
@@ -7,9 +8,31 @@ from sqlalchemy import select, or_
 
 from agent_app.api.v2 import metering_control
 from agent_app.infrastructure.database import get_session
-from agent_app.infrastructure.metering_models import CallRow, CloseManifestRow, ExecutionRow, TaskMeteringRow
+from agent_app.infrastructure.metering_models import CallRow, CloseManifestRow, ExecutionRow, TaskMeteringRow, UsageOutboxRow
 from agent_app.integrations.backend.entitlements import EntitlementClient
 from agent_app.control.usage_delivery import deliver_once
+from agent_app.control.metering import now_utc
+
+
+async def requeue_transient():
+    """Explicit local recovery, retaining IDs, payloads, reserves and old Acks.
+
+    Never retry a known permanent rejection or alter accounting facts. Repeated
+    invocation is a no-op for records already returned to the pending queue.
+    """
+    count = 0
+    async for db in get_session():
+        rows = (await db.scalars(select(UsageOutboxRow).where(
+            UsageOutboxRow.state == 'dead_letter').with_for_update())).all()
+        for row in rows:
+            if row.ack is not None and row.ack.get('retryable') is not True:
+                continue
+            row.state, row.attempts, row.available_at = 'pending', 0, now_utc()
+            logging.getLogger('agent.usage').warning(
+                'Operator requeued transient usage measurement_id=%s', row.measurement_id)
+            count += 1
+        await db.commit()
+    print(f'Requeued {count} transient usage records; reservations unchanged.')
 
 
 async def run():
@@ -33,7 +56,12 @@ async def run():
                         await db.commit()
                     except Exception:
                         await db.rollback()  # active execution is expected
-            await deliver_once(database.SessionFactory, backend, **options)
+            try:
+                await deliver_once(database.SessionFactory, backend, **options)
+            except Exception:
+                # Delivery already persists its retry schedule. Continue void
+                # and close recovery rather than let one batch starve both.
+                logging.getLogger('agent.usage').exception('Usage batch deferred; recovery continues')
             async with database.SessionFactory() as db:
                 call_ids = list((await db.scalars(select(CallRow.call_id).where(
                     CallRow.start_fact.is_(None), CallRow.remote_closed.is_(False),
@@ -47,19 +75,23 @@ async def run():
                     except Exception:
                         await db.rollback()
                         continue
-                if seal['permit_id'] is None:
-                    async with database.SessionFactory() as db:
-                        row = await db.get(CallRow, call_id)
-                        request = row.backend_request
-                    proof = {k: seal[k] for k in ('void_operation_id', 'sealed_intent_revision', 'sealed_at',
-                        'start_operation_id', 'local_started_record_absent', 'local_start_receipt_never_issued', 'reason_code')}
-                    response = await backend.request('POST', '/call-permits/abandon', dict(schema_version=1, request=request, **proof))
-                else:
-                    remote = await backend.request('GET', f"/call-permits/{seal['permit_id']}")
-                    proof = dict(schema_version=1, **seal, backend_start_authorization_id=(
-                        remote['start']['start_authorization_id'] if remote.get('start') else None))
-                    await backend.request('POST', f"/call-permits/{seal['permit_id']}/void", proof)
-                    response = None
+                try:
+                    if seal['permit_id'] is None:
+                        async with database.SessionFactory() as db:
+                            row = await db.get(CallRow, call_id)
+                            request = row.backend_request
+                        proof = {k: seal[k] for k in ('void_operation_id', 'sealed_intent_revision', 'sealed_at',
+                            'start_operation_id', 'local_started_record_absent', 'local_start_receipt_never_issued', 'reason_code')}
+                        response = await backend.request('POST', '/call-permits/abandon', dict(schema_version=1, request=request, **proof))
+                    else:
+                        remote = await backend.request('GET', f"/call-permits/{seal['permit_id']}")
+                        proof = dict(schema_version=1, **seal, backend_start_authorization_id=(
+                            remote['start']['start_authorization_id'] if remote.get('start') else None))
+                        await backend.request('POST', f"/call-permits/{seal['permit_id']}/void", proof)
+                        response = None
+                except Exception:
+                    logging.getLogger('agent.usage').exception('Permit recovery deferred call_id=%s', call_id)
+                    continue
                 async with database.SessionFactory() as db:
                     row = await db.get(CallRow, call_id)
                     if response:
@@ -84,7 +116,12 @@ async def run():
                     if existing.ack is not None:
                         continue
                     payload = existing.payload
-                ack = await backend.request('POST', f'/grants/{manifest.grant_id}/close', payload)
+                try:
+                    ack = await backend.request('POST', f'/grants/{manifest.grant_id}/close', payload)
+                except Exception:
+                    logging.getLogger('agent.usage').exception(
+                        'Grant close deferred task_id=%s grant_id=%s', task_id, manifest.grant_id)
+                    continue
                 async with database.SessionFactory() as db:
                     row = await db.get(CloseManifestRow, payload['manifest_id'])
                     row.ack = ack
@@ -97,4 +134,8 @@ async def run():
 
 
 if __name__ == '__main__':
-    asyncio.run(run())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--requeue-transient', action='store_true',
+                        help='Requeue exhausted transient deliveries once, then exit; no cost is released')
+    args = parser.parse_args()
+    asyncio.run(requeue_transient() if args.requeue_transient else run())

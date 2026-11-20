@@ -64,6 +64,10 @@ class ModelBudgetProfile(V2):
     """Deployment-reviewed assumptions, never a tokenizer proof or plan quota."""
     input_basis: Literal['risk_assessed_utf8_v1']
     input_overhead_tokens: Positive
+    # Explicit deployment risk assumption. Historical policies keep 1 byte per
+    # Token; 2 reduces conservative over-reservation without changing the wire
+    # measurement, the daily limit or the real-usage settlement.
+    input_bytes_per_token: Literal[1, 2] = 1
     context_window_tokens: Positive
     max_output_tokens: Positive
     output_limit_semantics: Literal['completion_including_reasoning']

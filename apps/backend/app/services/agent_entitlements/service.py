@@ -7,6 +7,7 @@ reconciliation. Serializing an owner is intentional; no in-memory quota exists.
 from __future__ import annotations
 
 import uuid
+import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, func
@@ -43,6 +44,7 @@ class EntitlementError(Exception):
 
 def require(condition, reason='AUTHORIZATION_CONFLICT', status=409):
     if not condition:
+        logging.getLogger('app.agent.authorization').warning('Authorization rejected reason=%s status=%s', reason, status)
         raise EntitlementError(reason, status)
 
 
@@ -323,6 +325,11 @@ class Entitlements:
             # Until a trusted tokenizer/bound verifier is installed, only an
             # explicitly approved risk policy can admit this provider.
             if policy.model_risk_profile is None or request.risk_profile != policy.model_risk_profile:
+                logging.getLogger('app.agent.authorization').warning(
+                    'Token risk profile missing/mismatched policy=%s capability=%s '
+                    'policy_profile=%s request_profile=%s model_budget_configured=%s',
+                    policy.policy_revision, request.capability_id, policy.model_risk_profile,
+                    request.risk_profile, request.capability_id in policy.model_budget_profiles)
                 reason = reason or 'TOKEN_BOUND_UNPROVEN'
         applicable = [a for a in grant.allocations if (a.capability_id is None or a.capability_id == request.capability_id)
                       and a.purpose in ('all', request.purpose)
@@ -370,7 +377,8 @@ class Entitlements:
                     # Deliberately a deployment-approved RISK estimate, not a
                     # tokenizer proof. Full payload bytes cover messages/tools;
                     # reviewed overhead covers provider framing assumptions.
-                    input_tokens = budget.input_bytes + profile.input_overhead_tokens
+                    ratio = profile.input_bytes_per_token
+                    input_tokens = (budget.input_bytes + ratio - 1) // ratio + profile.input_overhead_tokens
                     context = min(profile.context_window_tokens, budget.model_context_window or profile.context_window_tokens)
                     output_tokens = min(budget.requested_output_tokens, budget.model_max_output_tokens,
                         profile.max_output_tokens, context - input_tokens, available - input_tokens)
@@ -404,6 +412,10 @@ class Entitlements:
         response = dict(schema_version=1, call_id=request.call_id, request_digest=request.request_digest,
                         decision='denied' if reason else 'authorized', reason_code=reason, retryable=False,
                         current_grant_revision=root.current_revision, permit=None if reason else payload)
+        if reason:
+            logging.getLogger('app.agent.authorization').warning(
+                'Permit denied call_id=%s grant_id=%s capability=%s reason=%s',
+                request.call_id, root.grant_id, request.capability_id, reason)
         response = CallPermitResponse.model_validate(response).model_dump(mode='json')
         db.add(CallPermitRow(permit_id=permit_id, audience=self.audience, call_id=request.call_id,
                              grant_id=root.grant_id, request_digest=digest(raw), request=raw, response=response,

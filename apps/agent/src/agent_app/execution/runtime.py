@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agent_app.errors import BusinessError
+from agent_app.application.policies import MAX_EXECUTION_TURNS
 from agent_app.execution.compaction import (
     estimate_context_chars, format_file_operations, plan_compaction,
     split_off_summary, summarize, wrap_summary,
@@ -179,7 +180,7 @@ class AgentRuntime:
                  system: str | Callable[[Sequence[ToolSpec]], str] = '',
                  model: str | None = None,
                  temperature: float | None = None,
-                 max_turns: int = 36,
+                 max_turns: int = MAX_EXECUTION_TURNS,
                  deadline_s: float = 900.0,
                  max_tool_calls: int | None = None,
                  tool_budget: int | None = None,

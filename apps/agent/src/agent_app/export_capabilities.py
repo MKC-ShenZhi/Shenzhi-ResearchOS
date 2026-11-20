@@ -10,7 +10,7 @@ from pathlib import Path
 
 from agent_contracts.canonical import digest
 from agent_app.application.composition import build_runtime
-from agent_app.execution.metering import model_identity, tool_identity, skill_identity
+from agent_app.execution.metering import model_identity, tool_identity, skill_identity, implementation_digest
 from agent_app.extensions.skills import default_store
 from agent_app.integrations.llm.resolver import load_registry
 
@@ -31,7 +31,8 @@ def export():
                       if not store.get(name).disable_model_invocation)
     if any(identity.capability_id == 'tool:run_command' for identity in identities):
         raise ValueError('Shell cannot be exported for Free users')
-    return {'capabilities': [dict(identity=identity.model_dump(mode='json'),
+    return {'implementation_build_digest': implementation_digest(),
+            'capabilities': [dict(identity=identity.model_dump(mode='json'),
                                    version=digest(identity.model_dump(mode='json'))) for identity in identities]}
 
 

@@ -71,6 +71,11 @@ async def entitlement_error(_request: Request, error: EntitlementError):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(_request: Request, _error: RequestValidationError):
+    if _request.url.path.startswith('/api/v1/admin-console/'):
+        # Report field locations only, never raw submitted values or payloads.
+        fields = list(dict.fromkeys('.'.join(str(part) for part in error['loc'])
+                                    for error in _error.errors()))[:8]
+        return fail(20001, '请求参数不合法：' + '、'.join(fields), 422)
     return fail(20001, '请求参数不合法，请检查字段格式与长度', 422)
 
 
