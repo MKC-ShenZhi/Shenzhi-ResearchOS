@@ -17,10 +17,14 @@ dependencies = [
     "asyncpg>=0.31.0",
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.10",
+    "cryptography>=44",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "aiosqlite>=0.22.1",
+    "pytest>=8.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

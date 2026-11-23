@@ -12,7 +12,7 @@ import { useCurrentInternalPath } from "@/hooks/use-current-internal-path";
 import { useClearSearchRestoration, useSearchRestorationScope } from "@/hooks/use-search-restoration";
 import { discardSearchScroll, rememberSearchScroll, useSearchScrollRestoration } from "../use-search-scroll-restoration";
 import { conferenceQueryOptions } from "./conference-queries";
-import { ConferenceEmpty, ConferenceError, ConferenceSkeleton } from "./conference-states";
+import { ConferenceDirectoryNotice, ConferenceEmpty, ConferenceError, ConferenceSkeleton } from "./conference-states";
 import { buildConferenceDirectoryUrl, buildPaperBrowseUrl, CONFERENCE_PAGE_SIZE, filterConferences, readConferenceDirectoryState, type ConferenceDirectoryState } from "./conference-state";
 
 function ConferenceDirectoryContent() {
@@ -61,7 +61,8 @@ function ConferenceDirectoryContent() {
         <select value={state.sort} onChange={(event) => update({ sort: event.target.value === "name" ? "name" : "count" })} className="h-11 rounded-xl border border-line bg-card px-3 text-ink"><option value="count">论文数量最多</option><option value="name">会议名称 A–Z</option></select>
       </label>
     </div>
-    {query.isPending ? <ConferenceSkeleton /> : query.isError && !query.data ? <ConferenceError error={query.error} onRetry={() => void query.refetch()} /> : <>
+    <ConferenceDirectoryNotice data={query.data} />
+    {query.isPending ? <ConferenceSkeleton /> : query.isError && !query.data ? <ConferenceError directory error={query.error} onRetry={() => void query.refetch()} /> : <>
       {query.isError && <p role="status" className="mb-4 text-sm text-muted">会议更新失败，正在展示缓存数据。<button className="ml-2 text-primary" onClick={() => void query.refetch()}>重试</button></p>}
       <p role="status" className="mb-4 text-sm text-muted">共 {filtered.length} 条会议记录{filtered.length > 0 && ` · 第 ${page} / ${pageCount} 页`}</p>
       {visible.length ? <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

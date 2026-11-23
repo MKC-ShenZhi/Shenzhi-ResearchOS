@@ -28,7 +28,7 @@ def get_engine() -> AsyncEngine:
         raw = database_url()
         if not raw:
             raise RuntimeError('CHAT_DATABASE_URL is not configured')
-        _engine = create_async_engine(_normalize_url(raw), pool_pre_ping=True)
+        _engine = create_async_engine(_normalize_url(raw), pool_pre_ping=True, hide_parameters=True)
         _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
     return _engine
 

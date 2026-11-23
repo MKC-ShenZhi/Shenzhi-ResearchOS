@@ -1,5 +1,6 @@
 """Conference-deadline snapshot file and its public API contract."""
 
+from builtins import str as Text
 from datetime import date, datetime
 from typing import Literal
 
@@ -10,6 +11,7 @@ CcfRank = Literal['A', 'B', 'C']
 CoreRank = Literal['A*', 'A', 'B', 'C']
 ThcplRank = Literal['A', 'B', 'C']
 MilestoneKind = Literal['abstract', 'full']
+ConferenceEventKind = Literal['rebuttal', 'decision', 'opening']
 DeadlineStatus = Literal['open', 'tbd', 'closed']
 
 
@@ -23,6 +25,8 @@ class SnapshotTimelineEntry(ConferenceModel):
     # Local wall-clock time `YYYY-MM-DD HH:MM:SS` in the edition timezone; None = TBD.
     abstract_deadline: str | None = None
     deadline: str | None = None
+    rebuttal_deadline: str | None = None
+    decision_deadline: str | None = None
     comment: str | None = None
 
 
@@ -32,6 +36,8 @@ class SnapshotEdition(ConferenceModel):
     timezone: str
     date: str | None = None
     place: str | None = None
+    opening: str | None = None
+    opening_is_derived: bool = False
     timeline: list[SnapshotTimelineEntry] = Field(min_length=1)
 
 
@@ -39,6 +45,15 @@ class ConferenceRank(ConferenceModel):
     ccf: CcfRank | None = None
     core: CoreRank | None = None
     thcpl: ThcplRank | None = None
+
+
+class ConferenceAcceptanceRate(ConferenceModel):
+    year: int = Field(ge=1950, le=2100)
+    submitted: int | None = Field(default=None, ge=0)
+    accepted: int | None = Field(default=None, ge=0)
+    rate: float | None = Field(default=None, ge=0, le=1)
+    str: Text | None = None
+    source: Text | None = None
 
 
 class SnapshotConference(ConferenceModel):
@@ -50,6 +65,7 @@ class SnapshotConference(ConferenceModel):
     dblp: str | None = None
     rank: ConferenceRank
     editions: list[SnapshotEdition] = Field(min_length=1)
+    accept_rates: list[ConferenceAcceptanceRate] = Field(default_factory=list)
 
 
 class SnapshotCategory(ConferenceModel):
@@ -84,6 +100,14 @@ class ConferenceMilestone(ConferenceModel):
     comment: str | None = None
 
 
+class ConferenceEvent(ConferenceModel):
+    kind: ConferenceEventKind
+    at: datetime
+    local: str
+    comment: str | None = None
+    is_derived: bool = False
+
+
 class ConferenceEdition(ConferenceModel):
     year: int
     link: str | None = None
@@ -92,6 +116,7 @@ class ConferenceEdition(ConferenceModel):
     place: str | None = None
     # Dated milestones in chronological order, then TBD milestones.
     milestones: list[ConferenceMilestone]
+    events: list[ConferenceEvent] = Field(default_factory=list)
 
 
 class ConferenceDeadline(ConferenceModel):
@@ -108,6 +133,7 @@ class ConferenceDeadline(ConferenceModel):
     edition: ConferenceEdition
     edition_count: int = Field(ge=1)
     needs_update: bool = False
+    accept_rates: list[ConferenceAcceptanceRate] = Field(default_factory=list)
 
 
 class ConferenceDeadlineList(ConferenceModel):

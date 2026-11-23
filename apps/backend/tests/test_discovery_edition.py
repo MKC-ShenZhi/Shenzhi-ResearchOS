@@ -51,12 +51,23 @@ class EditionRuleTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual([p.id for p in result.papers], [p.id for p in tomorrow.papers])
 
     async def test_edition_is_pool_papers_only_with_knowledge_images_and_topics(self):
-        result = await builder(pool(30)).build(DAY, size=30)
+        topic = {'id': 'openalex:topic:T10028', 'nameZh': '语言模型', 'nameEn': 'Language models'}
+        rows = pool(30)
+        rows[0].topics = [topic]
+        result = await builder(rows).build(DAY, size=30)
         self.assertEqual(len(result.papers), 30)
         for paper in result.papers:
             self.assertIsNone(paper.thumbnail_url)
             self.assertTrue(paper.image_id.startswith('/images/'))
             self.assertEqual((paper.keywords, paper.subjects), ([f'kw-{paper.id}'], ['RAG']))
+        payload = [paper.model_dump(mode='json', exclude_unset=True) for paper in result.papers]
+        for item in payload:
+            if item['id'] != rows[0].paper_id:
+                item.pop('topics')
+        papers = discovery.parse_edition(payload)
+        self.assertIsNotNone(papers)
+        for paper in papers:
+            self.assertEqual(paper.model_dump(by_alias=True)['topics'], [topic] if paper.id == rows[0].paper_id else [])
 
     async def test_rule_b_rejects_papers_a_card_cannot_show(self):
         rows = pool(20) + [

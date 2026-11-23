@@ -78,17 +78,21 @@ class SnapshotPersistenceTests(unittest.IsolatedAsyncioTestCase):
         likes = PaperLikeService()
         await likes.like(self.user_a, self.paper_id)
         await likes.like(self.user_b, self.paper_id)
-        follows = TopicFollowService()
-        await follows.follow(self.user_a, self.topic_id)
-        await follows.follow(self.user_b, self.topic_id)
+        async with session_scope() as session:
+            for user_id in (self.user_a, self.user_b):
+                session.add(TopicFollowRow(user_id=user_id, topic_id=self.topic_id))
 
     async def test_snapshot_records_distinct_counts_for_the_whole_catalog(self):
         await self._seed()
 
+        openalex_id = 'openalex:topic:T10028'
+        async with session_scope() as session:
+            session.add(TopicFollowRow(user_id=self.user_a, topic_id=openalex_id))
+
         result = await SnapshotService().build(self.day)
         self.assertEqual(result.snapshot_date, self.day)
         self.assertEqual(result.snapshot_version, SNAPSHOT_VERSION)
-        self.assertEqual(result.topic_count, 293)
+        self.assertEqual(result.topic_count, 294)
         self.assertGreaterEqual(result.paper_count, 1)
 
         page = await self.service.papers_page(snapshot_date=self.day, limit=500)
@@ -99,8 +103,10 @@ class SnapshotPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rows[self.paper_id].like_count, 2)
 
         topics = await self.service.topics_page(snapshot_date=self.day, limit=500)
-        self.assertEqual(len(topics.items), 293)
-        self.assertEqual({item.topic_id: item.follower_count for item in topics.items}[self.topic_id], self.topic_base + 2)
+        self.assertEqual(len(topics.items), 294)
+        counts = {item.topic_id: item.follower_count for item in topics.items}
+        self.assertEqual(counts[self.topic_id], self.topic_base + 2)
+        self.assertEqual(counts[openalex_id], 1)
 
         meta = await self.service.meta()
         self.assertTrue(meta.published)

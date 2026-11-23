@@ -65,11 +65,12 @@ test("BFF client unwraps the Search success envelope and preserves the request c
   }]);
 });
 
-test("BFF search preserves real nullable imageId without parsing paper ids", async () => {
+test("BFF search preserves imageId and structured topics alongside legacy metadata", async () => {
   const results = ["/images/ASPLOS_2026/10.1145_3779212.3790216_minimal.jpg", null]
     .map((imageId) => ({
       id: "paper:opaque-identifier", imageId, title: "Paper", abstract: null,
-      authors: [], year: null, venue: null, keywords: [], subjects: [],
+      authors: [], year: null, venue: null, keywords: ["legacy"], subjects: ["subject"],
+      ...(imageId ? { topics: [{ id: "openalex:topic:T10028", nameZh: "语言模型", nameEn: "Language models" }] } : {}),
       score: null, rank: null, provenance: null,
     }));
   await withFetch(async () => jsonResponse({ code: 0, data: { results } }), async () => {
@@ -78,42 +79,50 @@ test("BFF search preserves real nullable imageId without parsing paper ids", asy
   });
 });
 
-test("BFF client requests Topic Catalog list and detail through stable routes", async () => {
+test("Topic detail exposes a 404 as the existing unavailable state", async () => {
+  await withFetch(async () => jsonResponse({
+    code: "NOT_FOUND", message: "Topic missing", retryable: false, requestId: null,
+  }, 404), async () => {
+    await assert.rejects(new BffKnowledgeClient().topic("openalex:topic:T10181"),
+      (error) => error instanceof KnowledgeClientError && error.code === "NOT_FOUND");
+  });
+  const detail = readFileSync("features/knowledge/topics/detail/topic-detail-page.tsx", "utf8");
+  assert.match(detail, /error\.code === "NOT_FOUND"/);
+  assert.match(detail, /该主题页面暂不可用/);
+  assert.match(detail, /href=\{squareHref\}[\s\S]*返回主题广场/);
+});
+
+test("BFF client encodes the OpenAlex ID for detail and papers", async () => {
   const requests: string[] = [];
+  const topic = {
+    id: "openalex:topic:T10028",
+    category: "openalex:subfield:1702",
+    categoryName: "Artificial Intelligence",
+    author: null,
+  };
   await withFetch(async (input) => {
-    requests.push(String(input));
-    if (requests.length === 1) {
+    const path = String(input);
+    requests.push(path);
+    if (path.includes("/papers?")) {
+      return jsonResponse({ code: 0, data: { results: [], total: 12379, offset: 1001, limit: 10 } });
+    }
+    if (path.endsWith("/topics")) {
       return jsonResponse({ code: 0, data: {
-        items: [],
-        total: 0,
-        categories: [],
+        items: [topic], total: 1, categories: [{ id: topic.category, name: topic.categoryName, total: 1 }],
       } });
     }
-    return jsonResponse({ code: 0, data: {
-      id: "large-language-models",
-      imagePath: null,
-      nameZh: "大语言模型",
-      nameEn: "Large Language Models",
-      author: "shenzhi",
-      descriptionZh: "主题简介",
-      descriptionEn: "Topic description",
-      followersCount: 0,
-      category: "自然语言处理",
-      subjectQuery: "llm",
-      paperCount: 2225,
-      enabled: true,
-    } });
+    return jsonResponse({ code: 0, data: topic });
   }, async () => {
     const client = new BffKnowledgeClient();
-    const list = await client.topics();
-    const detail = await client.topic("large-language-models");
-    assert.equal(list.total, 0);
-    assert.equal(detail.subjectQuery, "llm");
+    assert.equal((await client.topics()).categories[0].id, topic.category);
+    assert.equal((await client.topic(topic.id)).id, topic.id);
+    assert.equal((await client.topicPapers(topic.id, 1001, 10)).offset, 1001);
   });
 
   assert.deepEqual(requests, [
     "/api/v1/knowledge/topics",
-    "/api/v1/knowledge/topics/large-language-models",
+    "/api/v1/knowledge/topics/openalex%3Atopic%3AT10028",
+    "/api/v1/knowledge/topics/openalex%3Atopic%3AT10028/papers?offset=1001&limit=10",
   ]);
 });
 

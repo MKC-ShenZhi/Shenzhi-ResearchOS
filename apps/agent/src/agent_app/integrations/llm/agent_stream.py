@@ -7,6 +7,7 @@ import logging
 import os
 import random
 import time
+import uuid
 from collections.abc import AsyncIterator, Callable, Mapping
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -14,6 +15,9 @@ from typing import Any
 
 import httpx
 
+from agent_app.execution.metering import actual_call, model_identity, current_meter, model_payload_digest
+from agent_contracts.v2 import ModelCallBudgetRequest
+from agent_contracts.canonical import request_digest_v1
 from agent_app.errors import BusinessError
 from agent_app.integrations.llm.registry import ModelRegistry, ResolvedModel
 from agent_app.integrations.llm.resolver import load_registry, registry_from_config
@@ -201,6 +205,9 @@ class OpenAICompatProvider:
     默认关闭，异常不影响请求。
     """
 
+    supports_call_metering = True
+    usage_frame_semantics = 'cumulative'
+
     def __init__(self, config=None, *,
                  registry: ModelRegistry | None = None,
                  transport: httpx.AsyncBaseTransport | None = None, retry_delay: float = 1.5,
@@ -217,14 +224,19 @@ class OpenAICompatProvider:
         self.on_response = on_response
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ProviderEvent]:
+        if (current_meter.get() is not None and self.transport is not None
+                and not isinstance(self.transport, httpx.MockTransport)
+                and not getattr(self.transport, 'metering_no_hidden_retries', False)):
+            raise BusinessError(20004, 'Transport 未声明禁止隐式重试，拒绝计量执行', 503)
         resolved = self.registry.resolve_model(request.model, 'agent')
         attempt = 0
+        logical_id = uuid.uuid4().hex
         while True:
             attempt += 1
             emitted = False
             retry_after: float | None = None
             try:
-                async for event in self._stream_once(request, resolved):
+                async for event in self._stream_once(request, resolved, logical_id=logical_id, logical_attempt=attempt):
                     emitted = True
                     yield event
                 return
@@ -288,7 +300,7 @@ class OpenAICompatProvider:
             payload.update(resolved.spec.request_params)
         return payload
 
-    async def _stream_once(self, request: ModelRequest, resolved: ResolvedModel) -> AsyncIterator[ProviderEvent]:
+    async def _stream_once(self, request: ModelRequest, resolved: ResolvedModel, *, logical_id=None, logical_attempt=1) -> AsyncIterator[ProviderEvent]:
         # Only retry explicitly rejected optional parameters. Arbitrary 400s
         # (context length, invalid messages, etc.) must fail without degradation.
         degradations = ('enable_thinking', 'thinking', 'stream_options')
@@ -303,101 +315,122 @@ class OpenAICompatProvider:
             finish_text: str | None = None
             finished = False
             self._observe(self.on_payload, payload)
-            try:
-                async with httpx.AsyncClient(timeout=timeout, transport=self.transport) as client:
-                    async with client.stream(
-                        'POST', f'{resolved.base_url}/chat/completions',
-                        headers={'Authorization': f'Bearer {resolved.key}', 'Accept': 'text/event-stream'},
-                        json=payload,
-                    ) as response:
-                        if response.status_code >= 400:
-                            # Inspect privately: upstream bodies may echo secrets.
-                            detail = (await response.aread()).decode('utf-8', 'replace')
-                            next_drop = next((name for name in degradations
-                                              if name not in dropped and name in payload
-                                              and name in detail.lower()
-                                              and any(marker in detail.lower() for marker in
-                                                      ('not supported', 'unsupported', 'unknown parameter',
-                                                       'unrecognized', 'not allowed'))), None)
-                            if response.status_code == 400 and next_drop is not None:
-                                dropped.add(next_drop)
-                                logging.getLogger('app.agent').warning(
-                                    '%s 参数被上游明确拒绝(400)，摘掉后重试', next_drop)
-                                continue
-                            logging.getLogger('app.agent').warning(
-                                '模型上游返回 %s（Provider: %s）',
-                                response.status_code, resolved.provider.spec.id)
-                            raise _UpstreamStatus(response.status_code, detail, response.headers)
-                        async for line in response.aiter_lines():
-                            if not line.startswith('data:'):
-                                continue
-                            raw = line[5:].strip()
-                            if not raw:
-                                continue
-                            if raw == '[DONE]':
-                                finished = True
-                                break
-                            try:
-                                data = json.loads(raw)
-                            except ValueError:
-                                raise BusinessError(20004, '模型流数据格式错误', 502) from None
-                            self._observe(self.on_response, data)
-                            if data.get('error'):
-                                raise BusinessError(20004, '模型流返回错误，请稍后重试', 502)
-                            if isinstance(data.get('usage'), dict):
-                                usage = _parse_usage(data['usage'])
-                            choices = data.get('choices') or []
-                            if not choices:
-                                continue
-                            choice = choices[0]
-                            delta = choice.get('delta') or {}
-                            if isinstance(delta.get('content'), str) and delta['content']:
-                                yield TextDelta(delta['content'])
-                            if isinstance(delta.get('reasoning_content'), str) and delta['reasoning_content']:
-                                yield ReasoningDelta(delta['reasoning_content'])
-                            for fragment in delta.get('tool_calls') or []:
-                                if not isinstance(fragment, dict):
+            # Count the complete serialized body (messages, tools, schemas and
+            # thinking settings), not just user text. This is RISK input, not
+            # a proven tokenizer bound; Backend requires reviewed assumptions.
+            budget = None
+            if current_meter.get() is not None and getattr(current_meter.get(), 'dynamic_budget', True):
+                input_body = {k:v for k,v in payload.items() if k != 'max_tokens'}
+                input_bytes = len(json.dumps(input_body, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode('utf-8'))
+                budget = ModelCallBudgetRequest(schema_version=1, basis='risk_assessed_utf8_v1',
+                    input_bytes=input_bytes, requested_output_tokens=payload['max_tokens'],
+                    model_max_output_tokens=resolved.spec.capabilities.max_output_tokens,
+                    model_context_window=resolved.spec.capabilities.context_window_tokens)
+            async with actual_call(lambda: model_identity(resolved), purpose=request.purpose,
+                                   logical_id=logical_id, request_digest=(model_payload_digest(payload) if budget is not None else request_digest_v1(payload)) if current_meter.get() else None, model_budget=budget,
+                                   logical_attempt=logical_attempt, transport_attempt=len(dropped) + 1) as measurement:
+                if measurement.output_tokens is not None:
+                    payload['max_tokens'] = measurement.output_tokens
+                try:
+                    async with httpx.AsyncClient(timeout=timeout, transport=self.transport or httpx.AsyncHTTPTransport(retries=0)) as client:
+                        measurement.ensure_send(payload)
+                        async with client.stream(
+                            'POST', f'{resolved.base_url}/chat/completions',
+                            headers={'Authorization': f'Bearer {resolved.key}', 'Accept': 'text/event-stream'},
+                            json=payload,
+                        ) as response:
+                            measurement.provider_request_id = response.headers.get('x-request-id')
+                            if response.status_code >= 400:
+                                # Inspect privately: upstream bodies may echo secrets.
+                                detail = (await response.aread()).decode('utf-8', 'replace')
+                                next_drop = next((name for name in degradations
+                                                  if name not in dropped and name in payload
+                                                  and name in detail.lower()
+                                                  and any(marker in detail.lower() for marker in
+                                                          ('not supported', 'unsupported', 'unknown parameter',
+                                                           'unrecognized', 'not allowed'))), None)
+                                if response.status_code == 400 and next_drop is not None:
+                                    dropped.add(next_drop)
+                                    logging.getLogger('app.agent').warning(
+                                        '%s 参数被上游明确拒绝(400)，摘掉后重试', next_drop)
                                     continue
-                                index = fragment.get('index') or 0
-                                entry = tool_calls.setdefault(index, {'id': '', 'name': '', 'arguments': ''})
-                                # 首帧带 id/name，后续帧通常只有 arguments 片段；
-                                # 供应商重复发送 id/name 时赋值覆盖天然容错。
-                                if isinstance(fragment.get('id'), str) and fragment['id']:
-                                    entry['id'] = fragment['id']
-                                function = fragment.get('function') or {}
-                                if isinstance(function.get('name'), str) and function['name']:
-                                    entry['name'] = function['name']
-                                if isinstance(function.get('arguments'), str):
-                                    entry['arguments'] += function['arguments']
-                            if choice.get('finish_reason'):
-                                finish_text = str(choice['finish_reason'])
-                                finished = True
-                        if not finished:
-                            raise BusinessError(20004, '模型流提前结束，可以继续生成', 502)
-                        for index in sorted(tool_calls):
-                            entry = tool_calls[index]
-                            if entry['name']:
-                                # 参数在 AI 层解析成对象（pi toolcall_end 定稿同位置）：
-                                # 残缺 JSON 走修复阶梯、保留已写完的字段，绝不抛错——
-                                # 因此下游拿到的参数恒为对象，回传上游时恒为合法 JSON。
-                                yield ToolCallEvent(ToolCall(entry['id'] or f'call_{index}',
-                                                             entry['name'],
-                                                             parse_streaming_json(entry['arguments'])))
-                        raw_reason = finish_text or ''
-                        stop = _FINISH_REASONS.get(raw_reason)
-                        error_message = ''
-                        if stop is None:
-                            if not raw_reason:
-                                # 流正常收尾但上游没给 finish_reason：按内容推断（pi compat 分支）
-                                stop = StopReason.TOOL_CALLS if tool_calls else StopReason.STOP
-                            else:
-                                # content_filter / 未知取值 → error 并保留原文（pi:1550-1574）；
-                                # 静默降级成 stop 会让"被审核截断"伪装成"正常说完"
-                                stop = StopReason.ERROR
-                                error_message = '模型返回异常停止原因，请重试'
-                        yield Finish(stop, usage, error_message=error_message)
-            except BusinessError:
-                raise
-            except (ValueError, TypeError, AttributeError, IndexError, KeyError) as exc:
-                raise BusinessError(20004, '模型流数据格式错误', 502) from exc
+                                logging.getLogger('app.agent').warning(
+                                    '模型上游返回 %s（Provider: %s）',
+                                    response.status_code, resolved.provider.spec.id)
+                                raise _UpstreamStatus(response.status_code, detail, response.headers)
+                            async for line in response.aiter_lines():
+                                if not line.startswith('data:'):
+                                    continue
+                                raw = line[5:].strip()
+                                if not raw:
+                                    continue
+                                if raw == '[DONE]':
+                                    finished = True
+                                    break
+                                try:
+                                    data = json.loads(raw)
+                                except ValueError:
+                                    raise BusinessError(20004, '模型流数据格式错误', 502) from None
+                                self._observe(self.on_response, data)
+                                if data.get('error'):
+                                    raise BusinessError(20004, '模型流返回错误，请稍后重试', 502)
+                                if isinstance(data.get('usage'), dict):
+                                    measurement.cumulative_usage(data['usage'])
+                                    usage = _parse_usage(data['usage'])
+                                choices = data.get('choices') or []
+                                if not choices:
+                                    continue
+                                choice = choices[0]
+                                delta = choice.get('delta') or {}
+                                if isinstance(delta.get('content'), str) and delta['content']:
+                                    yield TextDelta(delta['content'])
+                                if isinstance(delta.get('reasoning_content'), str) and delta['reasoning_content']:
+                                    yield ReasoningDelta(delta['reasoning_content'])
+                                for fragment in delta.get('tool_calls') or []:
+                                    if not isinstance(fragment, dict):
+                                        continue
+                                    index = fragment.get('index') or 0
+                                    entry = tool_calls.setdefault(index, {'id': '', 'name': '', 'arguments': ''})
+                                    # 首帧带 id/name，后续帧通常只有 arguments 片段；
+                                    # 供应商重复发送 id/name 时赋值覆盖天然容错。
+                                    if isinstance(fragment.get('id'), str) and fragment['id']:
+                                        entry['id'] = fragment['id']
+                                    function = fragment.get('function') or {}
+                                    if isinstance(function.get('name'), str) and function['name']:
+                                        entry['name'] = function['name']
+                                    if isinstance(function.get('arguments'), str):
+                                        entry['arguments'] += function['arguments']
+                                if choice.get('finish_reason'):
+                                    finish_text = str(choice['finish_reason'])
+                                    finished = True
+                            if not finished:
+                                raise BusinessError(20004, '模型流提前结束，可以继续生成', 502)
+                            for index in sorted(tool_calls):
+                                entry = tool_calls[index]
+                                if entry['name']:
+                                    # 参数在 AI 层解析成对象（pi toolcall_end 定稿同位置）：
+                                    # 残缺 JSON 走修复阶梯、保留已写完的字段，绝不抛错——
+                                    # 因此下游拿到的参数恒为对象，回传上游时恒为合法 JSON。
+                                    yield ToolCallEvent(ToolCall(entry['id'] or f'call_{index}',
+                                                                 entry['name'],
+                                                                 parse_streaming_json(entry['arguments'])))
+                            raw_reason = finish_text or ''
+                            stop = _FINISH_REASONS.get(raw_reason)
+                            error_message = ''
+                            if stop is None:
+                                if not raw_reason:
+                                    # 流正常收尾但上游没给 finish_reason：按内容推断（pi compat 分支）
+                                    stop = StopReason.TOOL_CALLS if tool_calls else StopReason.STOP
+                                else:
+                                    # content_filter / 未知取值 → error 并保留原文（pi:1550-1574）；
+                                    # 静默降级成 stop 会让"被审核截断"伪装成"正常说完"
+                                    stop = StopReason.ERROR
+                                    error_message = '模型返回异常停止原因，请重试'
+                            measurement.outcome = 'failed' if stop == StopReason.ERROR else 'succeeded'
+                            measurement.successful_units = int(stop != StopReason.ERROR)
+                            yield Finish(stop, usage, error_message=error_message)
+                except BusinessError:
+                    raise
+                except (ValueError, TypeError, AttributeError, IndexError, KeyError) as exc:
+                    raise BusinessError(20004, '模型流数据格式错误', 502) from exc
             return  # 本轮流式完成，退出重试循环（否则 while True 会再发一次请求）

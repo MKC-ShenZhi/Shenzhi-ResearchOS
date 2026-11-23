@@ -6,12 +6,12 @@ import {
   type ConferenceDeadlineDto,
 } from "../../clients/backend/conferences";
 import {
-  compactTimeline,
   deadlineUrgency,
   formatInstant,
   formatOfficialTime,
   formatRemainingShort,
   remainingUntil,
+  timelinePoints,
   upcomingMilestone,
 } from "../../features/submit/lib/deadline-time";
 import { googleCalendarUrl, outlookCalendarUrl } from "../../features/submit/lib/calendar-links";
@@ -86,14 +86,17 @@ test("upcomingMilestone rolls from abstract to full deadline and ignores TBD", (
   assert.equal(upcomingMilestone(milestones, Date.parse("2026-12-01T00:00:00Z")), null);
 });
 
-test("compactTimeline collapses passed rounds and caps upcoming ones, keeping TBD", () => {
-  const rounds = Array.from({ length: 10 }, (_, month) => ({
-    at: new Date(Date.UTC(2026, month, 1)).toISOString(),
-  }));
-  const timeline = compactTimeline([...rounds, { at: null }], Date.UTC(2026, 4, 15), 3);
-  assert.equal(timeline.passedCount, 5);
-  assert.deepEqual(timeline.visible, [rounds[5], rounds[6], rounds[7], { at: null }]);
-  assert.equal(timeline.hiddenUpcomingCount, 2);
+test("card countdown rolls to the next event after submission without exporting it to the calendar", () => {
+  const item = conference();
+  item.edition.events = [
+    { kind: "rebuttal", at: "2026-11-20T12:00:00Z", local: "2026-11-20 00:00:00", is_derived: false, comment: null },
+    { kind: "opening", at: "2027-02-01T20:00:00Z", local: "2027-02-01 08:00:00", is_derived: true, comment: null },
+  ];
+  const points = timelinePoints(item.edition);
+  const now = new Date("2026-11-19T00:00:00Z");
+  assert.deepEqual(points.map((point) => point.kind), ["abstract", "full", "rebuttal", "opening", "full"]);
+  assert.equal(upcomingMilestone(points, now.getTime())?.kind, "rebuttal");
+  assert.equal(buildConferenceIcs(item, now), null);
 });
 
 test("formatInstant renders the instant in the requested timezone with a UTC offset", () => {
@@ -143,17 +146,17 @@ test("web calendar links prefill one milestone with title, UTC time and official
 
 test("filters toggle rank chips per system and hide closed venues by default", () => {
   const ccfA = RANK_CHIPS.find((chip) => chip.label === "CCF-A")!;
-  const coreAStar = RANK_CHIPS.find((chip) => chip.label === "CORE-A*")!;
+  const thcplA = RANK_CHIPS.find((chip) => chip.label === "TH-CPL A")!;
+  assert.deepEqual([...new Set(RANK_CHIPS.map((chip) => chip.system))], ["ccf", "thcpl"]);
   let state = toggleRankChip(EMPTY_CONFERENCE_FILTERS, ccfA);
-  state = toggleRankChip(state, coreAStar);
+  state = toggleRankChip(state, thcplA);
   state = toggleCategory(state, "AI");
   assert.equal(isRankChipActive(state, ccfA), true);
   assert.equal(hasActiveFilters(state), true);
   assert.deepEqual(toDeadlineQuery({ ...state, q: "  neurips " }), {
     categories: ["AI"],
     ccf: ["A"],
-    core: ["A*"],
-    thcpl: [],
+    thcpl: ["A"],
     statuses: ["open", "tbd"],
     q: "neurips",
     followed: false,

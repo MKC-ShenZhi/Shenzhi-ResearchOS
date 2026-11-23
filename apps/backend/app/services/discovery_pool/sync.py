@@ -47,6 +47,7 @@ def pool_row(paper: PaperSearchResult, venue: str, year: int) -> tuple[dict[str,
         'id': paper.id, 'title': paper.title, 'abstract': paper.abstract, 'authors': paper.authors,
         'year': paper.year, 'venue': venue, 'image_id': paper.image_id,
         'keywords': paper.keywords, 'subjects': paper.subjects,
+        'topics': paper.topics,
     }, year=year)
     if admitted is None:
         return None, reason
@@ -54,6 +55,7 @@ def pool_row(paper: PaperSearchResult, venue: str, year: int) -> tuple[dict[str,
         'paper_id': admitted.id, 'title': admitted.title, 'abstract': admitted.abstract,
         'authors': admitted.authors, 'year': year, 'venue': venue, 'image_id': admitted.image_id,
         'subjects': admitted.subjects, 'keywords': admitted.keywords,
+        'topics': [topic.model_dump(mode='json', by_alias=True) for topic in admitted.topics],
         'primary_subject': (paper.primary_subject or '').strip() or None,
     }, None
 
@@ -151,7 +153,7 @@ class DiscoveryPoolSync:
                     index_elements=[DiscoveryPoolPaperRow.paper_id],
                     set_={column: statement.excluded[column] for column in (
                         'title', 'abstract', 'authors', 'year', 'venue', 'image_id',
-                        'subjects', 'keywords', 'primary_subject', 'synced_at',
+                        'subjects', 'keywords', 'topics', 'primary_subject', 'synced_at',
                     )},
                 ))
             removed = await session.execute(delete(DiscoveryPoolPaperRow).where(

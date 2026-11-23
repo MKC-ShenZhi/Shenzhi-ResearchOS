@@ -10,7 +10,6 @@
 
 | 项 | 现状 | 方向 |
 |----|------|------|
-| Serverless 与长驻进程设计不匹配 | 后端在 Vercel 上以单个 Serverless 函数运行，而 `lifespan` 恢复与首页调度器、进程内 Agent 运行归属、本地 workspace、900s 的 Agent 运行时限都依赖长驻进程 | 明确正式服务器部署方式；Vercel 定位为开发测试环境。详见 [部署与运行环境](deployment.md) |
 | 平台统计快照未调度 | `python -m app.services.stats` 不在进程内调度器中，首页 `trending` 数据源依赖这些快照 | 随部署方式确定定时任务 |
 | 无 CI 门禁 | 仓库没有运行 typecheck / lint / test 的 workflow | 增加基础检查 workflow |
 
@@ -27,7 +26,7 @@
 | 项 | 现状 | 方向 |
 |----|------|------|
 | Web 直连知识底座图片 | `apps/web/app/api/paper-images/` 在 Web 服务端代理 `KNOWLEDGE_BASE_API_URL` 的图片 | 经 FastAPI `integrations/knowledge` 代理，或保留为显式的静态资源例外 |
-| Agent 外部调用边界 | OpenAI 兼容模型流位于 `integrations/llm/agent_stream.py`；Exa 图片检索位于 `integrations/web_search/exa_images.py`；公共网页抓取与 SSRF/大小限制位于 `integrations/public_web/`；论文来源候选位于 `integrations/paper_resource/agent_sources.py`。当前 Exa key 与 Unpaywall 联系邮箱仍由 Integration 读现有环境/占位值 | 后续把密钥和联系邮箱统一纳入 `core/config`，并评估 paper_resource 专用 Provider 是否承接全文下载 |
+| Agent 外部调用边界 | 下列路径位于 `apps/agent/src/agent_app/`。OpenAI 兼容模型流位于 `integrations/llm/agent_stream.py`；Exa 图片检索位于 `integrations/web_search/exa_images.py`；公共网页抓取与 SSRF/大小限制位于 `integrations/public_web/`；论文来源候选位于 `integrations/paper_resource/agent_sources.py`。当前 Exa key 与 Unpaywall 联系邮箱仍由 Integration 读现有环境/占位值 | 后续在 Agent 侧统一管理密钥和联系邮箱，并评估 paper_resource 专用 Provider 是否承接全文下载 |
 | Router 承载逻辑 | `api/agent.py` 内联请求 Schema 并直接调用 repository；`api/knowledge.py` 在路由内组合 `personal_overview` | 补薄 Service，Schema 移入 `schemas/` |
 | BFF 计算业务结果 | `apps/web/app/api/identity/anonymous-claim/route.ts` 的 GET 读取匿名身份的 Agent 会话列表并在 Next 中计算数量 | 后端提供预览接口，BFF 只转发 |
 | 全局层反向依赖 Feature | `components/common/**`、`stores/collections.ts`、`providers/interaction-sync.tsx` 引用 `features/*`，如 `sidebar-chat-history.tsx`、`components/auth/anonymous-claim-coordinator.tsx` → `features/agent-chat`、`composer/attachment-menu.tsx` → `features/knowledge` 示例数据 | 尽力收敛：共享部分迁到 `components/common`、`lib` 或 `stores` |
@@ -48,4 +47,4 @@
 |----|------|------|
 | `features/search` 命名 | 实际承载首页论文 Feed（见 [V1 模块](V1-modules.md)） | 可考虑更名为 `features/discovery` |
 | 首页 Feed 相关模块分散 | `services/discovery.py`、`home_feed/`、`discovery_pool/`、`recommendation/` | 可将 `discovery.py` 并入 `home_feed/` |
-| 大文件 | Web：`components/auth/login-modal.tsx`（约 1270 行，逻辑位于 components 而非 Feature）、`features/agent-chat/shenzhi-ai-page.tsx`（约 920 行）；Backend：`integrations/knowledge/adapter.py`（约 920 行）、`services/agent/execution/runtime.py`（约 800 行） | 修改相关模块时按职责拆分 |
+| 大文件 | Web：`components/auth/login-modal.tsx`（约 1270 行，逻辑位于 components 而非 Feature）、`features/agent-chat/shenzhi-ai-page.tsx`（约 920 行）；Backend：`integrations/knowledge/adapter.py`（约 920 行）、Agent：`apps/agent/src/agent_app/execution/runtime.py`（约 800 行） | 修改相关模块时按职责拆分 |

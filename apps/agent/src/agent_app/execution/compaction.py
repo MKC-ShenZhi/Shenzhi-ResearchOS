@@ -281,7 +281,7 @@ async def summarize(provider: ModelProvider, model: str, messages: Sequence[Agen
         model,
         [{'role': 'system', 'content': SUMMARIZATION_SYSTEM_PROMPT},
          {'role': 'user', 'content': prompt_text}],
-        [], None, max_summary_tokens)
+        [], None, max_summary_tokens, purpose='summary')
     try:
         pieces: list[str] = []
         async with aclosing(provider.stream(request)) as stream:

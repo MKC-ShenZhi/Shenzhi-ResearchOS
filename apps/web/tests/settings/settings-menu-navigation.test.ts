@@ -77,10 +77,10 @@ test("appearance scroll waits for the active profile panel, handles hash changes
   let scrolled = 0;
   const frames = new Map<number, () => void>();
   const loaded = load("features/settings/components/settings-tabs.tsx", {
+    "@/components/auth/auth-provider": { useAuth: () => ({ session: null }) },
     react: { useEffect: (callback: typeof effect) => { effect = callback; } },
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "next/navigation": { useRouter: () => ({}), useSearchParams: () => ({ get: () => tab }) },
-    "@/components/auth/auth-provider": { useAuth: () => ({ session: null }) },
     "@/components/ui/tabs": {},
     "../hooks/use-user-settings": { useUserSettings: () => ({ locale: "zh-CN" }) },
     "../i18n": { settingsMessages: { "zh-CN": {} } },

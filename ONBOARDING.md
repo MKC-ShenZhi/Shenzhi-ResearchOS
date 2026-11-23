@@ -98,18 +98,9 @@ dev ──┬── feat/xxx、fix/xxx 等(你的工作分支,从最新 dev 切�
 - Commit 格式：`<type>: <中文描述>`，type 用 `feat/fix/refactor/docs/chore/test`，例如 `feat: 新增论文收藏功能`；一个 commit 对应一个明确目的
 - 完整细则：[docs/engineering/git-conventions.md](docs/engineering/git-conventions.md)
 
-## 五、线上环境地图
+## 五、线上环境
 
-| 环境 | 地址 | 内容来源 | 用途 |
-|------|------|----------|------|
-| Vercel（临时） | https://shenzhi.vercel.app | `dev` 分支 | 演示与联调 |
-| Vercel 后端（临时） | https://shenzhi-backend.vercel.app/health | `dev` 分支 | 前端 BFF 调用，不直接对外 |
-| 你的分支预览 | `shenzhi-git-<分支名>-hakrin-devs-projects.vercel.app` | push 后自动生成 | 给别人验收你的功能 |
-
-- PR 里 Vercel bot 会自动评论预览链接，直接发给测试同学即可（预览无需登录）
-- ⚠️ `*.vercel.app` 在国内被 DNS 污染，访问需要可上外网的网络环境
-- Vercel 目前只作临时用途，正式部署目标是自有服务器。部署配置、环境变量规则、已知限制：**必读 [docs/engineering/deployment.md](docs/engineering/deployment.md)**，改部署配置前先同步该文档
-- Vercel 后台/日志权限在管理员处，需要查看日志或配环境变量找管理员协助
+日常开发和分支联调使用本地环境。正式环境位于韩国服务器，访问地址和发布流程向服务器负责人确认。修改部署配置前，先同步 [部署与运行环境](docs/engineering/deployment.md)。
 
 ## 六、遇到问题去哪查
 
@@ -125,8 +116,7 @@ dev ──┬── feat/xxx、fix/xxx 等(你的工作分支,从最新 dev 切�
 
 ## 七、常见坑（新人高发）
 
-1. **改了环境变量不生效** → Vercel 上必须 Redeploy；本地确认改的是 `.env.local`（web）/ `.env`（backend）
+1. **改了环境变量不生效** → 确认改的是 `.env.local`（Web）或 `.env`（Backend），然后重启对应的本地服务。生产 Web 的 `NEXT_PUBLIC_*` 变量需要重新构建。
 2. **本地起后端后前端仍报 503** → 两端都要设 `BACKEND_ALLOW_INSECURE_LOCAL_BFF=true`，且 `BUSINESS_BACKEND_URL` 是 `http://127.0.0.1:8000`
-3. **push 后没有预览部署** → 到 Vercel 项目 Deployments 查看该分支的构建日志（需权限，找管理员）
-4. **Windows 上 `pnpm dev` 报 Turbopack 二进制被拦截** → 换到 WSL2 内开发
-5. **知识检索报"暂不可用"** → 先确认 `KNOWLEDGE_BASE_API_URL` 已配且公网可达，再怀疑代码
+3. **Windows 上 `pnpm dev` 报 Turbopack 二进制被拦截** → 换到 WSL2 内开发
+4. **知识检索报"暂不可用"** → 确认已配置 `KNOWLEDGE_BASE_API_URL`，并检查后端能否访问该地址。

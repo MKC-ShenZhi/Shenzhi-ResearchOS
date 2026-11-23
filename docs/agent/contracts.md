@@ -1,5 +1,7 @@
 # Agent Platform 共享契约
 
+新增的独立 v2 候选模型位于 `agent_contracts.v2`、`execution_v2`、`canonical`、`signing`；消息仍为 `schema_version=1`。原 `wire.py` 未修改。v2 API、恢复与部署约束见 [权益与执行权限](entitlements.md)。本文下方原有“尚未实现”描述限定于 v1，不能用于推断新 v2 的实现或审批状态。
+
 本页描述 `packages/agent-contracts/src/agent_contracts/` 中 Backend 与 Agent Platform 共用的数据和接口约定。包以 dataclass 表达领域记录，以 Pydantic Wire Model 校验 HTTP 请求与响应；Runtime 类型只存在于 Agent Worker 内部，由 Worker adapter 在进程边界转换。Backend Gateway 已接入产品 Agent API、Session 投影和 Knowledge 内部适配器；本文记录静态代码状态，不替代独立进程或可靠性验收。
 
 ## 身份与关联
@@ -21,17 +23,29 @@ User → Session → Turn → Task → Run 1 / Run 2 / ...
 
 Agent Worker 的报告适配器负责把 Runtime `RunResult` 转换为 JSON 兼容报告字典，并映射错误和测得用量。Agent Runtime 的消息、最终文本和产物以字典字段表达。Control 在单一数据库事务内写报告、更新 Run/Task 状态并决定重试；失败或超时最多执行 3 次，使用新 `run_id` 和指数退避。用量结算尚未接入 Backend 配额服务。
 
+会话运行成功时，Worker 在序列化 `ExecutionReport` 前通过当前 owner 的 Session Workspace 读取 Markdown，并以 `result.output.kind = "report"`、`result.output.report` 和 `result.output.report_path` 交付报告种类、完整 UTF-8 正文和 Workspace 内相对路径。正文保留文件的换行。Worker 按本次 Run 的 `(turn, tool_call_id)` 和工具名称匹配调用与结果，选择最后一个成功结束的 Markdown 写入或编辑操作。同一 turn 内重复使用的调用 ID 不参与选择。该记录独立于 transcript，消息压缩后仍可用于交付。没有符合条件的本轮操作时，保留原运行结果。已有报告、反问及其他终态制品保持原样。文件读取失败时记录告警，保留原运行结果。Agent API / Control 持久化完整结果，Backend Gateway 读取并投影到产品接口。
+
 `BudgetLimits` 包含时长、工具次数和模型 Token 限制。Worker 按模式设置默认时长与工具次数，并可执行更严格的显式上限。`UsageReport` 用 `None` 表示未知；模型 Token 上限当前无法可靠预先强制，带该限制的 Run 会失败并返回明确执行错误。
 
 ## 事件
 
-Runtime `AgentEvent(seq, turn, name, data)` 是事件来源。Worker 边界将字段复制为 `PlatformEvent(task_id, run_id, seq, turn, name, data, occurred_at)`，交给 Control 的 `EventSink.publish`；共享协议不携带 Runtime 类实例。这里 `turn` 是 Runtime 内部轮序号，不是产品 `turn_id`。
+Runtime `AgentEvent(seq, turn, name, data)` 是事件来源，其中 `seq` 从 1 开始，是本次 Runtime 执行的本地序号。Worker 将领取响应的 `event_seq` 加到本地 `seq`，形成持久 `PlatformEvent(task_id, run_id, seq, turn, name, data, occurred_at)`；其余事件字段保持原样。共享协议不携带 Runtime 类实例。这里 `turn` 是 Runtime 内部轮序号，不是产品 `turn_id`。
 
 `seq` 在单个 Run 内排序；`PlatformEvent.sequence` 与 `seq` 相同。事件标识为 `PlatformEvent.event_key == (run_id, seq)`，数据库对 `(run_id, seq)` 建唯一约束；相同事件重放幂等，冲突事件拒绝。`PlatformEventWire` 与 `EventIngestWire` 是共享 HTTP envelope，`GET /internal/v1/runs/{run_id}/events?owner_id=...&after_seq=...` 提供持久事件读取。Backend Gateway 校验提交、Task、Run 与事件响应，再将持久事件投影到产品 SSE。
 
+`GET /internal/v1/tasks/{task_id}/runs?owner_id=...` 通过共享 `TaskRunsResponseWire` 返回 `{"run_ids":["r1","r2","r3"]}`。接口只读、受服务凭据和 Task Owner 校验保护，Task 不存在或不属于该 Owner 时均返回 404。列表不分页、不截断，按现有 `(task_id, attempt)` 唯一约束中的 `attempt` 升序返回全部 Run，不依赖时间戳或 `current_run_id`。Task 创建时已有首个 Run，因此有效列表至少包含一项；报告与重试 Run 原子提交，观察到可重试终态后重新枚举即可读到其后继。
+
+`POST /internal/v1/worker/claim` 在成功领取时返回 `run`、`lease_token` 与 `event_seq`。`event_seq` 是领取事务持有 Run 行锁期间查询的该 Run 最大已持久化事件序号，无事件时为 0。接管旧 Run 会提升 fencing token，新的 Worker 从 `event_seq + 1` 发布事件；旧 token 的事件、续租和首次终态报告不能再写入。Runtime 仍从头执行，这不表示 Checkpoint 恢复或工具副作用去重。
+
+Control 的事件写入与终态报告更新使用同一 Run 行锁，终态报告提交后拒绝新事件。Backend 三条产品流共用 `read_run_update`，按先读 Run、后读 events 的顺序轮询：若已观察到终态，后读的 events 包含该 Run 的完整尾部；若未观察到终态，则继续轮询，不提前发送 result。重试切换 Run 也先投影旧 Run 的事件，再切换到新 Run。
+
 产品 SSE 的 `after` 是从 0 开始的下一条事件偏移，与内部 API 的 `after_seq` 含义不同。若客户端最后完整收到的 SSE `id` 为 3，同一流续接时传 `after=4`。
 
+Session 首次投影与无缓存恢复都从 Task 最早的 Run 开始，依次投影每个 Run 的一条产品 `run_start` 和按 `seq` 排序的全部持久事件，只为最后一个 Run 的报告生成一条产品 `result`。每个旧 Run 排空尾部后才读取有序列表中的直接后继，即使两次轮询间发生多次重试也不跳过中间 Run。SSE ID 继续使用 `LiveRun.events` 的零基索引：若第 i 个 Run 有 Nᵢ 条持久事件，则最终 result 的 ID 为 Σ(1 + Nᵢ)，与轮询时机和缓存是否存在无关。result 的 ID 为 6 时，未完整收到该事件传 `after=6`，完整收到后传 `after=7`。该规则适用于关联 Agent Task 的 Session 流；未关联 Task 的历史导入继续使用原有产品投影回放。
+
 Agent Knowledge Adapter 使用共享 `KnowledgeSearchRequestWire`、`KnowledgeSearchResponseWire`、`KnowledgePaperDetailWire` 与 `KnowledgePaperGraphWire`。Backend 保留产品 Knowledge Schema 和上游实现，在内部 API 边界映射到共享 Wire Model；Agent 不安装或导入 Backend Python 包。
+
+论文检索与详情的产品 Schema 包含用于主题导航的 `topics`；当前 Agent Wire 不包含该字段，Backend 内部接口在序列化时显式排除它，再执行严格契约校验。产品知识库接口继续返回 `topics`。
 
 ## Protocol 边界
 
@@ -74,7 +88,7 @@ Worker 通过独立进程入口运行；`AGENT_DATABASE_URL` 与 `AGENT_SERVICE_
 | --- | --- |
 | Agent 持有 Conversation / Message；Backend 保存展示投影和外部引用 | Backend 仍提交会话历史，Agent 保存执行请求与结果快照。 |
 | Interaction 回答形成新产品 Turn，原 Task / Run 创建新 Attempt 继续执行 | 当前后续回答仍是一次新 Task；内部 API 没有 Interaction 回答接口。 |
-| 基础设施重试在同一个 Run 下建立独立 Attempt，从安全 Checkpoint 恢复 | 失败或超时会新建 Run，过期租约可复领旧 Run。尚未接入独立 Attempt、Checkpoint 和工具执行日志；同一 Run 从头执行时可能与已有事件序号冲突。 |
+| 基础设施重试在同一个 Run 下建立独立 Attempt，从安全 Checkpoint 恢复 | 失败或超时会新建 Run；过期租约可复领旧 Run，并从已持久化的最大事件序号之后继续发布。尚未接入独立 Attempt、Checkpoint 和工具执行日志；接管仍从头执行，工具副作用可能重复。 |
 | Task 级事件游标与事务通知 Outbox | 当前游标为单 Run 的 `after_seq`；调度 Outbox 与事件存储职责不同。 |
 | Backend 可靠提交、签发 BudgetGrant，并按用量报告幂等结算 | 当前由 Backend 同步提交并提供稳定幂等键，尚无提交 Outbox、额度预留、Grant 和结算。 |
 

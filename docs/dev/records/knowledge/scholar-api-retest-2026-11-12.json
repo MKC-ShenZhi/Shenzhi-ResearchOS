@@ -1,0 +1,4534 @@
+{
+  "observed_at": "2026-11-12T13:19:18+08:00",
+  "base_url": "<KNOWLEDGE_BASE_API_URL>",
+  "samples": [
+    {
+      "summary": {
+        "name": "Fanjin Zhang",
+        "id": "openalex:A5016224961",
+        "statuses": [
+          200,
+          200,
+          200,
+          404,
+          200
+        ],
+        "search_positions": {
+          "openalex:A5016224961": 2,
+          "author:fanjin_zhang": 1
+        },
+        "search_keys": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "bio_exact": true,
+        "api_metrics": [
+          20,
+          3994,
+          11,
+          12
+        ],
+        "snapshot_metrics": [
+          20,
+          3994,
+          11,
+          12
+        ],
+        "source": "delivered_profile",
+        "api_institutions": [
+          "Renmin University of China"
+        ],
+        "snapshot_institutions": [
+          "Renmin University of China"
+        ],
+        "api_annual_years": [
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "snapshot_annual_years": [
+          2026,
+          2025,
+          2024,
+          2023,
+          2022,
+          2021,
+          2020,
+          2019,
+          2018
+        ],
+        "annual_equal_years": [
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "annual_differences": {},
+        "history_basis_counts": {
+          "reported_affiliation": 6,
+          "reported_role": 7
+        },
+        "matching_roles": 7,
+        "snapshot_roles": 7,
+        "missing_keys": [
+          "aliases"
+        ],
+        "linked_papers": 1,
+        "metric_paper_count": 1,
+        "old_paper_count": 3,
+        "avatar_present": true,
+        "avatar_probe_status": 200,
+        "avatar_probe_type": "image/jpeg",
+        "avatar_probe_jpeg": true
+      },
+      "snapshot_profile": {
+        "scholar_id": "preview-efca6e4d8bdcfdf683f4",
+        "name_en": "Fanjin Zhang",
+        "aliases": [
+          "Fanjin Zhang",
+          "Zhang, Fanjin"
+        ],
+        "avatar_path": "/images/scholar-preview/efca6e4d8bdcfdf683f4.jpg",
+        "affiliations": [
+          {
+            "institution": "Renmin University of China"
+          }
+        ],
+        "employment": [
+          {
+            "organization": "Renmin University of China",
+            "role_title": "Assistant Professor, Information",
+            "department": null,
+            "start_date": "2025-11",
+            "end_date": null
+          },
+          {
+            "organization": "Tsinghua University",
+            "role_title": "Postdoctoral Researcher",
+            "department": null,
+            "start_date": "2024-01",
+            "end_date": "2025-11"
+          },
+          {
+            "organization": "Zhipu AI",
+            "role_title": "Algorithm Engineer",
+            "department": null,
+            "start_date": "2023-07",
+            "end_date": "2023-12"
+          },
+          {
+            "organization": "Tsinghua University",
+            "role_title": "CS PhD Student",
+            "department": null,
+            "start_date": "2017-09",
+            "end_date": "2023-06"
+          },
+          {
+            "organization": "Tencent",
+            "role_title": "Research Intern",
+            "department": null,
+            "start_date": "2019-07",
+            "end_date": "2020-11"
+          },
+          {
+            "organization": "Microsoft Research Asia",
+            "role_title": "Research Intern",
+            "department": null,
+            "start_date": "2017-05",
+            "end_date": "2017-09"
+          },
+          {
+            "organization": "Nanjing University",
+            "role_title": "CS BE Student",
+            "department": null,
+            "start_date": "2013-09",
+            "end_date": "2017-06"
+          }
+        ],
+        "external_ids": {
+          "orcid": "0000-0001-8551-1966"
+        },
+        "metrics": {
+          "source_work_count": 20,
+          "citation_count": 3994,
+          "h_index": 11,
+          "i10_index": 12
+        },
+        "topics": [
+          "Topic Modeling",
+          "Data Quality and Management",
+          "scientometrics and bibliometrics research",
+          "Advanced Graph Neural Networks",
+          "Complex Network Analysis Techniques",
+          "Ethics and Social Impacts of AI",
+          "Academic integrity and plagiarism",
+          "Scientific Computing and Data Management"
+        ],
+        "bio_en": "Fanjin Zhang’s Self-supervised learning: Generative or contrastive organizes self-supervised learning methods into generative and contrastive paradigms. Zhang is an Assistant Professor in the School of Information at Renmin University of China. Formerly a postdoctoral researcher at Tsinghua University and an algorithm engineer at Zhipu AI, they focus on LLMs and knowledge graphs to accelerate scientific research. They developed OAG-Bench, a multi-task benchmark for academic graph mining, and the million-scale WhoIsWho benchmark for author name disambiguation. Zhang also created EurekAgent for autonomous scientific discovery and SAM Decoding, which uses a suffix automaton for speculative decoding. They earned a PhD from Tsinghua University and a BE from Nanjing University.",
+        "annual_citations": [
+          {
+            "year": 2026,
+            "count": 12
+          },
+          {
+            "year": 2025,
+            "count": 4
+          },
+          {
+            "year": 2024,
+            "count": 150
+          },
+          {
+            "year": 2023,
+            "count": 38
+          },
+          {
+            "year": 2022,
+            "count": 34
+          },
+          {
+            "year": 2021,
+            "count": 57
+          },
+          {
+            "year": 2020,
+            "count": 3310
+          },
+          {
+            "year": 2019,
+            "count": 179
+          },
+          {
+            "year": 2018,
+            "count": 236
+          }
+        ]
+      },
+      "product_search": {
+        "path": "/api/v1/scholars/search?q=Fanjin+Zhang&limit=20&offset=0",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "items": [
+            {
+              "scholar_id": "author:fanjin_zhang",
+              "name_zh": null,
+              "name_en": "Fanjin Zhang",
+              "avatar_path": null,
+              "affiliations": [
+                {
+                  "institution": "Renmin University of China",
+                  "position": null
+                },
+                {
+                  "institution": "School of Information, Research Center of Database and Business Intelligence, Renmin University of China, Beijing, China",
+                  "position": null
+                }
+              ],
+              "topics": [],
+              "metrics": {
+                "source_work_count": null,
+                "citation_count": null,
+                "h_index": null,
+                "i10_index": null,
+                "paper_count": 3
+              }
+            },
+            {
+              "scholar_id": "openalex:A5016224961",
+              "name_zh": null,
+              "name_en": "Fanjin Zhang",
+              "avatar_path": "/images/scholars_20261112_6fbd0f2de850/354e36d206da504531074c3362cb3b62df657f85e13813dafa09cf4e528adff7.jpg",
+              "affiliations": [
+                {
+                  "institution": "Renmin University of China",
+                  "position": null
+                }
+              ],
+              "topics": [
+                "自然语言处理模型与表示",
+                "图表示学习与图神经网络"
+              ],
+              "metrics": {
+                "source_work_count": 20,
+                "citation_count": 3994,
+                "h_index": 11,
+                "i10_index": 12,
+                "paper_count": 1
+              }
+            }
+          ],
+          "total": 2,
+          "limit": 20,
+          "offset": 0,
+          "has_more": false
+        }
+      },
+      "product_openalex_detail": {
+        "path": "/api/v1/scholars/openalex%3AA5016224961",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "scholar_id": "openalex:A5016224961",
+          "name_zh": null,
+          "name_en": "Fanjin Zhang",
+          "avatar_path": "/images/scholars_20261112_6fbd0f2de850/354e36d206da504531074c3362cb3b62df657f85e13813dafa09cf4e528adff7.jpg",
+          "affiliations": [
+            {
+              "institution": "Renmin University of China",
+              "position": null
+            }
+          ],
+          "topics": [
+            "自然语言处理模型与表示",
+            "图表示学习与图神经网络"
+          ],
+          "metrics": {
+            "source_work_count": 20,
+            "citation_count": 3994,
+            "h_index": 11,
+            "i10_index": 12,
+            "paper_count": 1
+          },
+          "bio_zh": null,
+          "bio_en": "Fanjin Zhang’s Self-supervised learning: Generative or contrastive organizes self-supervised learning methods into generative and contrastive paradigms. Zhang is an Assistant Professor in the School of Information at Renmin University of China. Formerly a postdoctoral researcher at Tsinghua University and an algorithm engineer at Zhipu AI, they focus on LLMs and knowledge graphs to accelerate scientific research. They developed OAG-Bench, a multi-task benchmark for academic graph mining, and the million-scale WhoIsWho benchmark for author name disambiguation. Zhang also created EurekAgent for autonomous scientific discovery and SAM Decoding, which uses a suffix automaton for speculative decoding. They earned a PhD from Tsinghua University and a BE from Nanjing University.",
+          "employment": [
+            {
+              "organization": "Renmin University of China",
+              "role_title": "Assistant Professor, Information",
+              "department": null,
+              "start_date": "2025-11",
+              "end_date": null
+            },
+            {
+              "organization": "Tsinghua University",
+              "role_title": "Postdoctoral Researcher",
+              "department": null,
+              "start_date": "2024-01",
+              "end_date": "2025-11"
+            },
+            {
+              "organization": "Zhipu AI",
+              "role_title": "Algorithm Engineer",
+              "department": null,
+              "start_date": "2023-07",
+              "end_date": "2023-12"
+            },
+            {
+              "organization": "Tencent",
+              "role_title": "Research Intern",
+              "department": null,
+              "start_date": "2019-07",
+              "end_date": "2020-11"
+            },
+            {
+              "organization": "Tsinghua University",
+              "role_title": "CS PhD Student",
+              "department": null,
+              "start_date": "2017-09",
+              "end_date": "2023-06"
+            },
+            {
+              "organization": "Microsoft Research Asia",
+              "role_title": "Research Intern",
+              "department": null,
+              "start_date": "2017-05",
+              "end_date": "2017-09"
+            },
+            {
+              "organization": "Nanjing University",
+              "role_title": "CS BE Student",
+              "department": null,
+              "start_date": "2013-09",
+              "end_date": "2017-06"
+            }
+          ],
+          "annual_citations": [
+            {
+              "year": 2022,
+              "count": 34
+            },
+            {
+              "year": 2023,
+              "count": 38
+            },
+            {
+              "year": 2024,
+              "count": 150
+            },
+            {
+              "year": 2025,
+              "count": 4
+            },
+            {
+              "year": 2026,
+              "count": 12
+            }
+          ],
+          "external_ids": {
+            "orcid": "0000-0001-8551-1966"
+          },
+          "affiliation_history": [
+            {
+              "institution_id": "https://openalex.org/I78988378",
+              "institution": "Renmin University of China",
+              "years": [
+                2025,
+                2026
+              ],
+              "position": null,
+              "source": "delivered_profile",
+              "basis": "reported_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I99065089",
+              "institution": "Tsinghua University",
+              "years": [
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2023,
+                2024,
+                2025
+              ],
+              "position": null,
+              "source": "delivered_profile",
+              "basis": "reported_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4401726915",
+              "institution": "Zhipu AI (China)",
+              "years": [
+                2023
+              ],
+              "position": null,
+              "source": "delivered_profile",
+              "basis": "reported_affiliation"
+            },
+            {
+              "institution_id": "",
+              "institution": "Tencent",
+              "years": [
+                2019,
+                2020
+              ],
+              "position": null,
+              "source": "delivered_profile",
+              "basis": "reported_affiliation"
+            },
+            {
+              "institution_id": "",
+              "institution": "Microsoft Research Asia",
+              "years": [
+                2017
+              ],
+              "position": null,
+              "source": "delivered_profile",
+              "basis": "reported_affiliation"
+            },
+            {
+              "institution_id": "",
+              "institution": "Nanjing University",
+              "years": [
+                2013,
+                2014,
+                2015,
+                2016,
+                2017
+              ],
+              "position": null,
+              "source": "delivered_profile",
+              "basis": "reported_affiliation"
+            },
+            {
+              "institution": "Renmin University of China",
+              "institution_id": null,
+              "position": "Assistant Professor, Information",
+              "years": [],
+              "start_date": "2025-11",
+              "end_date": null,
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Tsinghua University",
+              "institution_id": null,
+              "position": "Postdoctoral Researcher",
+              "years": [],
+              "start_date": "2024-01",
+              "end_date": "2025-11",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Zhipu AI",
+              "institution_id": null,
+              "position": "Algorithm Engineer",
+              "years": [],
+              "start_date": "2023-07",
+              "end_date": "2023-12",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Tsinghua University",
+              "institution_id": null,
+              "position": "CS PhD Student",
+              "years": [],
+              "start_date": "2017-09",
+              "end_date": "2023-06",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Tencent",
+              "institution_id": null,
+              "position": "Research Intern",
+              "years": [],
+              "start_date": "2019-07",
+              "end_date": "2020-11",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Microsoft Research Asia",
+              "institution_id": null,
+              "position": "Research Intern",
+              "years": [],
+              "start_date": "2017-05",
+              "end_date": "2017-09",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Nanjing University",
+              "institution_id": null,
+              "position": "CS BE Student",
+              "years": [],
+              "start_date": "2013-09",
+              "end_date": "2017-06",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            }
+          ],
+          "research_impact": {
+            "works_count": 20,
+            "citation_count": 3994,
+            "h_index": 11,
+            "i10_index": 12,
+            "two_year_mean_citedness": 2.285714,
+            "source": "delivered_profile",
+            "coverage": "Delivered profile; upstream metrics are not independently separated",
+            "as_of": null,
+            "source_updated_at": "2026-11-09T14:06:01"
+          },
+          "updated_at": "2026-11-09T14:06:01",
+          "citation_meta": {
+            "source": "delivered_profile",
+            "coverage": "Delivered profile; upstream metrics are not independently separated",
+            "as_of": null
+          }
+        }
+      },
+      "product_openalex_papers_first_page": {
+        "path": "/api/v1/scholars/openalex%3AA5016224961/papers?limit=2&offset=0",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "items": [
+            {
+              "id": 71236,
+              "paper_id": "paper:2607.20498v1",
+              "arxiv_id": "2607.20498v1",
+              "source": "",
+              "conference": "SIGKDD",
+              "publication_name": "SIGKDD",
+              "publication_type": "conference",
+              "raw_conference": "SIGKDD",
+              "proceedings_type": "",
+              "conferenceId": "sigkdd",
+              "year": 2026,
+              "subjects": [
+                "tool-use benchmarking",
+                "LLM agents",
+                "information seeking",
+                "academic knowledge graphs"
+              ],
+              "topics": [],
+              "primary_subject": "tool-use benchmarking",
+              "track": "tool-use benchmarking",
+              "title": "AISE-Bench: A Full-Cycle Curated Benchmark for Information Seeking on Academic Knowledge Graphs Conference: Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2; August 09–13, 2026; Jeju Island, Republic of Korea Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2 (KDD ’26), August 09–13, 2026, Jeju Island, Republic of Korea DOI: 10.1145/3770855.3817492 ISBN: 979-8-4007-2259-2/2026/08 CCS: Information systems Information retrieval",
+              "authors": [
+                "Fanjin Zhang",
+                "Zhengyang Wang",
+                "Yuanchun Wang",
+                "Shu Zhao",
+                "Ruixuan Huang",
+                "Kefan Zhang",
+                "Juanzi Li",
+                "Jie Tang",
+                "Evgeny Kharlamov",
+                "Amy Xin"
+              ],
+              "abstract": ". Large language models (LLMs) augmented with tools are emerging as autonomous agents capable of using Web engine, APIs, and code to solve complex, long - horizon tasks. Current tool-using benchmarks for information seeking on academic graphs rely on synthetic templates, simplified solution spaces, or narrow tasks such as paper-centric tasks, leaving key challenges underexplored – realistic user intent, complex multi - step API planning, rich parameter filling for APIs, grounded answers with references, and comprehensive evaluation of both the process and the outcome. We introduce AISE-Bench, a real-world, full-cycle annotated benchmark for information seeking on academic knowledge graphs. AISE-Bench release contains 1,133 QA pairs, including query taxonomies, full API execution trajectories, validated parameters, and source-grounded answers with reference links. To support high - quality annotation, we design a customized agent workflow to enable annotators to plan, execute, and revise complex API workflows efficiently. We develop a comprehensive evaluation protocol measuring answer quality, reference grounding, API - planning correctness, and execution success. Among the 14 evaluated methods, even the strongest model (PLAY2PROMPT with Gemini - 3 - Pro) achieves only moderate performance and often struggles with API planning and execution. AISE-Bench establishes a challenging new testbed for quantitatively evaluating and improving the stepwise correctness, grounded summarization, and traceable reasoning of multi-step API-using LLM agents. Our code and data are available 1 1 1 https://aise-bench.github.io/ .",
+              "pdf_url": "https://arxiv.org/pdf/2607.20498v1",
+              "keywords": [
+                "Academic Search",
+                "LLM Agent",
+                "Academic Knowledge Graph"
+              ],
+              "type": "",
+              "editor": [],
+              "booktitle": "",
+              "pages": "",
+              "publisher": "",
+              "doi": "10.1145/3770855.3817492",
+              "openalex_id": "",
+              "source_url": "https://arxiv.org/pdf/2607.20498v1",
+              "source_urls": [
+                "https://arxiv.org/pdf/2607.20498v1",
+                "https://arxiv.org/html/2607.20498v1"
+              ],
+              "biburl": "",
+              "bibsource": "",
+              "source_file": "",
+              "funding": [],
+              "image_id": "/images/SIGKDD_2026/2607.20498v1.png",
+              "published_at": null,
+              "citation_count": null,
+              "cover_path": null,
+              "record_type": "canonical",
+              "external": false
+            }
+          ],
+          "total": 1,
+          "limit": 2,
+          "offset": 0
+        }
+      },
+      "product_author_detail": {
+        "path": "/api/v1/scholars/author%3Afanjin_zhang",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "scholar_id": "author:fanjin_zhang",
+          "name_zh": null,
+          "name_en": "Fanjin Zhang",
+          "avatar_path": null,
+          "affiliations": [
+            {
+              "institution": "Renmin University of China",
+              "position": null
+            },
+            {
+              "institution": "School of Information, Research Center of Database and Business Intelligence, Renmin University of China, Beijing, China",
+              "position": null
+            }
+          ],
+          "topics": [],
+          "metrics": {
+            "source_work_count": null,
+            "citation_count": null,
+            "h_index": null,
+            "i10_index": null,
+            "paper_count": 3
+          },
+          "bio_zh": null,
+          "bio_en": null,
+          "employment": [],
+          "annual_citations": [],
+          "external_ids": {
+            "orcid": null
+          },
+          "affiliation_history": [],
+          "research_impact": {
+            "works_count": null,
+            "citation_count": null,
+            "h_index": null,
+            "i10_index": null,
+            "two_year_mean_citedness": null,
+            "source": null,
+            "coverage": null,
+            "as_of": null,
+            "source_updated_at": null
+          },
+          "updated_at": null,
+          "citation_meta": {
+            "source": null,
+            "coverage": null,
+            "as_of": null
+          }
+        }
+      },
+      "legacy_openalex_detail": {
+        "path": "/api/retrieval/scholars/openalex%3AA5016224961",
+        "attempts": [
+          404
+        ],
+        "status": 404,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "error": "scholar not found",
+          "scholar_id": "openalex:A5016224961"
+        }
+      },
+      "avatar_probe": {
+        "path": "/images/scholars_20261112_6fbd0f2de850/354e36d206da504531074c3362cb3b62df657f85e13813dafa09cf4e528adff7.jpg",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "image/jpeg",
+        "has_jpeg_signature": true
+      }
+    },
+    {
+      "summary": {
+        "name": "Shayne Longpre",
+        "id": "openalex:A5001884064",
+        "statuses": [
+          200,
+          200,
+          200,
+          404,
+          200
+        ],
+        "search_positions": {
+          "openalex:A5001884064": 2,
+          "author:shayne_longpre": 1
+        },
+        "search_keys": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "bio_exact": true,
+        "api_metrics": [
+          87,
+          11869,
+          35,
+          56
+        ],
+        "snapshot_metrics": [
+          78,
+          19727,
+          42,
+          64
+        ],
+        "source": "OpenAlex",
+        "api_institutions": [
+          "Anthropic",
+          "Data Provenance Initiative",
+          "Massachusetts Institute of Technology"
+        ],
+        "snapshot_institutions": [
+          "Anthropic"
+        ],
+        "api_annual_years": [
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "snapshot_annual_years": [
+          2026,
+          2025,
+          2024,
+          2023,
+          2022,
+          2021,
+          2020,
+          2019,
+          2016
+        ],
+        "annual_equal_years": [],
+        "annual_differences": {
+          "2022": [
+            263,
+            174
+          ],
+          "2023": [
+            2284,
+            2242
+          ],
+          "2024": [
+            4965,
+            3689
+          ],
+          "2025": [
+            6143,
+            3126
+          ],
+          "2026": [
+            5745,
+            2524
+          ]
+        },
+        "history_basis_counts": {
+          "publication_affiliation": 20,
+          "reported_role": 13
+        },
+        "matching_roles": 13,
+        "snapshot_roles": 14,
+        "missing_keys": [
+          "aliases"
+        ],
+        "linked_papers": 9,
+        "metric_paper_count": 9,
+        "old_paper_count": 19,
+        "avatar_present": true,
+        "avatar_probe_status": 200,
+        "avatar_probe_type": "image/jpeg",
+        "avatar_probe_jpeg": true
+      },
+      "snapshot_profile": {
+        "scholar_id": "preview-7cc258d50eab33673459",
+        "name_en": "Shayne Longpre",
+        "aliases": [
+          "Shayne Longpre"
+        ],
+        "avatar_path": "/images/scholar-preview/7cc258d50eab33673459.jpg",
+        "affiliations": [
+          {
+            "institution": "Anthropic"
+          }
+        ],
+        "employment": [
+          {
+            "organization": "Anthropic",
+            "role_title": "Member of Technical Staff",
+            "department": null,
+            "start_date": "2026",
+            "end_date": null
+          },
+          {
+            "organization": "Data Provenance Initiative",
+            "role_title": "Founder",
+            "department": null,
+            "start_date": "2023",
+            "end_date": null
+          },
+          {
+            "organization": "Massachusetts Institute of Technology",
+            "role_title": "PhD Student",
+            "department": null,
+            "start_date": "2021-09",
+            "end_date": "2026"
+          },
+          {
+            "organization": "Google Brain",
+            "role_title": "Researcher",
+            "department": null,
+            "start_date": "2023",
+            "end_date": "2024"
+          },
+          {
+            "organization": "Google",
+            "role_title": "Google Student Researcher",
+            "department": null,
+            "start_date": "2022-05",
+            "end_date": "2022-09"
+          },
+          {
+            "organization": "Apple",
+            "role_title": "Applied Research Scientist, ML",
+            "department": null,
+            "start_date": "2018-02",
+            "end_date": "2021-07"
+          },
+          {
+            "organization": "Stanford University",
+            "role_title": "Graduate Researcher",
+            "department": null,
+            "start_date": "2017-06",
+            "end_date": "2017-12"
+          },
+          {
+            "organization": "Stanford University",
+            "role_title": "Graduate Teaching Assistant",
+            "department": null,
+            "start_date": "2017-01",
+            "end_date": "2017-06"
+          },
+          {
+            "organization": "Stanford University",
+            "role_title": "MSc Student",
+            "department": null,
+            "start_date": "2016",
+            "end_date": "2017"
+          },
+          {
+            "organization": "MetaMind",
+            "role_title": "Deep Learning Research Intern",
+            "department": null,
+            "start_date": "2016-06",
+            "end_date": "2016-09"
+          },
+          {
+            "organization": "Stanford University",
+            "role_title": "BA Student",
+            "department": null,
+            "start_date": "2012",
+            "end_date": "2016"
+          },
+          {
+            "organization": "Microsoft",
+            "role_title": "Software Engineer Intern",
+            "department": null,
+            "start_date": "2015-06",
+            "end_date": "2015-09"
+          },
+          {
+            "organization": "Cooliris",
+            "role_title": "Software Engineer Intern",
+            "department": null,
+            "start_date": "2014-07",
+            "end_date": "2014-09"
+          },
+          {
+            "organization": "Accuvest Global Advisors",
+            "role_title": "Business Development Intern",
+            "department": null,
+            "start_date": "2013-07",
+            "end_date": "2013-09"
+          }
+        ],
+        "external_ids": {
+          "orcid": null
+        },
+        "metrics": {
+          "source_work_count": 78,
+          "citation_count": 19727,
+          "h_index": 42,
+          "i10_index": 64
+        },
+        "topics": [
+          "Deep Learning",
+          "Natural Language Understanding"
+        ],
+        "bio_en": "Shayne Longpre’s Scaling instruction-finetuned language models introduced the Flan datasets and methods for tuning LLMs across diverse tasks. Longpre is a Member of Technical Staff at Anthropic and a PhD candidate at MIT, where he leads the Data Provenance Initiative to audit the transparency and attribution of AI training data. His research focuses on data selection, multilingual NLP, and model evaluation. He co-developed Bloom, a 176B-parameter multilingual model, and Prometheus, a model specialized for evaluating the outputs of other language models. Longpre previously worked as an applied ML research scientist at Apple and a student researcher at Google. He holds a master’s degree and a bachelor’s degree from Stanford University.",
+        "annual_citations": [
+          {
+            "year": 2026,
+            "count": 5745
+          },
+          {
+            "year": 2025,
+            "count": 6143
+          },
+          {
+            "year": 2024,
+            "count": 4965
+          },
+          {
+            "year": 2023,
+            "count": 2284
+          },
+          {
+            "year": 2022,
+            "count": 263
+          },
+          {
+            "year": 2021,
+            "count": 101
+          },
+          {
+            "year": 2020,
+            "count": 0
+          },
+          {
+            "year": 2019,
+            "count": 0
+          },
+          {
+            "year": 2016,
+            "count": 0
+          }
+        ]
+      },
+      "product_search": {
+        "path": "/api/v1/scholars/search?q=Shayne+Longpre&limit=20&offset=0",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "items": [
+            {
+              "scholar_id": "author:shayne_longpre",
+              "name_zh": null,
+              "name_en": "Shayne Longpre",
+              "avatar_path": null,
+              "affiliations": [
+                {
+                  "institution": "MIT",
+                  "position": null
+                },
+                {
+                  "institution": "MIT University of Washington ,Stanford University ,Google Cloud AI ,Google DeepMind",
+                  "position": null
+                },
+                {
+                  "institution": "Massachusetts Institute of Technology",
+                  "position": null
+                }
+              ],
+              "topics": [],
+              "metrics": {
+                "source_work_count": null,
+                "citation_count": null,
+                "h_index": null,
+                "i10_index": null,
+                "paper_count": 19
+              }
+            },
+            {
+              "scholar_id": "openalex:A5001884064",
+              "name_zh": null,
+              "name_en": "Shayne Longpre",
+              "avatar_path": "/images/scholars_20261112_b1a21c6bcae2/858e2d7467c29ef97fba6c1e95f35309299c98967222133b1f2801c36fda9956.jpg",
+              "affiliations": [
+                {
+                  "institution": "Anthropic",
+                  "position": null
+                },
+                {
+                  "institution": "Data Provenance Initiative",
+                  "position": null
+                },
+                {
+                  "institution": "Massachusetts Institute of Technology",
+                  "position": null
+                }
+              ],
+              "topics": [
+                "Deep Learning",
+                "Natural Language Understanding"
+              ],
+              "metrics": {
+                "source_work_count": 87,
+                "citation_count": 11869,
+                "h_index": 35,
+                "i10_index": 56,
+                "paper_count": 9
+              }
+            }
+          ],
+          "total": 2,
+          "limit": 20,
+          "offset": 0,
+          "has_more": false
+        }
+      },
+      "product_openalex_detail": {
+        "path": "/api/v1/scholars/openalex%3AA5001884064",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "scholar_id": "openalex:A5001884064",
+          "name_zh": null,
+          "name_en": "Shayne Longpre",
+          "avatar_path": "/images/scholars_20261112_b1a21c6bcae2/858e2d7467c29ef97fba6c1e95f35309299c98967222133b1f2801c36fda9956.jpg",
+          "affiliations": [
+            {
+              "institution": "Anthropic",
+              "position": null
+            },
+            {
+              "institution": "Data Provenance Initiative",
+              "position": null
+            },
+            {
+              "institution": "Massachusetts Institute of Technology",
+              "position": null
+            }
+          ],
+          "topics": [
+            "Deep Learning",
+            "Natural Language Understanding"
+          ],
+          "metrics": {
+            "source_work_count": 87,
+            "citation_count": 11869,
+            "h_index": 35,
+            "i10_index": 56,
+            "paper_count": 9
+          },
+          "bio_zh": null,
+          "bio_en": "Shayne Longpre’s Scaling instruction-finetuned language models introduced the Flan datasets and methods for tuning LLMs across diverse tasks. Longpre is a Member of Technical Staff at Anthropic and a PhD candidate at MIT, where he leads the Data Provenance Initiative to audit the transparency and attribution of AI training data. His research focuses on data selection, multilingual NLP, and model evaluation. He co-developed Bloom, a 176B-parameter multilingual model, and Prometheus, a model specialized for evaluating the outputs of other language models. Longpre previously worked as an applied ML research scientist at Apple and a student researcher at Google. He holds a master’s degree and a bachelor’s degree from Stanford University.",
+          "employment": [
+            {
+              "organization": "Anthropic",
+              "role_title": "Member of Technical Staff",
+              "department": null,
+              "start_date": "2026",
+              "end_date": null
+            },
+            {
+              "organization": "Data Provenance Initiative",
+              "role_title": "Founder",
+              "department": null,
+              "start_date": "2023",
+              "end_date": null
+            },
+            {
+              "organization": "Google Brain",
+              "role_title": "Researcher",
+              "department": null,
+              "start_date": "2023",
+              "end_date": "2024"
+            },
+            {
+              "organization": "Google",
+              "role_title": "Google Student Researcher",
+              "department": null,
+              "start_date": "2022-05",
+              "end_date": "2022-09"
+            },
+            {
+              "organization": "Massachusetts Institute of Technology",
+              "role_title": "PhD Student",
+              "department": null,
+              "start_date": "2021-09",
+              "end_date": "2026"
+            },
+            {
+              "organization": "Apple",
+              "role_title": "Applied Research Scientist, ML",
+              "department": null,
+              "start_date": "2018-02",
+              "end_date": "2021-07"
+            },
+            {
+              "organization": "Stanford University",
+              "role_title": "Graduate Researcher",
+              "department": null,
+              "start_date": "2017-06",
+              "end_date": "2017-12"
+            },
+            {
+              "organization": "Stanford University",
+              "role_title": "Graduate Teaching Assistant",
+              "department": null,
+              "start_date": "2017-01",
+              "end_date": "2017-06"
+            },
+            {
+              "organization": "MetaMind",
+              "role_title": "Deep Learning Research Intern",
+              "department": null,
+              "start_date": "2016-06",
+              "end_date": "2016-09"
+            },
+            {
+              "organization": "Stanford University",
+              "role_title": "MSc Student",
+              "department": null,
+              "start_date": "2016",
+              "end_date": "2017"
+            },
+            {
+              "organization": "Microsoft",
+              "role_title": "Software Engineer Intern",
+              "department": null,
+              "start_date": "2015-06",
+              "end_date": "2015-09"
+            },
+            {
+              "organization": "Cooliris",
+              "role_title": "Software Engineer Intern",
+              "department": null,
+              "start_date": "2014-07",
+              "end_date": "2014-09"
+            },
+            {
+              "organization": "Accuvest Global Advisors",
+              "role_title": "Business Development Intern",
+              "department": null,
+              "start_date": "2013-07",
+              "end_date": "2013-09"
+            },
+            {
+              "organization": "Stanford University",
+              "role_title": "BA Student",
+              "department": null,
+              "start_date": "2012",
+              "end_date": "2016"
+            }
+          ],
+          "annual_citations": [
+            {
+              "year": 2022,
+              "count": 174
+            },
+            {
+              "year": 2023,
+              "count": 2242
+            },
+            {
+              "year": 2024,
+              "count": 3689
+            },
+            {
+              "year": 2025,
+              "count": 3126
+            },
+            {
+              "year": 2026,
+              "count": 2524
+            }
+          ],
+          "external_ids": {
+            "orcid": null
+          },
+          "affiliation_history": [
+            {
+              "institution_id": "https://openalex.org/I114772536",
+              "institution": "Software Engineering Institute",
+              "years": [
+                2025
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I1291425158",
+              "institution": "Google (United States)",
+              "years": [
+                2023
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I130769515",
+              "institution": "Pennsylvania State University",
+              "years": [
+                2022
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I1311269955",
+              "institution": "Apple (Israel)",
+              "years": [
+                2021
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I135310074",
+              "institution": "University of Wisconsin–Madison",
+              "years": [
+                2022
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I157725225",
+              "institution": "University of Illinois Urbana-Champaign",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I20089843",
+              "institution": "Princeton University",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I201448701",
+              "institution": "University of Washington",
+              "years": [
+                2020,
+                2022
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I204250578",
+              "institution": "University of California, Irvine",
+              "years": [
+                2021
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I205274468",
+              "institution": "Trinity College Dublin",
+              "years": [
+                2022
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4210110652",
+              "institution": "RIKEN",
+              "years": [
+                2022
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4210153776",
+              "institution": "Apple (United States)",
+              "years": [
+                2019,
+                2020,
+                2021,
+                2022,
+                2024,
+                2025
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4210155268",
+              "institution": "Salesforce (United States)",
+              "years": [
+                2016
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4405261073",
+              "institution": "Cornell Tech",
+              "years": [
+                2022
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4405268810",
+              "institution": "MIT Media Lab",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I5023651",
+              "institution": "McGill University",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I63966007",
+              "institution": "Massachusetts Institute of Technology",
+              "years": [
+                2020,
+                2022,
+                2023,
+                2024,
+                2025,
+                2026
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I74973139",
+              "institution": "Carnegie Mellon University",
+              "years": [
+                2025
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I887064364",
+              "institution": "University of Amsterdam",
+              "years": [
+                2021
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I97018004",
+              "institution": "Stanford University",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution": "Data Provenance Initiative",
+              "institution_id": null,
+              "position": "Founder",
+              "years": [],
+              "start_date": "2023",
+              "end_date": null,
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Massachusetts Institute of Technology",
+              "institution_id": null,
+              "position": "PhD Student",
+              "years": [],
+              "start_date": "2021-09",
+              "end_date": "2026",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Google Brain",
+              "institution_id": null,
+              "position": "Researcher",
+              "years": [],
+              "start_date": "2023",
+              "end_date": "2024",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Google",
+              "institution_id": null,
+              "position": "Google Student Researcher",
+              "years": [],
+              "start_date": "2022-05",
+              "end_date": "2022-09",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Apple",
+              "institution_id": null,
+              "position": "Applied Research Scientist, ML",
+              "years": [],
+              "start_date": "2018-02",
+              "end_date": "2021-07",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Stanford University",
+              "institution_id": null,
+              "position": "Graduate Researcher",
+              "years": [],
+              "start_date": "2017-06",
+              "end_date": "2017-12",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Stanford University",
+              "institution_id": null,
+              "position": "Graduate Teaching Assistant",
+              "years": [],
+              "start_date": "2017-01",
+              "end_date": "2017-06",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Stanford University",
+              "institution_id": null,
+              "position": "MSc Student",
+              "years": [],
+              "start_date": "2016",
+              "end_date": "2017",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "MetaMind",
+              "institution_id": null,
+              "position": "Deep Learning Research Intern",
+              "years": [],
+              "start_date": "2016-06",
+              "end_date": "2016-09",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Stanford University",
+              "institution_id": null,
+              "position": "BA Student",
+              "years": [],
+              "start_date": "2012",
+              "end_date": "2016",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Microsoft",
+              "institution_id": null,
+              "position": "Software Engineer Intern",
+              "years": [],
+              "start_date": "2015-06",
+              "end_date": "2015-09",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Cooliris",
+              "institution_id": null,
+              "position": "Software Engineer Intern",
+              "years": [],
+              "start_date": "2014-07",
+              "end_date": "2014-09",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Accuvest Global Advisors",
+              "institution_id": null,
+              "position": "Business Development Intern",
+              "years": [],
+              "start_date": "2013-07",
+              "end_date": "2013-09",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            }
+          ],
+          "research_impact": {
+            "works_count": 87,
+            "citation_count": 11869,
+            "h_index": 35,
+            "i10_index": 56,
+            "two_year_mean_citedness": 65.06666666666666,
+            "source": "OpenAlex",
+            "coverage": "OpenAlex author record and works",
+            "as_of": null,
+            "source_updated_at": "2026-11-09T14:06:01"
+          },
+          "updated_at": "2026-11-09T14:06:01",
+          "citation_meta": {
+            "source": "OpenAlex",
+            "coverage": "OpenAlex author record and works",
+            "as_of": null
+          }
+        }
+      },
+      "product_openalex_papers_first_page": {
+        "path": "/api/v1/scholars/openalex%3AA5001884064/papers?limit=2&offset=0",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "items": [
+            {
+              "id": 61351,
+              "paper_id": "paper:2510.22037",
+              "arxiv_id": "2510.22037",
+              "source": "",
+              "conference": "ICLR",
+              "publication_name": "ICLR",
+              "publication_type": "conference",
+              "raw_conference": "ICLR",
+              "proceedings_type": "",
+              "conferenceId": "iclr",
+              "year": 2026,
+              "subjects": [
+                "pretraining",
+                "multilingual scaling laws",
+                "language transfer",
+                "finetuning",
+                "curse of multilinguality"
+              ],
+              "topics": [],
+              "primary_subject": "pretraining",
+              "track": "pretraining",
+              "title": "ATLAS : Adaptive Transfer Scaling Laws for Multilingual Pretraining, Finetuning, and Decoding the Curse of Multilinguality",
+              "authors": [
+                "Shayne Longpre",
+                "Sneha Kudugunta",
+                "Sercan Ö. Arık",
+                "Sayna Ebrahimi",
+                "Niklas Muennighoff",
+                "Isaac Caswell",
+                "I-Hung Hsu",
+                "Chen-Yu Lee",
+                "Alex Pentland"
+              ],
+              "abstract": "Scaling laws research has focused overwhelmingly on English—yet the most prominent AI models explicitly serve billions of international users.\nIn this work, we undertake the largest multilingual scaling laws study to date, totaling 774 multilingual training experiments, spanning 10M-8B model parameters, 400+ training languages and 48 evaluation languages.\nWe introduce the Adaptive Transfer Scaling Law ( ATLAS ) for both monolingual and multilingual pretraining, which outperforms existing scaling laws’ out-of-sample generalization often by more than 0.3 0.3 R 2 R^{2} .\nOur analyses of the experiments shed light on multilingual learning dynamics, transfer properties between languages, and the curse of multilinguality.\nFirst, we derive a cross-lingual transfer matrix, empirically measuring mutual benefit scores between 38 × 38 = 1444 38\\times 38=1444 language pairs.\nSecond, we derive a language-agnostic scaling law that reveals how to optimally scale model size and data when adding languages without sacrificing performance.\nThird, we identify the computational crossover points for when to pretrain from scratch versus finetune from multilingual checkpoints.\nWe hope these findings provide the scientific foundation for democratizing scaling laws across languages, and enable practitioners to efficiently scale models—beyond English-first AI.",
+              "pdf_url": "https://arxiv.org/pdf/2510.22037",
+              "keywords": [
+                "multilingual scaling laws",
+                "language transfer",
+                "curse of multilinguality",
+                "pretraining",
+                "finetuning"
+              ],
+              "type": "",
+              "editor": [],
+              "booktitle": "",
+              "pages": "",
+              "publisher": "",
+              "doi": "",
+              "openalex_id": "",
+              "source_url": "https://arxiv.org/pdf/2510.22037",
+              "source_urls": [
+                "https://arxiv.org/pdf/2510.22037",
+                "https://arxiv.org/html/2510.22037"
+              ],
+              "biburl": "",
+              "bibsource": "",
+              "source_file": "",
+              "funding": [],
+              "image_id": "/images/ICLR_2026/2510.22037.svg",
+              "published_at": null,
+              "citation_count": null,
+              "cover_path": null,
+              "record_type": "canonical",
+              "external": false
+            },
+            {
+              "id": 71001,
+              "paper_id": "paper:2606.31567v1",
+              "arxiv_id": "2606.31567v1",
+              "source": "",
+              "conference": "ICML",
+              "publication_name": "ICML",
+              "publication_type": "conference",
+              "raw_conference": "ICML",
+              "proceedings_type": "",
+              "conferenceId": "icml",
+              "year": 2026,
+              "subjects": [
+                "machine-readable reports",
+                "interoperability",
+                "incident reporting",
+                "AI safety",
+                "AI flaw reporting"
+              ],
+              "topics": [],
+              "primary_subject": "machine-readable reports",
+              "track": "machine-readable reports",
+              "title": "FLARE-AI: Fla w Re porting for AI",
+              "authors": [
+                "Shayne Longpre",
+                "Sean McGregor",
+                "Sayash Kapoor",
+                "Ruth Appel",
+                "Rishi Bommasani",
+                "Responsible AI Collaborative",
+                "Peter Slattery",
+                "Percy Liang",
+                "Nathan Butters",
+                "MIT FutureTech",
+                "Mark M. Jaycox",
+                "Lauren McIlvenny",
+                "Kevin Paeth",
+                "Kevin Klyman",
+                "Hugging Face",
+                "Gregory Strom",
+                "Elaine Zhu",
+                "Carson Ezell",
+                "Avijit Ghosh",
+                "Arvind Narayanan",
+                "Alex Pentland",
+                "AI Risk and Vulnerability Alliance"
+              ],
+              "abstract": "Flaw reporting for deployed AI systems is fundamental to identifying system failures and improving AI safety.\nYet the AI reporting ecosystem is fragmented: researchers who identify flaws often do not know what or where to report, and groups who receive reports rarely share them with other relevant stakeholders.\nAs a result, good-faith reporters duplicate effort by submitting many different forms, and recipients lack standardized, triage-ready information.\nWe survey 12 reporting systems published by AI developers, cybersecurity groups, and AI flaw aggregators, identifying five recurring design challenges spanning discoverability, scope, information collection, coordination, and guidance for strict-liability cases.\nBuilding on this analysis and feedback from 49 experts across 32 organizations representing developers, security researchers, and ecosystem coordinators, we introduce Flare-AI , an open-source AI flaw reporting system designed for interoperability with existing systems. Flare-AI streamlines flaw report creation by collecting triage-relevant information through conditional logic and early classification, then enables optional dissemination of standardized, machine-readable reports to multiple developers, coordinators, and incident registries from a single submission.\nBy lowering barriers to reporting AI flaws and improving interoperability across stakeholders, Flare-AI helps break down silos and accelerate remediation across the AI ecosystem.",
+              "pdf_url": "https://arxiv.org/pdf/2606.31567v1",
+              "keywords": [
+                "Machine Learning",
+                "ICML"
+              ],
+              "type": "",
+              "editor": [],
+              "booktitle": "",
+              "pages": "",
+              "publisher": "",
+              "doi": "",
+              "openalex_id": "",
+              "source_url": "https://arxiv.org/pdf/2606.31567v1",
+              "source_urls": [
+                "https://arxiv.org/pdf/2606.31567v1",
+                "https://arxiv.org/html/2606.31567v1"
+              ],
+              "biburl": "",
+              "bibsource": "",
+              "source_file": "",
+              "funding": [],
+              "image_id": "/images/ICML_2026/2606.31567v1.png",
+              "published_at": null,
+              "citation_count": null,
+              "cover_path": null,
+              "record_type": "canonical",
+              "external": false
+            }
+          ],
+          "total": 9,
+          "limit": 2,
+          "offset": 0
+        }
+      },
+      "product_author_detail": {
+        "path": "/api/v1/scholars/author%3Ashayne_longpre",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "scholar_id": "author:shayne_longpre",
+          "name_zh": null,
+          "name_en": "Shayne Longpre",
+          "avatar_path": null,
+          "affiliations": [
+            {
+              "institution": "MIT",
+              "position": null
+            },
+            {
+              "institution": "MIT University of Washington ,Stanford University ,Google Cloud AI ,Google DeepMind",
+              "position": null
+            },
+            {
+              "institution": "Massachusetts Institute of Technology",
+              "position": null
+            }
+          ],
+          "topics": [],
+          "metrics": {
+            "source_work_count": null,
+            "citation_count": null,
+            "h_index": null,
+            "i10_index": null,
+            "paper_count": 19
+          },
+          "bio_zh": null,
+          "bio_en": null,
+          "employment": [],
+          "annual_citations": [],
+          "external_ids": {
+            "orcid": null
+          },
+          "affiliation_history": [],
+          "research_impact": {
+            "works_count": null,
+            "citation_count": null,
+            "h_index": null,
+            "i10_index": null,
+            "two_year_mean_citedness": null,
+            "source": null,
+            "coverage": null,
+            "as_of": null,
+            "source_updated_at": null
+          },
+          "updated_at": null,
+          "citation_meta": {
+            "source": null,
+            "coverage": null,
+            "as_of": null
+          }
+        }
+      },
+      "legacy_openalex_detail": {
+        "path": "/api/retrieval/scholars/openalex%3AA5001884064",
+        "attempts": [
+          404
+        ],
+        "status": 404,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "error": "scholar not found",
+          "scholar_id": "openalex:A5001884064"
+        }
+      },
+      "avatar_probe": {
+        "path": "/images/scholars_20261112_b1a21c6bcae2/858e2d7467c29ef97fba6c1e95f35309299c98967222133b1f2801c36fda9956.jpg",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "image/jpeg",
+        "has_jpeg_signature": true
+      }
+    },
+    {
+      "summary": {
+        "name": "Tatsuya Harada",
+        "id": "openalex:A5042711470",
+        "statuses": [
+          200,
+          200,
+          200,
+          404,
+          200
+        ],
+        "search_positions": {
+          "openalex:A5042711470": 2,
+          "author:tatsuya_harada": 1
+        },
+        "search_keys": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "bio_exact": true,
+        "api_metrics": [
+          422,
+          15281,
+          50,
+          166
+        ],
+        "snapshot_metrics": [
+          463,
+          24352,
+          62,
+          211
+        ],
+        "source": "OpenAlex",
+        "api_institutions": [
+          "The University of Tokyo",
+          "National Institute of Informatics (NII), Japan",
+          "RIKEN AIP",
+          "RIKEN",
+          "RIKEN Center for Advanced Intelligence Project",
+          "Research Center for Advanced Science and Technology, The University of Tokyo"
+        ],
+        "snapshot_institutions": [
+          "The University of Tokyo"
+        ],
+        "api_annual_years": [
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "snapshot_annual_years": [
+          2026,
+          2025,
+          2024,
+          2023,
+          2022,
+          2021,
+          2020,
+          2019,
+          2018,
+          2017,
+          2016,
+          2015,
+          2014,
+          2013,
+          2012,
+          2011,
+          2010,
+          2009,
+          2008,
+          2007,
+          2006,
+          2005,
+          2004,
+          2003,
+          2002,
+          2001,
+          2000,
+          1999,
+          1998,
+          1997,
+          1992,
+          1990,
+          1989,
+          1987,
+          1986,
+          1985,
+          1973,
+          1967
+        ],
+        "annual_equal_years": [],
+        "annual_differences": {
+          "2022": [
+            2401,
+            1626
+          ],
+          "2023": [
+            2973,
+            2004
+          ],
+          "2024": [
+            3252,
+            2308
+          ],
+          "2025": [
+            4334,
+            2346
+          ],
+          "2026": [
+            4916,
+            1954
+          ]
+        },
+        "history_basis_counts": {
+          "publication_affiliation": 27,
+          "reported_role": 11
+        },
+        "matching_roles": 11,
+        "snapshot_roles": 11,
+        "missing_keys": [
+          "aliases"
+        ],
+        "linked_papers": 7,
+        "metric_paper_count": 7,
+        "old_paper_count": 34,
+        "avatar_present": false,
+        "avatar_probe_status": null,
+        "avatar_probe_type": null,
+        "avatar_probe_jpeg": null
+      },
+      "snapshot_profile": {
+        "scholar_id": "preview-78b30786440491b73539",
+        "name_en": "Tatsuya Harada",
+        "aliases": [
+          "Tatsuya Harada"
+        ],
+        "avatar_path": null,
+        "affiliations": [
+          {
+            "institution": "The University of Tokyo"
+          }
+        ],
+        "employment": [
+          {
+            "organization": "The University of Tokyo",
+            "role_title": "Professor, RCAST",
+            "department": null,
+            "start_date": "2019-09",
+            "end_date": null
+          },
+          {
+            "organization": "National Institute of Informatics (NII), Japan",
+            "role_title": "Vice Director, Research Center for Medical Bigdata",
+            "department": null,
+            "start_date": "2019",
+            "end_date": null
+          },
+          {
+            "organization": "RIKEN AIP",
+            "role_title": "Team Leader",
+            "department": null,
+            "start_date": "2016-10",
+            "end_date": null
+          },
+          {
+            "organization": "National Institute of Informatics (NII), Japan",
+            "role_title": "Visiting Professor, RCMB",
+            "department": null,
+            "start_date": "2017-11",
+            "end_date": null
+          },
+          {
+            "organization": "The University of Tokyo",
+            "role_title": "Professor, IST",
+            "department": null,
+            "start_date": "2013-04",
+            "end_date": "2019-09"
+          },
+          {
+            "organization": "The University of Tokyo",
+            "role_title": "Associate Professor, IST",
+            "department": null,
+            "start_date": "2009-04",
+            "end_date": "2013-04"
+          },
+          {
+            "organization": "The University of Tokyo",
+            "role_title": "Lecturer, IST",
+            "department": null,
+            "start_date": "2006-04",
+            "end_date": "2009-04"
+          },
+          {
+            "organization": "The University of Tokyo",
+            "role_title": "Research Associate, IST",
+            "department": null,
+            "start_date": "2001-12",
+            "end_date": "2006-04"
+          },
+          {
+            "organization": "Carnegie Mellon University",
+            "role_title": "Visiting Scientist",
+            "department": null,
+            "start_date": "2001-09",
+            "end_date": "2001-12"
+          },
+          {
+            "organization": "JSPS",
+            "role_title": "Research Fellowship for Young Scientists (PD)",
+            "department": null,
+            "start_date": "2001-04",
+            "end_date": "2001-09"
+          },
+          {
+            "organization": "The University of Tokyo",
+            "role_title": "Engineering PhD Student",
+            "department": null,
+            "start_date": "1998",
+            "end_date": "2001-03"
+          }
+        ],
+        "external_ids": {
+          "orcid": null
+        },
+        "metrics": {
+          "source_work_count": 463,
+          "citation_count": 24352,
+          "h_index": 62,
+          "i10_index": 211
+        },
+        "topics": [
+          "Computer Vision",
+          "Machine Learning",
+          "Intelligent Robot"
+        ],
+        "bio_en": "Tatsuya Harada’s Maximum classifier discrepancy aligns source and target distributions for unsupervised domain adaptation by maximizing the disagreement between task-specific classifiers. He is a Professor at the University of Tokyo within the Research Center for Advanced Science and Technology and serves as a group director at RIKEN AIP. His research focuses on CV, ML, and robotics, specifically addressing how intelligent systems perceive and interact with diverse environments. He co-authored Open X-Embodiment to scale robotic learning across heterogeneous datasets and Neural 3d mesh renderer to enable mesh reconstruction using 2D image supervision. Harada also acts as vice director for the Research Center for Medical Bigdata at the National Institute of Informatics. His recent work includes Frequency-aware feature fusion for dense image prediction and methods for multispectral object detection in autonomous vehicles.",
+        "annual_citations": [
+          {
+            "year": 2026,
+            "count": 4916
+          },
+          {
+            "year": 2025,
+            "count": 4334
+          },
+          {
+            "year": 2024,
+            "count": 3252
+          },
+          {
+            "year": 2023,
+            "count": 2973
+          },
+          {
+            "year": 2022,
+            "count": 2401
+          },
+          {
+            "year": 2021,
+            "count": 2088
+          },
+          {
+            "year": 2020,
+            "count": 1458
+          },
+          {
+            "year": 2019,
+            "count": 854
+          },
+          {
+            "year": 2018,
+            "count": 392
+          },
+          {
+            "year": 2017,
+            "count": 233
+          },
+          {
+            "year": 2016,
+            "count": 204
+          },
+          {
+            "year": 2015,
+            "count": 178
+          },
+          {
+            "year": 2014,
+            "count": 182
+          },
+          {
+            "year": 2013,
+            "count": 137
+          },
+          {
+            "year": 2012,
+            "count": 140
+          },
+          {
+            "year": 2011,
+            "count": 137
+          },
+          {
+            "year": 2010,
+            "count": 82
+          },
+          {
+            "year": 2009,
+            "count": 76
+          },
+          {
+            "year": 2008,
+            "count": 0
+          },
+          {
+            "year": 2007,
+            "count": 0
+          },
+          {
+            "year": 2006,
+            "count": 0
+          },
+          {
+            "year": 2005,
+            "count": 0
+          },
+          {
+            "year": 2004,
+            "count": 0
+          },
+          {
+            "year": 2003,
+            "count": 0
+          },
+          {
+            "year": 2002,
+            "count": 0
+          },
+          {
+            "year": 2001,
+            "count": 0
+          },
+          {
+            "year": 2000,
+            "count": 0
+          },
+          {
+            "year": 1999,
+            "count": 0
+          },
+          {
+            "year": 1998,
+            "count": 0
+          },
+          {
+            "year": 1997,
+            "count": 0
+          },
+          {
+            "year": 1992,
+            "count": 0
+          },
+          {
+            "year": 1990,
+            "count": 0
+          },
+          {
+            "year": 1989,
+            "count": 0
+          },
+          {
+            "year": 1987,
+            "count": 0
+          },
+          {
+            "year": 1986,
+            "count": 0
+          },
+          {
+            "year": 1985,
+            "count": 0
+          },
+          {
+            "year": 1973,
+            "count": 0
+          },
+          {
+            "year": 1967,
+            "count": 0
+          }
+        ]
+      },
+      "product_search": {
+        "path": "/api/v1/scholars/search?q=Tatsuya+Harada&limit=20&offset=0",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "items": [
+            {
+              "scholar_id": "author:tatsuya_harada",
+              "name_zh": null,
+              "name_en": "Tatsuya Harada",
+              "avatar_path": null,
+              "affiliations": [
+                {
+                  "institution": "RIKEN",
+                  "position": null
+                },
+                {
+                  "institution": "RIKEN AIP",
+                  "position": null
+                },
+                {
+                  "institution": "RIKEN AIP, Japan",
+                  "position": null
+                },
+                {
+                  "institution": "RIKEN Center for Advanced Intelligence Project, Japan",
+                  "position": null
+                },
+                {
+                  "institution": "RIKEN Center for Advanced Intelligence Project, Tokyo, Japan",
+                  "position": null
+                },
+                {
+                  "institution": "RIKEN Center for Advanced Intelligence Project. Correspondence to: Takayuki Osa",
+                  "position": null
+                },
+                {
+                  "institution": "RIKEN and The University of Tokyo",
+                  "position": null
+                },
+                {
+                  "institution": "RIKEN, Japan",
+                  "position": null
+                },
+                {
+                  "institution": "The University of Tokyo",
+                  "position": null
+                },
+                {
+                  "institution": "The University of Tokyo, Japan",
+                  "position": null
+                },
+                {
+                  "institution": "The University of Tokyo, Tokyo, Japan",
+                  "position": null
+                }
+              ],
+              "topics": [],
+              "metrics": {
+                "source_work_count": null,
+                "citation_count": null,
+                "h_index": null,
+                "i10_index": null,
+                "paper_count": 34
+              }
+            },
+            {
+              "scholar_id": "openalex:A5042711470",
+              "name_zh": null,
+              "name_en": "Tatsuya Harada",
+              "avatar_path": null,
+              "affiliations": [
+                {
+                  "institution": "The University of Tokyo",
+                  "position": null
+                },
+                {
+                  "institution": "National Institute of Informatics (NII), Japan",
+                  "position": null
+                },
+                {
+                  "institution": "RIKEN AIP",
+                  "position": null
+                },
+                {
+                  "institution": "RIKEN",
+                  "position": null
+                },
+                {
+                  "institution": "RIKEN Center for Advanced Intelligence Project",
+                  "position": null
+                },
+                {
+                  "institution": "Research Center for Advanced Science and Technology, The University of Tokyo",
+                  "position": null
+                }
+              ],
+              "topics": [
+                "Computer Vision",
+                "Machine Learning",
+                "Intelligent Robot"
+              ],
+              "metrics": {
+                "source_work_count": 422,
+                "citation_count": 15281,
+                "h_index": 50,
+                "i10_index": 166,
+                "paper_count": 7
+              }
+            }
+          ],
+          "total": 2,
+          "limit": 20,
+          "offset": 0,
+          "has_more": false
+        }
+      },
+      "product_openalex_detail": {
+        "path": "/api/v1/scholars/openalex%3AA5042711470",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "scholar_id": "openalex:A5042711470",
+          "name_zh": null,
+          "name_en": "Tatsuya Harada",
+          "avatar_path": null,
+          "affiliations": [
+            {
+              "institution": "The University of Tokyo",
+              "position": null
+            },
+            {
+              "institution": "National Institute of Informatics (NII), Japan",
+              "position": null
+            },
+            {
+              "institution": "RIKEN AIP",
+              "position": null
+            },
+            {
+              "institution": "RIKEN",
+              "position": null
+            },
+            {
+              "institution": "RIKEN Center for Advanced Intelligence Project",
+              "position": null
+            },
+            {
+              "institution": "Research Center for Advanced Science and Technology, The University of Tokyo",
+              "position": null
+            }
+          ],
+          "topics": [
+            "Computer Vision",
+            "Machine Learning",
+            "Intelligent Robot"
+          ],
+          "metrics": {
+            "source_work_count": 422,
+            "citation_count": 15281,
+            "h_index": 50,
+            "i10_index": 166,
+            "paper_count": 7
+          },
+          "bio_zh": null,
+          "bio_en": "Tatsuya Harada’s Maximum classifier discrepancy aligns source and target distributions for unsupervised domain adaptation by maximizing the disagreement between task-specific classifiers. He is a Professor at the University of Tokyo within the Research Center for Advanced Science and Technology and serves as a group director at RIKEN AIP. His research focuses on CV, ML, and robotics, specifically addressing how intelligent systems perceive and interact with diverse environments. He co-authored Open X-Embodiment to scale robotic learning across heterogeneous datasets and Neural 3d mesh renderer to enable mesh reconstruction using 2D image supervision. Harada also acts as vice director for the Research Center for Medical Bigdata at the National Institute of Informatics. His recent work includes Frequency-aware feature fusion for dense image prediction and methods for multispectral object detection in autonomous vehicles.",
+          "employment": [
+            {
+              "organization": "The University of Tokyo",
+              "role_title": "Professor, RCAST",
+              "department": null,
+              "start_date": "2019-09",
+              "end_date": null
+            },
+            {
+              "organization": "National Institute of Informatics (NII), Japan",
+              "role_title": "Vice Director, Research Center for Medical Bigdata",
+              "department": null,
+              "start_date": "2019",
+              "end_date": null
+            },
+            {
+              "organization": "National Institute of Informatics (NII), Japan",
+              "role_title": "Visiting Professor, RCMB",
+              "department": null,
+              "start_date": "2017-11",
+              "end_date": null
+            },
+            {
+              "organization": "RIKEN AIP",
+              "role_title": "Team Leader",
+              "department": null,
+              "start_date": "2016-10",
+              "end_date": null
+            },
+            {
+              "organization": "The University of Tokyo",
+              "role_title": "Professor, IST",
+              "department": null,
+              "start_date": "2013-04",
+              "end_date": "2019-09"
+            },
+            {
+              "organization": "The University of Tokyo",
+              "role_title": "Associate Professor, IST",
+              "department": null,
+              "start_date": "2009-04",
+              "end_date": "2013-04"
+            },
+            {
+              "organization": "The University of Tokyo",
+              "role_title": "Lecturer, IST",
+              "department": null,
+              "start_date": "2006-04",
+              "end_date": "2009-04"
+            },
+            {
+              "organization": "The University of Tokyo",
+              "role_title": "Research Associate, IST",
+              "department": null,
+              "start_date": "2001-12",
+              "end_date": "2006-04"
+            },
+            {
+              "organization": "Carnegie Mellon University",
+              "role_title": "Visiting Scientist",
+              "department": null,
+              "start_date": "2001-09",
+              "end_date": "2001-12"
+            },
+            {
+              "organization": "JSPS",
+              "role_title": "Research Fellowship for Young Scientists (PD)",
+              "department": null,
+              "start_date": "2001-04",
+              "end_date": "2001-09"
+            },
+            {
+              "organization": "The University of Tokyo",
+              "role_title": "Engineering PhD Student",
+              "department": null,
+              "start_date": "1998",
+              "end_date": "2001-03"
+            }
+          ],
+          "annual_citations": [
+            {
+              "year": 2022,
+              "count": 1626
+            },
+            {
+              "year": 2023,
+              "count": 2004
+            },
+            {
+              "year": 2024,
+              "count": 2308
+            },
+            {
+              "year": 2025,
+              "count": 2346
+            },
+            {
+              "year": 2026,
+              "count": 1954
+            }
+          ],
+          "external_ids": {
+            "orcid": null
+          },
+          "affiliation_history": [
+            {
+              "institution_id": "https://openalex.org/I113306721",
+              "institution": "Hiroshima University",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I125602781",
+              "institution": "Tokyo Medical and Dental University",
+              "years": [
+                2010,
+                2018
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I130416959",
+              "institution": "Central Research Institute of Electric Power Industry",
+              "years": [
+                1970,
+                1971,
+                1972,
+                1973,
+                1974,
+                1976,
+                1978,
+                1980,
+                1981
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I1313323035",
+              "institution": "Russian Academy of Sciences",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I177136067",
+              "institution": "Saga University",
+              "years": [
+                1986,
+                1987,
+                1989
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I183067930",
+              "institution": "Shanghai Jiao Tong University",
+              "years": [
+                2021
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I184597095",
+              "institution": "National Institute of Informatics",
+              "years": [
+                2019,
+                2020,
+                2022,
+                2023
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I189196454",
+              "institution": "The University of Texas at Arlington",
+              "years": [
+                2022
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I19283125",
+              "institution": "Meikai University",
+              "years": [
+                2023,
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I197347611",
+              "institution": "Korea University",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I207399273",
+              "institution": "Utsunomiya University",
+              "years": [
+                2006
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I2799899675",
+              "institution": "Central Conservatory of Music",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4210086780",
+              "institution": "Japan Science and Technology Agency",
+              "years": [
+                2011,
+                2012
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4210087348",
+              "institution": "National Cancer Centre Japan",
+              "years": [
+                2020
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4210096404",
+              "institution": "Institute for Design Problems in Microelectronics",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4210110652",
+              "institution": "RIKEN",
+              "years": [
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2023,
+                2024,
+                2025,
+                2026
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4210126580",
+              "institution": "RIKEN Center for Advanced Intelligence Project",
+              "years": [
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2023,
+                2024,
+                2025,
+                2026
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4210143797",
+              "institution": "Sony (Japan)",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4391767781",
+              "institution": "State Key Laboratory of Software Development Environment",
+              "years": [
+                2020
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4405261458",
+              "institution": "Kameda IVF Clinic Makuhari",
+              "years": [
+                2018
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4405265148",
+              "institution": "OYO Corporation (Japan)",
+              "years": [
+                2024
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4405287038",
+              "institution": "Research Center for Advanced Science and Technology, The University of Tokyo",
+              "years": [
+                2020,
+                2021,
+                2022,
+                2023,
+                2024,
+                2026
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4405287541",
+              "institution": "National Cancer Center Research Institute",
+              "years": [
+                2020
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I74801974",
+              "institution": "The University of Tokyo",
+              "years": [
+                1998,
+                2001,
+                2002,
+                2003,
+                2004,
+                2005,
+                2006,
+                2007,
+                2008,
+                2009,
+                2010,
+                2011,
+                2012,
+                2013,
+                2014,
+                2015,
+                2016,
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022,
+                2023,
+                2024,
+                2025,
+                2026
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I82880672",
+              "institution": "Beihang University",
+              "years": [
+                2020
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I95053508",
+              "institution": "Nippon Institute of Technology",
+              "years": [
+                1991,
+                1993,
+                1994,
+                1997,
+                1998,
+                1999,
+                2000,
+                2001,
+                2002,
+                2003,
+                2005,
+                2006,
+                2007
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I98285908",
+              "institution": "The University of Osaka",
+              "years": [
+                2018
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution": "The University of Tokyo",
+              "institution_id": null,
+              "position": "Professor, RCAST",
+              "years": [],
+              "start_date": "2019-09",
+              "end_date": null,
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "National Institute of Informatics (NII), Japan",
+              "institution_id": null,
+              "position": "Vice Director, Research Center for Medical Bigdata",
+              "years": [],
+              "start_date": "2019",
+              "end_date": null,
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "RIKEN AIP",
+              "institution_id": null,
+              "position": "Team Leader",
+              "years": [],
+              "start_date": "2016-10",
+              "end_date": null,
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "National Institute of Informatics (NII), Japan",
+              "institution_id": null,
+              "position": "Visiting Professor, RCMB",
+              "years": [],
+              "start_date": "2017-11",
+              "end_date": null,
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "The University of Tokyo",
+              "institution_id": null,
+              "position": "Professor, IST",
+              "years": [],
+              "start_date": "2013-04",
+              "end_date": "2019-09",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "The University of Tokyo",
+              "institution_id": null,
+              "position": "Associate Professor, IST",
+              "years": [],
+              "start_date": "2009-04",
+              "end_date": "2013-04",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "The University of Tokyo",
+              "institution_id": null,
+              "position": "Lecturer, IST",
+              "years": [],
+              "start_date": "2006-04",
+              "end_date": "2009-04",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "The University of Tokyo",
+              "institution_id": null,
+              "position": "Research Associate, IST",
+              "years": [],
+              "start_date": "2001-12",
+              "end_date": "2006-04",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Carnegie Mellon University",
+              "institution_id": null,
+              "position": "Visiting Scientist",
+              "years": [],
+              "start_date": "2001-09",
+              "end_date": "2001-12",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "JSPS",
+              "institution_id": null,
+              "position": "Research Fellowship for Young Scientists (PD)",
+              "years": [],
+              "start_date": "2001-04",
+              "end_date": "2001-09",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "The University of Tokyo",
+              "institution_id": null,
+              "position": "Engineering PhD Student",
+              "years": [],
+              "start_date": "1998",
+              "end_date": "2001-03",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            }
+          ],
+          "research_impact": {
+            "works_count": 422,
+            "citation_count": 15281,
+            "h_index": 50,
+            "i10_index": 166,
+            "two_year_mean_citedness": 20.11864406779661,
+            "source": "OpenAlex",
+            "coverage": "OpenAlex author record and works",
+            "as_of": null,
+            "source_updated_at": "2026-11-09T14:06:01"
+          },
+          "updated_at": "2026-11-09T14:06:01",
+          "citation_meta": {
+            "source": "OpenAlex",
+            "coverage": "OpenAlex author record and works",
+            "as_of": null
+          }
+        }
+      },
+      "product_openalex_papers_first_page": {
+        "path": "/api/v1/scholars/openalex%3AA5042711470/papers?limit=2&offset=0",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "items": [
+            {
+              "id": 57368,
+              "paper_id": "paper:2508.04086v3",
+              "arxiv_id": "2508.04086v3",
+              "source": "",
+              "conference": "ACL",
+              "publication_name": "ACL",
+              "publication_type": "conference",
+              "raw_conference": "ACL",
+              "proceedings_type": "",
+              "conferenceId": "acl",
+              "year": 2026,
+              "subjects": [
+                "tool-use dataset generation",
+                "textual gradients",
+                "large language models",
+                "data efficiency",
+                "answer-first framework"
+              ],
+              "topics": [
+                {
+                  "id": "openalex:topic:T10028",
+                  "nameZh": "自然语言处理模型与表示",
+                  "nameEn": "Natural Language Processing Models and Representations"
+                }
+              ],
+              "primary_subject": "tool-use dataset generation",
+              "track": "tool-use dataset generation",
+              "title": "ToolGrad: Efficient Tool-use Dataset Generation with Textual “Gradients”",
+              "authors": [
+                "Zhongyi Zhou",
+                "Kohei Uehara",
+                "Haoyu Zhang",
+                "Jingtao Zhou",
+                "Lin Gu",
+                "Ruofei Du",
+                "Zheng Xu",
+                "Tatsuya Harada"
+              ],
+              "abstract": "Prior work synthesizes tool-use LLM datasets by first generating a user query, followed by complex tool-use annotations like depth-first search (DFS).\nThis leads to inevitable annotation failures and low efficiency in data generation.\nWe introduce ToolGrad , an agentic framework that inverts this paradigm. ToolGrad first constructs valid tool-use chains through an iterative process guided by textual “gradients”, and then synthesizes corresponding user queries.\nThis “answer-first” approach led to ToolGrad-500 , a dataset generated with more complex tool use, lower cost, and almost 100 % 100\\% pass rate.\nExperiments show that ToolGrad models outperform those trained on expensive baseline datasets and proprietary LLMs.\nThe ToolGrad source code, dataset, and models are available at https://github.com/zhongyi-zhou/toolgrad .",
+              "pdf_url": "https://arxiv.org/pdf/2508.04086v3",
+              "keywords": [
+                "tool-use dataset generation",
+                "answer-first framework",
+                "textual gradients",
+                "data efficiency",
+                "large language models"
+              ],
+              "type": "",
+              "editor": [],
+              "booktitle": "",
+              "pages": "",
+              "publisher": "",
+              "doi": "10.1145/3613904.3642579",
+              "openalex_id": "",
+              "source_url": "https://arxiv.org/pdf/2508.04086v3",
+              "source_urls": [
+                "https://arxiv.org/pdf/2508.04086v3",
+                "https://arxiv.org/html/2508.04086v3"
+              ],
+              "biburl": "",
+              "bibsource": "",
+              "source_file": "",
+              "funding": [],
+              "image_id": "/images/ACL_2026/2508.04086v3.png",
+              "published_at": null,
+              "citation_count": null,
+              "cover_path": null,
+              "record_type": "canonical",
+              "external": false
+            },
+            {
+              "id": 65114,
+              "paper_id": "paper:2602.10894v2",
+              "arxiv_id": "2602.10894v2",
+              "source": "",
+              "conference": "ICML",
+              "publication_name": "ICML",
+              "publication_type": "conference",
+              "raw_conference": "ICML",
+              "proceedings_type": "",
+              "conferenceId": "icml",
+              "year": 2026,
+              "subjects": [
+                "zero-sum",
+                "Two-Player",
+                "normal-form",
+                "Kullback-Leibler",
+                "game-theoretic"
+              ],
+              "topics": [
+                {
+                  "id": "openalex:topic:T10462",
+                  "nameZh": "强化学习与策略学习",
+                  "nameEn": "Reinforcement Learning and Policy Learning"
+                }
+              ],
+              "primary_subject": "zero-sum",
+              "track": "zero-sum",
+              "title": "Revisiting Regularized Policy Optimization for Stable and Efficient Reinforcement Learning in Two-Player Games",
+              "authors": [
+                "Kazuki Ota",
+                "Takayuki Osa",
+                "Motoki Omura",
+                "Tatsuya Harada"
+              ],
+              "abstract": "Two-player games such as board games have long been used as traditional benchmarks for reinforcement learning. This work revisits a policy optimization method with reverse Kullback-Leibler regularization and entropy regularization and analyzes this combination in two-player zero-sum settings from theoretical and empirical perspectives. From a theoretical perspective, we investigate the stability of the policy update rule in two theoretical settings: game-theoretic normal-form games and finite-length games. We provide novel convergence guarantees and verify our theoretical results through numerical experiments on synthetic games. From an empirical perspective, we derive a practical model-free reinforcement learning algorithm based on the regularized policy optimization. We validate the training efficiency of our algorithm through comprehensive experiments on five board games: Animal Shogi, Gardner Chess, Go, Hex, and Othello. Experimental results show that our agent learns more efficiently than existing methods across environments.",
+              "pdf_url": "https://arxiv.org/pdf/2602.10894v2",
+              "keywords": [
+                "Machine Learning",
+                "Reinforcement Learning",
+                "Regularized Policy Optimization",
+                "Two-Player Games",
+                "ICML"
+              ],
+              "type": "",
+              "editor": [],
+              "booktitle": "",
+              "pages": "",
+              "publisher": "",
+              "doi": "",
+              "openalex_id": "",
+              "source_url": "https://arxiv.org/pdf/2602.10894v2",
+              "source_urls": [
+                "https://arxiv.org/pdf/2602.10894v2",
+                "https://arxiv.org/html/2602.10894v2"
+              ],
+              "biburl": "",
+              "bibsource": "",
+              "source_file": "",
+              "funding": [
+                "JST SPRING, Grant Number JPMJSP2108",
+                "JST Moonshot R&D Grant Number JPMJPS2011, CREST Grant Number JPMJCR2015 and Basic Research Grant (Super AI) of Institute for AI and Beyond of the University of Tokyo",
+                "JSPS KAKENHI Grant Number JP25K03176"
+              ],
+              "image_id": "/images/ICML_2026/2602.10894v2.png",
+              "published_at": null,
+              "citation_count": null,
+              "cover_path": null,
+              "record_type": "canonical",
+              "external": false
+            }
+          ],
+          "total": 7,
+          "limit": 2,
+          "offset": 0
+        }
+      },
+      "product_author_detail": {
+        "path": "/api/v1/scholars/author%3Atatsuya_harada",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "scholar_id": "author:tatsuya_harada",
+          "name_zh": null,
+          "name_en": "Tatsuya Harada",
+          "avatar_path": null,
+          "affiliations": [
+            {
+              "institution": "RIKEN",
+              "position": null
+            },
+            {
+              "institution": "RIKEN AIP",
+              "position": null
+            },
+            {
+              "institution": "RIKEN AIP, Japan",
+              "position": null
+            },
+            {
+              "institution": "RIKEN Center for Advanced Intelligence Project, Japan",
+              "position": null
+            },
+            {
+              "institution": "RIKEN Center for Advanced Intelligence Project, Tokyo, Japan",
+              "position": null
+            },
+            {
+              "institution": "RIKEN Center for Advanced Intelligence Project. Correspondence to: Takayuki Osa",
+              "position": null
+            },
+            {
+              "institution": "RIKEN and The University of Tokyo",
+              "position": null
+            },
+            {
+              "institution": "RIKEN, Japan",
+              "position": null
+            },
+            {
+              "institution": "The University of Tokyo",
+              "position": null
+            },
+            {
+              "institution": "The University of Tokyo, Japan",
+              "position": null
+            },
+            {
+              "institution": "The University of Tokyo, Tokyo, Japan",
+              "position": null
+            }
+          ],
+          "topics": [],
+          "metrics": {
+            "source_work_count": null,
+            "citation_count": null,
+            "h_index": null,
+            "i10_index": null,
+            "paper_count": 34
+          },
+          "bio_zh": null,
+          "bio_en": null,
+          "employment": [],
+          "annual_citations": [],
+          "external_ids": {
+            "orcid": null
+          },
+          "affiliation_history": [],
+          "research_impact": {
+            "works_count": null,
+            "citation_count": null,
+            "h_index": null,
+            "i10_index": null,
+            "two_year_mean_citedness": null,
+            "source": null,
+            "coverage": null,
+            "as_of": null,
+            "source_updated_at": null
+          },
+          "updated_at": null,
+          "citation_meta": {
+            "source": null,
+            "coverage": null,
+            "as_of": null
+          }
+        }
+      },
+      "legacy_openalex_detail": {
+        "path": "/api/retrieval/scholars/openalex%3AA5042711470",
+        "attempts": [
+          404
+        ],
+        "status": 404,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "error": "scholar not found",
+          "scholar_id": "openalex:A5042711470"
+        }
+      },
+      "avatar_probe": null
+    },
+    {
+      "summary": {
+        "name": "Yihong Dong",
+        "id": "openalex:A5140781838",
+        "statuses": [
+          200,
+          200,
+          200,
+          404,
+          200
+        ],
+        "search_positions": {
+          "openalex:A5140781838": 4,
+          "author:yihong_dong": 3
+        },
+        "search_keys": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "bio_exact": true,
+        "api_metrics": [
+          14,
+          22,
+          2,
+          1
+        ],
+        "snapshot_metrics": [
+          77,
+          4011,
+          26,
+          36
+        ],
+        "source": "OpenAlex",
+        "api_institutions": [
+          "Shanghai Jiao Tong University",
+          "Alibaba Group (Cayman Islands)",
+          "Alibaba Group (China)",
+          "Peking University"
+        ],
+        "snapshot_institutions": [
+          "Shanghai Jiao Tong University"
+        ],
+        "api_annual_years": [
+          2026
+        ],
+        "snapshot_annual_years": [
+          2026,
+          2025,
+          2024,
+          2023,
+          2022,
+          2021,
+          2020
+        ],
+        "annual_equal_years": [],
+        "annual_differences": {
+          "2026": [
+            1885,
+            22
+          ]
+        },
+        "history_basis_counts": {
+          "publication_affiliation": 4,
+          "reported_role": 2
+        },
+        "matching_roles": 2,
+        "snapshot_roles": 2,
+        "missing_keys": [
+          "aliases"
+        ],
+        "linked_papers": 6,
+        "metric_paper_count": 6,
+        "old_paper_count": 15,
+        "avatar_present": true,
+        "avatar_probe_status": null,
+        "avatar_probe_type": null,
+        "avatar_probe_jpeg": null
+      },
+      "snapshot_profile": {
+        "scholar_id": "preview-78ca07c5b5496d00a225",
+        "name_en": "Yihong Dong",
+        "aliases": [
+          "Yihong Dong"
+        ],
+        "avatar_path": "/images/scholar-preview/78ca07c5b5496d00a225.jpg",
+        "affiliations": [
+          {
+            "institution": "Shanghai Jiao Tong University"
+          }
+        ],
+        "employment": [
+          {
+            "organization": "Shanghai Jiao Tong University",
+            "role_title": "Researcher, CS",
+            "department": null,
+            "start_date": "2026-07",
+            "end_date": null
+          },
+          {
+            "organization": "Peking University",
+            "role_title": "PhD, CS",
+            "department": null,
+            "start_date": "2022",
+            "end_date": "2026-07"
+          }
+        ],
+        "external_ids": {
+          "orcid": null
+        },
+        "metrics": {
+          "source_work_count": 77,
+          "citation_count": 4011,
+          "h_index": 26,
+          "i10_index": 36
+        },
+        "topics": [
+          "Code Generation",
+          "Large Language Models",
+          "Multi-agent Collaboration"
+        ],
+        "bio_en": "Yihong Dong’s Self-collaboration enables LLMs to generate code by simulating a multi-agent team of analysts, coders, and testers. He is a researcher at Shanghai Jiao Tong University specializing in code generation and multi-agent collaboration. Dong also developed Self-planning, a method for decomposing complex programming tasks into structured plans before implementation. His work includes EvoCodeBench, a benchmark for evaluating code generation on real-world repositories, and RL-PLUS, which uses hybrid-policy optimization to train LLMs via RL. Additionally, he investigates LLM reliability through studies on data contamination and the development of trustworthy evaluation frameworks.",
+        "annual_citations": [
+          {
+            "year": 2026,
+            "count": 1885
+          },
+          {
+            "year": 2025,
+            "count": 1431
+          },
+          {
+            "year": 2024,
+            "count": 454
+          },
+          {
+            "year": 2023,
+            "count": 170
+          },
+          {
+            "year": 2022,
+            "count": 41
+          },
+          {
+            "year": 2021,
+            "count": 0
+          },
+          {
+            "year": 2020,
+            "count": 0
+          }
+        ]
+      },
+      "product_search": {
+        "path": "/api/v1/scholars/search?q=Yihong+Dong&limit=20&offset=0",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "items": [
+            {
+              "scholar_id": "author:derived:yihong_dong:bf3742c5ffae1e8c",
+              "name_zh": null,
+              "name_en": "Yihong Dong",
+              "avatar_path": null,
+              "affiliations": [
+                {
+                  "institution": "School of Computer Science, Peking University",
+                  "position": null
+                }
+              ],
+              "topics": [],
+              "metrics": {
+                "source_work_count": null,
+                "citation_count": null,
+                "h_index": null,
+                "i10_index": null,
+                "paper_count": 1
+              }
+            },
+            {
+              "scholar_id": "author:legacy:9bea051076521c5abdb8ba44",
+              "name_zh": null,
+              "name_en": "Yihong Dong",
+              "avatar_path": null,
+              "affiliations": [],
+              "topics": [],
+              "metrics": {
+                "source_work_count": null,
+                "citation_count": null,
+                "h_index": null,
+                "i10_index": null,
+                "paper_count": 0
+              }
+            },
+            {
+              "scholar_id": "author:yihong_dong",
+              "name_zh": null,
+              "name_en": "Yihong Dong",
+              "avatar_path": null,
+              "affiliations": [
+                {
+                  "institution": "Department of Computing Science, University of Alberta quad Canada CIFAR AI Chair",
+                  "position": null
+                },
+                {
+                  "institution": "Key Lab of High Confidence Software Technology (PKU), Ministry of Education",
+                  "position": null
+                },
+                {
+                  "institution": "Key Laboratory of High Conﬁdence Software Technologies (Peking University), Ministry of Education; School of Computer Science, Peking University, Beijing, China",
+                  "position": null
+                },
+                {
+                  "institution": "Peking University",
+                  "position": null
+                },
+                {
+                  "institution": "School of Computer Science, Peking University",
+                  "position": null
+                },
+                {
+                  "institution": "School of Computer Science, Peking University, China",
+                  "position": null
+                },
+                {
+                  "institution": "Tongyi Lab, Alibaba Group",
+                  "position": null
+                }
+              ],
+              "topics": [],
+              "metrics": {
+                "source_work_count": null,
+                "citation_count": null,
+                "h_index": null,
+                "i10_index": null,
+                "paper_count": 15
+              }
+            },
+            {
+              "scholar_id": "openalex:A5140781838",
+              "name_zh": null,
+              "name_en": "Yihong Dong",
+              "avatar_path": "/images/scholars_20261112_b1a21c6bcae2/2371742654981158c007708d096fb30f6f94416f54c6eb4b4b64c0a7863c2a60.jpg",
+              "affiliations": [
+                {
+                  "institution": "Shanghai Jiao Tong University",
+                  "position": null
+                },
+                {
+                  "institution": "Alibaba Group (Cayman Islands)",
+                  "position": null
+                },
+                {
+                  "institution": "Alibaba Group (China)",
+                  "position": null
+                },
+                {
+                  "institution": "Peking University",
+                  "position": null
+                }
+              ],
+              "topics": [
+                "Code Generation",
+                "Large Language Models",
+                "Multi-agent Collaboration"
+              ],
+              "metrics": {
+                "source_work_count": 14,
+                "citation_count": 22,
+                "h_index": 2,
+                "i10_index": 1,
+                "paper_count": 6
+              }
+            }
+          ],
+          "total": 4,
+          "limit": 20,
+          "offset": 0,
+          "has_more": false
+        }
+      },
+      "product_openalex_detail": {
+        "path": "/api/v1/scholars/openalex%3AA5140781838",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "scholar_id": "openalex:A5140781838",
+          "name_zh": null,
+          "name_en": "Yihong Dong",
+          "avatar_path": "/images/scholars_20261112_b1a21c6bcae2/2371742654981158c007708d096fb30f6f94416f54c6eb4b4b64c0a7863c2a60.jpg",
+          "affiliations": [
+            {
+              "institution": "Shanghai Jiao Tong University",
+              "position": null
+            },
+            {
+              "institution": "Alibaba Group (Cayman Islands)",
+              "position": null
+            },
+            {
+              "institution": "Alibaba Group (China)",
+              "position": null
+            },
+            {
+              "institution": "Peking University",
+              "position": null
+            }
+          ],
+          "topics": [
+            "Code Generation",
+            "Large Language Models",
+            "Multi-agent Collaboration"
+          ],
+          "metrics": {
+            "source_work_count": 14,
+            "citation_count": 22,
+            "h_index": 2,
+            "i10_index": 1,
+            "paper_count": 6
+          },
+          "bio_zh": null,
+          "bio_en": "Yihong Dong’s Self-collaboration enables LLMs to generate code by simulating a multi-agent team of analysts, coders, and testers. He is a researcher at Shanghai Jiao Tong University specializing in code generation and multi-agent collaboration. Dong also developed Self-planning, a method for decomposing complex programming tasks into structured plans before implementation. His work includes EvoCodeBench, a benchmark for evaluating code generation on real-world repositories, and RL-PLUS, which uses hybrid-policy optimization to train LLMs via RL. Additionally, he investigates LLM reliability through studies on data contamination and the development of trustworthy evaluation frameworks.",
+          "employment": [
+            {
+              "organization": "Shanghai Jiao Tong University",
+              "role_title": "Researcher, CS",
+              "department": null,
+              "start_date": "2026-07",
+              "end_date": null
+            },
+            {
+              "organization": "Peking University",
+              "role_title": "PhD, CS",
+              "department": null,
+              "start_date": "2022",
+              "end_date": "2026-07"
+            }
+          ],
+          "annual_citations": [
+            {
+              "year": 2026,
+              "count": 22
+            }
+          ],
+          "external_ids": {
+            "orcid": null
+          },
+          "affiliation_history": [
+            {
+              "institution_id": "https://openalex.org/I183067930",
+              "institution": "Shanghai Jiao Tong University",
+              "years": [
+                2026
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I20231570",
+              "institution": "Peking University",
+              "years": [
+                2026
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I4210086143",
+              "institution": "Alibaba Group (Cayman Islands)",
+              "years": [
+                2026
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution_id": "https://openalex.org/I45928872",
+              "institution": "Alibaba Group (China)",
+              "years": [
+                2026
+              ],
+              "position": null,
+              "source": "OpenAlex",
+              "basis": "publication_affiliation"
+            },
+            {
+              "institution": "Shanghai Jiao Tong University",
+              "institution_id": null,
+              "position": "Researcher, CS",
+              "years": [],
+              "start_date": "2026-07",
+              "end_date": null,
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            },
+            {
+              "institution": "Peking University",
+              "institution_id": null,
+              "position": "PhD, CS",
+              "years": [],
+              "start_date": "2022",
+              "end_date": "2026-07",
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            }
+          ],
+          "research_impact": {
+            "works_count": 14,
+            "citation_count": 22,
+            "h_index": 2,
+            "i10_index": 1,
+            "two_year_mean_citedness": 1.5714285714285714,
+            "source": "OpenAlex",
+            "coverage": "OpenAlex author record and works",
+            "as_of": null,
+            "source_updated_at": "2026-11-07T12:08:38"
+          },
+          "updated_at": "2026-11-07T12:08:38",
+          "citation_meta": {
+            "source": "OpenAlex",
+            "coverage": "OpenAlex author record and works",
+            "as_of": null
+          }
+        }
+      },
+      "product_openalex_papers_first_page": {
+        "path": "/api/v1/scholars/openalex%3AA5140781838/papers?limit=2&offset=0",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "items": [
+            {
+              "id": 60508,
+              "paper_id": "paper:2510.09259",
+              "arxiv_id": "2510.09259",
+              "source": "",
+              "conference": "ICLR",
+              "publication_name": "ICLR",
+              "publication_type": "conference",
+              "raw_conference": "ICLR",
+              "proceedings_type": "",
+              "conferenceId": "iclr",
+              "year": 2026,
+              "subjects": [
+                "reinforcement learning post-training",
+                "membership inference",
+                "large language models",
+                "entropy collapse",
+                "data contamination"
+              ],
+              "topics": [
+                {
+                  "id": "openalex:topic:T11689",
+                  "nameZh": "机器学习对抗鲁棒性",
+                  "nameEn": "Adversarial Robustness in Machine Learning"
+                }
+              ],
+              "primary_subject": "reinforcement learning post-training",
+              "track": "reinforcement learning post-training",
+              "title": "Detecting Data Contamination from Reinforcement Learning Post-training for Large Language Models",
+              "authors": [
+                "Yongding Tao",
+                "Tian Wang",
+                "Yihong Dong",
+                "Huanyu Liu",
+                "Kechi Zhang",
+                "Xiaolong Hu",
+                "Ge Li"
+              ],
+              "abstract": "Data contamination poses a significant threat to the reliable evaluation of Large Language Models (LLMs). This issue arises when benchmark samples may inadvertently appear in training sets, compromising the validity of reported performance. While detection methods have been developed for the pre-training and Supervised Fine-Tuning stages, a critical research gap exists for the increasingly significant phase of Reinforcement Learning (RL) post-training.\nAs RL post-training becomes pivotal for advancing LLM reasoning, the absence of specialized contamination detection methods in this paradigm presents a critical vulnerability.\nTo address this, we conduct the first systematic study of data detection within RL post-training scenario and propose Self-Critique . Our method is motivated by a key observation: after RL phase, the output entropy distribution of LLMs tends to collapse into highly specific and sparse modes.  Self-Critique probes for the underlying policy collapse, i.e., the model’s convergence to a narrow reasoning path, which causes this entropy reduction.\nTo facilitate this research, we also introduce RL-MIA , a benchmark constructed to simulate this specific contamination scenario.\nExtensive experiments show that Self-Critique significantly outperforms baseline methods across multiple models and contamination tasks, achieving an AUC improvement of up to 30% . Whereas existing methods are close to a random guess for RL-phase contamination, our method makes detection possible.\nOur benchmark and code are available at https://github.com/yongding-tao/RL-Data-Contamination .",
+              "pdf_url": "https://arxiv.org/pdf/2510.09259",
+              "keywords": [
+                "data contamination",
+                "reinforcement learning post-training",
+                "membership inference",
+                "large language models",
+                "entropy collapse"
+              ],
+              "type": "",
+              "editor": [],
+              "booktitle": "",
+              "pages": "",
+              "publisher": "",
+              "doi": "",
+              "openalex_id": "",
+              "source_url": "https://arxiv.org/pdf/2510.09259",
+              "source_urls": [
+                "https://arxiv.org/pdf/2510.09259",
+                "https://arxiv.org/html/2510.09259"
+              ],
+              "biburl": "",
+              "bibsource": "",
+              "source_file": "",
+              "funding": [
+                "National Natural Science Foundation of China (Grant No.62192733)",
+                "National Natural Science Foundation of China (Grant No.62192730)",
+                "National Key R&D Program (Grant No.2023YFB4503801)"
+              ],
+              "image_id": "/images/ICLR_2026/2510.09259.png",
+              "published_at": null,
+              "citation_count": null,
+              "cover_path": null,
+              "record_type": "canonical",
+              "external": false
+            },
+            {
+              "id": 61157,
+              "paper_id": "paper:2510.18471v2",
+              "arxiv_id": "2510.18471v2",
+              "source": "",
+              "conference": "ACL",
+              "publication_name": "ACL",
+              "publication_type": "conference",
+              "raw_conference": "ACL",
+              "proceedings_type": "",
+              "conferenceId": "acl",
+              "year": 2026,
+              "subjects": [
+                "RLVR",
+                "reinforcement learning",
+                "execution semantics",
+                "code reasoning",
+                "code generation"
+              ],
+              "topics": [
+                {
+                  "id": "openalex:topic:T10260",
+                  "nameZh": "软件工程研究",
+                  "nameEn": "Software Engineering Research"
+                }
+              ],
+              "primary_subject": "RLVR",
+              "track": "RLVR",
+              "title": "CodeRL+ : Improving Code Generation via Reinforcement with Execution Semantics Alignment",
+              "authors": [
+                "Xue Jiang",
+                "Yihong Dong",
+                "Mengyang Liu",
+                "Hongyi Deng",
+                "Tian Wang",
+                "Yongding Tao",
+                "Rongyu Cao",
+                "Binhua Li",
+                "Zhi Jin",
+                "Wenpin Jiao",
+                "Fei Huang",
+                "Yongbin Li",
+                "Ge Li"
+              ],
+              "abstract": "While Large Language Models (LLMs) excel at code generation by learning from vast code corpora, a fundamental semantic gap remains between their training on textual patterns and the goal of functional correctness, which is governed by formal execution semantics. Reinforcement Learning with Verifiable Rewards (RLVR) approaches attempt to bridge this gap using outcome rewards from executing test cases. However, solely relying on binary pass/fail signals is inefficient for establishing a well-aligned connection between the textual representation of code and its execution semantics, especially for subtle logical errors within the code.\nIn this paper, we propose CodeRL+ , a novel approach that integrates execution semantics alignment into the RLVR training pipeline for code generation. CodeRL+ enables the model to infer variable-level execution trajectory, providing a direct learning signal of execution semantics. CodeRL+ can construct execution semantics alignment directly using existing on-policy rollouts and integrates seamlessly with various RL algorithms.\nExtensive experiments demonstrate that CodeRL+ outperforms post-training baselines (including RLVR and Distillation), achieving a 4.6% average relative improvement in pass@1. CodeRL+ generalizes effectively to other coding tasks, yielding 15.5% and 4.4% higher accuracy on code-reasoning and test-output-generation benchmarks, respectively. CodeRL+ shows strong applicability across diverse RL algorithms and LLMs. Furthermore, probe analyses provide compelling evidence that CodeRL+ strengthens the alignment between code’s textual representations and its underlying execution semantics.",
+              "pdf_url": "https://arxiv.org/pdf/2510.18471v2",
+              "keywords": [
+                "code generation",
+                "execution semantics",
+                "reinforcement learning",
+                "RLVR",
+                "code reasoning"
+              ],
+              "type": "",
+              "editor": [],
+              "booktitle": "",
+              "pages": "",
+              "publisher": "",
+              "doi": "10.48550/arxiv.2510.18471",
+              "openalex_id": "",
+              "source_url": "https://arxiv.org/pdf/2510.18471v2",
+              "source_urls": [
+                "https://arxiv.org/pdf/2510.18471v2",
+                "https://arxiv.org/html/2510.18471v2"
+              ],
+              "biburl": "",
+              "bibsource": "",
+              "source_file": "",
+              "funding": [
+                "National Natural Science Foundation of China (Grant No. 62192733, 62192730, 62192731)",
+                "National Key R&D Program (Grant No. 2023YFB4503801)",
+                "Beijing Major Science and Technology Project (Contract No. Z251100008425005)"
+              ],
+              "image_id": "/images/ACL_2026/2510.18471v2.png",
+              "published_at": null,
+              "citation_count": null,
+              "cover_path": null,
+              "record_type": "canonical",
+              "external": false
+            }
+          ],
+          "total": 6,
+          "limit": 2,
+          "offset": 0
+        }
+      },
+      "product_author_detail": {
+        "path": "/api/v1/scholars/author%3Ayihong_dong",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "scholar_id": "author:yihong_dong",
+          "name_zh": null,
+          "name_en": "Yihong Dong",
+          "avatar_path": null,
+          "affiliations": [
+            {
+              "institution": "Department of Computing Science, University of Alberta quad Canada CIFAR AI Chair",
+              "position": null
+            },
+            {
+              "institution": "Key Lab of High Confidence Software Technology (PKU), Ministry of Education",
+              "position": null
+            },
+            {
+              "institution": "Key Laboratory of High Conﬁdence Software Technologies (Peking University), Ministry of Education; School of Computer Science, Peking University, Beijing, China",
+              "position": null
+            },
+            {
+              "institution": "Peking University",
+              "position": null
+            },
+            {
+              "institution": "School of Computer Science, Peking University",
+              "position": null
+            },
+            {
+              "institution": "School of Computer Science, Peking University, China",
+              "position": null
+            },
+            {
+              "institution": "Tongyi Lab, Alibaba Group",
+              "position": null
+            }
+          ],
+          "topics": [],
+          "metrics": {
+            "source_work_count": null,
+            "citation_count": null,
+            "h_index": null,
+            "i10_index": null,
+            "paper_count": 15
+          },
+          "bio_zh": null,
+          "bio_en": null,
+          "employment": [],
+          "annual_citations": [],
+          "external_ids": {
+            "orcid": null
+          },
+          "affiliation_history": [],
+          "research_impact": {
+            "works_count": null,
+            "citation_count": null,
+            "h_index": null,
+            "i10_index": null,
+            "two_year_mean_citedness": null,
+            "source": null,
+            "coverage": null,
+            "as_of": null,
+            "source_updated_at": null
+          },
+          "updated_at": null,
+          "citation_meta": {
+            "source": null,
+            "coverage": null,
+            "as_of": null
+          }
+        }
+      },
+      "legacy_openalex_detail": {
+        "path": "/api/retrieval/scholars/openalex%3AA5140781838",
+        "attempts": [
+          404
+        ],
+        "status": 404,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "error": "scholar not found",
+          "scholar_id": "openalex:A5140781838"
+        }
+      },
+      "avatar_probe": null
+    },
+    {
+      "summary": {
+        "name": "Adi Simhi",
+        "id": "openalex:A5056036228",
+        "statuses": [
+          200,
+          200,
+          200,
+          404,
+          200
+        ],
+        "search_positions": {
+          "openalex:A5056036228": 2,
+          "author:adi_simhi": 1
+        },
+        "search_keys": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "bio_exact": true,
+        "api_metrics": [
+          13,
+          2911,
+          9,
+          9
+        ],
+        "snapshot_metrics": [
+          13,
+          2911,
+          9,
+          9
+        ],
+        "source": "delivered_profile",
+        "api_institutions": [
+          "George Mason University"
+        ],
+        "snapshot_institutions": [
+          "George Mason University"
+        ],
+        "api_annual_years": [
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "snapshot_annual_years": [
+          2026,
+          2025,
+          2024,
+          2023,
+          2022
+        ],
+        "annual_equal_years": [
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "annual_differences": {},
+        "history_basis_counts": {
+          "reported_affiliation": 1,
+          "reported_role": 1
+        },
+        "matching_roles": 1,
+        "snapshot_roles": 1,
+        "missing_keys": [
+          "aliases"
+        ],
+        "linked_papers": 4,
+        "metric_paper_count": 4,
+        "old_paper_count": 3,
+        "avatar_present": true,
+        "avatar_probe_status": null,
+        "avatar_probe_type": null,
+        "avatar_probe_jpeg": null
+      },
+      "snapshot_profile": {
+        "scholar_id": "preview-1919a2587be38d26b7cf",
+        "name_en": "Adi Simhi",
+        "aliases": [
+          "Adi Simhi",
+          "Simhi, Adi"
+        ],
+        "avatar_path": "/images/scholar-preview/1919a2587be38d26b7cf.jpg",
+        "affiliations": [
+          {
+            "institution": "George Mason University"
+          }
+        ],
+        "employment": [
+          {
+            "organization": "Technion - Israel Institute of Technology",
+            "role_title": "CS PhD Student",
+            "department": null,
+            "start_date": "2023",
+            "end_date": null
+          }
+        ],
+        "external_ids": {
+          "orcid": "0000-0003-1730-7087"
+        },
+        "metrics": {
+          "source_work_count": 13,
+          "citation_count": 2911,
+          "h_index": 9,
+          "i10_index": 9
+        },
+        "topics": [
+          "Topic Modeling",
+          "Natural Language Processing Techniques",
+          "Adversarial Robustness in Machine Learning",
+          "Explainable Artificial Intelligence (XAI)",
+          "Software Testing and Debugging Techniques"
+        ],
+        "bio_en": "Adi Simhi’s Distinguishing ignorance from error characterizes LLM hallucinations by distinguishing between a model's lack of knowledge and its failure to utilize existing information. Simhi is a CS PhD student at the Technion – Israel Institute of Technology advised by Yonatan Belinkov. Their research focuses on LLM truthfulness, safety, and interpretability, including the analysis of high-certainty hallucinations in Trust me, i’m wrong. Simhi developed ManagerBench to evaluate safety-pragmatism trade-offs in autonomous agents and contributed to the 176-billion-parameter multilingual model Bloom. A recipient of the VATAT Scholarship in data science and AI, they also examine how conversational history influences model geometry in Old Habits Die Hard.",
+        "annual_citations": [
+          {
+            "year": 2026,
+            "count": 10
+          },
+          {
+            "year": 2025,
+            "count": 107
+          },
+          {
+            "year": 2024,
+            "count": 48
+          },
+          {
+            "year": 2023,
+            "count": 43
+          },
+          {
+            "year": 2022,
+            "count": 2644
+          }
+        ]
+      },
+      "product_search": {
+        "path": "/api/v1/scholars/search?q=Adi+Simhi&limit=20&offset=0",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "items": [
+            {
+              "scholar_id": "author:adi_simhi",
+              "name_zh": null,
+              "name_en": "Adi Simhi",
+              "avatar_path": null,
+              "affiliations": [
+                {
+                  "institution": "Technion - Israel Institute of Technology",
+                  "position": null
+                },
+                {
+                  "institution": "Technion – Israel Institute of Technology",
+                  "position": null
+                }
+              ],
+              "topics": [],
+              "metrics": {
+                "source_work_count": null,
+                "citation_count": null,
+                "h_index": null,
+                "i10_index": null,
+                "paper_count": 3
+              }
+            },
+            {
+              "scholar_id": "openalex:A5056036228",
+              "name_zh": null,
+              "name_en": "Adi Simhi",
+              "avatar_path": "/images/scholars_20261112_6fbd0f2de850/79f3a7cf854de468e546c5b4bb279ec798c94ea30034bcaa3b2dffedf795c168.jpg",
+              "affiliations": [
+                {
+                  "institution": "George Mason University",
+                  "position": null
+                }
+              ],
+              "topics": [
+                "自然语言处理模型与表示",
+                "机器学习对抗鲁棒性",
+                "可解释人工智能"
+              ],
+              "metrics": {
+                "source_work_count": 13,
+                "citation_count": 2911,
+                "h_index": 9,
+                "i10_index": 9,
+                "paper_count": 4
+              }
+            }
+          ],
+          "total": 2,
+          "limit": 20,
+          "offset": 0,
+          "has_more": false
+        }
+      },
+      "product_openalex_detail": {
+        "path": "/api/v1/scholars/openalex%3AA5056036228",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "scholar_id": "openalex:A5056036228",
+          "name_zh": null,
+          "name_en": "Adi Simhi",
+          "avatar_path": "/images/scholars_20261112_6fbd0f2de850/79f3a7cf854de468e546c5b4bb279ec798c94ea30034bcaa3b2dffedf795c168.jpg",
+          "affiliations": [
+            {
+              "institution": "George Mason University",
+              "position": null
+            }
+          ],
+          "topics": [
+            "自然语言处理模型与表示",
+            "机器学习对抗鲁棒性",
+            "可解释人工智能",
+            "软件测试与调试技术"
+          ],
+          "metrics": {
+            "source_work_count": 13,
+            "citation_count": 2911,
+            "h_index": 9,
+            "i10_index": 9,
+            "paper_count": 4
+          },
+          "bio_zh": null,
+          "bio_en": "Adi Simhi’s Distinguishing ignorance from error characterizes LLM hallucinations by distinguishing between a model's lack of knowledge and its failure to utilize existing information. Simhi is a CS PhD student at the Technion – Israel Institute of Technology advised by Yonatan Belinkov. Their research focuses on LLM truthfulness, safety, and interpretability, including the analysis of high-certainty hallucinations in Trust me, i’m wrong. Simhi developed ManagerBench to evaluate safety-pragmatism trade-offs in autonomous agents and contributed to the 176-billion-parameter multilingual model Bloom. A recipient of the VATAT Scholarship in data science and AI, they also examine how conversational history influences model geometry in Old Habits Die Hard.",
+          "employment": [
+            {
+              "organization": "Technion - Israel Institute of Technology",
+              "role_title": "CS PhD Student",
+              "department": null,
+              "start_date": "2023",
+              "end_date": null
+            }
+          ],
+          "annual_citations": [
+            {
+              "year": 2022,
+              "count": 2644
+            },
+            {
+              "year": 2023,
+              "count": 43
+            },
+            {
+              "year": 2024,
+              "count": 48
+            },
+            {
+              "year": 2025,
+              "count": 107
+            },
+            {
+              "year": 2026,
+              "count": 10
+            }
+          ],
+          "external_ids": {
+            "orcid": "0000-0003-1730-7087"
+          },
+          "affiliation_history": [
+            {
+              "institution_id": "https://openalex.org/I174306211",
+              "institution": "Technion – Israel Institute of Technology",
+              "years": [
+                2023,
+                2024,
+                2025,
+                2026
+              ],
+              "position": null,
+              "source": "delivered_profile",
+              "basis": "reported_affiliation"
+            },
+            {
+              "institution": "Technion - Israel Institute of Technology",
+              "institution_id": null,
+              "position": "CS PhD Student",
+              "years": [],
+              "start_date": "2023",
+              "end_date": null,
+              "source": "delivered_profile",
+              "basis": "reported_role"
+            }
+          ],
+          "research_impact": {
+            "works_count": 13,
+            "citation_count": 2911,
+            "h_index": 9,
+            "i10_index": 9,
+            "two_year_mean_citedness": 19.5,
+            "source": "delivered_profile",
+            "coverage": "Delivered profile; upstream metrics are not independently separated",
+            "as_of": null,
+            "source_updated_at": "2026-11-09T14:06:01"
+          },
+          "updated_at": "2026-11-09T14:06:01",
+          "citation_meta": {
+            "source": "delivered_profile",
+            "coverage": "Delivered profile; upstream metrics are not independently separated",
+            "as_of": null
+          }
+        }
+      },
+      "product_openalex_papers_first_page": {
+        "path": "/api/v1/scholars/openalex%3AA5056036228/papers?limit=2&offset=0",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "items": [
+            {
+              "id": 59823,
+              "paper_id": "paper:2510.00857",
+              "arxiv_id": "2510.00857",
+              "source": "",
+              "conference": "ICLR",
+              "publication_name": "ICLR",
+              "publication_type": "conference",
+              "raw_conference": "ICLR",
+              "proceedings_type": "",
+              "conferenceId": "iclr",
+              "year": 2026,
+              "subjects": [
+                "safety-pragmatism trade-off",
+                "managerial scenarios",
+                "LLM safety",
+                "benchmark",
+                "autonomous agents"
+              ],
+              "topics": [],
+              "primary_subject": "safety-pragmatism trade-off",
+              "track": "safety-pragmatism trade-off",
+              "title": "ManagerBench : Evaluating the Safety-Pragmatism Trade-off in Autonomous LLMs",
+              "authors": [
+                "Adi Simhi",
+                "Jonathan Herzig",
+                "Martin Tutek",
+                "Itay Itzhak",
+                "Idan Szpektor",
+                "Yonatan Belinkov"
+              ],
+              "abstract": "As large language models (LLMs) evolve from conversational assistants into autonomous agents, evaluating the safety of their actions becomes critical. Prior safety benchmarks have primarily focused on preventing generation of harmful content, such as toxic text. However, they overlook the challenge of agents taking harmful actions when the most effective path to an operational goal conflicts with human safety. To address this gap, we introduce ManagerBench , a benchmark that evaluates LLM decision-making in realistic, human-validated managerial scenarios. Each scenario forces a choice between a pragmatic but harmful action that achieves an operational goal, and a safe action that leads to worse operational performance. A parallel control set, where potential harm is directed only at inanimate objects, measures a model’s pragmatism and identifies its tendency to be overly safe. Our findings indicate that the frontier LLMs perform poorly when navigating this safety-pragmatism trade-off. Many consistently choose harmful options to advance their operational goals, while others avoid harm only to become overly safe and ineffective. Critically, we find this misalignment does not stem from an inability to perceive harm, as models’ harm assessments align with human judgments, but from flawed prioritization. ManagerBench is a challenging benchmark for a core component of agentic behavior: making safe choices when operational goals and alignment values incentivize conflicting actions. 1 1 1 Benchmark & code: https://technion-cs-nlp.github.io/ManagerBench-website/ .",
+              "pdf_url": "https://arxiv.org/pdf/2510.00857",
+              "keywords": [
+                "LLM safety",
+                "autonomous agents",
+                "safety-pragmatism trade-off",
+                "benchmark",
+                "managerial scenarios"
+              ],
+              "type": "",
+              "editor": [],
+              "booktitle": "",
+              "pages": "",
+              "publisher": "",
+              "doi": "",
+              "openalex_id": "",
+              "source_url": "https://arxiv.org/pdf/2510.00857",
+              "source_urls": [
+                "https://arxiv.org/pdf/2510.00857",
+                "https://arxiv.org/html/2510.00857"
+              ],
+              "biburl": "",
+              "bibsource": "",
+              "source_file": "",
+              "funding": [
+                "Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the European Research Council Executive Agency",
+                "the Council for Higher Education (VATAT) Scholarship for PhD students in data science and artificial intelligence",
+                "Coefficient Giving (formerly Open Philanthropy), a Google Award, the Israel Science Foundation (grant No. 2942/25), and the European Union (ERC, Control-LM,101165402)"
+              ],
+              "image_id": "/images/ICLR_2026/2510.00857.svg",
+              "published_at": null,
+              "citation_count": null,
+              "cover_path": null,
+              "record_type": "canonical",
+              "external": false
+            },
+            {
+              "id": 66070,
+              "paper_id": "paper:2603.03308v2",
+              "arxiv_id": "2603.03308v2",
+              "source": "",
+              "conference": "ICML",
+              "publication_name": "ICML",
+              "publication_type": "conference",
+              "raw_conference": "ICML",
+              "proceedings_type": "",
+              "conferenceId": "icml",
+              "year": 2026,
+              "subjects": [
+                "technion-cs-nlp",
+                "multi-turn",
+                "large language models",
+                "History-Echoes",
+                "black-box"
+              ],
+              "topics": [
+                {
+                  "id": "openalex:topic:T10028",
+                  "nameZh": "自然语言处理模型与表示",
+                  "nameEn": "Natural Language Processing Models and Representations"
+                }
+              ],
+              "primary_subject": "technion-cs-nlp",
+              "track": "technion-cs-nlp",
+              "title": "Old Habits Die Hard: How Conversational History Geometrically Traps LLMs",
+              "authors": [
+                "Adi Simhi",
+                "Fazl Barez",
+                "Martin Tutek",
+                "Yonatan Belinkov",
+                "Shay B. Cohen"
+              ],
+              "abstract": "How does the conversational past of large language models (LLMs) influence their future performance?\nRecent work suggests that LLMs are affected by their conversational history in unexpected ways.\nFor instance, hallucinations in prior interactions may influence subsequent model responses.\nIn this work, we introduce History-Echoes , a framework that investigates how conversational history biases subsequent generations.\nThe framework explores this bias from two perspectives: probabilistically, we model conversations as Markov chains to quantify state consistency; geometrically, we measure the consistency of consecutive hidden representations.\nAcross three model families and six datasets spanning diverse phenomena, our analysis reveals a strong correlation between the two perspectives.\nBy bridging these perspectives, we demonstrate that behavioral persistence manifests as a geometric trap , where gaps in the latent space confine the model’s trajectory. 1 1 1 Code available at https://github.com/technion-cs-nlp/OldHabitsDieHard .",
+              "pdf_url": "https://arxiv.org/pdf/2603.03308v2",
+              "keywords": [
+                "Machine Learning",
+                "ICML"
+              ],
+              "type": "",
+              "editor": [],
+              "booktitle": "",
+              "pages": "",
+              "publisher": "",
+              "doi": "",
+              "openalex_id": "",
+              "source_url": "https://arxiv.org/pdf/2603.03308v2",
+              "source_urls": [
+                "https://arxiv.org/pdf/2603.03308v2",
+                "https://arxiv.org/html/2603.03308v2"
+              ],
+              "biburl": "",
+              "bibsource": "",
+              "source_file": "",
+              "funding": [
+                "Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the European Research Council Executive Agency",
+                "the Council for Higher Education (VATAT) Scholarship for PhD students in data science and artificial intelligence",
+                "an Azrieli Faculty Fellowship, Coefficient Giving, a Google Award, the Israel Science Foundation (grant No. 2942/25), and the European Union (ERC, Control-LM,101165402)"
+              ],
+              "image_id": "/images/ICML_2026/2603.03308v2.svg",
+              "published_at": null,
+              "citation_count": null,
+              "cover_path": null,
+              "record_type": "canonical",
+              "external": false
+            }
+          ],
+          "total": 4,
+          "limit": 2,
+          "offset": 0
+        }
+      },
+      "product_author_detail": {
+        "path": "/api/v1/scholars/author%3Aadi_simhi",
+        "attempts": [
+          200
+        ],
+        "status": 200,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "scholar_id": "author:adi_simhi",
+          "name_zh": null,
+          "name_en": "Adi Simhi",
+          "avatar_path": null,
+          "affiliations": [
+            {
+              "institution": "Technion - Israel Institute of Technology",
+              "position": null
+            },
+            {
+              "institution": "Technion – Israel Institute of Technology",
+              "position": null
+            }
+          ],
+          "topics": [],
+          "metrics": {
+            "source_work_count": null,
+            "citation_count": null,
+            "h_index": null,
+            "i10_index": null,
+            "paper_count": 3
+          },
+          "bio_zh": null,
+          "bio_en": null,
+          "employment": [],
+          "annual_citations": [],
+          "external_ids": {
+            "orcid": null
+          },
+          "affiliation_history": [],
+          "research_impact": {
+            "works_count": null,
+            "citation_count": null,
+            "h_index": null,
+            "i10_index": null,
+            "two_year_mean_citedness": null,
+            "source": null,
+            "coverage": null,
+            "as_of": null,
+            "source_updated_at": null
+          },
+          "updated_at": null,
+          "citation_meta": {
+            "source": null,
+            "coverage": null,
+            "as_of": null
+          }
+        }
+      },
+      "legacy_openalex_detail": {
+        "path": "/api/retrieval/scholars/openalex%3AA5056036228",
+        "attempts": [
+          404
+        ],
+        "status": 404,
+        "content_type": "application/json; charset=utf-8",
+        "response_json": {
+          "error": "scholar not found",
+          "scholar_id": "openalex:A5056036228"
+        }
+      },
+      "avatar_probe": null
+    }
+  ],
+  "product_browse": {
+    "path": "/api/v1/scholars?limit=2&offset=0",
+    "attempts": [
+      200
+    ],
+    "status": 200,
+    "content_type": "application/json; charset=utf-8",
+    "response_json": {
+      "items": [
+        {
+          "scholar_id": "openalex:A5013900997",
+          "name_zh": null,
+          "name_en": "Aayush Mishra",
+          "avatar_path": "/images/scholars_20261112_6fbd0f2de850/d47d32110acb595d4c41cac91a31048a872511bbf83d02b8e26be5eda7bea5d4.jpg",
+          "affiliations": [
+            {
+              "institution": "The Johns Hopkins University",
+              "position": null
+            },
+            {
+              "institution": "MATS Research",
+              "position": null
+            },
+            {
+              "institution": "Qualcomm",
+              "position": null
+            }
+          ],
+          "topics": [
+            "自然语言处理模型与表示",
+            "领域适应与小样本学习"
+          ],
+          "metrics": {
+            "source_work_count": 17,
+            "citation_count": 203,
+            "h_index": 5,
+            "i10_index": 5,
+            "paper_count": 2
+          }
+        },
+        {
+          "scholar_id": "openalex:A5008443788",
+          "name_zh": null,
+          "name_en": "Abhinav Java",
+          "avatar_path": "/images/scholars_20261112_6fbd0f2de850/0b8496b38d60302a3558ee52f3d953e5f497d5736a5ca47daf0d794c1adcca80.jpg",
+          "affiliations": [
+            {
+              "institution": "Carnegie Mellon University",
+              "position": null
+            }
+          ],
+          "topics": [
+            "自然语言处理模型与表示",
+            "生成对抗网络与图像合成"
+          ],
+          "metrics": {
+            "source_work_count": 22,
+            "citation_count": 243,
+            "h_index": 7,
+            "i10_index": 6,
+            "paper_count": 4
+          }
+        }
+      ],
+      "total": 363,
+      "limit": 2,
+      "offset": 0,
+      "has_more": true
+    }
+  }
+}

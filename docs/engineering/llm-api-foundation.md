@@ -11,11 +11,11 @@ Agent / Future AI Features
     → /chat/completions
 ```
 
-- `apps/backend/app/integrations/llm/catalog.json`：内置 Provider 定义与精确型号能力模板。模板本身不表示该型号已开放；环境默认型号、旧白名单或自定义文件决定实际注册的模型。
+- `apps/agent/src/agent_app/integrations/llm/catalog.json`：内置 Provider 定义与精确型号能力模板。模板本身不表示该型号已开放；环境默认型号、旧白名单或自定义文件决定实际注册的模型。
 - `registry.py`：类型、校验、模型查询、默认模型、兼容别名、用途校验及公开目录投影。用途（`Purpose`）有 `chat` 与 `agent` 两种：`chat` 是基础用途与共享默认（要求流式对话能力，对应 `AI_DEFAULT_MODEL`），`agent` 在此之上要求 Tool Calling；它们是 Registry 内的能力 / 默认划分，不对应独立产品。`ResolvedModel` 包含 `spec`、`provider`、`upstream_model`、`base_url`、`key`；它是服务端对象，禁止直接序列化为 API 响应。
-- `resolver.py`：服务端配置加载器。组合内置声明、旧变量、自定义 JSON，生成单一 Registry。现阶段按配置请求 / Provider / Runtime 构造加载，不引入数据库、远程管理或缓存失效机制。进程启动也校验配置。
-- `core/config.py`：保留 `ModelConfig` 兼容结构；`OpenAICompatProvider(config)` 经 `resolver.registry_from_legacy()` 用它注入测试 / MockTransport。业务路由使用 Registry。
-- `integrations/llm/agent_stream.py`、`services/agent/execution/provider.py`、`services/agent/execution/runtime.py`：唯一的模型调用 Adapter。负责 Tool Calling、JSON 修复、超时（`AI_TIMEOUT_SEC`）、零增量重试、历史恢复与预算，模型解析及请求参数构造统一走 Registry。上下文摘要仍通过相同 Agent Provider 与模型。
+- `resolver.py`：服务端配置加载器。组合内置声明、旧变量、自定义 JSON，生成单一 Registry。现阶段按配置请求 / Provider / Runtime 构造加载，不引入数据库、远程管理或缓存失效机制。
+- `agent_app.integrations.llm.config`：保留 `ModelConfig` 兼容结构；`OpenAICompatProvider(config)` 经 `resolver.registry_from_legacy()` 用它注入测试 / MockTransport。业务路由使用 Registry。
+- `integrations/llm/agent_stream.py`、`agent_app/execution/provider.py`、`agent_app/execution/runtime.py`：唯一的模型调用 Adapter。负责 Tool Calling、JSON 修复、超时（`AI_TIMEOUT_SEC`）、零增量重试、历史恢复与预算，模型解析及请求参数构造统一走 Registry。上下文摘要仍通过相同 Agent Provider 与模型。
 - `api/agent.py` 的 `GET /agent/config`：Registry 中 `agent` 用途的公开目录与默认模型；保留 JSON 外层及 `value/label/provider/enabled` 字段。`provider` 表示展示品牌，另有 `provider_id/brand/capabilities/aliases`。
 - Web 的 `clients/backend/model-types.ts` 为公开模型契约，`types/ai-search.ts` 定义 Composer 使用的 `ComposerConfig` / `ModelId` 等类型；配置加载失败时的禁用占位目录在 `components/common/composer/config.ts`。模型选择器不维护可用性白名单，只展示 `/agent/config` 的能力过滤结果。
 
@@ -23,19 +23,19 @@ Provider 与品牌分别建模。例如 `dashscope/deepseek-v3` 的品牌为 `de
 
 ## 三家供应商配置
 
-仅在 Backend 环境设置，禁止放入 Web / `NEXT_PUBLIC_*`。以下省略真实 Key：
+在 Agent 环境设置，禁止放入 Web / `NEXT_PUBLIC_*`。以下省略真实 Key：
 
 ```ini
 DASHSCOPE_API_KEY=
-DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+DASHSCOPE_BASE_URL=<DASHSCOPE_BASE_URL>
 DASHSCOPE_MODEL=qwen-plus
 
 DEEPSEEK_API_KEY=
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_BASE_URL=<DEEPSEEK_BASE_URL>
 DEEPSEEK_MODEL=deepseek-chat
 
 ZHIPU_API_KEY=
-ZHIPU_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+ZHIPU_BASE_URL=<ZHIPU_BASE_URL>
 ZHIPU_MODEL=glm-4-plus
 
 AI_DEFAULT_MODEL=dashscope/qwen-plus
@@ -67,11 +67,11 @@ Agent Runtime 构造保留离线测试注入体验，先验证型号及用途；
 
 ## AutoDL
 
-AutoDL 复用 OpenAI Chat Completions Adapter，不新增协议或 API 路由；前端共享模型选择组件为其补齐了通用品牌回退和空目录提交保护。在 `apps/backend/.env` 配置：
+AutoDL 复用 OpenAI Chat Completions Adapter，不新增协议或 API 路由；前端共享模型选择组件为其补齐了通用品牌回退和空目录提交保护。在 `apps/agent/.env` 配置：
 
 ```ini
 AUTODL_API_KEY=
-AUTODL_BASE_URL=https://www.autodl.art/api/v1
+AUTODL_BASE_URL=<AUTODL_BASE_URL>
 AUTODL_MODELS=
 AI_DEFAULT_MODEL=autodl/DeepSeek-V4.1-Flash-1017
 AI_AGENT_DEFAULT_MODEL=autodl/DeepSeek-V4.1-Flash-1017
@@ -152,11 +152,11 @@ DeepSeek 官方 Provider 推理型号的 Agent Tool Calling 暂时保守禁用�
 
 ## 验证与真实 API 边界
 
-在 `apps/backend`：
+在 `apps/agent`：
 
 ```bash
 UV_CACHE_DIR=/tmp/shenzhi-uv-cache uv run --no-sync python -m unittest discover -s tests
-UV_CACHE_DIR=/tmp/shenzhi-uv-cache uv run --no-sync python -m unittest discover -s tests -p 'test_llm*.py'
+UV_CACHE_DIR=/tmp/shenzhi-uv-cache uv run --no-sync python -m unittest discover -s tests/unit -p 'test_llm*.py'
 ```
 
 `--no-sync` 使用已有 uv 环境；首次开发按仓库方式先 `uv sync`。在 `apps/web`：

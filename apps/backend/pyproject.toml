@@ -6,6 +6,7 @@ dependencies = [
 	"agent-contracts",
     "alembic>=1.19.1",
     "asyncpg>=0.31.0",
+    "cryptography>=44",
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
     "openreview-py>=2.6,<3",

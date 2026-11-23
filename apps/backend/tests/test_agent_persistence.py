@@ -47,6 +47,31 @@ class PostgresAgentClaimTests(unittest.IsolatedAsyncioTestCase):
             (await self.repo.get(not_prepared.id, self.SOURCE)).owner, self.SOURCE
         )
 
+    async def test_claim_preserves_legacy_execution_owner_for_replay(self):
+        session = await self.repo.create(self.SOURCE, 'legacy task', {})
+        turn, _ = await self.repo.start_turn(session.id, self.SOURCE, 'run', {
+            'agent_task_id': 'task-before-claim', 'agent_run_id': 'run-before-claim',
+        }, [])
+        await self.repo.finish_turn(session.id, self.SOURCE, turn.id, {'status': 'done'})
+        await self.repo.claim_anonymous_sessions(self.SOURCE, self.TARGET, session_ids=[session.id])
+        claimed = await self.repo.get(session.id, self.TARGET)
+        self.assertEqual(claimed.turns[0].settings['_agent_owner_id'], self.SOURCE)
+        self.assertNotIn('_agent_owner_id', claimed.turns[0].public()['settings'])
+        with self.assertRaises(BusinessError):
+            await self.repo.get(session.id, self.SOURCE)
+
+    async def test_projection_release_is_fenced_and_immediately_recoverable(self):
+        session = await self.repo.create(self.SOURCE, 'projection', {})
+        turn, _ = await self.repo.start_turn(session.id, self.SOURCE, 'run', {
+            'agent_task_id': 'task-linked', 'agent_run_id': 'run-linked',
+        }, [], worker_id='worker-a')
+        await self.repo.release_turn_projection(turn.id, 'wrong-worker')
+        self.assertFalse(await self.repo.claim_turn_projection(session.id, self.SOURCE, turn.id, 'worker-b'))
+        await self.repo.release_turn_projection(turn.id, 'worker-a')
+        self.assertTrue(await self.repo.claim_turn_projection(session.id, self.SOURCE, turn.id, 'worker-b'))
+        await self.repo.release_turn_projection(turn.id, 'worker-a')
+        self.assertTrue(await self.repo.renew_turn(turn.id, 'worker-b'))
+
     async def test_claim_rechecks_running_state_after_prepare(self):
         session = await self.repo.create(self.SOURCE, 'becomes running', {})
         prepared_ids = await self.repo.claimable_session_ids(self.SOURCE)

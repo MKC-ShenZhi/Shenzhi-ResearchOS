@@ -19,7 +19,7 @@ import {
 import { useDismiss } from "@/features/submit/hooks/use-dismiss";
 import { PopoverPanel } from "./popover-panel";
 
-const RANK_SYSTEM_LABELS: Record<RankSystem, string> = { ccf: "CCF", core: "CORE", thcpl: "TH-CPL" };
+const RANK_SYSTEM_LABELS: Record<RankSystem, string> = { ccf: "CCF", thcpl: "TH-CPL" };
 
 const RANK_GROUPS = (Object.keys(RANK_SYSTEM_LABELS) as RankSystem[]).map((system) => ({
   system,
@@ -109,7 +109,7 @@ export function ConferenceFilterBar({
   onChange,
   onReset,
 }: ConferenceFilterBarProps) {
-  const rankCount = filters.ccf.length + filters.core.length + filters.thcpl.length;
+  const rankCount = filters.ccf.length + filters.thcpl.length;
   const categoryNames = new Map((categories ?? []).map((category) => [category.id, category.name]));
   const activeTags = [
     ...RANK_CHIPS.filter((chip) => isRankChipActive(filters, chip)).map((chip) => ({

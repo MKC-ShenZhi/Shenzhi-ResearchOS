@@ -6,7 +6,7 @@ import pytest
 
 from agent_contracts import (
     ExecutionReportWire, KnowledgeSearchRequestWire, PlatformEventWire,
-    RunStatus, TaskSubmissionWire,
+    RunStatus, TaskRunsResponseWire, TaskSubmissionWire,
 )
 
 
@@ -52,6 +52,15 @@ def test_platform_event_envelope_contains_durable_replay_identity() -> None:
     )
     payload = event.model_dump(mode='json')
     assert (payload['task_id'], payload['run_id'], payload['seq']) == ('t1', 'r1', 3)
+
+
+def test_task_run_history_preserves_order_and_requires_complete_nonempty_field() -> None:
+    assert TaskRunsResponseWire(run_ids=['r1', 'r2', 'r3']).model_dump(mode='json') == {
+        'run_ids': ['r1', 'r2', 'r3'],
+    }
+    for payload in ({}, {'run_ids': []}, {'run_ids': ['r1'], 'cursor': 'partial'}):
+        with pytest.raises(ValueError):
+            TaskRunsResponseWire.model_validate(payload)
 
 
 def test_knowledge_wire_is_shared_and_uses_product_aliases() -> None:

@@ -23,3 +23,4 @@
 - 个人 fork、`origin`/`upstream` 等远程配置属于本机 `.git/config`；**禁止**写入仓库内的 Agent 规则、`AGENTS.md` 或文档，以免误导其他成员的 Agent。
 - 未获用户明确要求时，Agent **不得**修改 `git remote`、改写他人的 fork 推送目标，或把个人 Cursor 规范（`.cursor/`）提交入库。
 - Git 协作流程以 `docs/engineering/git-conventions.md` 为准；个人 Agent 习惯仅留在本地（可用 `.git/info/exclude` 忽略）。
+- 涉及 Admin 认证、部署、反向代理或端口配置时，必须先阅读 `docs/engineering/deployment.md` 的“Admin 管理入口：SSH 密钥与隧道”。已确定采用单人 SSH 密钥认证＋本地转发，目标为 Admin 免密码；实施状态和上线条件以该节为准，不得误当成已完成或将管理入口暴露到公网。

@@ -8,8 +8,9 @@ from agent_app.execution.tools import ToolSpec
 
 IDENTITY = '你是 ShenzhiAi，一个可以调用工具完成任务的智能体。'
 TEMPERATURE = {'fast': 0.3, 'deep': 0.6, 'idea': 1.0, 'doubt': 0.85}
-RUN_DEADLINE_S = {'fast': 180.0, 'deep': 900.0, 'idea': 900.0, 'doubt': 900.0}
-TOOL_CALL_BUDGET = {'fast': 12, 'deep': 120, 'idea': 120, 'doubt': 120}
+RUN_DEADLINE_S = {'fast': 300.0, 'deep': 1800.0, 'idea': 1800.0, 'doubt': 1800.0}
+TOOL_CALL_BUDGET = {'fast': 20, 'deep': 150, 'idea': 150, 'doubt': 150}
+MAX_EXECUTION_TURNS = 60
 
 
 def compose_agent_system(specs: Sequence[ToolSpec], *, extra_sections: Sequence[str] = (),

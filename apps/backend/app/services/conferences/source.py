@@ -4,9 +4,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 import yaml
 from app.schemas.conferences import ConferenceSnapshotFile
 from app.services.conferences import catalog_from_snapshot
@@ -21,7 +22,19 @@ RANK_VALUES = {
 }
 UNRANKED = {None, "", "N"}
 TIMELINE_KEY_ALIASES = {"abstract deadline": "abstract_deadline"}
-TIMELINE_KEYS = {"abstract_deadline", "deadline", "comment"}
+OPTIONAL_DEADLINES = ("rebuttal_deadline", "decision_deadline")
+TIMELINE_KEYS = {"abstract_deadline", "deadline", "comment", *OPTIONAL_DEADLINES}
+SNAPSHOT_ID_PREFIX = "ccfddl-v2-"
+MONTHS = {
+    name: month
+    for month, names in enumerate((
+        ("jan", "january"), ("feb", "february"), ("mar", "march"),
+        ("apr", "april"), ("may",), ("jun", "june"), ("jul", "july"),
+        ("aug", "august"), ("sep", "sept", "september"), ("oct", "october"),
+        ("nov", "november"), ("dec", "december"),
+    ), start=1)
+    for name in names
+}
 
 
 def optional_text(value: Any) -> str | None:
@@ -82,7 +95,7 @@ def normalize_timeline(raw: Any, where: str) -> list[dict[str, str | None]]:
         item = {
             TIMELINE_KEY_ALIASES.get(key, key): value for key, value in item.items()
         }
-        unknown = set(item) - TIMELINE_KEYS - {"rebuttal_deadline", "decision_deadline"}
+        unknown = set(item) - TIMELINE_KEYS
         if unknown:
             raise ValueError(
                 f"{where}[{index}]: unknown timeline keys {sorted(unknown)}"
@@ -94,9 +107,46 @@ def normalize_timeline(raw: Any, where: str) -> list[dict[str, str | None]]:
                 ),
                 "deadline": local_deadline(item.get("deadline"), f"{where}[{index}]"),
                 "comment": optional_text(item.get("comment")),
+                **{
+                    key: value
+                    for key in OPTIONAL_DEADLINES
+                    if (value := local_deadline(item.get(key), f"{where}[{index}].{key}")) is not None
+                },
             }
         )
     return entries
+
+
+def derive_opening(dates: str, edition_year: int) -> str | None:
+    """Follow ccfddl's first-day convention, without assuming a day for month-only dates."""
+    years = re.findall(r"\b\d{4}\b", dates)
+    fallback_year = int(years[-1]) if years else edition_year
+    starts = []
+    for session in re.split(r"\band\b|(?<=\)),\s*", dates, flags=re.IGNORECASE):
+        session = session.strip()
+        iso = re.match(r"^(\d{4})-(\d{2})-(\d{2})\b", session)
+        if iso:
+            year, month, day = map(int, iso.groups())
+        else:
+            month_first = re.match(r"^([a-zA-Z]+)\.?\s+(\d{1,2})\b", session)
+            day_first = re.match(r"^(\d{1,2})\s+([a-zA-Z]+)\b", session)
+            if month_first:
+                name, day_text = month_first.groups()
+            elif day_first:
+                day_text, name = day_first.groups()
+            else:
+                continue
+            month = MONTHS.get(name.lower())
+            if month is None:
+                continue
+            year_match = re.search(r"\b\d{4}\b", session)
+            year = int(year_match[0]) if year_match else fallback_year
+            day = int(day_text)
+        try:
+            starts.append(date(year, month, day))
+        except ValueError:
+            continue
+    return f"{min(starts).isoformat()} 08:00:00" if starts else None
 
 
 def normalize_edition(raw: Any, where: str) -> dict[str, Any]:
@@ -108,14 +158,45 @@ def normalize_edition(raw: Any, where: str) -> dict[str, Any]:
     timezone = raw.get("timezone")
     if not isinstance(timezone, str) or not TIMEZONE.match(timezone):
         raise ValueError(f"{where}: unsupported timezone {timezone!r}")
+    dates = optional_text(raw.get("date"))
+    opening = derive_opening(dates, year) if dates else None
     return {
         "year": year,
         "link": optional_text(raw.get("link")),
         "timezone": timezone,
-        "date": optional_text(raw.get("date")),
+        "date": dates,
         "place": optional_text(raw.get("place")),
         "timeline": normalize_timeline(raw.get("timeline"), f"{where}.timeline"),
+        **({"opening": opening, "opening_is_derived": True} if opening else {}),
     }
+
+
+def normalize_accept_rates(rows: list) -> list[dict]:
+    rates = []
+    for row in rows:
+        if not isinstance(row, dict) or type(row.get("year")) is not int or not 1950 <= row["year"] <= 2100:
+            continue
+        rate = {"year": row["year"]}
+        for key in ("submitted", "accepted"):
+            value = row.get(key)
+            if type(value) is int and value >= 0:
+                rate[key] = value
+        value = row.get("rate")
+        if type(value) in (int, float) and 0 <= value <= 1:
+            rate["rate"] = value
+        if isinstance(row.get("str"), str) and row["str"].strip():
+            rate["str"] = row["str"].strip()
+        if isinstance(row.get("source"), str):
+            source = row["source"].strip()
+            try:
+                url = urlsplit(source)
+                if url.scheme in ("http", "https") and url.hostname:
+                    rate["source"] = source
+            except ValueError:
+                pass
+        if len(rate) > 1:
+            rates.append(rate)
+    return sorted(rates, key=lambda rate: rate["year"], reverse=True)
 
 
 def build_snapshot(payload: dict, revision: str, exported_at: str) -> dict:
@@ -139,8 +220,9 @@ def build_snapshot(payload: dict, revision: str, exported_at: str) -> dict:
     if not categories or len(category_ids) != len(categories):
         raise ValueError("categories must be a non-empty list with unique ids")
 
+    raw_conferences = payload.get("conferences") or []
     conferences = []
-    for raw in payload.get("conferences") or []:
+    for raw in raw_conferences:
         title = optional_text(raw.get("title"))
         category = raw.get("sub")
         where = f"{category}/{title}"
@@ -170,6 +252,27 @@ def build_snapshot(payload: dict, revision: str, exported_at: str) -> dict:
     ids = [conference["id"] for conference in conferences]
     if len(set(ids)) != len(ids):
         raise ValueError("conference ids are not unique")
+    by_path = {
+        (raw["_source_path"], conference["title"].casefold()): conference
+        for raw, conference in zip(raw_conferences, conferences, strict=True)
+        if "_source_path" in raw
+    }
+    by_title: dict[str, list[dict]] = {}
+    for conference in conferences:
+        by_title.setdefault(conference["title"].casefold(), []).append(conference)
+    for source_path, entry in payload.get("acceptances", []):
+        title = entry["title"].strip().casefold()
+        candidates = by_title.get(title, [])
+        target = by_path.get((source_path, title))
+        if target is None:
+            target = candidates[0] if len(candidates) == 1 else None
+        if target is not None:
+            rates = normalize_accept_rates(entry["accept_rates"])
+            if rates:
+                target.setdefault("accept_rates", []).extend(rates)
+    for conference in conferences:
+        if "accept_rates" in conference:
+            conference["accept_rates"].sort(key=lambda rate: rate["year"], reverse=True)
     conferences.sort(key=lambda conference: conference["id"])
 
     canonical = json.dumps(
@@ -185,7 +288,7 @@ def build_snapshot(payload: dict, revision: str, exported_at: str) -> dict:
     )
     result = {
         "schema_version": 1,
-        "snapshot_id": f"ccfddl-{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:16]}",
+        "snapshot_id": f"{SNAPSHOT_ID_PREFIX}{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:16]}",
         "data_as_of": exported_at,
         "source": {"name": "ccf-deadlines", "url": SOURCE_URL, "revision": revision},
         "categories": categories,
@@ -198,11 +301,12 @@ def build_snapshot(payload: dict, revision: str, exported_at: str) -> dict:
 def snapshot_from_files(
     files: dict[str, bytes], revision: str, commit_date: str
 ) -> dict:
-    """Only accept the category catalog and direction/name.yml records."""
+    """Read conference and acceptance-rate records from the same upstream revision."""
     if "conference/types.yml" not in files:
         raise ValueError("Missing conference/types.yml")
     categories = yaml.safe_load(files["conference/types.yml"])
     conferences = []
+    acceptances = []
     for name, data in sorted(files.items()):
         parts = name.split("/")
         if len(parts) == 3 and parts[0] == "conference" and name.endswith(".yml"):
@@ -212,9 +316,18 @@ def snapshot_from_files(
             for entry in entries:
                 if not isinstance(entry, dict) or entry.get("sub") != parts[1]:
                     raise ValueError(f"{name}: category does not match directory")
-            conferences.extend(entries)
+            conferences.extend({**entry, "_source_path": "/".join(parts[1:])} for entry in entries)
+        elif len(parts) == 3 and parts[0] == "accept_rates" and name.endswith(".yml"):
+            entries = yaml.safe_load(data)
+            if not isinstance(entries, list):
+                raise ValueError(f"{name}: expected a list")
+            for entry in entries:
+                if not isinstance(entry, dict) or not isinstance(entry.get("title"), str) or not isinstance(entry.get("accept_rates"), list):
+                    raise ValueError(f"{name}: expected a title and acceptance-rate list")
+                acceptances.append(("/".join(parts[1:]), entry))
     return build_snapshot(
-        {"categories": categories, "conferences": conferences}, revision, commit_date
+        {"categories": categories, "conferences": conferences, "acceptances": acceptances},
+        revision, commit_date,
     )
 
 
@@ -222,6 +335,7 @@ def snapshot_from_directory(source: Path, revision: str, commit_date: str) -> di
     paths = [
         source / "conference/types.yml",
         *sorted((source / "conference").glob("*/*.yml")),
+        *sorted((source / "accept_rates").glob("*/*.yml")),
     ]
     files = {}
     for path in paths:

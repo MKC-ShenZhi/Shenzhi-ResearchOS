@@ -40,3 +40,5 @@ Agent 使用独立 `AGENT_DATABASE_URL` 和 `AGENT_SERVICE_TOKEN`。在 `apps/ag
 - 真实服务联调需覆盖独立进程、重启恢复、事件重放、Lease fencing、重试、取消、附件、Knowledge、Session 投影与 SSE 重连。本次迁移按用户要求未运行自动化测试或真实服务验收。
 
 Session/Turn 与 Task/Run 的关联规则见 [生命周期](lifecycle.md)，共享 Wire Model 与当前能力边界见 [共享契约](contracts.md)。
+
+M1 的独立 Mock Worker、浏览器操作说明与隔离环境启动方式见 [本地产品演示](local-demo.md)。它复用现有 Worker Host 的事件、租约、控制与报告交付，仅替换显式注入的 Runtime factory；普通 Worker 默认路径不变。`AGENT_DEMO_MODE=1` 只公布带标记的 `demo/m1` 模型，并拒绝启动普通模型 Worker。

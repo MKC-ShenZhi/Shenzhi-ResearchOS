@@ -60,4 +60,3 @@ class ConfigApiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(all(m['provider'] == m['brand'] for m in data['models']))
                 self.assertNotIn('autodl-private', response.text)
                 self.assertNotIn('api_key', response.text)
-

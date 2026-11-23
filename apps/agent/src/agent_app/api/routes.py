@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import base64
+import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,13 +22,26 @@ from agent_app.extensions.workspace import (
 from agent_contracts import (
     AgentConfigWire, BudgetLimits, ExecutionReport, PlatformEvent, RunStatus,
     RunSteerRequestWire, RunSteerResponseWire, SessionFileReadResponseWire,
-    TaskSubmission, WorkerHeartbeatRequestWire, WorkerHeartbeatResponseWire,
+    TaskRunsResponseWire, TaskSubmission, WorkerHeartbeatRequestWire, WorkerHeartbeatResponseWire,
     WorkspaceClaimCommitResponseWire,
     WorkspaceClaimPrepareResponseWire, WorkspaceClaimRequestWire,
     WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
     WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire,
     EventIngestWire, ReportIngestWire, TaskSubmissionWire, UsageReport,
 )
+
+
+async def require_v1_record(request: Request, session: AsyncSession = Depends(get_session)):
+    from sqlalchemy import select
+    from agent_app.infrastructure.metering_models import TaskMeteringRow
+    from agent_app.infrastructure.models import RunRow
+    task_id = request.path_params.get('task_id')
+    run_id = request.path_params.get('run_id')
+    if run_id:
+        run = await session.scalar(select(RunRow).where(RunRow.run_id == run_id))
+        task_id = run.task_id if run else None
+    if task_id and await session.scalar(select(TaskMeteringRow).where(TaskMeteringRow.task_id == task_id)) is not None:
+        raise BusinessError(20004, '任务协议不匹配', 404)
 
 
 router = APIRouter(prefix='/internal/v1', dependencies=[Depends(require_service)])
@@ -38,6 +52,7 @@ SubmitBody = TaskSubmissionWire
 
 class ClaimBody(BaseModel):
     worker_id: str = Field(min_length=1, max_length=255)
+    demo_mode: bool = False
 
 
 EventBody = EventIngestWire
@@ -46,6 +61,12 @@ ReportBody = ReportIngestWire
 
 @router.get('/config')
 async def agent_config():
+    if os.getenv('AGENT_DEMO_MODE') == '1':
+        return AgentConfigWire(
+            models=[{'value': 'demo/m1', 'label': 'Mock 演示（无模型调用）',
+                     'provider': 'platform', 'enabled': True}], default_model='demo/m1',
+            skills=[{'name': 'deep-research', 'description': 'Mock 演示报告，不执行真实研究'}],
+        ).model_dump(mode='json')
     registry = load_registry()
     store = default_store()
     skills = [{'name': skill.name, 'description': skill.description}
@@ -124,6 +145,11 @@ def _task_json(record) -> dict[str, Any]:
 
 @router.post('/tasks')
 async def submit_task(body: SubmitBody, session: AsyncSession = Depends(get_session)):
+    if os.getenv('AGENT_V1_ADMISSION') == 'drain_only':
+        raise BusinessError(20004, '旧协议已停止新任务准入', 409)
+    demo_mode = os.getenv('AGENT_DEMO_MODE') == '1'
+    if (body.model == 'demo/m1') != demo_mode or (demo_mode and not body.session_id):
+        raise BusinessError(20001, 'Mock 与正式任务不可混用', 409)
     submission = TaskSubmission(
         owner_id=body.owner_id, prompt=body.prompt, session_id=body.session_id,
         turn_id=body.turn_id, input_ref=body.input_ref,
@@ -136,12 +162,18 @@ async def submit_task(body: SubmitBody, session: AsyncSession = Depends(get_sess
     return _task_json(task)
 
 
-@router.get('/tasks/{task_id}')
+@router.get('/tasks/{task_id}', dependencies=[Depends(require_v1_record)])
 async def get_task(task_id: str, owner_id: str, session: AsyncSession = Depends(get_session)):
     return _task_json(await repository.get_task(session, task_id, owner_id))
 
 
-@router.get('/runs/{run_id}')
+@router.get('/tasks/{task_id}/runs', dependencies=[Depends(require_v1_record)])
+async def list_task_runs(task_id: str, owner_id: str,
+                        session: AsyncSession = Depends(get_session)) -> TaskRunsResponseWire:
+    return TaskRunsResponseWire(run_ids=await repository.list_task_runs(session, task_id, owner_id))
+
+
+@router.get('/runs/{run_id}', dependencies=[Depends(require_v1_record)])
 async def get_run(run_id: str, owner_id: str, session: AsyncSession = Depends(get_session)):
     run, task = await repository.get_run(session, run_id, owner_id)
     return {'run_id': run.run_id, 'task_id': run.task_id, 'attempt': run.attempt,
@@ -151,12 +183,12 @@ async def get_run(run_id: str, owner_id: str, session: AsyncSession = Depends(ge
             'report': run.report_json, 'task_status': task.status}
 
 
-@router.post('/tasks/{task_id}/cancel')
+@router.post('/tasks/{task_id}/cancel', dependencies=[Depends(require_v1_record)])
 async def cancel_task(task_id: str, owner_id: str, session: AsyncSession = Depends(get_session)):
     return _task_json(await repository.request_cancel(session, task_id, owner_id))
 
 
-@router.post('/runs/{run_id}/steer')
+@router.post('/runs/{run_id}/steer', dependencies=[Depends(require_v1_record)])
 async def steer_run(run_id: str, body: RunSteerRequestWire,
                     session: AsyncSession = Depends(get_session)):
     if not body.text.strip():
@@ -166,14 +198,14 @@ async def steer_run(run_id: str, body: RunSteerRequestWire,
     ).model_dump(mode='json')
 
 
-@router.get('/runs/{run_id}/controls')
+@router.get('/runs/{run_id}/controls', dependencies=[Depends(require_v1_record)])
 async def read_controls(run_id: str, owner_id: str,
                         after_seq: int = Query(default=0, ge=0),
                         session: AsyncSession = Depends(get_session)):
     return {'controls': await repository.list_controls(session, run_id, owner_id, after_seq)}
 
 
-@router.get('/runs/{run_id}/events')
+@router.get('/runs/{run_id}/events', dependencies=[Depends(require_v1_record)])
 async def read_events(run_id: str, owner_id: str,
                       after_seq: int = Query(default=0, ge=0),
                       session: AsyncSession = Depends(get_session)):
@@ -186,10 +218,13 @@ async def read_events(run_id: str, owner_id: str,
 
 @router.post('/worker/claim')
 async def claim(body: ClaimBody, session: AsyncSession = Depends(get_session)):
-    claimed = await repository.claim_run(session, body.worker_id)
+    demo_mode = os.getenv('AGENT_DEMO_MODE') == '1'
+    if body.demo_mode != demo_mode:
+        raise BusinessError(20001, 'Worker 与 Agent API 运行模式不匹配', 409)
+    claimed = await repository.claim_run(session, body.worker_id, demo_mode=demo_mode)
     if claimed is None:
         return {'run': None}
-    request, lease_token = claimed
+    request, lease_token, event_seq = claimed
     return {'run': {'run_id': request.run_id, 'task_id': request.task_id,
                     'owner_id': request.owner_id, 'prompt': request.prompt,
                     'session_id': request.session_id, 'turn_id': request.turn_id,
@@ -200,10 +235,10 @@ async def claim(body: ClaimBody, session: AsyncSession = Depends(get_session)):
                     'budget': {'max_duration_s': request.budget.max_duration_s,
                                'max_tool_calls': request.budget.max_tool_calls,
                                'max_model_tokens': request.budget.max_model_tokens}},
-            'lease_token': lease_token}
+            'lease_token': lease_token, 'event_seq': event_seq}
 
 
-@router.post('/runs/{run_id}/heartbeat')
+@router.post('/runs/{run_id}/heartbeat', dependencies=[Depends(require_v1_record)])
 async def heartbeat(run_id: str, body: WorkerHeartbeatRequestWire,
                     session: AsyncSession = Depends(get_session)) -> WorkerHeartbeatResponseWire:
     active, cancel_requested = await repository.heartbeat(
@@ -212,7 +247,7 @@ async def heartbeat(run_id: str, body: WorkerHeartbeatRequestWire,
     return WorkerHeartbeatResponseWire(active=active, cancel_requested=cancel_requested)
 
 
-@router.post('/runs/{run_id}/events')
+@router.post('/runs/{run_id}/events', dependencies=[Depends(require_v1_record)])
 async def append_event(run_id: str, body: EventBody,
                        session: AsyncSession = Depends(get_session)):
     if run_id != body.run_id:
@@ -223,7 +258,7 @@ async def append_event(run_id: str, body: EventBody,
     return {'stored': True}
 
 
-@router.post('/runs/{run_id}/report')
+@router.post('/runs/{run_id}/report', dependencies=[Depends(require_v1_record)])
 async def record_report(run_id: str, body: ReportBody,
                         session: AsyncSession = Depends(get_session)):
     if run_id != body.run_id:

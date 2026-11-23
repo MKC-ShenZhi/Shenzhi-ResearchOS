@@ -78,6 +78,21 @@ class AgentGatewayContractTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValidationError):
             await gateway.submit({'owner_id': 'u1', 'prompt': 'research'})
 
+    async def test_task_runs_preserves_order_and_forwards_owner_and_service_auth(self):
+        def handler(request):
+            self.assertEqual(request.method, 'GET')
+            self.assertEqual(request.url.path, '/internal/v1/tasks/t1/runs')
+            self.assertEqual(request.url.params['owner_id'], 'anon:1')
+            self.assertEqual(request.headers['authorization'], 'Bearer service-secret')
+            return httpx.Response(200, json={'run_ids': ['r3', 'r1', 'r2']})
+
+        self.assertEqual(await self.gateway(handler).task_runs('t1', 'anon:1'), ['r3', 'r1', 'r2'])
+
+    async def test_task_runs_rejects_missing_or_empty_history(self):
+        for payload in ({}, {'run_ids': []}):
+            with self.subTest(payload=payload), self.assertRaises(ValidationError):
+                await self.gateway(lambda _: httpx.Response(200, json=payload)).task_runs('t1', 'u1')
+
 
 if __name__ == '__main__':
     unittest.main()

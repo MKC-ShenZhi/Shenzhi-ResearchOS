@@ -37,7 +37,7 @@ const MOCK_CREATOR: KnowledgeCreator = {
   name: "ShenZhi",
   avatarUrl: "/brand/logo-night.png",
   bio: "深知 ShenZhi · Research OS，整理和维护面向科研工作的知识主题。",
-  topicCount: MOCK_TOPICS.length,
+  topicCount: 0,
   isVerified: true,
 };
 
@@ -206,7 +206,8 @@ export class MockKnowledgeClient implements KnowledgeClient {
     return {
       items,
       total: items.length,
-      categories: [...new Set(items.map((topic) => topic.category))],
+      categories: [...new Map(items.map((topic) => [topic.category, topic.categoryName]))]
+        .map(([id, name]) => ({ id, name, total: items.filter((topic) => topic.category === id).length })),
     };
   }
 
@@ -217,6 +218,19 @@ export class MockKnowledgeClient implements KnowledgeClient {
     const topic = MOCK_TOPICS.find((item) => item.id === topicId && item.enabled);
     if (!topic) throw KnowledgeClientError.notFound("未找到对应主题");
     return topic;
+  }
+
+  async topicPapers(topicId: string, offset: number, limit: number, signal?: AbortSignal): Promise<KnowledgePaperBrowseResponse> {
+    await this.topic(topicId, signal);
+    const papers = topicId === "openalex:topic:T10028" ? MOCK_PAPERS.slice(0, 2) : [];
+    return {
+      results: papers.slice(offset, offset + limit).map((paper) => ({
+        ...paper, imageId: null, score: null, rank: null, provenance: { source: "mock" },
+      })),
+      total: papers.length,
+      limit,
+      offset,
+    };
   }
 
   async creator(creatorId: string): Promise<KnowledgeCreator> {

@@ -176,6 +176,12 @@ class TaskRecordWire(WireModel):
     created_at: datetime
 
 
+class TaskRunsResponseWire(WireModel):
+    """All Run IDs for one Task, ordered by its immutable, unique attempt."""
+
+    run_ids: list[str] = Field(min_length=1)
+
+
 class RunRecordWire(WireModel):
     run_id: str
     task_id: str

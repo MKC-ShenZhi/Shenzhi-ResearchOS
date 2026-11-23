@@ -19,7 +19,7 @@ export function TopicResults({ topics, returnTo }: { topics: KnowledgeTopic[]; r
       {groupTopics(displayedTopics).map(([category, items]) => (
         <section key={category}>
           <div className="mb-3 flex items-center justify-between gap-4">
-            <h2 className="text-2xl font-semibold tracking-tight text-ink">{category}</h2>
+            <h2 className="text-2xl font-semibold tracking-tight text-ink">{items[0].categoryName}</h2>
             <span className="text-sm text-muted">{totals.get(category)} 个主题</span>
           </div>
           <TopicGrid topics={items} returnTo={returnTo} />

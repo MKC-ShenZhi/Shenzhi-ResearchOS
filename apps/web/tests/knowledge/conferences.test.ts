@@ -48,10 +48,13 @@ test("directory searches names, filters actual years, sorts without mutating met
 test("BFF browse forwards exact conference, pagination, cancellation and no keyword", async () => {
   const original = globalThis.fetch;
   const requests: string[] = [];
+  const signals: AbortSignal[] = [];
   const controller = new AbortController();
   globalThis.fetch = async (input, init) => {
     requests.push(String(input));
-    assert.equal(init?.signal, controller.signal);
+    assert.ok(init?.signal);
+    assert.equal(init.signal.aborted, false);
+    signals.push(init.signal);
     return new Response(JSON.stringify({ code: 0, data: requests.length === 1 ? { items: ITEMS } : { results: [], total: 0, limit: 20, offset: 20 } }));
   };
   try {
@@ -59,6 +62,9 @@ test("BFF browse forwards exact conference, pagination, cancellation and no keyw
     assert.equal((await client.conferences(controller.signal)).items.length, 3);
     await client.browsePapers({ conference: "A & B", year: 2022, limit: 20, offset: 20 }, controller.signal);
     assert.deepEqual(requests, ["/api/v1/knowledge/conferences", "/api/v1/knowledge/papers?conference=A+%26+B&year=2022&limit=20&offset=20"]);
+    controller.abort();
+    assert.equal(signals.length, 2);
+    assert.ok(signals.every((signal) => signal.aborted));
   } finally { globalThis.fetch = original; }
 });
 

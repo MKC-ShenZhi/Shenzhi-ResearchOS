@@ -44,6 +44,7 @@ export interface KnowledgeClient {
   topics(signal?: AbortSignal): Promise<KnowledgeTopicListResponse>;
   /** 主题详情；topicId 作为 opaque string 使用 */
   topic(topicId: string, signal?: AbortSignal): Promise<KnowledgeTopic>;
+  topicPapers(topicId: string, offset: number, limit: number, signal?: AbortSignal): Promise<KnowledgePaperBrowseResponse>;
   /** 主题创作者信息；按需加载，creatorId 作为 opaque string 使用 */
   creator(creatorId: string): Promise<KnowledgeCreator>;
   /** 总览页跨实体混合搜索 */

@@ -10,7 +10,7 @@ from agent_app.execution.tools import Tool
 from agent_app.errors import BusinessError
 from agent_app.extensions.skills import SkillStore, default_store
 from agent_app.application.policies import (
-    TEMPERATURE, compose_agent_system, run_deadline_s, tool_call_budget,
+    TEMPERATURE, MAX_EXECUTION_TURNS, compose_agent_system, run_deadline_s, tool_call_budget,
 )
 from agent_app.capabilities.fetch_url import fetch_url_tool
 from agent_app.capabilities.read_paper import read_paper_tool
@@ -114,6 +114,7 @@ def build_runtime(*, runtime_factory: Callable[..., AgentRuntime] = default_runt
     system = lambda specs: compose_agent_system(specs, extra_sections=extra_sections)
     overrides.setdefault('temperature', TEMPERATURE.get(mode, TEMPERATURE['fast']))
     overrides.setdefault('deadline_s', run_deadline_s(mode))
+    overrides.setdefault('max_turns', MAX_EXECUTION_TURNS)
     overrides.setdefault('max_tool_calls', tool_call_budget(mode))
     overrides.setdefault('tool_budget', tool_call_budget(mode))
     overrides.setdefault('compaction', True)

@@ -39,7 +39,7 @@ test("discovery mapper preserves display metadata without inventing engagement o
   assert.equal(mapped.venue, "预印本");
   assert.equal(mapped.authors, "A One · B Two · C Three · D Four · E Five 等");
   // Without upstream topics there are no tags; none are invented.
-  assert.deepEqual(mapped.tags, []);
+  assert.deepEqual(mapped.topics, []);
   assert.equal(mapped.thumbnailUrl, "/paper-thumbnails/2604.17730v1.webp");
   assert.equal("likes" in mapped, false);
   assert.equal("citations" in mapped, false);
@@ -105,11 +105,18 @@ test("daily-edition pool papers resolve their knowledge image through the proxy 
   }
 });
 
-test("home cards show knowledge topics like search cards: keywords first, else subjects, at most five", () => {
+test("home cards keep at most five structured topics in upstream order", () => {
+  const topics = Array.from({ length: 6 }, (_, index) => ({
+    id: `openalex:topic:T${index}`, nameZh: null, nameEn: `Topic ${index}`,
+  }));
   assert.deepEqual(mapDiscoveryPaper(discoveryPaper({
-    keywords: ["k1", "k2", "k3", "k4", "k5", "k6"], subjects: ["s1"],
-  })).tags, ["k1", "k2", "k3", "k4", "k5"]);
-  assert.deepEqual(mapDiscoveryPaper(discoveryPaper({ keywords: [], subjects: ["RAG", "Agents"] })).tags, ["RAG", "Agents"]);
+    topics, keywords: ["keyword"], subjects: ["subject"],
+  })).topics, topics.slice(0, 5));
+  for (const topics of [[], undefined]) {
+    assert.deepEqual(mapDiscoveryPaper(discoveryPaper({
+      topics, keywords: ["keyword"], subjects: ["subject"],
+    })).topics, []);
+  }
 });
 
 test("home static thumbnails bypass the knowledge image flag", () => {

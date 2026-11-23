@@ -117,6 +117,9 @@ class FakeAgentGateway:
         plan = next(item for item in self.runs.values() if item['task_id'] == task_id)
         return {'current_run_id': plan['run_id'], 'cancel_requested': plan['status'] == 'cancelled'}
 
+    async def task_runs(self, task_id, owner):
+        return [item['run_id'] for item in self.runs.values() if item['task_id'] == task_id]
+
     async def steer(self, run_id, owner, message):
         if run_id not in self.runs:
             raise BusinessError(20004, '运行不存在', 404)
@@ -185,6 +188,57 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(renamed.json()['data']['title'], '重命名')
         self.assertEqual((await self.request('DELETE', f'/api/v1/agent/sessions/{session_id}')).status_code, 200)
         self.assertEqual((await self.request('GET', f'/api/v1/agent/sessions/{session_id}')).status_code, 404)
+
+    async def test_cached_stream_is_revoked_after_delete_or_claim(self):
+        for revoke in ('delete', 'claim'):
+            session_id = await self.create()
+            await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+                               json_body={'prompt': 'private'})
+            self.assertIn(session_id, live_runs._live)
+            if revoke == 'delete':
+                await self.request('DELETE', f'/api/v1/agent/sessions/{session_id}')
+            else:
+                # Same persisted owner change performed by anonymous claim.
+                self.repo.sessions[session_id].owner = 'user:claimed'
+            denied = await self.request('GET', f'/api/v1/agent/sessions/{session_id}/run/stream')
+            self.assertEqual(denied.status_code, 404)
+            self.assertNotIn('private', denied.text)
+
+    async def test_old_idempotency_key_replays_its_own_turn_and_preserves_latest_stream(self):
+        session_id = await self.create()
+        path = f'/api/v1/agent/sessions/{session_id}/run'
+        streams = []
+        for index in (1, 2):
+            self.gateway.enqueue(final_text=f'answer-{index}')
+            response = await self.request('POST', path, json_body={'prompt': f'question-{index}'},
+                                          headers={'Idempotency-Key': f'key-{index}'})
+            streams.append(parse_sse(response.text))
+        for cached in (True, False):
+            if not cached:
+                live_runs._live.clear()
+            repeated = await self.request('POST', path, json_body={'prompt': 'question-1'},
+                                          headers={'Idempotency-Key': 'key-1'})
+            self.assertEqual(parse_sse(repeated.text), streams[0])
+            latest = await self.request('GET', path + '/stream')
+            self.assertEqual(parse_sse(latest.text), streams[1])
+        self.assertEqual(len(self.gateway.submissions), 2)
+
+    async def test_claimed_session_replays_with_trusted_execution_owner(self):
+        session_id = await self.create()
+        response = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+                                      json_body={'prompt': 'private'})
+        original = parse_sse(response.text)
+        source = self.repo.sessions[session_id].owner
+        self.repo.sessions[session_id].owner = 'user:claimed'
+        live_runs._live.clear()
+        with patch.object(self.gateway, 'task_runs', wraps=self.gateway.task_runs) as task_runs:
+            replay = await self.request('GET', f'/api/v1/agent/sessions/{session_id}/run/stream',
+                                        owner={'x-shenzhi-user-id': 'claimed'})
+            self.assertEqual(parse_sse(replay.text), original)
+            self.assertEqual(task_runs.call_args.args[1], source)
+        detail = await self.request('GET', f'/api/v1/agent/sessions/{session_id}',
+                                     owner={'x-shenzhi-user-id': 'claimed'})
+        self.assertNotIn('_agent_owner_id', detail.text)
 
     async def test_cursor_pagination_and_legacy_import_are_product_owned(self):
         for index in range(12):
@@ -282,10 +336,24 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         response = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
                                       json_body={'prompt': '投影失败'})
         self.assertEqual(response.status_code, 200)
-        # The projection catches Agent Gateway failures and closes the product Turn.
+        # Losing Agent connectivity must not invent a terminal execution result.
         turn = self.repo.sessions[session_id].turns[0]
-        self.assertEqual(turn.status, 'failed')
-        self.assertEqual(turn.assistant_content, '部分答案')
+        self.assertEqual(turn.status, 'running')
+        self.assertNotIn('result', [name for name, _ in parse_sse(response.text)])
+        self.assertNotIn(session_id, live_runs._live)
+        detail = await self.request('GET', f'/api/v1/agent/sessions/{session_id}')
+        self.assertEqual(detail.json()['data']['turns'][0]['status'], 'running')
+        conflict = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+                                      json_body={'prompt': '不能重复执行'})
+        self.assertEqual(conflict.status_code, 409)
+        # A failed recovery attempt must also leave the authoritative Turn open.
+        broken = await self.request('GET', f'/api/v1/agent/sessions/{session_id}/run/stream')
+        self.assertNotIn('result', [name for name, _ in parse_sse(broken.text)])
+        self.gateway.runs['run-1']['event_error'] = None
+        recovered = await self.request('GET', f'/api/v1/agent/sessions/{session_id}/run/stream')
+        self.assertEqual(parse_sse(recovered.text)[-1][1]['final_text'], '部分答案')
+        self.assertEqual(turn.status, 'done')
+        self.assertEqual(len(self.gateway.submissions), 1)
 
     async def test_orphan_reconciliation_preserves_previous_transcript(self):
         owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"

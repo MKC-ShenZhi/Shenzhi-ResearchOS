@@ -90,7 +90,9 @@ function FundingBrowserContent({ searchParams }: { searchParams: FundingSearchPa
 
   const updateFundingUrl = (nextQuery: string, nextFundingId: string | null) => {
     if (!nextQuery.trim() && !nextFundingId) clearRestoration();
-    router.replace(buildFundingUrl(searchParams, nextQuery, nextFundingId), { scroll: false });
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", "fundings");
+    router.replace(buildFundingUrl(params, nextQuery, nextFundingId), { scroll: false });
   };
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -116,13 +118,8 @@ function FundingBrowserContent({ searchParams }: { searchParams: FundingSearchPa
     : new KnowledgeClientError("UNKNOWN", "基金恢复失败");
 
   return (
-    <div className="mx-auto w-full max-w-[1080px] px-6 py-8 lg:px-8">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">项目基金库</h1>
-        <p className="mt-1.5 text-sm text-muted">浏览知识底座中的基金信息，并查看关联论文</p>
-      </header>
-
-      <form onSubmit={submit} className="mt-6 flex gap-3 rounded-2xl bg-card p-4 shadow-card">
+    <div>
+      <form onSubmit={submit} className="flex gap-3 rounded-2xl bg-card p-4 shadow-card">
         <label className="relative min-w-0 flex-1">
           <span className="sr-only">搜索基金名称或 ID</span>
           <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-faint" />

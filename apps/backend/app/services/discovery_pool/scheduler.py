@@ -1,8 +1,8 @@
-"""In-process scheduling for the home feed's periodic jobs.
+"""In-process scheduling for the long-running backend's periodic jobs.
 
-Opt-in with ``HOME_FEED_SCHEDULER_ENABLED=true``. Every CHECK_INTERVAL the
-process tries a Postgres advisory lock; only the holder runs what is due, so
-several workers or instances never duplicate a job:
+Opt-in with ``BACKGROUND_JOBS_ENABLED=true``. Each tick checks the knowledge
+conference directory and conference deadlines independently. For the home
+feed jobs below, only the holder of the Postgres advisory lock runs what is due:
 
 - ``sync`` when the pool year has no papers or was synced SYNC_INTERVAL ago;
 - ``publish`` when today's edition (Shanghai) is missing and it is past PUBLISH_AFTER;
@@ -10,8 +10,8 @@ several workers or instances never duplicate a job:
   events past retention, and daily editions no longer read as history.
 
 Sync and publish due-ness is read from the database, so a restart or a missed
-tick simply catches up on the next one. A failed sync is not retried for
-SYNC_RETRY_DELAY. Purging is idempotent; after a restart it just runs again.
+tick simply catches up on the next one. The sync retry window and hourly
+purge interval are shared by all workers and survive restarts.
 """
 
 from __future__ import annotations
@@ -22,17 +22,21 @@ import os
 from datetime import datetime, time, timedelta
 
 from sqlalchemy import exists, func, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import session_scope
 from app.core.time import utc_now
 from app.models.home_daily_edition import HomeDailyEditionRow
 from app.models.discovery_pool import DiscoveryPoolPaperRow
+from app.models.home_scheduler_state import HomeSchedulerStateRow
 from app.services.discovery import SHANGHAI_TIMEZONE
 from app.services.discovery_pool.edition import DailyEditionBuilder
 from app.services.discovery_pool.sync import DiscoveryPoolSync
 from app.services.home_feed.config import pool_year
 from app.services.recommendation.maintenance import purge_expired
 from app.services.conferences.sync import ConferenceSync
+from app.services.knowledge.conference_directory import refresh_conference_directory
 
 logger = logging.getLogger(__name__)
 
@@ -46,57 +50,61 @@ PURGE_INTERVAL = timedelta(hours=1)
 LOCK_KEY = 7_402_118_031
 
 
-def home_feed_enabled() -> bool:
-    return os.getenv('HOME_FEED_SCHEDULER_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
-
-
-def conference_sync_enabled() -> bool:
-    # Conference jobs use this scheduler only; deployment must keep it running.
-    return os.getenv('CONFERENCE_SYNC_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
-
-
 def scheduler_enabled() -> bool:
-    return home_feed_enabled() or conference_sync_enabled()
+    return os.getenv('BACKGROUND_JOBS_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+async def record_job_time(session: AsyncSession, job: str, now: datetime) -> None:
+    await session.execute(
+        insert(HomeSchedulerStateRow).values(job=job, recorded_at=now).on_conflict_do_update(
+            index_elements=[HomeSchedulerStateRow.job],
+            set_={'recorded_at': now},
+        ),
+    )
 
 
 class HomeFeedScheduler:
     def __init__(self, sync: DiscoveryPoolSync | None = None, builder: DailyEditionBuilder | None = None):
         self.sync = sync or DiscoveryPoolSync()
         self.builder = builder or DailyEditionBuilder()
-        self._sync_failed_at: datetime | None = None
-        self._purged_at: datetime | None = None
 
     async def run_due(self, now: datetime | None = None) -> list[str]:
         """Run every job that is due now; returns the jobs that ran."""
+        if not scheduler_enabled():
+            return []
         now = now or utc_now()
-        conference_ran = []
-        if conference_sync_enabled():
-            try:
-                result = await ConferenceSync().run(now=now)
-                if result['status'] in {'updated', 'unchanged'}:
-                    conference_ran.append('conferences')
-            except Exception:
-                logger.exception('Conference sync failed; the existing snapshot is kept')
-        if not home_feed_enabled():
-            return conference_ran
+        ran: list[str] = []
+        try:
+            if await refresh_conference_directory():
+                ran.append('knowledge_conferences')
+        except Exception:
+            logger.exception('Knowledge conference directory refresh failed; the existing snapshot is kept')
+        try:
+            result = await ConferenceSync().run(now=now)
+            if result['status'] in {'updated', 'unchanged'}:
+                ran.append('conferences')
+        except Exception:
+            logger.exception('Conference sync failed; the existing snapshot is kept')
         local = now.astimezone(SHANGHAI_TIMEZONE)
         year = pool_year()
-        ran: list[str] = conference_ran
         async with session_scope() as session:
             if not await session.scalar(select(func.pg_try_advisory_xact_lock(LOCK_KEY))):
                 return ran
             last_sync = await session.scalar(
                 select(func.max(DiscoveryPoolPaperRow.synced_at)).where(DiscoveryPoolPaperRow.year == year),
             )
-            retry_blocked = self._sync_failed_at is not None and now - self._sync_failed_at < SYNC_RETRY_DELAY
+            sync_job = f'pool-sync:{year}'
+            attempt = await session.get(HomeSchedulerStateRow, sync_job)
+            retry_blocked = attempt is not None and now - attempt.recorded_at < SYNC_RETRY_DELAY
             if (last_sync is None or now - last_sync >= SYNC_INTERVAL) and not retry_blocked:
                 try:
+                    # Persist the attempt before calling upstream, even if this worker exits mid-sync.
+                    async with session_scope() as state_session:
+                        await record_job_time(state_session, sync_job, now)
                     result = await self.sync.sync(year)
-                    self._sync_failed_at = None
                     ran.append('sync')
                     logger.info('Home pool synced: %s', result.summary())
                 except Exception:  # noqa: BLE001 - the existing pool keeps serving
-                    self._sync_failed_at = now
                     logger.exception('Home pool sync failed; the existing pool is kept')
             published = await session.scalar(select(exists().where(
                 HomeDailyEditionRow.edition_date == local.date(),
@@ -108,11 +116,12 @@ class HomeFeedScheduler:
                     logger.info('Home daily edition published: %s', result.summary())
                 except Exception:  # noqa: BLE001 - the feed falls back to an older edition
                     logger.exception('Home daily edition publish failed')
-            if self._purged_at is None or now - self._purged_at >= PURGE_INTERVAL:
+            purge = await session.get(HomeSchedulerStateRow, 'purge')
+            if purge is None or now - purge.recorded_at >= PURGE_INTERVAL:
                 try:
                     events, snapshots = await purge_expired(now)
                     editions = await self.builder.purge(local.date())
-                    self._purged_at = now
+                    await record_job_time(session, 'purge', now)
                     ran.append('purge')
                     logger.info('Home feed purge: events=%d snapshots=%d editions=%d', events, snapshots, editions)
                 except Exception:  # noqa: BLE001 - retried on the next tick
@@ -124,15 +133,15 @@ class HomeFeedScheduler:
             try:
                 await self.run_due()
             except Exception:  # noqa: BLE001 - one bad tick must not stop scheduling
-                logger.exception('Home feed scheduler tick failed')
+                logger.exception('Background scheduler tick failed')
             await asyncio.sleep(CHECK_INTERVAL_SECONDS)
 
 
 def start_home_feed_scheduler() -> asyncio.Task | None:
     if not scheduler_enabled():
         return None
-    logger.info('Home feed scheduler started')
-    return asyncio.create_task(HomeFeedScheduler().run_forever(), name='home-feed-scheduler')
+    logger.info('Background scheduler started')
+    return asyncio.create_task(HomeFeedScheduler().run_forever(), name='background-scheduler')
 
 
 async def stop_home_feed_scheduler(task: asyncio.Task | None) -> None:

@@ -10,7 +10,7 @@ from agent_contracts import (
     AgentConfigWire, OwnerQueryWire, PlatformEventWire, RunEventsQueryWire,
     RunRecordWire, RunSteerRequestWire, RunSteerResponseWire,
     SessionFileReadRequestWire, SessionFileReadResponseWire, TaskRecordWire,
-    TaskSubmissionWire, WorkspaceClaimCommitResponseWire,
+    TaskRunsResponseWire, TaskSubmissionWire, WorkspaceClaimCommitResponseWire,
     WorkspaceClaimPrepareResponseWire, WorkspaceClaimRequestWire,
     WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
     WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire,
@@ -33,6 +33,9 @@ class AgentGateway:
         try:
             async with httpx.AsyncClient(base_url=self.base_url, timeout=20.0,
                                          transport=self.transport,
+                                         # Internal service traffic must not inherit the
+                                         # editor's Internet proxy (or leak its Bearer).
+                                         trust_env=False,
                                          headers={'Authorization': f'Bearer {self.token}'}) as client:
                 response = await client.request(method, path, params=params, json=payload)
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
@@ -58,6 +61,8 @@ class AgentGateway:
         return AgentConfigWire.model_validate(result).model_dump(mode='json')
 
     async def submit(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if os.getenv('AGENT_V2_ADMISSION') == 'authorized':
+            raise BusinessError(20004, '正式权益准入已启用，请使用 v2 提交', 409)
         body = TaskSubmissionWire.model_validate(payload)
         result = await self.request('POST', '/internal/v1/tasks',
                                     payload=body.model_dump(mode='json'))
@@ -74,6 +79,12 @@ class AgentGateway:
         result = await self.request('GET', f'/internal/v1/runs/{run_id}',
                                     params=query.model_dump(mode='json'))
         return RunRecordWire.model_validate(result).model_dump(mode='json')
+
+    async def task_runs(self, task_id: str, owner: str) -> list[str]:
+        query = OwnerQueryWire(owner_id=owner)
+        result = await self.request('GET', f'/internal/v1/tasks/{task_id}/runs',
+                                    params=query.model_dump(mode='json'))
+        return TaskRunsResponseWire.model_validate(result).run_ids
 
     async def events(self, run_id: str, owner: str, after_seq: int) -> list[dict[str, Any]]:
         query = RunEventsQueryWire(owner_id=owner, after_seq=after_seq)
@@ -151,6 +162,19 @@ class AgentGateway:
         except (KeyError, ValueError, TypeError) as exc:
             raise BusinessError(20004, 'Agent 文件响应无效', 502) from exc
         return content, media_type
+
+
+async def read_run_update(gateway: AgentGateway, run_id: str, owner: str,
+                          after_seq: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Read status before events so a terminal report cannot truncate the tail.
+
+    Control seals a Run against event writes when it commits its report. If this
+    read observes that report, the subsequent events read includes its full tail.
+    If it does not, the caller must poll again instead of emitting a result.
+    """
+    run = await gateway.run(run_id, owner)
+    events = await gateway.events(run_id, owner, after_seq)
+    return run, events
 
 
 agent_gateway = AgentGateway()

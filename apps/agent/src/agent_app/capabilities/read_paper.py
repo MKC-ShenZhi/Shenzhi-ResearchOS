@@ -217,4 +217,3 @@ async def _resolve_pdf_url(knowledge: Any, paper_id: str) -> str | None:
 
 
 _unpaywall_pdf = unpaywall_pdf  # compatibility for existing callers/tests
-

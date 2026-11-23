@@ -18,8 +18,8 @@
   `(user_id, topic_id)` 唯一键保证同一用户重复点击不会多计。
 - `paper_count`（文件夹内论文数）与 `collector_count`（全平台独立收藏用户数）是不同口径，
   界面不得混用。
-- 目录 `topic_catalog.json` 的 `followersCount` 只是历史快照（当前全部为 0），不再是人数
-  来源；目录文件本身不改写，真实人数在接口层覆盖。
+- 主题卡片和详情通过互动接口读取实时关注人数。新增关注使用默认 OpenAlex Tree 的叶节点 ID。
+  旧目录 ID 的关注记录保留，可以按原 ID 取消关注。
 
 ## 二、数据模型
 
@@ -90,7 +90,8 @@ uv run --env-file .env python -m app.services.stats               # 上海时区
 
 - 论文行覆盖“当天在收藏或点赞关系中出现过的论文”，无互动论文不产生行，读取方按 0 处理；
   也可用 `paper_id` 精确查询并得到 `missing_paper_ids`。
-- 主题行覆盖目录中全部启用主题（当前 293 条），因此知识底座能读到完整集合（含 0）。
+- 主题行保留历史目录的全量覆盖（含 0），同时统计有关注记录的 OpenAlex Topic ID。两套 ID 分开统计。
+  快照任务直接读取平台关系表，生成论文和主题统计时无需访问知识底座。
 - 生成事务采用 PostgreSQL `REPEATABLE READ`，收藏、点赞、关注使用同一个 MVCC 视图。
   首次读取前以 `SHARE ROW EXCLUSIVE` 锁串行化所有快照生成任务；普通统计查询不被该锁阻塞。
 - 当日运行记录、当日全部明细行在同一事务内写入并提交；读取方只采纳
@@ -99,9 +100,8 @@ uv run --env-file .env python -m app.services.stats               # 上海时区
 - 同日重跑会删除当日旧行并整体替换；失败时事务回滚，上一次完整发布继续对外可见，
   `failure_reason` 只记录最近一次尝试的错误类型。
 - CLI 只生成运行时上海时区的当天快照。源表只保存当前有效关系，不能用当前人数回填过去日期并称作历史统计。
-- 快照调度不在仓库内实现：API 进程内的首页调度器（`app/services/discovery_pool/scheduler.py`，
-  `HOME_FEED_SCHEDULER_ENABLED`）只执行候选池 `sync`、每日候选 `publish` 与过期数据 `purge`，
-  不生成统计快照。部署侧需用 cron / systemd timer / 平台调度器每日调用一次 CLI；仓库不预设已有 Cron 配置。
+- 统计快照由部署侧通过 cron、systemd timer 或平台调度器每日调用一次 CLI。
+  `BACKGROUND_JOBS_ENABLED` 控制 API 进程内的后台调度器，统计快照仍由上述 CLI 独立生成。
 - 快照的站内消费方：首页 `trending` 数据源（`app/services/home_feed/trending.py`）读取列表日期之前
   （不含当天）最新一次完整发布，按点赞数 + 收藏人数排序候选池论文；个人推荐排序中的“平台热度”
   特征也来自已发布快照。从未运行 `python -m app.services.stats` 时 `trending` 始终为空，其配额由其他

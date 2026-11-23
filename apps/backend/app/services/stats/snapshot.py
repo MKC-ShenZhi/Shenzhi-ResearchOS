@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import session_scope
 from app.core.time import utc_now
+from app.integrations.knowledge.adapter import is_openalex_topic_id
 from app.models.collections import CollectionFolderRow, CollectionItemRow
 from app.models.interactions import PaperLikeRow, TopicFollowRow
 from app.models.stats import PaperStatDailyRow, StatsSnapshotRunRow, TopicStatDailyRow
@@ -76,6 +77,9 @@ class SnapshotService:
             collector_counts = await self._collector_counts(session)
             like_counts = await self._like_counts(session)
             follower_counts = await self._follower_counts(session)
+            # Preserve legacy coverage and include new IDs with follows without
+            # making the shared paper-statistics job depend on the upstream API.
+            topic_ids.extend(sorted(topic_id for topic_id in follower_counts if is_openalex_topic_id(topic_id)))
             paper_ids = sorted(set(collector_counts) | set(like_counts))
 
             # Publish the day first so the foreign key is satisfied; rows and the

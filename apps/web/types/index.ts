@@ -1,14 +1,15 @@
+import type { PaperTopic } from "../clients/knowledge/types";
+
 /** 论文卡片展示数据：首页与检索各自的数据适配层转换为此结构后共用同一版式。 */
 export interface PaperCardModel {
   id: string;
   date: string;
   /** 为空时不展示会议标签。 */
   venue: string | null;
-  venueTone: "violet" | "amber" | "green";
   authors: string;
   title: string;
   abstract: string;
-  tags: string[];
+  topics: PaperTopic[];
   /** 由数据适配层提供；为空时由展示组件使用统一 fallback。 */
   thumbnailUrl?: string | null;
 }

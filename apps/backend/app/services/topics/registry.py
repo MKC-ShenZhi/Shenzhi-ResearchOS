@@ -1,4 +1,4 @@
-"""Domain access for the controlled Topic Catalog."""
+"""Historical Topic metadata for creator profiles, recommendations and statistics."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ class TopicRegistry:
             and (
                 (isinstance(topic.author, str) and topic.author.strip().lower() in CREATOR_ALIASES)
                 or (
-                    not isinstance(topic.author, str)
+                    topic.author is not None and not isinstance(topic.author, str)
                     and topic.author.id.strip().lower() in CREATOR_ALIASES
                 )
             )

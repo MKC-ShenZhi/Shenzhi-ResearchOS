@@ -54,7 +54,7 @@ def main():
 
         revision = revision or git("rev-parse", "HEAD")
         commit_date = commit_date or git("show", "-s", "--format=%cI", "HEAD")[:10]
-        if git("status", "--porcelain", "--", "conference"):
+        if git("status", "--porcelain", "--", "conference", "accept_rates"):
             raise ValueError("Source has uncommitted conference changes")
     snapshot = snapshot_from_directory(args.source, revision, commit_date)
     previous = (

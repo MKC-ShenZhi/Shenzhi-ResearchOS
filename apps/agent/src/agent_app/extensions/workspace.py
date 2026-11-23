@@ -570,7 +570,9 @@ def copy_session_workspace(source_owner: str, target_owner: str, session_id: str
         raise BusinessError(20001, '非法的会话标识')
     source = _owner_dir(source_owner) / session_id
     if not source.exists():
-        return False
+        # Empty/new Sessions and fast runs need not have materialized files.
+        # There is nothing to copy, so their ownership claim can still proceed.
+        return True
     target = _owner_dir(target_owner) / session_id
     target.parent.mkdir(parents=True, exist_ok=True)
     # Preserve links instead of dereferencing paths outside the owner tree.

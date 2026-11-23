@@ -13,12 +13,14 @@ from app.integrations.knowledge.adapter import (
 )
 from app.integrations.knowledge.client import KnowledgeBaseClient
 from app.integrations.knowledge.exceptions import KnowledgeIntegrationError
+from app.integrations.knowledge.nsfc_projects import NsfcProjectsAdapter
 from app.main import app
 from app.schemas.knowledge import (
     FundingSearchRequest,
     KnowledgeMixedSearchRequest,
     ScholarSearchRequest,
 )
+from app.services.knowledge.cache import ProjectFirstPageCache
 from app.services.knowledge.service import KnowledgeService, KnowledgeServiceError
 
 
@@ -550,6 +552,38 @@ class KnowledgeEntityApiTests(unittest.IsolatedAsyncioTestCase):
         app.dependency_overrides.pop(require_bff, None)
         self.service_patch.stop()
         self.env.stop()
+
+    async def test_project_routes_cache_only_unfiltered_first_page_until_expiry(self):
+        requests = []
+        now = 0
+
+        def upstream(request):
+            self.assertEqual(request.url.path, '/api/retrieval/projects')
+            requests.append(dict(request.url.params))
+            return httpx.Response(200, json={'items': [], 'total': 0})
+
+        adapter = NsfcProjectsAdapter(base_url='https://example.com', transport=httpx.MockTransport(upstream))
+        cache = ProjectFirstPageCache(ttl_seconds=300, max_entries=50, clock=lambda: now)
+        path = '/api/v1/knowledge/projects'
+        with (
+            patch('app.api.knowledge.service.nsfc_projects', adapter),
+            patch('app.services.knowledge.service.shared_project_first_page_cache', cache),
+        ):
+            for url in (path, '/api/v1/knowledge/nsfc-projects'):
+                response = await self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(requests), 1)
+
+            for params in ({'offset': 20}, {'keyword': 'graph'}, {'q': 'project'}):
+                for _ in range(2):
+                    response = await self.client.get(path, params=params)
+                    self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(requests), 7)
+
+            now = 300
+            response = await self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(requests), 8)
 
     async def test_new_routes_expose_only_shenzhi_contract(self):
         scholar_search = await self.client.get(

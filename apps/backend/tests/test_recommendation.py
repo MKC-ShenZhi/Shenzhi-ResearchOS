@@ -3,6 +3,7 @@
 import asyncio
 import os
 import unittest
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -51,6 +52,8 @@ from app.services.recommendation.recommendations import (
     _rank,
 )
 from app.services.user.account_deletion import AccountDeletionService
+
+TOPIC = {'id': 'openalex:topic:T10028', 'nameZh': None, 'nameEn': 'Language models'}
 
 
 def profile(**changes):
@@ -263,6 +266,25 @@ class ProfileMathTests(unittest.TestCase):
 
 
 class RecallTests(unittest.IsolatedAsyncioTestCase):
+    async def test_recommendation_topics_survive_an_older_pool_row_and_legacy_snapshots(self):
+        raw = recalled_paper('paper:personal', '/images/personal.webp')
+        row = SimpleNamespace(paper_fields=lambda: raw)
+        session = SimpleNamespace(scalars=AsyncMock(side_effect=[[raw['id']], [row]]))
+
+        @asynccontextmanager
+        async def fake_session():
+            yield session
+
+        live = DiscoveryPaper.model_validate({**raw, 'source': 'personal', 'topics': [TOPIC]})
+        legacy = {**raw, 'id': 'paper:legacy'}
+        with patch('app.services.recommendation.recommendations.session_scope', fake_session):
+            packed = await RecommendationService._pack([(live, None, ['keyword'])], first_rank=1)
+            cards = await RecommendationService._hydrate([
+                *packed, {'id': legacy['id'], 'rank': 2, 'source': 'personal', 'paper': legacy},
+            ], uuid4())
+        self.assertNotIn('paper', packed[0])
+        self.assertEqual([card['topics'] for card in cards], [[TOPIC], []])
+
     async def test_empty_paper_history_skips_metadata_lookup(self):
         knowledge = SimpleNamespace(get_paper=AsyncMock())
         self.assertEqual(await PaperFeatureService(knowledge).get_many([]), {})
@@ -271,13 +293,15 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_deduplicates_sources_and_survives_partial_failure(self):
         paper = SimpleNamespace(id='paper:1', title='One', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=['RAG'], keywords=['retrieval'],
+                                subjects=['RAG'], keywords=['retrieval'], topics=[],
                                 image_id='/images/2026/paper-1.webp')
         knowledge = SimpleNamespace(
             search_by_subject=AsyncMock(side_effect=[
                 SimpleNamespace(results=[paper]), KnowledgeServiceError('unavailable'),
             ]),
-            search=AsyncMock(return_value=SimpleNamespace(results=[paper])),
+            search=AsyncMock(return_value=SimpleNamespace(results=[SimpleNamespace(
+                **{**vars(paper), 'topics': [TOPIC]},
+            )])),
         )
         result = await CandidateRecallService(knowledge).recall(profile(
             explicit_subjects=['RAG', 'vision'], long_keywords={'retrieval': 1},
@@ -286,6 +310,7 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result[0].paper['id'], 'paper:1')
         self.assertEqual(result[0].paper['image_id'], '/images/2026/paper-1.webp')
         self.assertEqual((result[0].paper['keywords'], result[0].paper['subjects']), (['retrieval'], ['RAG']))
+        self.assertEqual(result[0].paper['topics'], [TOPIC])
         self.assertEqual(result[0].sources, {'followed_topic', 'keyword'})
 
     async def test_all_knowledge_failures_leave_no_personal_candidates(self):
@@ -300,7 +325,7 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_keyword_retrieval_is_a_scored_search_interest_signal(self):
         paper = SimpleNamespace(id='paper:graph', title='Graph paper', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=[], keywords=['networks'], image_id=None)
+                                subjects=[], keywords=['networks'], image_id=None, topics=[])
         knowledge = SimpleNamespace(
             search=AsyncMock(return_value=SimpleNamespace(results=[paper])),
             search_by_subject=AsyncMock(),
@@ -316,7 +341,7 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_unexpected_source_errors_and_timeouts_are_isolated(self):
         paper = SimpleNamespace(id='paper:ok', title='Survivor', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=['RAG'], keywords=[], image_id=None)
+                                subjects=['RAG'], keywords=[], image_id=None, topics=[])
 
         async def never_returns(*_args, **_kwargs):
             await asyncio.sleep(60)
@@ -340,7 +365,7 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_recall_limits_queries_and_merges_duplicate_ids_across_sources(self):
         paper = SimpleNamespace(id='shared', title='Shared', abstract=None,
                                 authors=[], year=2026, venue=None,
-                                subjects=['RAG'], keywords=['retrieval'], image_id=None)
+                                subjects=['RAG'], keywords=['retrieval'], image_id=None, topics=[])
         knowledge = SimpleNamespace(
             search_by_subject=AsyncMock(return_value=SimpleNamespace(results=[paper, paper])),
             search=AsyncMock(return_value=SimpleNamespace(results=[paper])),
@@ -356,7 +381,7 @@ class RecallTests(unittest.IsolatedAsyncioTestCase):
     async def test_home_year_bounds_keyword_search_and_filters_overfetched_subjects(self):
         def paper(paper_id, year):
             return SimpleNamespace(id=paper_id, title=paper_id, abstract=None, authors=[], year=year,
-                                   venue=None, subjects=['RAG'], keywords=[], image_id='/images/p.png')
+                                   venue=None, subjects=['RAG'], keywords=[], image_id='/images/p.png', topics=[])
         knowledge = SimpleNamespace(
             search=AsyncMock(return_value=SimpleNamespace(results=[paper('keyword:2026', 2026)])),
             search_by_subject=AsyncMock(return_value=SimpleNamespace(results=[

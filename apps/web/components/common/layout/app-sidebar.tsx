@@ -43,7 +43,6 @@ interface NavItem {
   href: string;
   label: string;
   icon: typeof Compass;
-  badge?: string;
   disabled?: boolean;
   /** 前缀匹配(用于详情页保持高亮) */
   matchPrefix?: string;
@@ -52,7 +51,7 @@ interface NavItem {
 }
 
 const RESEARCH_NAV: NavItem[] = [
-  { href: "/", label: "发现", icon: Compass, badge: "新" },
+  { href: "/", label: "发现", icon: Compass },
   { href: "/agents", label: "深知 AI", icon: Sparkles },
   {
     href: "/submit",
@@ -74,7 +73,7 @@ const KNOWLEDGE_SUB_NAV = [
   { href: "/knowledge/search", label: "论文库" },
   { href: "/knowledge/scholars", label: "学者库" },
   { href: "/knowledge/topics", label: "主题库" },
-  { href: "/knowledge/funding", label: "项目基金库" },
+  { href: "/knowledge/funding", label: "项目基金库", detailPrefix: "/knowledge/nsfc-projects/" },
   { href: "/knowledge/graph", label: "关系图谱" },
 ];
 
@@ -98,11 +97,6 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
       <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
       {!collapsed && (
         <span className="flex-1 text-[15px] font-medium">{item.label}</span>
-      )}
-      {!collapsed && item.badge && (
-        <span className="rounded-full bg-brand-gold px-1.5 py-0.5 text-[10px] font-semibold leading-none text-ink">
-          {item.badge}
-        </span>
       )}
       {item.indicator?.(collapsed)}
     </>
@@ -186,7 +180,7 @@ function ExpandableNav({
   href: string;
   label: string;
   icon: typeof Compass;
-  subNav: { href: string; label: string }[];
+  subNav: { href: string; label: string; detailPrefix?: string }[];
   collapsed: boolean;
   /** 子栏目列表末尾的附加内容(如「新建项目」) */
   footer?: React.ReactNode;
@@ -305,7 +299,8 @@ function ExpandableNav({
       {open && (
         <div className="mt-0.5 flex flex-col gap-0.5 pl-6">
           {availableSubNav.map((sub) => {
-            const active = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
+            const active = pathname === sub.href || pathname.startsWith(`${sub.href}/`)
+              || (sub.detailPrefix !== undefined && pathname.startsWith(sub.detailPrefix));
             const NavigationLink = Object.hasOwn(SEARCH_RESTORATION_ROUTES, sub.href)
               ? SearchNavigationLink
               : FeatureNavigationLink;

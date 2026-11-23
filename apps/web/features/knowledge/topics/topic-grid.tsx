@@ -55,7 +55,7 @@ export function TopicGrid({ deferred = false, ...props }: TopicGridProps) {
   if (!deferred) return <TopicCardList {...props} />;
 
   return (
-    <div ref={containerRef} tabIndex={0} role="region" aria-label={`${props.topics[0]?.category ?? "分类"}主题`} onFocusCapture={() => setReady(true)} className="rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary/20">
+    <div ref={containerRef} tabIndex={0} role="region" aria-label={`${props.topics[0]?.categoryName ?? "分类"}主题`} onFocusCapture={() => setReady(true)} className="rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary/20">
       {ready ? <TopicCardList {...props} /> : <TopicRowPlaceholder />}
     </div>
   );

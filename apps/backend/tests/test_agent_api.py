@@ -105,6 +105,26 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['status'], 'done')
         self.assertEqual(result['final_text'], '你好')
 
+    async def test_authorized_product_entry_uses_v2_without_fallback(self):
+        from app.services.agent_entitlements.service import EntitlementError
+        from unittest.mock import AsyncMock
+        v2 = FakeAgentGateway()
+        with patch.dict('os.environ', {'AGENT_V2_ADMISSION': 'authorized'}), \
+             patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test',
+                headers={'x-shenzhi-user-id': 'registered', 'Idempotency-Key': 'stable-key'}) as browser:
+                response = await browser.post('/api/v1/agent/run', json={'prompt': 'hello', 'model': 'test/m1'})
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(parse_sse(response.text)[-1][1]['final_text'], '你好')
+                self.assertEqual(v2.submissions[0]['idempotency_key'], 'stable-key')
+                self.assertEqual(v2.submissions[0]['owner_id'], 'user:registered')
+                self.assertEqual(len(self.gateway.submissions), 0)
+                v2.submit = AsyncMock(side_effect=EntitlementError('QUOTA_EXHAUSTED', 403))
+                denied = await browser.post('/api/v1/agent/run', json={'prompt': 'hello', 'model': 'test/m1'})
+                self.assertEqual(denied.status_code, 403)
+                self.assertEqual(denied.json()['message'], 'QUOTA_EXHAUSTED')
+                self.assertEqual(len(self.gateway.submissions), 0)
+
     async def test_tool_round_trip_over_http(self):
         self.gateway.events_data = [
             {'seq': 1, 'name': 'tool_call', 'data': {'name': 'echo'}},
@@ -241,7 +261,26 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('inline', response.headers['content-disposition'])
             # inline SVG 是活动内容：必须带关掉脚本/外链的 CSP
             self.assertEqual(response.headers['content-security-policy'],
-                             "default-src 'none'; style-src 'unsafe-inline'")
+                             "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:")
+
+    async def test_active_artifacts_are_sandboxed_on_both_file_routes(self):
+        self.asset_workspace('ses_active')
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url='http://test') as client:
+            for filename, mime in [('page.html', 'text/html'), ('plot.svg', 'image/svg+xml')]:
+                content = b'<script>fetch("/api/v1/agent/sessions")</script>'
+                self.gateway.files[('ses_active', filename)] = (content, mime)
+                for url, params in [
+                    (f'/api/v1/agent/assets/ses_active/{filename}', {}),
+                    ('/api/v1/agent/session/ses_active/file', {'path': filename}),
+                    ('/api/v1/agent/session/ses_active/file', {'path': filename, 'download': 'true'}),
+                ]:
+                    response = await client.get(url, params=params, headers=self.OWNER)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.content, content)
+                    policy = response.headers['content-security-policy'].split('; ')
+                    self.assertIn('sandbox', policy)
+                    self.assertIn("default-src 'none'", policy)
 
     async def test_session_export_html_and_jsonl(self):
         messages = [

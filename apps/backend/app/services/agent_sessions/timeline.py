@@ -12,12 +12,19 @@ class TimelineCapture:
         self.steers: list[dict[str, str]] = []
         self.warnings = list(warnings)
         self.turn = -1
+        self.run_start_index = 0
         self.reasoning_index = -1
         self.text_index = -1
 
     def event(self, name: str, data: dict[str, Any]) -> None:
         turn = int(data.get('turn') or 0)
-        if name == 'delta':
+        if name == 'run_start':
+            # Runtime turn numbers restart for each execution attempt.
+            self.run_start_index = len(self.process)
+            self.turn = -1
+            self.reasoning_index = -1
+            self.text_index = -1
+        elif name == 'delta':
             if turn != self.turn:
                 self.turn = turn
                 self.reasoning_index = -1
@@ -37,7 +44,8 @@ class TimelineCapture:
             }})
         elif name == 'tool_end':
             call_id = str(data.get('tool_call_id') or '')
-            for item in reversed(self.process):
+            for index in range(len(self.process) - 1, self.run_start_index - 1, -1):
+                item = self.process[index]
                 if item.get('kind') == 'tool' and item.get('tool', {}).get('toolCallId') == call_id:
                     item['tool'].update({
                         'done': True,

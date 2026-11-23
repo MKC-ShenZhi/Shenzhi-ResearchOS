@@ -56,10 +56,10 @@ __pycache__/
 /apps/backend/workspace/
 /apps/agent/workspace/
 
-# vercel
-.vercel
-
 # docker
 *.tar
 .superpowers/
 docs/superpowers/
+
+
+国自然图谱汇总_共617

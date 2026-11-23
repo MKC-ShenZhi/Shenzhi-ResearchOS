@@ -2,6 +2,7 @@
 import json
 import logging
 import asyncio
+import os
 from pathlib import PurePosixPath
 from typing import Literal
 from urllib.parse import quote
@@ -31,7 +32,7 @@ from app.services.agent_sessions.service import (
     get_session_detail, resume_session_run, start_session_run,
 )
 from app.services.agent_sessions import export as agent_export
-from app.services.agent_gateway.client import agent_gateway
+from app.services.agent_gateway.client import agent_gateway, read_run_update
 from app.services.agent_attachments import resolve_agent_attachments
 from app.services.agent_uploads import agent_upload_store
 from app.services.uploads.parser import parse_document
@@ -39,6 +40,30 @@ from app.schemas.knowledge import KnowledgeSearchRequest
 
 router = APIRouter(prefix='/api/v1/agent', tags=['agent'])
 logger = logging.getLogger(__name__)
+
+
+def product_gateway(owner):
+    if owner.startswith('user:'):
+        from app.services.agent_gateway.v2 import AgentGatewayV2
+        return AgentGatewayV2()
+    return agent_gateway
+
+
+async def gateway_for_run(run_id, owner):
+    gateway = product_gateway(owner)
+    if gateway is not agent_gateway:
+        try:
+            return gateway, await gateway.run(run_id, owner)
+        except BusinessError as exc:
+            if exc.status != 404:
+                raise
+            # Read-only lookup of legacy runs during drain. This never retries
+            # a submission or changes its authorization/metering context.
+    return agent_gateway, await agent_gateway.run(run_id, owner)
+
+# Workspace bytes are untrusted documents, including HTML and SVG. Apply this
+# to both download/preview routes, regardless of the filename or MIME type.
+ARTIFACT_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:"
 
 
 @router.post('/internal/knowledge/search', dependencies=[Depends(require_agent_service)])
@@ -49,7 +74,8 @@ async def agent_knowledge_search(body: KnowledgeSearchRequestWire):
     request = KnowledgeSearchRequest.model_validate(body.model_dump(mode='json', by_alias=True))
     result = await knowledge_service.search(request)
     return KnowledgeSearchResponseWire.model_validate(
-        result.model_dump(mode='json', by_alias=True),
+        # Product topic navigation is not part of the Agent wire contract.
+        result.model_dump(mode='json', by_alias=True, exclude={'results': {'__all__': {'topics'}}}),
     ).model_dump(mode='json', by_alias=True)
 
 
@@ -60,7 +86,7 @@ async def agent_knowledge_paper(paper_id: str):
 
     result = await knowledge_service.get_paper(paper_id)
     return KnowledgePaperDetailWire.model_validate(
-        result.model_dump(mode='json', by_alias=True),
+        result.model_dump(mode='json', by_alias=True, exclude={'topics'}),
     ).model_dump(mode='json', by_alias=True)
 
 
@@ -89,29 +115,38 @@ async def config(_credential: None = Depends(require_bff)):
 
 
 @router.post('/run')
-async def run(body: AgentRunBody, owner: str = Depends(request_owner)):
+async def run(body: AgentRunBody, owner: str = Depends(request_owner),
+              idempotency_key: str | None = Header(default=None, alias='Idempotency-Key')):
+    gateway = product_gateway(owner)
+    key = validate_idempotency_key(idempotency_key)
+    if gateway is not agent_gateway and key is None:
+        raise BusinessError(20001, 'Idempotency-Key 必填', 422)
     try:
         validate_history(body.history)
     except ValueError as exc:
         raise BusinessError(20001, '历史消息格式无效', 400) from exc
     attachment_text, warnings, files = await resolve_agent_attachments(body.attachments, owner)
-    task = await agent_gateway.submit({
+    payload = {
         'owner_id': owner, 'prompt': body.prompt + attachment_text,
         'session_id': body.session_id, 'mode': body.mode, 'model': body.model,
         'workspace_id': body.workspace_id,
         'skills': body.skills, 'history': body.history,
-    })
+    }
+    if key is not None:
+        payload['idempotency_key'] = key
+    task = await gateway.submit(payload)
     if files:
         try:
             await agent_upload_store.consume(owner, list(files))
         except Exception:
             logger.exception('Failed to consume Agent attachments after submit')
-    return StreamingResponse(_agent_task_stream(owner, task, warnings), media_type='text/event-stream',
+    return StreamingResponse(_agent_task_stream(owner, task, warnings, gateway=gateway), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache, no-transform',
                                       'X-Accel-Buffering': 'no'})
 
 
-async def _agent_task_stream(owner: str, task: dict, warnings: list[str]):
+async def _agent_task_stream(owner: str, task: dict, warnings: list[str], *, gateway=None):
+    gateway = gateway or agent_gateway
     task_id = task['task_id']
     run_id = task['current_run_id']
     after_seq = 0
@@ -120,14 +155,13 @@ async def _agent_task_stream(owner: str, task: dict, warnings: list[str]):
     yield f"event: run_start\ndata: {json.dumps({'run_id': run_id}, ensure_ascii=False)}\n\n"
     heartbeat_at = asyncio.get_running_loop().time()
     while True:
-        events = await agent_gateway.events(run_id, owner, after_seq)
+        run, events = await read_run_update(gateway, run_id, owner, after_seq)
         for event in events:
             after_seq = max(after_seq, int(event['seq']))
             event_id = f"id: {after_seq}\n"
             yield (f"{event_id}event: {event['name']}\n"
                    f"data: {json.dumps(event['data'], ensure_ascii=False)}\n\n")
-        run = await agent_gateway.run(run_id, owner)
-        task_state = await agent_gateway.task(task_id, owner)
+        task_state = await gateway.task(task_id, owner)
         current_run_id = task_state.get('current_run_id')
         report = run.get('report')
         if report and current_run_id and current_run_id != run_id:
@@ -179,15 +213,16 @@ async def steer(run_id: str, body: SteerBody, owner: str = Depends(request_owner
     """运行中插话：下一模型请求前注入（不打断当前工具批）。"""
     if not body.text.strip():
         raise BusinessError(20001, '插话内容不能为空')
-    await agent_gateway.steer(run_id, owner, body.text.strip())
+    gateway, _ = await gateway_for_run(run_id, owner)
+    await gateway.steer(run_id, owner, body.text.strip())
     return ok({'injected': True})
 
 
 @router.post('/run/{run_id}/stop')
 async def stop(run_id: str, owner: str = Depends(request_owner)):
     """Cleanly stop the active run so its partial result remains recoverable."""
-    run = await agent_gateway.run(run_id, owner)
-    task = await agent_gateway.cancel(run['task_id'], owner)
+    gateway, run = await gateway_for_run(run_id, owner)
+    task = await gateway.cancel(run['task_id'], owner)
     return ok({'stopping': task.get('cancel_requested', False)})
 
 
@@ -249,12 +284,16 @@ async def run_agent_session(
     owner: str = Depends(request_owner),
 ):
     key = validate_idempotency_key(idempotency_key)
+    gateway = product_gateway(owner)
+    if gateway is not agent_gateway and key is None:
+        raise BusinessError(20001, 'Idempotency-Key 必填', 422)
     live = await start_session_run(
         owner=owner, session_id=session_id, prompt=body.prompt, model=body.model,
         mode=body.mode, attachments=body.attachments, workspace_id=body.workspace_id,
         skills=body.skills, allow_shell=False, idempotency_key=key,
         idempotency_fingerprint=(request_fingerprint(body.model_dump(mode='json'))
                                  if key is not None else None),
+        gateway=gateway,
     )
 
     return session_run_stream(live)
@@ -279,8 +318,11 @@ async def attach_agent_session_run(
     session_id: str, after: int = Query(default=0, ge=0),
     owner: str = Depends(request_owner),
 ):
+    # A cached stream is not an authorization record: deletion and anonymous
+    # claim can revoke access while its ten-minute buffer is still alive.
+    session = await agent_session_repository.get(session_id, owner)
     live = get_live(session_id, owner)
-    if live is None:
+    if live is None or not session.turns or live.turn_id != session.turns[-1].id:
         live = await resume_session_run(session_id, owner)
     return session_run_stream(live, after)
 
@@ -302,6 +344,7 @@ async def session_file(session_id: str, path: str, download: bool = False,
             'Content-Disposition': f"{disposition}; filename*=UTF-8''{quote(filename)}",
             'Cache-Control': 'private, no-store',
             'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy': ARTIFACT_CSP,
         })
 
 
@@ -314,12 +357,8 @@ async def session_asset(session_id: str, path: str, owner: str = Depends(request
     重做，仍由 read_session_file 收口（session_id 正则 + Workspace.resolve 双 resolve 后
     必须仍在工作区内），本层只定响应头。
 
-    inline SVG 的风险判断：SVG 是活动内容（可含 <script>、外链、<foreignObject>），而它的
-    字节来自模型 / 被上传文档左右的工作区，且浏览器只打同源 /api/v1（Next 微后端转发到
-    FastAPI），因此"把 /assets/.../x.svg 直接当页面打开"就是一个同源存储型 XSS 面；<img>
-    内嵌不会执行脚本，但不能只指望前端永远用 <img>。故 SVG 保留 inline（attachment 会让
-    报告缩略图/预览链路失效），同时附 CSP `default-src 'none'` 关掉脚本与外部请求，
-    只放行内联样式（图形本身的 fill/stroke/<style> 需要）；其余图片类型无活动内容，不加 CSP。
+    所有工作区产物统一附 sandbox CSP，避免直接打开 HTML/SVG 时获得站点权限。
+    图片继续 inline 展示；只放行图形所需的内联样式和 data 图片。
     """
     await agent_session_repository.get(session_id, owner)
     content, media_type = await agent_gateway.read_session_file(owner, session_id, path)
@@ -332,8 +371,7 @@ async def session_asset(session_id: str, path: str, owner: str = Depends(request
         # media_type 只看后缀（read_session_file 不做字节嗅探），禁掉嗅探避免伪装后缀被当活动内容执行
         'X-Content-Type-Options': 'nosniff',
     }
-    if media_type == 'image/svg+xml':
-        headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'"
+    headers['Content-Security-Policy'] = ARTIFACT_CSP
     return Response(content, media_type=media_type, headers=headers)
 
 

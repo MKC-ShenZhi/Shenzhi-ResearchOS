@@ -1,4 +1,5 @@
 import { apiJson, ApiError } from "./http";
+import type { PaperTopic } from "../knowledge/types";
 
 export interface DiscoveryPaperDto {
   id: string;
@@ -13,6 +14,7 @@ export interface DiscoveryPaperDto {
   image_id?: string | null;
   keywords?: string[];
   subjects?: string[];
+  topics?: PaperTopic[];
   /** Home-feed source that placed the paper: daily / trending / personal / fallback. */
   source?: string | null;
 }

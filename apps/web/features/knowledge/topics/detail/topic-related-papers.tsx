@@ -12,14 +12,14 @@ import {
   KnowledgeSearchSkeleton,
 } from "@/features/knowledge/search/components/search-states";
 import { useTopicPapers } from "./use-topic-papers";
-import { canAutoLoadTopicPapers, TOPIC_PAPER_RESULT_LIMIT } from "./topic-paper-query";
+import { canAutoLoadTopicPapers } from "./topic-paper-query";
 
 export function TopicRelatedPapers({
   topicId,
-  subjectQuery,
+  topicName,
 }: {
   topicId: string;
-  subjectQuery: string;
+  topicName: string;
 }) {
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
@@ -33,12 +33,11 @@ export function TopicRelatedPapers({
     isError,
     isFetching,
     isFetchNextPageError,
-    limitReached,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useTopicPapers(topicId, subjectQuery);
+  } = useTopicPapers(topicId);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -91,7 +90,7 @@ export function TopicRelatedPapers({
           onRetry={() => void refetch()}
         />
       ) : papers.length === 0 ? (
-        <KnowledgeSearchEmpty query={subjectQuery} />
+        <KnowledgeSearchEmpty query={topicName} />
       ) : (
         <div className="space-y-4">
           {papers.map((paper, index) => (
@@ -133,11 +132,9 @@ export function TopicRelatedPapers({
             ) : hasNextPage ? (
               <span>继续向下滚动加载更多</span>
             ) : (
-              <span>{limitReached
-                ? `已达到当前接口展示上限（${TOPIC_PAPER_RESULT_LIMIT.toLocaleString()} 篇），仍有论文未展示。`
-                : papers.length < total
-                  ? "检索接口暂未返回更多论文，部分结果尚未展示。"
-                  : "已加载全部相关论文"}</span>
+              <span>{papers.length < total
+                ? "论文接口暂未返回更多论文，部分结果尚未展示。"
+                : "已加载全部相关论文"}</span>
             )}
           </div>
         </div>
