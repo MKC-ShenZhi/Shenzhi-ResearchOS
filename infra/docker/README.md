@@ -20,7 +20,13 @@ Linux 同样运行 `python3 infra/docker/prepare-env.py --from-local`，随后 `
 没有本地配置的同学去掉 `--from-local`，再填写外部模型、知识底座及邮件配置。
 脚本只导入 Docker 示例声明的变量（含注释列出的非空 Provider 地址/模型覆盖项），不复制编辑器 OIDC 凭据和 Admin 密码。
 原文件保留；已存在的有效 Docker 配置不被覆盖，缺失或空的必需凭据会补齐，跨服务凭据不一致时报错。
+可导入字段为空时会补入非空的本机值；共享凭据及 audience/issuer 优先复用已有非空 Docker 值，冲突时拒绝写入。
+空 Provider BASE_URL/MODEL 没有本机覆盖值时保持未设置，以使用 Registry 默认值。
 首次为缺失的内部凭据生成随机值，为容器改写 DSN、服务地址和工作目录；再次执行不会轮换已有凭据。
+签名密钥不会自动生成或轮换：路径为空时优先复用已复制文件，其次导入本机文件；V2 启用时缺少签名文件会失败。
+已有非空签名路径必须指向可读、非空的普通文件；`/run/secrets/<服务>/...` 按本地 `secrets/<服务>/` 校验，
+其他绝对路径按本机文件校验、相对路径从 `infra/docker` 解析。自定义容器挂载路径须有可验证的本机对应路径。
+全部校验完成后才暂存并替换输出文件；写入失败会尝试恢复已替换文件，重复运行不重写内容不变的文件。
 已有端口占用时修改 `.env`；修改 `WEB_PORT` 后须同时更新 `env/web.env` 中的浏览器 origin。
 脚本限制生成 DSN 的数据库用户名、密码、库名使用字母、数字、`_` 和 `-`。
 首次使用随机密码；更改已初始化 PostgreSQL 的环境变量不会自动修改数据库角色密码。
@@ -147,6 +153,10 @@ docker compose run --rm agent-migrate
 API healthcheck 增加 DB 连接与 alembic_version 检查，Web healthcheck 穿过 BFF 到 Backend；
 这些不代表模型、搜索、任务恢复或登录邮件已通过验收。Worker 没有现成业务健康接口，
 不以简单 PID 检查伪装业务就绪；须结合日志、任务 Lease、Outbox 积压和真实任务验收。
+
+Smoke Test 按当前认证 SQL 文件名及与迁移入口相同的 SHA-256 规则核对账本，
+缺失记录、额外记录或 checksum 不一致均明确失败，不固定迁移数量。运行维护测试：
+`python -m unittest discover -s infra/docker/tests -v`；测试只使用临时目录、合成 SQL 与虚构凭据。
 
 ## 常用操作
 

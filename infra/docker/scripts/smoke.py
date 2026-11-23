@@ -10,7 +10,7 @@ import os
 import urllib.error
 import urllib.request
 
-import asyncpg
+from auth_migrations import load_auth_migrations, validate_auth_migrations
 
 
 def request(url, *, headers=None, body=None, expected=200):
@@ -27,6 +27,7 @@ def request(url, *, headers=None, body=None, expected=200):
 
 
 async def main():
+    import asyncpg
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--full', action='store_true')
     parser.add_argument('--write-probe', action='store_true')
@@ -40,7 +41,10 @@ async def main():
     db = await asyncpg.connect(os.environ['CHAT_DATABASE_URL'].replace('postgresql+asyncpg://', 'postgresql://', 1))
     try:
         assert await db.fetchval('SELECT version_num FROM alembic_version')
-        assert await db.fetchval('SELECT count(*) FROM docker_auth_migrations') == 3
+        validate_auth_migrations(
+            await db.fetch('SELECT name, sha256 FROM docker_auth_migrations'),
+            load_auth_migrations(),
+        )
         for table in ('user', 'account', 'session', 'verification', 'turnstile_verification'):
             assert await db.fetchval('SELECT to_regclass($1)', f'public."{table}"')
         if args.write_probe:
@@ -65,4 +69,5 @@ async def main():
     print('Smoke complete; no model/search/email/task execution was attempted.')
 
 
-asyncio.run(main())
+if __name__ == '__main__':
+    asyncio.run(main())

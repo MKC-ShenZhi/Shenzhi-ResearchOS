@@ -1,12 +1,11 @@
 """Single migration entrypoint; PostgreSQL advisory locks serialize operators too."""
 import asyncio
-import hashlib
 import os
-from pathlib import Path
 import subprocess
 import sys
 
 import asyncpg
+from auth_migrations import load_auth_migrations
 
 
 async def main():
@@ -22,18 +21,16 @@ async def main():
             return
         await connection.execute('CREATE TABLE IF NOT EXISTS docker_auth_migrations '
                                  '(name text PRIMARY KEY, sha256 text NOT NULL)')
-        for path in sorted(Path('/opt/auth-migrations').glob('*.sql')):
-            sql = path.read_text(encoding='utf-8-sig')
-            digest = hashlib.sha256(sql.encode()).hexdigest()
-            previous = await connection.fetchval('SELECT sha256 FROM docker_auth_migrations WHERE name=$1', path.name)
+        for name, sql, digest in load_auth_migrations():
+            previous = await connection.fetchval('SELECT sha256 FROM docker_auth_migrations WHERE name=$1', name)
             if previous is not None:
                 if previous != digest:
-                    raise RuntimeError(f'Applied migration changed: {path.name}')
+                    raise RuntimeError(f'Applied migration changed: {name}')
                 continue
             async with connection.transaction():
                 await connection.execute(sql)
-                await connection.execute('INSERT INTO docker_auth_migrations VALUES ($1,$2)', path.name, digest)
-            print(f'Applied {path.name}', flush=True)
+                await connection.execute('INSERT INTO docker_auth_migrations VALUES ($1,$2)', name, digest)
+            print(f'Applied {name}', flush=True)
     finally:
         await connection.close()
 
