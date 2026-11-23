@@ -58,6 +58,8 @@ __pycache__/
 
 # docker
 *.tar
+/infra/docker/env/*.env
+/infra/docker/secrets/
 .superpowers/
 docs/superpowers/
 

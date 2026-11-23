@@ -1,0 +1,58 @@
+services:
+  web:
+    image: ${IMAGE_PREFIX:-shenzhi}/web:${IMAGE_TAG:-local}-dev
+    build:
+      target: development
+    # Polling works across Docker Desktop Windows bind mounts. Native pnpm dev
+    # remains Turbopack; this is only the container development entrypoint.
+    command: [pnpm, exec, next, dev, --webpack, --hostname, 0.0.0.0]
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: 'true'
+    volumes:
+      # Mount source selectively: native .env.local and Windows node_modules
+      # must never shadow the container configuration/dependencies.
+      - ../../apps/web/app:/repo/apps/web/app
+      - ../../apps/web/clients:/repo/apps/web/clients
+      - ../../apps/web/components:/repo/apps/web/components
+      - ../../apps/web/config:/repo/apps/web/config
+      - ../../apps/web/features:/repo/apps/web/features
+      - ../../apps/web/hooks:/repo/apps/web/hooks
+      - ../../apps/web/lib:/repo/apps/web/lib
+      - ../../apps/web/providers:/repo/apps/web/providers
+      - ../../apps/web/public:/repo/apps/web/public
+      - ../../apps/web/stores:/repo/apps/web/stores
+      - ../../apps/web/styles:/repo/apps/web/styles
+      - ../../apps/web/types:/repo/apps/web/types
+      - ../../apps/web/next.config.mjs:/repo/apps/web/next.config.mjs
+      - ../../apps/web/tsconfig.json:/repo/apps/web/tsconfig.json
+      - ../../apps/web/postcss.config.mjs:/repo/apps/web/postcss.config.mjs
+      - ../../apps/web/proxy.ts:/repo/apps/web/proxy.ts
+      - web-next:/repo/apps/web/.next
+  backend:
+    command: [uvicorn, 'app.main:app', --host, 0.0.0.0, --port, '8000', --reload, --no-proxy-headers]
+    environment:
+      WATCHFILES_FORCE_POLLING: 'true'
+    ports:
+      - 127.0.0.1:${BACKEND_PORT:-8800}:8000
+    volumes:
+      - ../../apps/backend/app:/repo/apps/backend/app
+      - ../../packages/agent-contracts/src:/repo/packages/agent-contracts/src
+  agent-api:
+    ports:
+      - 127.0.0.1:${AGENT_PORT:-8811}:8101
+    volumes:
+      - ../../apps/agent/src:/repo/apps/agent/src
+      - ../../apps/agent/skills:/repo/apps/agent/skills
+      - ../../packages/agent-contracts/src:/repo/packages/agent-contracts/src
+  agent-worker:
+    volumes:
+      - ../../apps/agent/src:/repo/apps/agent/src
+      - ../../apps/agent/skills:/repo/apps/agent/skills
+      - ../../packages/agent-contracts/src:/repo/packages/agent-contracts/src
+  agent-usage-worker:
+    volumes:
+      - ../../apps/agent/src:/repo/apps/agent/src
+      - ../../packages/agent-contracts/src:/repo/packages/agent-contracts/src
+volumes:
+  web-next:

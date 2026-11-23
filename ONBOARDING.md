@@ -44,6 +44,13 @@ shenzhi/
 
 ### 3.2 启动前端
 
+可选 Docker 路线：先运行 `python infra/docker/prepare-env.py`（已有本机配置加 `--from-local`），
+再进入 `infra/docker`。仅数据库使用 `docker compose up -d --wait postgres`，应用仍按下文原生启动；
+完整容器开发使用 `docker compose -f compose.yml -f compose.dev.yml --profile full up -d --build --wait`。
+首次启动自动执行独立迁移服务；新数据库不复制原生账号和套餐权益。
+Windows 使用 Docker Desktop 的 Linux containers / WSL2 后端，完整说明见
+[Docker 运行指南](infra/docker/README.md)。停止用 `down` 保留数据，禁止把 `down -v` 当日常命令。
+
 ```bash
 git clone git@github.com:MKC-ShenZhi/Shenzhi-ResearchOS.git
 cd Shenzhi-ResearchOS/apps/web

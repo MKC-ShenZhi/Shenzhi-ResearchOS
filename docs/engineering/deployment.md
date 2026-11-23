@@ -26,6 +26,19 @@
 
 原阿里云 ECS + GHCR + Watchtower 链路已完全停用，相关 `infra/` 与 GitHub Actions 配置已移除。仓库当前**没有 CI 门禁**，提交前的检查需本地执行（见 [ONBOARDING](../../ONBOARDING.md)）。
 
+当前新增的 `infra/docker/` 是独立 Compose 运行体系，不恢复旧自动发布链路。
+镜像由 `apps/web/Dockerfile`、`apps/backend/Dockerfile`、`apps/agent/Dockerfile` 维护；
+Agent API、执行 Worker、Usage Worker 共用镜像。运行支持 infra-only、dev、full 和生产配置基础，
+命令及边界见 [Docker 运行指南](../../infra/docker/README.md)。本次不改变线上环境。
+业务与 Agent 分库共用 PostgreSQL 16 named volume；独立迁移服务串行执行认证 SQL 和 Backend Alembic，
+Agent Alembic 在独立库执行。Workspace 与 Usage Spool 分别持久化；升级须备份并保留未决用量恢复能力。
+Compose dev 仅绑定宿主 loopback，生产 override 不发布数据库端口，Backend/Agent 只在内部网络可达，
+Web loopback 端口供宿主 HTTPS 反向代理接入。所有跨容器调用使用匹配的服务凭据，禁用本地 BFF 免密。
+Docker 配置集中于本地 `infra/docker/.env`、`env/*.env`、`secrets/`，不修改原生应用环境文件。
+生产配置仍需正式域名、TLS、授权/模型预算批准、监控、备份恢复演练及镜像发布流程；不表示可直接上线。
+Admin 沿用下文既定约束，未加入 Compose，不放宽 local-only，也不将容器私网误认为已实现可信隧道入口。
+公共 Web BFF 显式拒绝 `admin-console` 路径（包括编码的路径段），不将管理请求转发给 Backend。
+
 ## 二、环境变量与运行约束
 
 - 配置项见 [Web 示例](../../apps/web/.env.example) 、[Backend 示例](../../apps/backend/.env.example) 和 [Agent 示例](../../apps/agent/.env.example)。真实值只写在本地环境文件或由部署环境注入。`NEXT_PUBLIC_` 变量由 Next.js 在构建时内联，修改后需重新构建 Web。
