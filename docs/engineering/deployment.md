@@ -36,7 +36,7 @@ Compose dev 仅绑定宿主 loopback，生产 override 不发布数据库端口�
 Web loopback 端口供宿主 HTTPS 反向代理接入。所有跨容器调用使用匹配的服务凭据，禁用本地 BFF 免密。
 Docker 配置集中于本地 `infra/docker/.env`、`env/*.env`、`secrets/`，不修改原生应用环境文件。
 生产配置仍需正式域名、TLS、授权/模型预算批准、监控、备份恢复演练及镜像发布流程；不表示可直接上线。
-Admin 沿用下文既定约束，未加入 Compose，不放宽 local-only，也不将容器私网误认为已实现可信隧道入口。
+Admin 仅加入开发 override 的 full profile，宿主 loopback:3101 发布；与 Backend 共享网络命名空间，代理仍经 loopback。默认开发凭据和随机 Session Secret 仅由开发 override 注入，生产 override 清空管理认证配置。Backend local-only 保持，Vite 开发入口校验 Host/Origin，不信任转发 Header。此开发接入不表示已实现下文生产 SSH 隧道入口。
 公共 Web BFF 显式拒绝 `admin-console` 路径（包括编码的路径段），不将管理请求转发给 Backend。
 
 ## 二、环境变量与运行约束

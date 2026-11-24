@@ -145,6 +145,9 @@ def main(argv=None):
     compose.update({key: value for key, value in existing_compose.items()
                     if nonempty(value) or key not in compose})
     compose['POSTGRES_PASSWORD'] = compose['POSTGRES_PASSWORD'] or secrets.token_hex(24)
+    compose['ADMIN_DEV_SESSION_SECRET'] = compose['ADMIN_DEV_SESSION_SECRET'] or secrets.token_urlsafe(48)
+    if len(compose['ADMIN_DEV_SESSION_SECRET']) < 32:
+        raise ValueError('ADMIN_DEV_SESSION_SECRET must be at least 32 characters')
     # Safe URL components; no ambiguous quoting or accidental DSN syntax.
     for key in ('POSTGRES_USER', 'POSTGRES_PASSWORD', 'POSTGRES_DB', 'AGENT_DB'):
         if not re.fullmatch(r'[A-Za-z0-9_-]+', compose[key]):

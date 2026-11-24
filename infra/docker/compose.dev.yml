@@ -53,12 +53,49 @@ services:
   backend:
     command: [uvicorn, 'app.main:app', --host, 0.0.0.0, --port, '8000', --reload, --no-proxy-headers]
     environment:
+      ENVIRONMENT: development
       WATCHFILES_FORCE_POLLING: 'true'
+      ADMIN_AUTH_MODE: local_password
+      ADMIN_AUTH_LOCAL_ONLY: 'true'
+      ADMIN_LOCAL_USERNAME: shenzhi
+      ADMIN_LOCAL_PASSWORD: shenzhi-dev
+      ADMIN_SESSION_SECRET: ${ADMIN_DEV_SESSION_SECRET:?Run prepare-env.py first}
     ports:
       - 127.0.0.1:${BACKEND_PORT:-8800}:8000
+      # Admin shares this network namespace; its proxy reaches Backend via loopback.
+      - 127.0.0.1:3101:3101
     volumes:
       - ../../apps/backend/app:/repo/apps/backend/app
       - ../../packages/agent-contracts/src:/repo/packages/agent-contracts/src
+  admin:
+    profiles: [full]
+    image: ${IMAGE_PREFIX:-shenzhi}/admin:${IMAGE_TAG:-local}-dev
+    build:
+      context: ../..
+      dockerfile: apps/admin/Dockerfile
+      target: development
+    init: true
+    restart: unless-stopped
+    network_mode: service:backend
+    environment:
+      NODE_ENV: development
+      ADMIN_DOCKER_DEV: 'true'
+      ADMIN_BACKEND_ORIGIN: http://127.0.0.1:8000
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://localhost:3101/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    develop:
+      watch:
+        - { <<: *web-source-sync, path: ../../apps/admin/src, target: /repo/apps/admin/src }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/admin/vite.config.ts, target: /repo/apps/admin/vite.config.ts }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/admin/index.html, target: /repo/apps/admin/index.html }
+        - { action: rebuild, path: ../../apps/admin/package.json }
+        - { action: rebuild, path: ../../apps/admin/pnpm-lock.yaml }
+        - { action: rebuild, path: ../../apps/admin/pnpm-workspace.yaml }
   agent-api:
     ports:
       - 127.0.0.1:${AGENT_PORT:-8811}:8101

@@ -18,7 +18,7 @@ docker compose --profile full config --quiet
 
 Linux 同样运行 `python3 infra/docker/prepare-env.py --from-local`，随后 `cd infra/docker`。
 没有本地配置的同学去掉 `--from-local`，再填写外部模型、知识底座及邮件配置。
-脚本只导入 Docker 示例声明的变量（含注释列出的非空 Provider 地址覆盖项），不复制编辑器 OIDC 凭据和 Admin 密码。
+脚本只导入 Docker 示例声明的变量（含注释列出的非空 Provider 地址覆盖项），不复制编辑器 OIDC 凭据和 Admin 密码；随机生成仅供 dev override 使用的 ADMIN_DEV_SESSION_SECRET，重复运行保留。
 原文件保留；已存在的有效 Docker 配置不被覆盖，缺失或空的必需凭据会补齐，跨服务凭据不一致时报错。
 生成的 `.env` 和 `env/*.env` 沿用对应 `.env.example` 的中文分组与配置说明；再次执行会按最新模板更新注释。
 模板未声明的已有配置项保留在文件末尾；自写备注请同步维护在模板中，脚本不会保留本地文件中的自定义注释。
@@ -90,7 +90,9 @@ docker compose -f compose.yml -f compose.dev.yml --profile full up -d --build --
 docker compose -f compose.yml -f compose.dev.yml --profile full watch --no-up web
 ```
 
-开发地址：Web `http://localhost:3300`，Backend `http://localhost:8800`，Agent API `http://localhost:8811`。
+开发地址：Web `http://localhost:3300`，Backend `http://localhost:8800`，Agent API `http://localhost:8811`；full profile 另启 Admin `http://localhost:3101`，开发账号 `shenzhi` / `shenzhi-dev`。
+Admin 与 Backend 共享网络命名空间，代理走 `127.0.0.1:8000`，保持 Backend local-only；Vite 显式开发入口校验 Host/Origin，忽略转发身份。3101 仅绑定宿主 loopback，Session Secret 由 prepare-env.py 随机生成。
+Admin 源码同步使用相同 watch 命令末尾的 `admin`（或 `web admin`）；Backend 重建/重建容器后用同一 full up 命令重新关联 Admin 网络命名空间。
 所有映射均绑定宿主 loopback；内部调用使用 `backend:8000`、`agent-api:8101`、`postgres:5432`。
 Web 使用 Turbopack + Compose Watch，将源码同步到容器内部，不挂载宿主源码、env 或 node_modules；.next 使用独立 named volume。
 Python 环境位于 `/opt/venv`，源码挂载不覆盖环境；本地 contracts 包以相同仓库相对路径 editable 安装。
@@ -144,8 +146,8 @@ docker compose -f compose.yml -f compose.prod.yml --profile full up -d --no-buil
 v1 drain_only、protocol=2、隔离角色 Token、签名历史公钥、Worker digest、模型预算、套餐权益及恢复流程。
 签名 key、角色配置和授权策略错误时应拒绝调用，不能为启动方便打开旁路。
 
-Admin 不纳入本次 Compose：现有 local_password/local-only 拒绝容器来源，
-SSH 隧道免密码模式和可信专用入口仍待实现，见 deployment.md。保留原生独立启动方式；不得关闭 local-only 绕过。
+Admin 仅在开发 override 中定义，基础和生产 Compose 不包含 Admin 服务或 3101 端口。生产 override 清空管理账号、密码及 Session Secret 并禁用管理认证，开发密码在非 development 环境也被拒绝。
+生产 SSH 隧道免密码模式和可信专用入口仍待实现，见 deployment.md。不得叠加 dev 与 prod 文件或关闭 local-only 绕过。
 公网反向代理必须阻断 `/api/v1/admin-console` 及子路径，不提供 Admin 静态站点。
 上线还需域名/TLS、邮件和 OAuth 回调、备份恢复演练、监控告警、容量评估和 CI 镜像扫描/发布。
 后台调度器由 `BACKGROUND_JOBS_ENABLED` 控制，默认关闭；只在单个 Backend 实例按部署需要启用。

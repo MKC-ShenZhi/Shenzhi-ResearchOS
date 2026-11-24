@@ -71,6 +71,10 @@ class PrepareEnvTests(unittest.TestCase):
         self.run_setup(local=False)
         self.assertEqual(self.snapshot(), first)
         self.assertTrue(self.read('web')['BETTER_AUTH_SECRET'])
+        compose = self.env.read(self.here / '.env')
+        self.assertGreaterEqual(len(compose['ADMIN_DEV_SESSION_SECRET']), 32)
+        for name in ('web', 'backend', 'agent'):
+            self.assertNotIn('ADMIN_DEV_SESSION_SECRET', self.read(name))
         self.assertEqual(self.read('web')['BACKEND_BFF_SECRET'], self.read('backend')['BACKEND_BFF_SECRET'])
 
     def test_template_comments_optional_overrides_and_extra_values_survive_setup(self):
