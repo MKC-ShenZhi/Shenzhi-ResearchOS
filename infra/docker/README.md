@@ -53,6 +53,18 @@ Agent 仅挂载公钥目录，Backend 仅挂载私钥目录；两个目录不互
 Docker env_file 使用 raw 格式，值不加外层引号，`$` 和 `#` 保留为值。
 脚本导入支持常规单行 dotenv；复杂多行配置请人工配置，不做 Shell 求值。
 
+OpenLux 配置在 `env/agent.env`：填写 `OPENLUX_API_KEY`、完整 HTTPS `OPENLUX_BASE_URL`、
+逗号分隔的 `OPENLUX_MODELS`；`OPENLUX_AGENT_MODELS` 为已确认支持流式及多轮工具调用的型号子集。
+`prepare-env.py --from-local` 可从 `apps/agent/.env` 导入这些值，已有非空 Docker 值优先。
+三个 Agent 服务通过共享 `env_file` 使用同一配置，修改后使用下列开发命令重新创建容器：
+
+```powershell
+docker compose -f compose.yml -f compose.dev.yml --profile full up -d --no-deps --force-recreate agent-api agent-worker agent-usage-worker
+```
+
+`restart` 不重新加载 env；生产使用对应的 prod 文件组合并先排空任务。具体能力声明及套餐授权要求见
+[OpenLux 接入说明](../../docs/engineering/llm-api-foundation.md#openlux)。
+
 ## 四种运行模式
 
 ### A：只启动基础设施

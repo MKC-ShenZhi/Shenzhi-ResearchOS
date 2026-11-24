@@ -117,6 +117,27 @@ class PrepareEnvTests(unittest.TestCase):
         self.run_setup()
         self.assertEqual(before, self.snapshot())
 
+    def test_openlux_import_and_existing_docker_values_are_preserved(self):
+        native = {'OPENLUX_API_KEY': 'fixture-secret-openlux-native',
+                  'OPENLUX_BASE_URL': 'https://native.example.invalid/v1',
+                  'OPENLUX_MODELS': 'Chat-ID,Tool-ID', 'OPENLUX_AGENT_MODELS': 'Tool-ID'}
+        self.native('agent', native)
+        native_before = (self.root / 'apps/agent/.env').read_bytes()
+        self.run_setup()
+        for key, value in native.items():
+            self.assertEqual(self.read('agent')[key], value)
+            self.assertNotIn(key, self.read('web'))
+            self.assertNotIn(key, self.read('backend'))
+        docker_values = {**self.read('agent'), 'OPENLUX_API_KEY': 'fixture-secret-openlux-docker',
+                         'OPENLUX_BASE_URL': 'https://docker.example.invalid/v1',
+                         'OPENLUX_MODELS': 'Docker-ID', 'OPENLUX_AGENT_MODELS': 'Docker-ID'}
+        self.docker('agent', docker_values)
+        before = self.snapshot()
+        self.run_setup()
+        self.assertEqual(self.read('agent'), docker_values)
+        self.assertEqual(before, self.snapshot())
+        self.assertEqual((self.root / 'apps/agent/.env').read_bytes(), native_before)
+
     def test_all_role_tokens_import_native_into_empty_docker_values(self):
         roles = ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN')
         fixtures = {key: f'fixture-secret-{index}' for index, key in enumerate(roles)}

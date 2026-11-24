@@ -55,7 +55,7 @@ AI_MODEL_REGISTRY_FILE=
 1. 内置 Provider 默认地址可被各自 `*_BASE_URL` 覆盖；Key 总是取各自环境变量。
 2. 注册旧 Provider 的 `*_MODEL`。DashScope 默认 `qwen-plus`，DeepSeek 默认 `deepseek-chat`，智谱无默认型号。没有 Key 的条目仍可供服务端校验历史 ID，但不进入公开 config 目录。AutoDL 按下节的独立清单注册。
 3. `AI_ALLOWED_MODELS` 保持旧语义：作为额外型号，绑定有 Key 的 DashScope，否则绑定 DeepSeek。它不是多 Provider 全局白名单；新增多供应商型号优先使用 JSON 声明。
-4. `AI_MODEL_REGISTRY_FILE` 指向服务端 JSON 文件，相对路径以 Backend 工作目录为基准。自定义条目按 ID 覆盖自动生成条目（完整替换，不做字段合并）。文件内重复 Model / Provider ID、未知 Provider、冲突别名、未知字段、不支持协议、非法参数、非 HTTPS 地址均明确报配置错误。
+4. `AI_MODEL_REGISTRY_FILE` 指向 Agent 服务端 JSON 文件，相对路径以 Agent 进程工作目录为基准；Docker 中建议使用容器内绝对路径。自定义条目按 ID 覆盖自动生成条目（完整替换，不做字段合并）。文件内重复 Model / Provider ID、未知 Provider、冲突别名、未知字段、不支持协议、非法参数、非 HTTPS 地址均明确报配置错误。
 5. 默认模型优先级为 `AI_DEFAULT_MODEL` / `AI_AGENT_DEFAULT_MODEL` > 文件 `defaults` > 旧规则。有旧 Key 时，`chat` 用途默认为有 Key 的 DashScope，否则 DeepSeek；仅智谱或 AutoDL 配置有效时可默认选择其已配置模型。公开 `default_model` 只有在本次公开列表中存在时才返回，否则为 `null`。
 6. Agent 未单独指定默认时，共用具备 Tool Calling 的 `chat` 用途默认；否则优先选择已配置、启用且具备 Agent 能力的条目。没有合适候选时明确不可用，不放行不支持的模型。显式默认模型不存在、禁用或不支持其用途会报配置错误；缺失凭据不会切到别家。
 
@@ -96,6 +96,31 @@ AI_AGENT_DEFAULT_MODEL=autodl/DeepSeek-V4.1-Flash-1017
 `public_models()` 过滤未配置凭据或未启用的 Provider；已配置 Provider 下显式禁用的模型保留 `enabled=false / reason=model_disabled`。这是对第一阶段“缺 Key 时展示灰色条目”的行为变更，服务端历史 ID 解析与旧 Provider 优先级不变。
 
 `public_default()` 仅返回当前公开列表中的默认 ID；目录为空或显式默认指向未配置 Provider 时返回 `null`，不把隐藏模型重新带回菜单。前端成功加载空目录时 AI 发送禁用，简单搜索仍可用；配置加载失败时使用 `components/common/composer/config.ts` 的 `FALLBACK_COMPOSER_CONFIG` 禁用占位，两者不可混淆。`chat` 用途按 chat/streaming 过滤，`agent` 用途额外要求 `tool_calling=true`。
+
+## OpenLux
+
+OpenLux 使用原有 `OpenAICompatProvider`，请求为 `POST {base_url}/chat/completions`，凭据为 Bearer API Key；不新增客户端、数据库表或前端白名单。真实上游地址只配置在本地环境文件或部署环境变量中，不提供代码内默认地址。
+
+原生启动时配置 `apps/agent/.env`；Docker 运行时填写 `infra/docker/env/agent.env`（示例见 [agent.env.example](../../infra/docker/env/agent.env.example)），Compose 的 `agent-api`、`agent-worker`、`agent-usage-worker` 通过共享 `x-agent.env_file` 使用同一配置。`prepare-env.py --from-local` 可导入原生 Agent 配置，已有非空 Docker 值优先。不要把模型 Key 放到 Web、Backend 或仅放到 Compose 项目的 `.env`；项目 `.env` 只参与插值，不自动进入容器。
+
+```ini
+OPENLUX_API_KEY=
+OPENLUX_BASE_URL=<OPENLUX_BASE_URL>
+OPENLUX_MODELS=<UPSTREAM_MODEL_ID>,<UPSTREAM_TOOL_MODEL_ID>
+OPENLUX_AGENT_MODELS=<UPSTREAM_TOOL_MODEL_ID>
+# 可选；仅在型号已注册且用途能力匹配时设置：
+# AI_DEFAULT_MODEL=openlux/<UPSTREAM_MODEL_ID>
+# AI_AGENT_DEFAULT_MODEL=openlux/<UPSTREAM_TOOL_MODEL_ID>
+```
+
+- 只有 Key 非空且 `OPENLUX_MODELS` 清理后非空时才自动注册 Provider 和型号；此时 Base URL 必填，沿用 HTTPS 校验。仅添加 Key 不会选择、发现或虚构型号。
+- 两个型号列表均区分大小写、清理空白、去重；`OPENLUX_AGENT_MODELS` 必须是 `OPENLUX_MODELS` 的子集。ID 为 `openlux/<上游精确 ID>`，不生成裸名称别名，标签为 `OpenLux · <上游 ID>`，品牌使用 `openlux` 与现有通用图标回退。
+- 默认能力沿用保守的 Chat 声明，输出硬上限 4096，不发送 thinking 扩展或 `stream_options`；只有显式列入 `OPENLUX_AGENT_MODELS` 才声明 Tool Calling 并进入 Agent 菜单。该声明是部署者确认，不是自动探测结果。
+- 更细能力（`stream_options`、`reasoning`、thinking 策略、输出或上下文上限）通过 `AI_MODEL_REGISTRY_FILE` 的同 ID Model 条目完整覆盖；可仅提供 `models` 引用自动注册的 `openlux`。需要流式 usage 时，在确认上游支持后设置 `capabilities.stream_options=true`，Adapter 才发送 `stream_options.include_usage=true`。
+- `/models` 不参与运行时发现。`reasoning_content`、流式工具参数和累计 usage 复用现有解析；工具续轮不回传推理字段，必须确认具体型号兼容。当前 OpenLux 仅有离线 Mock 验证，尚未用真实凭据联调。
+- 原有默认优先级保持不变；环境显式默认优先于 JSON。正式用户还需要发布包含 OpenLux 能力身份与模型预算的套餐，并按现有流程分配，Registry 注册不会自动授权。
+
+Docker 修改 env 后需要重新创建三个 Agent 容器（单纯 `docker restart` 不重新加载 `env_file`），具体 dev/prod 文件组合见 [Docker 运行指南](../../infra/docker/README.md)。Agent API 与 Worker 必须看到同一份型号和能力配置；自定义 JSON 需挂载到二者可读的相同容器路径，`AI_MODEL_REGISTRY_FILE` 不得填写 Windows 主机路径。容器工作目录为 `/repo/apps/agent`。
 
 ## 声明第四家 OpenAI 兼容 Provider
 
@@ -140,7 +165,7 @@ AI_AGENT_DEFAULT_MODEL=autodl/DeepSeek-V4.1-Flash-1017
 }
 ```
 
-然后设置 `FOURTH_API_KEY` 与 `AI_MODEL_REGISTRY_FILE` 并重启。目录文件不保存 Key；只引用环境变量名。修改文件为该 JSON 与 Backend 环境配置；可选增加品牌 Logo。未知品牌使用通用图标，不会造成组件异常。增加新协议才需要新增 Adapter；当前拒绝未支持的协议字符串。
+然后设置 `FOURTH_API_KEY` 与 `AI_MODEL_REGISTRY_FILE` 并重启。目录文件不保存 Key；只引用环境变量名。修改文件为该 JSON 与 Agent 环境配置；可选增加品牌 Logo。未知品牌使用通用图标，不会造成组件异常。增加新协议才需要新增 Adapter；当前拒绝未支持的协议字符串。
 
 给新 GLM 型号声明能力时，也可只提供 `models`（引用已有 `zhipu`），例如 ID `zhipu/my-glm`、`upstream_model` 为实际型号，明确设置该版本支持的能力。不得凭型号名称推测。
 

@@ -40,6 +40,28 @@ def model_definition(model_id: str, provider_id: str, upstream: str) -> ModelSpe
                      capabilities=Capabilities())
 
 
+def _openlux_definitions() -> tuple[list[ProviderSpec], list[ModelSpec]]:
+    """Explicit deployment declarations; never infer capabilities from model names."""
+    upstreams = list(dict.fromkeys(item.strip() for item in
+                                 os.getenv('OPENLUX_MODELS', '').split(',') if item.strip()))
+    if not os.getenv('OPENLUX_API_KEY', '').strip() or not upstreams:
+        return [], []
+    agent_models = {item.strip() for item in os.getenv('OPENLUX_AGENT_MODELS', '').split(',')
+                    if item.strip()}
+    if agent_models - set(upstreams):
+        raise RegistryConfigError('OPENLUX_AGENT_MODELS 必须是 OPENLUX_MODELS 的子集')
+    try:
+        provider = ProviderSpec(id='openlux', base_url=os.getenv('OPENLUX_BASE_URL', '').strip(),
+                                api_key_env='OPENLUX_API_KEY')
+    except ValidationError:
+        raise RegistryConfigError('OPENLUX_BASE_URL 必须配置为可信 HTTPS 端点') from None
+    models = [ModelSpec(id=f'openlux/{upstream}', provider_id='openlux', upstream_model=upstream,
+                        label=f'OpenLux · {upstream}', brand='openlux',
+                        capabilities=Capabilities(tool_calling=upstream in agent_models))
+              for upstream in upstreams]
+    return [provider], models
+
+
 def load_registry() -> ModelRegistry:
     builtins = _read_catalog(CATALOG_PATH)
     providers = [provider.model_copy(update={
@@ -71,6 +93,9 @@ def load_registry() -> ModelRegistry:
                                          os.getenv('AUTODL_MODELS', '').split(',') if item.strip()))
         for upstream in autodl_models or AUTODL_DEFAULT_MODELS:
             models.append(model_definition(f'autodl/{upstream}', 'autodl', upstream))
+    openlux_providers, openlux_models = _openlux_definitions()
+    providers.extend(openlux_providers)
+    models.extend(openlux_models)
     defaults: dict[str, str] = {}
     path = os.getenv('AI_MODEL_REGISTRY_FILE', '').strip()
     if path:
