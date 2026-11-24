@@ -2,7 +2,8 @@
 import base64
 import json
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import httpx
 
@@ -22,9 +23,11 @@ class FakeAgentGateway:
         }}
         self.submissions = []
         self.files = {}
+        self.client_request_digests = []
 
-    async def submit(self, payload):
+    async def submit(self, payload, *, client_request_digest=None):
         self.submissions.append(payload)
+        self.client_request_digests.append(client_request_digest)
         return {'task_id': 'task-1', 'current_run_id': 'run-1'}
 
     async def events(self, run_id, owner, after_seq):
@@ -77,20 +80,27 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         self.gateway = FakeAgentGateway()
         self.api_repo = patch('app.api.agent.agent_session_repository', self.repo)
         self.gateway_patch = patch('app.api.agent.agent_gateway', self.gateway)
+        # New product tasks always use the unified V2 boundary. Tests substitute
+        # the same deterministic fake so existing SSE assertions stay valid.
+        self.v2_patch = patch('app.services.agent_gateway.v2.AgentGatewayV2',
+                              return_value=self.gateway)
         self.api_repo.start()
         self.gateway_patch.start()
+        self.v2_patch.start()
 
     def tearDown(self):
+        self.v2_patch.stop()
         self.gateway_patch.stop()
         self.api_repo.stop()
         self.env.stop()
 
     OWNER = {'x-shenzhi-anonymous-id': '00000000-0000-4000-8000-000000000001'}
 
-    async def post(self, payload):
+    async def post(self, payload, headers=None):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
-            return await client.post('/api/v1/agent/run', json=payload, headers=self.OWNER)
+            return await client.post('/api/v1/agent/run', json=payload,
+                                     headers={**self.OWNER, **(headers or {})})
 
     async def test_run_streams_events_and_result(self):
         self.gateway.events_data = [{'seq': 1, 'name': 'delta', 'data': {'text': '你好'}}]
@@ -107,7 +117,6 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_authorized_product_entry_uses_v2_without_fallback(self):
         from app.services.agent_entitlements.service import EntitlementError
-        from unittest.mock import AsyncMock
         v2 = FakeAgentGateway()
         with patch.dict('os.environ', {'AGENT_V2_ADMISSION': 'authorized'}), \
              patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
@@ -124,6 +133,59 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(denied.status_code, 403)
                 self.assertEqual(denied.json()['message'], 'QUOTA_EXHAUSTED')
                 self.assertEqual(len(self.gateway.submissions), 0)
+
+    async def test_anonymous_new_task_uses_v2_gateway(self):
+        v2 = FakeAgentGateway()
+        v2.events_data = [{'seq': 1, 'name': 'delta', 'data': {'text': '你好'}}]
+        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+            response = await self.post({'prompt': '匿名任务'},
+                                       headers={'Idempotency-Key': 'anon-v2-key'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(parse_sse(response.text)[-1][1]['final_text'], '你好')
+        self.assertEqual(v2.submissions[0]['owner_id'],
+                         'anon:00000000-0000-4000-8000-000000000001')
+        self.assertEqual(v2.submissions[0]['idempotency_key'], 'anon-v2-key')
+        self.assertTrue(v2.client_request_digests[0].startswith('sha256:'))
+        # The V1 boundary must not receive new submissions.
+        self.assertEqual(self.gateway.submissions, [])
+
+    async def test_anonymous_new_task_requires_idempotency_key(self):
+        v2 = FakeAgentGateway()
+        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+            response = await self.post({'prompt': '缺少幂等键'})
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(v2.submissions, [])
+
+    async def test_stateless_retry_recovers_before_resolving_expired_attachment(self):
+        from app.api.agent import _client_request_digest
+        from app.schemas.agent import AgentRunBody
+
+        body = {'prompt': '带附件任务', 'attachments': [{'kind': 'file', 'file_id': 'expired-slot'}]}
+        digest_value = _client_request_digest(AgentRunBody.model_validate(body))
+        stored = SimpleNamespace(client_request_digest=digest_value)
+        db = unittest.mock.MagicMock()
+        db.scalar = AsyncMock(return_value=stored)
+        scope = unittest.mock.MagicMock()
+        scope.return_value.__aenter__ = AsyncMock(return_value=db)
+        scope.return_value.__aexit__ = AsyncMock(return_value=False)
+        self.gateway.recover_submission = AsyncMock(return_value={
+            'task_id': 'task-1', 'current_run_id': 'run-1',
+        })
+        attachment_resolver = AsyncMock(side_effect=AssertionError('expired upload must not be resolved'))
+        with patch('app.core.database.database_url', return_value='postgresql://test'), \
+             patch('app.core.database.session_scope', scope), \
+             patch('app.api.agent.resolve_agent_attachments', attachment_resolver):
+            response = await self.post(body, headers={'Idempotency-Key': 'retry-with-expired-file'})
+            conflict = await self.post(
+                {**body, 'prompt': '不同请求'},
+                headers={'Idempotency-Key': 'retry-with-expired-file'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(parse_sse(response.text)[-1][1]['final_text'], '你好')
+        self.gateway.recover_submission.assert_awaited_once_with(
+            'anon:00000000-0000-4000-8000-000000000001', 'retry-with-expired-file')
+        self.assertEqual(conflict.status_code, 409)
+        attachment_resolver.assert_not_awaited()
+        self.assertEqual(self.gateway.submissions, [])
 
     async def test_tool_round_trip_over_http(self):
         self.gateway.events_data = [
@@ -322,6 +384,54 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client_post_json(
             '/api/v1/agent/run/deadbeef/steer', {'text': '插话'})
         self.assertEqual(response.status_code, 404)
+
+    async def test_run_control_resolves_v2_binding_without_owner_switch(self):
+        gateway = AsyncMock()
+        gateway.token = 'gateway-token'
+        gateway.run.return_value = {'task_id': 'task-1'}
+        gateway.steer.return_value = {'stored': True}
+        with patch('app.api.agent.submission_gateway', return_value=gateway):
+            response = await self.client_post_json(
+                '/api/v1/agent/run/run-1/steer', {'text': '聚焦结论'})
+        self.assertEqual(response.status_code, 200)
+        # Anonymous historical owners must not force a V1 control path.
+        gateway.steer.assert_awaited_once_with(
+            'run-1', 'anon:00000000-0000-4000-8000-000000000001', '聚焦结论')
+
+    async def test_run_control_does_not_fallback_to_v1_when_v2_is_unavailable(self):
+        gateway = AsyncMock()
+        gateway.run.side_effect = BusinessError(20004, 'Agent 服务凭据未配置', 503)
+        with patch('app.api.agent.submission_gateway', return_value=gateway):
+            response = await self.client_post_json(
+                '/api/v1/agent/run/run-1/stop', {})
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(self.gateway.result['status'], 'completed')
+
+    async def test_v2_session_artifact_uses_shared_service_gateway(self):
+        session_id = 'ses_v2_file'
+        owner = f"anon:{self.OWNER['x-shenzhi-anonymous-id']}"
+        session = AgentSession(id=session_id, owner=owner, title='V2 文件')
+        from app.services.agent_sessions.entities import AgentTurn
+        session.turns.append(AgentTurn(
+            id='turn-v2-file', session_id=session_id, user_content='图表',
+            settings={'_agent_protocol': 2},
+            status='done',
+        ))
+        self.repo.sessions[session_id] = session
+        self.gateway.read_session_file = AsyncMock(return_value=(b'v2 artifact', 'text/plain'))
+        v2 = AsyncMock()
+        with patch('app.api.agent.submission_gateway', return_value=v2):
+            response = await self.client_get(
+                f'/api/v1/agent/session/{session_id}/file?path=report.txt')
+            asset = await self.client_get(
+                f'/api/v1/agent/assets/{session_id}/report.txt')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'v2 artifact')
+        self.assertEqual(asset.status_code, 200)
+        self.assertEqual(asset.content, b'v2 artifact')
+        self.assertEqual(self.gateway.read_session_file.await_count, 2)
+        self.gateway.read_session_file.assert_awaited_with(owner, session_id, 'report.txt')
+        v2.read_session_file.assert_not_awaited()
 
     async def client_get(self, url: str) -> httpx.Response:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:

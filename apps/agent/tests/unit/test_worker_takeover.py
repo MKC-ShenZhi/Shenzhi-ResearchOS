@@ -72,7 +72,7 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         self.task = await repository.submit(self.db, TaskSubmission(owner_id='owner', prompt='run'))
 
     def expire_lease(self):
-        self.now += timedelta(seconds=46)
+        self.now += timedelta(seconds=repository.WORKER_LEASE_SECONDS + 1)
 
     async def emit(self, claim, worker, seq, *, text='partial'):
         run = claim['run']

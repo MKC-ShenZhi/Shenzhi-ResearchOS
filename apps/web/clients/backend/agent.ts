@@ -223,9 +223,10 @@ export async function streamAgentRun(
     onResult: (result: AgentRunResult) => void;
   },
   signal?: AbortSignal,
+  idempotencyKey?: string,
 ): Promise<void> {
   await streamAgentEndpoint(apiPath("/agent/run"), body, handlers, signal,
-    { "Idempotency-Key": crypto.randomUUID() });
+    { "Idempotency-Key": idempotencyKey ?? crypto.randomUUID() });
 }
 
 export async function streamAgentSessionRun(

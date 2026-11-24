@@ -104,7 +104,7 @@ class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await repository.claim_run(self.db, 'real'))
         self.assertIsNone(await repository.claim_run(self.db, 'demo', demo_mode=True))
         await repository.request_cancel(self.db, real.task_id, 'owner')
-        self.now += timedelta(seconds=46)
+        self.now += timedelta(seconds=repository.WORKER_LEASE_SECONDS + 1)
         taken, _, _ = await repository.claim_run(self.db, 'demo-2', demo_mode=True)
         self.assertEqual(taken.task_id, demo.task_id)
         taken, _, _ = await repository.claim_run(self.db, 'real-2')
@@ -126,6 +126,23 @@ class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
                     'worker_id': 'wrong-mode', 'demo_mode': demo_mode != '1',
                 })
                 self.assertEqual(rejected.status_code, 409)
+
+    async def test_v1_drain_mode_rejects_new_tasks_but_keeps_worker_claims(self):
+        from agent_contracts import TaskSubmission
+        legacy = await repository.submit(self.db, TaskSubmission(
+            owner_id='owner', prompt='existing v1 task', model='test/m1'))
+        with patch.dict('os.environ', {'AGENT_V1_ADMISSION': 'drain_only', 'AGENT_DEMO_MODE': '0'}):
+            rejected = await self.client.post('/internal/v1/tasks', json={
+                'owner_id': 'owner', 'prompt': 'new v1 task', 'model': 'test/m1',
+            })
+            self.assertEqual(rejected.status_code, 409)
+            claims = [await self.client.post('/internal/v1/worker/claim', json={
+                'worker_id': f'drain-worker-{index}', 'demo_mode': False,
+            }) for index in range(2)]
+        for claim in claims:
+            self.assertEqual(claim.status_code, 200, claim.text)
+        self.assertEqual({claim.json()['run']['task_id'] for claim in claims},
+                         {self.task.task_id, legacy.task_id})
 
     async def test_service_credential_is_required_and_read_does_not_mutate_task(self):
         before = await repository.get_task(self.db, self.task.task_id, 'owner')

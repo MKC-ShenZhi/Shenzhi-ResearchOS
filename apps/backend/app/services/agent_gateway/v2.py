@@ -7,6 +7,7 @@ from agent_contracts.canonical import digest, request_digest_v1
 from agent_contracts.v2 import CallStartFact, TaskSubmissionV2
 from agent_contracts.wire import TaskSubmissionWire
 from app.core.database import session_scope
+from app.core.errors import BusinessError
 from app.models.agent_entitlements import (
     EntitlementPolicyRow, GrantRootRow, MeteringProfileRow, SubmissionRow, ObservationAdmissionRow,
 )
@@ -22,6 +23,16 @@ class AgentGatewayV2(AgentGateway):
     def __init__(self, **kwargs):
         kwargs.setdefault('token', os.getenv('AGENT_GATEWAY_TOKEN', '').strip())
         super().__init__(**kwargs)
+
+    async def request(self, method, path, *, params=None, payload=None):
+        # Shared V1 capabilities still require the distinct service role. The
+        # V2 gateway credential must never be forwarded to V1 internal routes.
+        if path.startswith('/internal/v1/'):
+            service_gateway = AgentGateway(
+                base_url=self.base_url, transport=self.transport,
+            )
+            return await service_gateway.request(method, path, params=params, payload=payload)
+        return await super().request(method, path, params=params, payload=payload)
 
     async def submit(self, payload, *, client_request_digest=None):
         request = TaskSubmissionWire.model_validate(payload)
@@ -56,14 +67,18 @@ class AgentGatewayV2(AgentGateway):
             known_task_id = profile.task_id
         if known_task_id:
             result = await self.task(known_task_id, request.owner_id)
-            require(result.get('submission_id') == submission_id, 'AGENT_RESPONSE_INVALID', 502)
+            # A response error after the Task may exist is indeterminate: never
+            # turn it into a definitive authorization rejection.
+            if result.get('submission_id') != submission_id:
+                raise BusinessError(20004, 'AGENT_RESPONSE_INVALID', 502)
             if result.get('binding_status') == 'bound':
                 if grant.revision > 1:
                     await self.request('POST', f'/internal/v2/grants/{grant.grant_id}/revisions', payload=grant.model_dump(mode='json'))
                 return result
         result = await self.request('POST', '/internal/v2/tasks', payload=envelope.model_dump(mode='json'))
-        require(result.get('schema_version') == 1 and result.get('metering_context') == 'authorized'
-                and result.get('submission_id') == submission_id, 'AGENT_RESPONSE_INVALID', 502)
+        if not (result.get('schema_version') == 1 and result.get('metering_context') == 'authorized'
+                and result.get('submission_id') == submission_id):
+            raise BusinessError(20004, 'AGENT_RESPONSE_INVALID', 502)
         async with session_scope() as db:
             submission = await db.get(SubmissionRow, submission_id)
             submission.status = 'bound' if result['binding_status'] == 'bound' else 'pending'
@@ -101,18 +116,24 @@ class AgentGatewayV2(AgentGateway):
                 agent_audience=service.audience, owner_id=request.owner_id, request_digest=admission.request_digest,
                 submission_id=None, budget_grant=None, permission_snapshot=None, call_bounds={}, request=request)
         result = await self.request('POST', '/internal/v2/tasks', payload=envelope.model_dump(mode='json'))
-        require(result.get('schema_version') == 1 and result.get('metering_context') == 'observation_only'
-                and result.get('metering_profile_id') == envelope.metering_profile_id, 'AGENT_RESPONSE_INVALID', 502)
+        if not (result.get('schema_version') == 1 and result.get('metering_context') == 'observation_only'
+                and result.get('metering_profile_id') == envelope.metering_profile_id):
+            raise BusinessError(20004, 'AGENT_RESPONSE_INVALID', 502)
         return result
 
-    async def recover_submission(self, owner, client_key):
+    async def recover_submission(self, owner, client_key, *, allow_missing=False):
         async with session_scope() as db:
             submission = await db.scalar(select(SubmissionRow).where(
                 SubmissionRow.owner_id == owner, SubmissionRow.client_key == client_key))
             if submission is None:
                 submission = await db.scalar(select(ObservationAdmissionRow).where(
                     ObservationAdmissionRow.owner_id == owner, ObservationAdmissionRow.client_key == client_key))
-            require(submission is not None, 'SUBMISSION_NOT_FOUND', 404)
+            if submission is None:
+                # Session recovery may distinguish a crash before admission
+                # from a missing key in operator or product recovery flows.
+                if not allow_missing:
+                    raise BusinessError(20004, 'SUBMISSION_NOT_FOUND', 404)
+                return None
             request = dict(submission.request)
             is_observation = isinstance(submission, ObservationAdmissionRow)
         if is_observation:

@@ -8,6 +8,8 @@ import {
   paperAgentHistory,
   paperAgentReducer,
   paperAgentRunRequest,
+  pendingPaperAgentRetry,
+  type PendingPaperAgentRun,
   type PaperAgentState,
 } from "../../features/papers/[id]/paper-agent";
 
@@ -56,6 +58,18 @@ test("Paper Agent request binds the exact paper id while the visible user turn s
   assert.match(request.prompt, /paper_id: paper:current-123/);
   assert.match(request.prompt, /read_paper/);
   assert.ok(request.prompt.includes(question));
+});
+
+test("Paper Agent retries the same unresolved request with its original key and body", () => {
+  const operation: PendingPaperAgentRun = {
+    question: "这篇论文的核心贡献是什么？",
+    request: paperAgentRunRequest(paper, "这篇论文的核心贡献是什么？", []),
+    idempotencyKey: "stable-paper-operation",
+  };
+
+  const pendingRuns = new Map([[operation.question, operation]]);
+  assert.equal(pendingPaperAgentRetry(pendingRuns, operation.question), operation);
+  assert.equal(pendingPaperAgentRetry(pendingRuns, "另一个问题"), null);
 });
 
 test("Paper Agent history follows the existing user/assistant protocol across turns", () => {

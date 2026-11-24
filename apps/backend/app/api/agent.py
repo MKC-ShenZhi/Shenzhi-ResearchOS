@@ -15,6 +15,7 @@ from agent_contracts import (
     KnowledgeGraphQueryWire, KnowledgePaperDetailWire, KnowledgePaperGraphWire,
     KnowledgeSearchRequestWire, KnowledgeSearchResponseWire, validate_history,
 )
+from agent_contracts.canonical import digest
 
 from app.api._support.upload_reader import read_upload
 from app.core.config import MAX_FILES, UPLOAD_ACCEPT
@@ -42,24 +43,68 @@ router = APIRouter(prefix='/api/v1/agent', tags=['agent'])
 logger = logging.getLogger(__name__)
 
 
-def product_gateway(owner):
-    if owner.startswith('user:'):
-        from app.services.agent_gateway.v2 import AgentGatewayV2
-        return AgentGatewayV2()
-    return agent_gateway
+def submission_gateway():
+    """Unified execution boundary for every new product task.
+
+    New submissions always use the V2 internal protocol; owner type no longer
+    selects a protocol. V1 remains reachable only for draining existing tasks.
+    """
+    from app.services.agent_gateway.v2 import AgentGatewayV2
+    return AgentGatewayV2()
+
+
+def _client_request_digest(body: AgentRunBody) -> str:
+    """Freeze the parsed product request before expiring upload slots are read."""
+    serialized = json.dumps(body.model_dump(mode='json'), sort_keys=True, ensure_ascii=False,
+                            allow_nan=False, separators=(',', ':'))
+    return digest(serialized)
+
+
+async def _recover_stateless_submission(gateway, owner: str, key: str,
+                                        body: AgentRunBody) -> tuple[dict | None, str | None]:
+    """Recover a previously admitted V2 request before resolving short-lived uploads."""
+    from sqlalchemy import select
+    from app.core.database import database_url, session_scope
+    from app.models.agent_entitlements import SubmissionRow, ObservationAdmissionRow
+
+    client_digest = _client_request_digest(body)
+    if not database_url():
+        return None, client_digest
+    async with session_scope() as db:
+        row = await db.scalar(select(SubmissionRow).where(
+            SubmissionRow.owner_id == owner, SubmissionRow.client_key == key))
+        if row is None:
+            row = await db.scalar(select(ObservationAdmissionRow).where(
+                ObservationAdmissionRow.owner_id == owner, ObservationAdmissionRow.client_key == key))
+        stored_client_digest = row.client_request_digest if row is not None else None
+    if row is None:
+        # Fresh requests create an admission during submit; persist their source
+        # fingerprint so later retries can recover before resolving uploads.
+        return None, client_digest
+    if stored_client_digest is None:
+        # Preserve retries for rows created before product fingerprints were
+        # recorded; their normalized Task request is still checked by V2 submit.
+        return None, None
+    if stored_client_digest != client_digest:
+        raise BusinessError(20009, 'Idempotency-Key 已用于不同请求', 409)
+    return await gateway.recover_submission(owner, key), client_digest
 
 
 async def gateway_for_run(run_id, owner):
-    gateway = product_gateway(owner)
-    if gateway is not agent_gateway:
-        try:
-            return gateway, await gateway.run(run_id, owner)
-        except BusinessError as exc:
-            if exc.status != 404:
-                raise
-            # Read-only lookup of legacy runs during drain. This never retries
-            # a submission or changes its authorization/metering context.
+    """Resolve an existing Run by its persisted protocol, not by owner type.
+
+    V2 is authoritative; a 404 falls back to the V1 read boundary while legacy
+    tasks drain. The fallback never retries a submission or changes its
+    authorization/metering context.
+    """
+    gateway = submission_gateway()
+    try:
+        return gateway, await gateway.run(run_id, owner)
+    except BusinessError as exc:
+        if exc.status != 404:
+            raise
     return agent_gateway, await agent_gateway.run(run_id, owner)
+
 
 # Workspace bytes are untrusted documents, including HTML and SVG. Apply this
 # to both download/preview routes, regardless of the filename or MIME type.
@@ -117,14 +162,20 @@ async def config(_credential: None = Depends(require_bff)):
 @router.post('/run')
 async def run(body: AgentRunBody, owner: str = Depends(request_owner),
               idempotency_key: str | None = Header(default=None, alias='Idempotency-Key')):
-    gateway = product_gateway(owner)
+    gateway = submission_gateway()
     key = validate_idempotency_key(idempotency_key)
+    # The V2 execution boundary requires a stable retry key for submission.
     if gateway is not agent_gateway and key is None:
         raise BusinessError(20001, 'Idempotency-Key 必填', 422)
     try:
         validate_history(body.history)
     except ValueError as exc:
         raise BusinessError(20001, '历史消息格式无效', 400) from exc
+    recovered, submit_client_digest = await _recover_stateless_submission(gateway, owner, key, body)
+    if recovered is not None:
+        return StreamingResponse(_agent_task_stream(owner, recovered, [], gateway=gateway), media_type='text/event-stream',
+                                 headers={'Cache-Control': 'no-cache, no-transform',
+                                          'X-Accel-Buffering': 'no'})
     attachment_text, warnings, files = await resolve_agent_attachments(body.attachments, owner)
     payload = {
         'owner_id': owner, 'prompt': body.prompt + attachment_text,
@@ -134,7 +185,7 @@ async def run(body: AgentRunBody, owner: str = Depends(request_owner),
     }
     if key is not None:
         payload['idempotency_key'] = key
-    task = await gateway.submit(payload)
+    task = await gateway.submit(payload, client_request_digest=submit_client_digest)
     if files:
         try:
             await agent_upload_store.consume(owner, list(files))
@@ -284,7 +335,8 @@ async def run_agent_session(
     owner: str = Depends(request_owner),
 ):
     key = validate_idempotency_key(idempotency_key)
-    gateway = product_gateway(owner)
+    gateway = submission_gateway()
+    # The V2 execution boundary requires a stable retry key for submission.
     if gateway is not agent_gateway and key is None:
         raise BusinessError(20001, 'Idempotency-Key 必填', 422)
     live = await start_session_run(
@@ -335,6 +387,8 @@ async def session_file(session_id: str, path: str, download: bool = False,
     # session has been deleted.  The existence/owner check is deliberately at
     # the HTTP boundary, before resolving the physical path.
     await agent_session_repository.get(session_id, owner)
+    # File access remains a shared V1 internal capability and uses the isolated
+    # Agent service credential; AgentGatewayV2's token is gateway-role only.
     content, media_type = await agent_gateway.read_session_file(owner, session_id, path)
     filename = PurePosixPath(path).name or 'file'
     disposition = 'attachment' if download else 'inline'

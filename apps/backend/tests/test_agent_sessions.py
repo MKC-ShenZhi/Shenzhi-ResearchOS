@@ -6,9 +6,10 @@ import json
 import os
 import unittest
 from collections import deque
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
+from app.core.idempotency import request_fingerprint
 
 from app.core.errors import BusinessError
 from app.main import app
@@ -43,6 +44,8 @@ class FakeAgentGateway:
         self.cancelled = []
         self.submit_error = None
         self._next_id = 0
+        self.protocol_version = 1
+        self.updated_settings = None
 
     def enqueue(self, *, final_text='已完成', status='completed', events=None,
                 output=None, error_message=None, gate=None, event_error=None):
@@ -51,6 +54,7 @@ class FakeAgentGateway:
             'events': list(events or []), 'output': output,
             'error_message': error_message, 'gate': gate,
             'event_error': event_error,
+            'event_error_raised': False,
         })
 
     async def submit(self, payload):
@@ -78,6 +82,14 @@ class FakeAgentGateway:
         self.runs[run_id] = plan
         self.submissions.append(payload)
         return {'task_id': task_id, 'current_run_id': run_id}
+
+    async def recover_submission(self, owner, client_key, *, allow_missing=False):
+        plan = next((item for item in self.runs.values()
+                     if item['payload']['owner_id'] == owner
+                     and item['payload']['idempotency_key'] == client_key), None)
+        if plan is None:
+            return None
+        return {'task_id': plan['task_id'], 'current_run_id': plan['run_id']}
 
     async def events(self, run_id, owner, after_seq):
         plan = self.runs[run_id]
@@ -118,6 +130,7 @@ class FakeAgentGateway:
         return {'current_run_id': plan['run_id'], 'cancel_requested': plan['status'] == 'cancelled'}
 
     async def task_runs(self, task_id, owner):
+        self.task_runs_calls = getattr(self, 'task_runs_calls', 0) + 1
         return [item['run_id'] for item in self.runs.values() if item['task_id'] == task_id]
 
     async def steer(self, run_id, owner, message):
@@ -136,6 +149,9 @@ class FakeAgentGateway:
 
     async def config(self):
         return {'models': [], 'default_model': None, 'skills': []}
+
+    async def usage(self, task_id, owner):
+        return {}
 
 
 class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
@@ -156,18 +172,24 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.service_repo = patch('app.services.agent_sessions.service.agent_session_repository', self.repo)
         self.api_gateway = patch('app.api.agent.agent_gateway', self.gateway)
         self.service_gateway = patch('app.services.agent_sessions.service.agent_gateway', self.gateway)
-        for patcher in (self.api_repo, self.service_repo, self.api_gateway, self.service_gateway):
+        # New Session Turns submit through the unified V2 boundary; substitute the
+        # same deterministic fake so the projection assertions stay unchanged.
+        self.v2_gateway = patch('app.services.agent_gateway.v2.AgentGatewayV2',
+                                return_value=self.gateway)
+        for patcher in (self.api_repo, self.service_repo, self.api_gateway,
+                        self.service_gateway, self.v2_gateway):
             patcher.start()
 
     def tearDown(self):
-        for patcher in (self.service_gateway, self.api_gateway, self.service_repo, self.api_repo):
+        for patcher in (self.v2_gateway, self.service_gateway, self.api_gateway,
+                        self.service_repo, self.api_repo):
             patcher.stop()
         self.live_registry.stop()
         self.env.stop()
 
     async def request(self, method: str, path: str, *, owner=None, json_body=None, headers=None):
         request_headers = {**(owner or self.OWNER_A), **(headers or {})}
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
                                      base_url='http://test') as client:
             return await client.request(method, path, headers=request_headers, json=json_body)
 
@@ -404,6 +426,150 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parse_sse(response.text)[-1][1]['status'], 'stopped')
         self.assertEqual(self.gateway.steers[0][2], '聚焦结论')
         self.assertTrue(self.gateway.cancelled)
+
+    async def test_new_session_turn_submits_through_unified_v2_boundary(self):
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('统一路径')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        v2.enqueue(final_text='v2 回答')
+        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+            response = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body={'prompt': '统一路径问题'},
+                headers={'Idempotency-Key': 'unified-turn-key'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(parse_sse(response.text)[-1][1]['final_text'], 'v2 回答')
+        self.assertEqual(len(v2.submissions), 1)
+        # The legacy V1 boundary receives no new Session submission.
+        self.assertEqual(self.gateway.submissions, [])
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].settings.get('_agent_protocol'), 2)
+        self.assertGreater(v2.task_runs_calls, 0)
+
+    async def test_v2_turn_recovers_after_crash_before_remote_submission(self):
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('Backend 提交前重启')
+        from app.services.agent_sessions.entities import AgentTurn
+        turn = AgentTurn(
+            id='turn-v2-before-submit', session_id=session_id, user_content='恢复任务',
+            settings={'_agent_owner_id': owner, '_agent_protocol': 2,
+                      '_agent_recovery_request': {'prompt': '恢复任务 附件文本', 'history': [{'kind': 'user', 'text': '之前'}]},
+                      'mode': 'fast', 'model': None, 'workspace_id': None, 'skills': []}, status='running',
+            idempotency_key='crash-before-submit-key',
+            idempotency_fingerprint=request_fingerprint({
+                'prompt': '恢复任务', 'mode': 'fast', 'model': None,
+                'attachments': [], 'workspace_id': None, 'skills': [],
+            }),
+            worker_id='previous-worker',
+        )
+        self.repo.sessions[session_id].turns.append(turn)
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        v2.recovery_prompt = '恢复任务 附件文本'
+        v2.recovery_history = [{'kind': 'user', 'text': '之前'}]
+        self.v2_gateway.stop()
+        self.v2_gateway = patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2)
+        self.v2_gateway.start()
+        v2.enqueue(final_text='恢复后提交')
+        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+            response = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body={'prompt': '恢复任务'},
+                headers={'Idempotency-Key': 'crash-before-submit-key'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(v2.runs), 1)
+        recovered_payload = next(iter(v2.runs.values()))['payload']
+        self.assertEqual(recovered_payload['prompt'], '恢复任务 附件文本')
+        self.assertEqual(recovered_payload['history'], [{'kind': 'user', 'text': '之前'}])
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].settings.get('agent_task_id'), 'task-1')
+        self.assertEqual(detail.turns[-1].status, 'done')
+        self.assertNotIn('_agent_recovery_request', self.repo.sessions[session_id].turns[-1].settings)
+
+    async def test_v2_projection_uses_v2_gateway_for_retry_run_lookup(self):
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('V2 重试查询')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        v2.enqueue(final_text='首次失败', status='failed')
+        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+            response = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body={'prompt': '验证重试'},
+                headers={'Idempotency-Key': 'retry-run-key'})
+        self.assertEqual(response.status_code, 200, response.text)
+        await get_session_detail(session_id, owner)
+        self.assertGreater(v2.task_runs_calls, 0)
+        self.assertEqual(self.gateway.submissions, [])
+
+    async def test_definite_v2_submission_rejection_closes_product_turn(self):
+        from app.services.agent_entitlements.service import EntitlementError
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('明确拒绝')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        v2.submit = AsyncMock(side_effect=EntitlementError('ENTITLEMENT_UNAVAILABLE', 403))
+        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+            response = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body={'prompt': '匿名任务'},
+                headers={'Idempotency-Key': 'rejected-key'})
+        self.assertEqual(response.status_code, 403, response.text)
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].status, 'failed')
+        self.assertIn('ENTITLEMENT_UNAVAILABLE', detail.turns[-1].error or '')
+
+    async def test_local_v2_wire_validation_rejection_closes_product_turn(self):
+        from agent_contracts.wire import TaskSubmissionWire
+        from pydantic import ValidationError
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('本地协议校验拒绝')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        try:
+            TaskSubmissionWire.model_validate({})
+        except ValidationError as exc:
+            validation_error = exc
+        else:
+            self.fail('Expected invalid TaskSubmissionWire to fail validation')
+        v2.submit = AsyncMock(side_effect=validation_error)
+        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+            response = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body={'prompt': '应结束本轮'},
+                headers={'Idempotency-Key': 'wire-validation-rejected-key'})
+        self.assertEqual(response.status_code, 500, response.text)
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].status, 'failed')
+        self.assertIn('Field required', detail.turns[-1].error or '')
+
+    async def test_indeterminate_v2_submit_recovers_same_task_on_idempotent_retry(self):
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('不确定提交恢复')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        async def submit_then_lose_response(payload):
+            await FakeAgentGateway.submit(v2, payload)
+            raise TimeoutError('response lost after remote task creation')
+        submit_mock = AsyncMock(side_effect=submit_then_lose_response)
+        v2.submit = submit_mock
+        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+            first = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body={'prompt': '同一个请求'},
+                headers={'Idempotency-Key': 'stable-recovery-key'})
+            self.assertEqual(first.status_code, 500, first.text)
+            second = await self.request(
+                'POST', f'/api/v1/agent/sessions/{session_id}/run',
+                json_body={'prompt': '同一个请求'},
+                headers={'Idempotency-Key': 'stable-recovery-key'})
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertEqual(submit_mock.await_count, 1)
+        self.assertEqual(len(v2.runs), 1)
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].status, 'done')
+        self.assertEqual(detail.turns[-1].settings.get('agent_task_id'), 'task-1')
 
 
 class TimelineCaptureTests(unittest.TestCase):

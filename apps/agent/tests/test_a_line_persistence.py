@@ -186,11 +186,22 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         await deliver_once(self.agent, Bridge(), producer_id='agent-test', batch_size=200,
                            max_attempts=5, retry_base_seconds=1, retry_max_seconds=10)
 
-    async def test_pending_cannot_claim_and_v1_worker_cannot_see_v2(self):
+    async def test_v1_and_v2_workers_only_claim_their_protocol_tasks(self):
+        from agent_contracts import TaskSubmission
+        async with self.agent() as db:
+            legacy = await repository.submit(db, TaskSubmission(
+                owner_id='legacy-owner', prompt='legacy task', model='test/m1'))
         await self.submit()
         async with self.agent() as db:
-            self.assertIsNone(await repository.claim_run(db,'legacy'))
-            self.assertIsNone(await repository.claim_run(db,'v2-worker',v2=True))
+            self.assertIsNone(await repository.claim_run(db, 'v2-pending', v2=True))
+            legacy_claim = await repository.claim_run(db, 'v1-worker')
+            self.assertEqual(legacy_claim[0].task_id, legacy.task_id)
+            self.assertIsNone(await repository.claim_run(db, 'v1-second'))
+        await self.bind()
+        async with self.agent() as db:
+            v2_claim = await repository.claim_run(db, 'v2-worker', v2=True)
+            self.assertEqual(v2_claim[0].task_id, self.task_id)
+            self.assertIsNone(await repository.claim_run(db, 'v1-after-v2-bind'))
 
     async def test_submission_retries_share_original_reservation_and_conflict(self):
         await self.submit()
@@ -756,6 +767,12 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                 row.payload=self.policy.model_dump(mode='json')
             async with httpx.AsyncClient(transport=backend_transport,base_url='http://backend.invalid',
                 headers={'x-shenzhi-bff-secret':'bff-test','x-shenzhi-user-id':'test','Idempotency-Key':'http-test'}) as browser:
+                # The formal V2 Task endpoint stays closed until the legacy
+                # submission gate is in drain mode; replaying the same product
+                # key succeeds once that deployment gate has switched.
+                with patch.dict(os.environ, {'AGENT_V1_ADMISSION':'authorized'}):
+                    held=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
+                self.assertEqual(held.status_code,403,held.text)
                 response=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
                 self.assertEqual(response.status_code,200,response.text)
                 task=response.json()['task']
