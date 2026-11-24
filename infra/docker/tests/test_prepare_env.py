@@ -73,6 +73,30 @@ class PrepareEnvTests(unittest.TestCase):
         self.assertTrue(self.read('web')['BETTER_AUTH_SECRET'])
         self.assertEqual(self.read('web')['BACKEND_BFF_SECRET'], self.read('backend')['BACKEND_BFF_SECRET'])
 
+    def test_template_comments_optional_overrides_and_extra_values_survive_setup(self):
+        # Values containing raw env_file syntax must not be interpolated or quoted.
+        literal = 'fixture-secret-$token#literal'
+        self.docker('agent', {'CUSTOM_SETTING': literal})
+        self.native('agent', {'DASHSCOPE_BASE_URL': 'https://provider.example/v1'})
+        self.run_setup()
+        path = self.here / 'env/agent.env'
+        content = path.read_text(encoding='utf-8')
+        self.assertIn('# ----', content)
+        self.assertIn('DASHSCOPE_BASE_URL=https://provider.example/v1\n', content)
+        self.assertNotIn('# DASHSCOPE_BASE_URL=', content)
+        self.assertIn('# DEEPSEEK_BASE_URL=<DEEPSEEK_BASE_URL>', content)
+        self.assertEqual(self.read('agent')['CUSTOM_SETTING'], literal)
+        for name in ('web', 'backend', 'agent'):
+            template = (self.here / 'env' / f'{name}.env.example').read_text(encoding='utf-8')
+            generated = (self.here / 'env' / f'{name}.env').read_text(encoding='utf-8')
+            for line in template.splitlines():
+                if line.startswith('# ') and '=' not in line:
+                    self.assertIn(line, generated)
+        self.assertIn('# ', (self.here / '.env').read_text(encoding='utf-8'))
+        before = self.snapshot()
+        self.run_setup()
+        self.assertEqual(before, self.snapshot())
+
     def test_empty_credentials_are_generated_and_shared(self):
         self.docker('web', {'BETTER_AUTH_SECRET': '', 'BACKEND_BFF_SECRET': ''})
         roles = ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN')
@@ -132,9 +156,11 @@ class PrepareEnvTests(unittest.TestCase):
                          'OPENLUX_BASE_URL': 'https://docker.example.invalid/v1',
                          'OPENLUX_MODELS': 'Docker-ID', 'OPENLUX_AGENT_MODELS': 'Docker-ID'}
         self.docker('agent', docker_values)
-        before = self.snapshot()
         self.run_setup()
         self.assertEqual(self.read('agent'), docker_values)
+        # The first run restores template comments to the manually written file.
+        before = self.snapshot()
+        self.run_setup()
         self.assertEqual(before, self.snapshot())
         self.assertEqual((self.root / 'apps/agent/.env').read_bytes(), native_before)
 

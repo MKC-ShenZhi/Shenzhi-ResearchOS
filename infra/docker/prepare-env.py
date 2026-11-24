@@ -35,11 +35,31 @@ def read(path):
     return values
 
 
-def render(values, compose=False):
+def render(values, compose=False, template=None):
     # Compose .env uses interpolation; app files use env_file format: raw.
-    text = '\n'.join(f"{key}={chr(39) + value + chr(39) if compose else value}"
-                     for key, value in values.items()) + '\n'
-    return text.encode('utf-8')
+    def assignment(key):
+        value = values[key]
+        return f"{key}={chr(39) + value + chr(39) if compose else value}"
+
+    if template is None:
+        return ('\n'.join(assignment(key) for key in values) + '\n').encode('utf-8')
+    lines, emitted = [], set()
+    for line in template.read_text(encoding='utf-8-sig').splitlines():
+        match = re.match(r'^(#\s*)?([A-Za-z_][A-Za-z_0-9]*)=', line)
+        if match:
+            commented, key = match.groups()
+            if key in values:
+                lines.append(assignment(key))
+                emitted.add(key)
+            elif commented:
+                lines.append(line)
+        else:
+            lines.append(line)
+    extra = [key for key in values if key not in emitted]
+    if extra:
+        lines.extend(['', '# 本地额外配置（未在示例模板中声明）'])
+        lines.extend(assignment(key) for key in extra)
+    return ('\n'.join(lines) + '\n').encode('utf-8')
 
 
 def publish(files):
@@ -230,8 +250,8 @@ def main(argv=None):
         if key.startswith('NEXT_PUBLIC_') and not nonempty(existing_compose.get(key)):
             compose[key] = web.get(key, compose[key])
     for name, path in paths.items():
-        files[path] = render(values[name])
-    files[HERE / '.env'] = render(compose, compose=True)
+        files[path] = render(values[name], template=path.with_suffix('.env.example'))
+    files[HERE / '.env'] = render(compose, compose=True, template=HERE / '.env.example')
     # No environment or signing file is changed before every validation passes.
     for name in ('backend', 'agent'):
         (HERE / 'secrets' / name).mkdir(mode=0o700, parents=True, exist_ok=True)
