@@ -9,6 +9,10 @@ cd apps/agent
 uv sync
 ```
 
+模型供应商通常只需在 `.env` 填写对应 API Key；型号、能力和默认顺序由 Catalog 维护。
+内置白名单、旧变量迁移、OpenLux 实测状态与正式授权步骤见 [Model Provider 指南](../../docs/engineering/llm-api-foundation.md)。
+启动 API、Worker 时需显式加载同一 `.env`（例如 `uv run --env-file .env ...`）。仅配置 Key 不自动获得正式 Policy 授权。
+
 Agent API 与 Worker 必须挂载同一个持久化/共享目录并配置 `AGENT_WORKSPACE_ROOT`，否则跨进程与重启后的工作区产物不可见。
 
 启动 Agent API 与 Worker 两个进程前，设置独立数据库和服务凭据并应用迁移：

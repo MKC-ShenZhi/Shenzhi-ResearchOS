@@ -70,7 +70,7 @@ class DeepResearchAssetTests(unittest.TestCase):
 class DeepResearchRuntimeTests(unittest.TestCase):
     def setUp(self):
         self.env = patch.dict('os.environ', {
-            'DEEPSEEK_API_KEY': 'test', 'DEEPSEEK_MODEL': 'deepseek-chat',
+            'DEEPSEEK_API_KEY': 'test',
             'DASHSCOPE_API_KEY': '', 'SKILLS_VENDOR': '',
         })
         self.env.start()

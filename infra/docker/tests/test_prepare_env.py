@@ -116,26 +116,26 @@ class PrepareEnvTests(unittest.TestCase):
     def test_empty_values_import_native_without_modifying_native_files(self):
         self.native('web', {'BETTER_AUTH_SECRET': 'fixture-secret-auth', 'BACKEND_BFF_SECRET': 'fixture-secret-bff'})
         self.native('agent', {'AUTODL_API_KEY': 'fixture-secret-provider', 'AUTODL_BASE_URL': 'https://example.invalid/v1',
-                              'AUTODL_MODEL': 'fixture-model', 'AGENT_WORKER_TOKEN': 'fixture-secret-worker'})
+                              'AI_DEFAULT_MODEL': 'fixture-model', 'AGENT_WORKER_TOKEN': 'fixture-secret-worker'})
         self.docker('web', {'BETTER_AUTH_SECRET': '', 'BACKEND_BFF_SECRET': ''})
-        self.docker('agent', {'AUTODL_API_KEY': '', 'AUTODL_BASE_URL': '', 'AUTODL_MODEL': '', 'AGENT_WORKER_TOKEN': ''})
+        self.docker('agent', {'AUTODL_API_KEY': '', 'AUTODL_BASE_URL': '', 'AI_DEFAULT_MODEL': '', 'AGENT_WORKER_TOKEN': ''})
         native_before = {p: p.read_bytes() for p in (self.root / 'apps').rglob('*') if p.is_file()}
         self.run_setup()
         self.assertEqual(self.read('web')['BETTER_AUTH_SECRET'], 'fixture-secret-auth')
         self.assertEqual(self.read('backend')['BACKEND_BFF_SECRET'], 'fixture-secret-bff')
-        for key in ('AUTODL_API_KEY', 'AUTODL_BASE_URL', 'AUTODL_MODEL', 'AGENT_WORKER_TOKEN'):
+        for key in ('AUTODL_API_KEY', 'AUTODL_BASE_URL', 'AI_DEFAULT_MODEL', 'AGENT_WORKER_TOKEN'):
             self.assertEqual(self.read('agent')[key], self.env.read(self.root / 'apps/agent/.env')[key])
         self.assertEqual(native_before, {p: p.read_bytes() for p in native_before})
 
     def test_existing_nonempty_docker_values_win_over_native(self):
         self.native('web', {'BETTER_AUTH_SECRET': 'fixture-secret-native', 'BACKEND_BFF_SECRET': 'fixture-secret-native-bff'})
-        self.native('agent', {'AUTODL_BASE_URL': 'https://native.example.invalid', 'AUTODL_MODEL': 'native-model'})
+        self.native('agent', {'AUTODL_BASE_URL': 'https://native.example.invalid', 'AI_DEFAULT_MODEL': 'native-model'})
         self.docker('web', {'BETTER_AUTH_SECRET': 'fixture-secret-docker', 'BACKEND_BFF_SECRET': 'fixture-secret-docker-bff'})
-        self.docker('agent', {'AUTODL_BASE_URL': 'https://docker.example.invalid', 'AUTODL_MODEL': 'docker-model'})
+        self.docker('agent', {'AUTODL_BASE_URL': 'https://docker.example.invalid', 'AI_DEFAULT_MODEL': 'docker-model'})
         self.run_setup()
         self.assertEqual(self.read('web')['BETTER_AUTH_SECRET'], 'fixture-secret-docker')
         self.assertEqual(self.read('backend')['BACKEND_BFF_SECRET'], 'fixture-secret-docker-bff')
-        self.assertEqual(self.read('agent')['AUTODL_MODEL'], 'docker-model')
+        self.assertEqual(self.read('agent')['AI_DEFAULT_MODEL'], 'docker-model')
         self.assertEqual(self.read('agent')['AUTODL_BASE_URL'], 'https://docker.example.invalid')
         before = self.snapshot()
         self.run_setup()
@@ -143,8 +143,7 @@ class PrepareEnvTests(unittest.TestCase):
 
     def test_openlux_import_and_existing_docker_values_are_preserved(self):
         native = {'OPENLUX_API_KEY': 'fixture-secret-openlux-native',
-                  'OPENLUX_BASE_URL': 'https://native.example.invalid/v1',
-                  'OPENLUX_MODELS': 'Chat-ID,Tool-ID', 'OPENLUX_AGENT_MODELS': 'Tool-ID'}
+                  'OPENLUX_BASE_URL': 'https://native.example.invalid/v1'}
         self.native('agent', native)
         native_before = (self.root / 'apps/agent/.env').read_bytes()
         self.run_setup()
@@ -153,8 +152,7 @@ class PrepareEnvTests(unittest.TestCase):
             self.assertNotIn(key, self.read('web'))
             self.assertNotIn(key, self.read('backend'))
         docker_values = {**self.read('agent'), 'OPENLUX_API_KEY': 'fixture-secret-openlux-docker',
-                         'OPENLUX_BASE_URL': 'https://docker.example.invalid/v1',
-                         'OPENLUX_MODELS': 'Docker-ID', 'OPENLUX_AGENT_MODELS': 'Docker-ID'}
+                         'OPENLUX_BASE_URL': 'https://docker.example.invalid/v1'}
         self.docker('agent', docker_values)
         self.run_setup()
         self.assertEqual(self.read('agent'), docker_values)
@@ -178,10 +176,10 @@ class PrepareEnvTests(unittest.TestCase):
         self.assertEqual(self.read('agent')['AGENT_WORKER_TOKEN'], 'fixture-secret-worker')
 
     def test_blank_provider_overrides_without_native_are_unset(self):
-        self.docker('agent', {'AUTODL_BASE_URL': '', 'AUTODL_MODEL': ''})
+        self.docker('agent', {'AUTODL_BASE_URL': '', 'AI_DEFAULT_MODEL': ''})
         self.run_setup()
         self.assertNotIn('AUTODL_BASE_URL', self.read('agent'))
-        self.assertNotIn('AUTODL_MODEL', self.read('agent'))
+        self.assertEqual(self.read('agent')['AI_DEFAULT_MODEL'], '')
 
     def test_shared_credential_conflicts_fail_without_writes(self):
         for key in ('BACKEND_BFF_SECRET', 'AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN',

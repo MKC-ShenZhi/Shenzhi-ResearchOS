@@ -10,13 +10,15 @@ from unittest.mock import patch
 import httpx
 
 from agent_app.errors import BusinessError
-from agent_app.integrations.llm.resolver import AUTODL_DEFAULT_MODELS, load_registry
+from agent_app.integrations.llm.resolver import load_registry
 from agent_app.integrations.llm.agent_stream import OpenAICompatProvider, ModelRequest, TextDelta, ToolCallEvent
 from agent_app.execution.runtime import AgentRuntime
 from agent_app.application.composition import default_runtime
 
+VERIFIED_AUTODL_UPSTREAMS = ('DeepSeek-V4.1-Flash-1017', 'Qwen3.5-397B-A17B', 'Kimi-K2.5')
+
 ENV = {'DASHSCOPE_API_KEY': 'dash-secret', 'DEEPSEEK_API_KEY': 'deep-secret',
-       'ZHIPU_API_KEY': 'glm-secret', 'ZHIPU_MODEL': 'glm-4-plus'}
+       'ZHIPU_API_KEY': 'glm-secret'}
 
 
 @contextmanager
@@ -47,7 +49,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         agent = OpenAICompatProvider(registry=registry, transport=httpx.MockTransport(handler))
         # The Agent adapter logs nothing at INFO, so the key cannot reach logs.
         with self.assertNoLogs('app', level='INFO'):
-            for upstream in AUTODL_DEFAULT_MODELS:
+            for upstream in VERIFIED_AUTODL_UPSTREAMS:
                 model = f'autodl/{upstream}'
                 self.assertIn(TextDelta('正文'), [e async for e in agent.stream(ModelRequest(model, []))])
                 self.assertEqual(seen[-1]['model'], upstream)
@@ -145,7 +147,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('dash-secret', error.exception.message + str(captured.output))
 
     async def test_runtime_rejects_unknown_or_no_tools(self):
-        with patch.dict(os.environ, {**ENV, 'AI_ALLOWED_MODELS': 'deepseek-r1'}, clear=True):
+        with patch.dict(os.environ, ENV, clear=True):
             for model in ['missing', 'deepseek-r1']:
                 with self.subTest(model=model), self.assertRaises(BusinessError):
                     default_runtime(model=model)
@@ -156,7 +158,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
                                    'capabilities': {'tool_calling': True, 'temperature': False,
                                                     'thinking': 'thinking', 'max_output_tokens': 777},
                                    'request_params': {'thinking': {'type': 'disabled'}}}]}) as catalog_path:
-            with patch.dict(os.environ, {**ENV, 'ZHIPU_MODEL': 'future-glm',
+            with patch.dict(os.environ, {**ENV,
                                          'AI_MODEL_REGISTRY_FILE': catalog_path}, clear=True):
                 registry = load_registry()
             seen = []

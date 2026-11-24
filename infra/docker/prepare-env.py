@@ -132,13 +132,13 @@ def main(argv=None):
                              if nonempty(value) or key not in values[name]})
     # Empty BASE_URL overrides disable the registry default, so import only
     # explicitly configured nonempty Provider overrides.
-    for provider in ('DASHSCOPE', 'DEEPSEEK', 'ZHIPU', 'AUTODL'):
-        for suffix in ('BASE_URL', 'MODEL'):
-            key = f'{provider}_{suffix}'
-            if nonempty(originals['agent'].get(key)) and not nonempty(existing['agent'].get(key)):
-                values['agent'][key] = originals['agent'][key]
-            if not nonempty(values['agent'].get(key)):
-                values['agent'].pop(key, None)
+    # Import only the optional nonempty overrides declared in the template.
+    template = paths['agent'].with_suffix('.env.example').read_text(encoding='utf-8-sig')
+    for key in re.findall(r'^#\s*([A-Z][A-Z0-9_]*)=', template, re.MULTILINE):
+        if nonempty(originals['agent'].get(key)) and not nonempty(existing['agent'].get(key)):
+            values['agent'][key] = originals['agent'][key]
+        if not nonempty(values['agent'].get(key)):
+            values['agent'].pop(key, None)
 
     compose = read(HERE / '.env.example')
     existing_compose = read(HERE / '.env')

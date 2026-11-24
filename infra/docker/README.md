@@ -18,12 +18,12 @@ docker compose --profile full config --quiet
 
 Linux 同样运行 `python3 infra/docker/prepare-env.py --from-local`，随后 `cd infra/docker`。
 没有本地配置的同学去掉 `--from-local`，再填写外部模型、知识底座及邮件配置。
-脚本只导入 Docker 示例声明的变量（含注释列出的非空 Provider 地址/模型覆盖项），不复制编辑器 OIDC 凭据和 Admin 密码。
+脚本只导入 Docker 示例声明的变量（含注释列出的非空 Provider 地址覆盖项），不复制编辑器 OIDC 凭据和 Admin 密码。
 原文件保留；已存在的有效 Docker 配置不被覆盖，缺失或空的必需凭据会补齐，跨服务凭据不一致时报错。
 生成的 `.env` 和 `env/*.env` 沿用对应 `.env.example` 的中文分组与配置说明；再次执行会按最新模板更新注释。
 模板未声明的已有配置项保留在文件末尾；自写备注请同步维护在模板中，脚本不会保留本地文件中的自定义注释。
 可导入字段为空时会补入非空的本机值；共享凭据及 audience/issuer 优先复用已有非空 Docker 值，冲突时拒绝写入。
-空 Provider BASE_URL/MODEL 没有本机覆盖值时保持未设置，以使用 Registry 默认值。
+空 Provider BASE_URL 没有本机覆盖值时保持未设置，以使用 Registry 默认值。
 首次为缺失的内部凭据生成随机值，为容器改写 DSN、服务地址和工作目录；再次执行不会轮换已有凭据。
 签名密钥不会自动生成或轮换：路径为空时优先复用已复制文件，其次导入本机文件；V2 启用时缺少签名文件会失败。
 已有非空签名路径必须指向可读、非空的普通文件；`/run/secrets/<服务>/...` 按本地 `secrets/<服务>/` 校验，
@@ -55,17 +55,16 @@ Agent 仅挂载公钥目录，Backend 仅挂载私钥目录；两个目录不互
 Docker env_file 使用 raw 格式，值不加外层引号，`$` 和 `#` 保留为值。
 脚本导入支持常规单行 dotenv；复杂多行配置请人工配置，不做 Shell 求值。
 
-OpenLux 配置在 `env/agent.env`：填写 `OPENLUX_API_KEY`、完整 HTTPS `OPENLUX_BASE_URL`、
-逗号分隔的 `OPENLUX_MODELS`；`OPENLUX_AGENT_MODELS` 为已确认支持流式及多轮工具调用的型号子集。
-`prepare-env.py --from-local` 可从 `apps/agent/.env` 导入这些值，已有非空 Docker 值优先。
-三个 Agent 服务通过共享 `env_file` 使用同一配置，修改后使用下列开发命令重新创建容器：
+模型 Key 配置在 `env/agent.env`，内置型号与能力由 Catalog 维护，无需填写型号变量。
+OpenLux 固定白名单、真实探测状态和默认优先级见 [模型配置指南](../../docs/engineering/llm-api-foundation.md)。
+三个 Agent 服务使用同一份 env_file；修改环境后按下列命令重新创建容器：
 
 ```powershell
 docker compose -f compose.yml -f compose.dev.yml --profile full up -d --no-deps --force-recreate agent-api agent-worker agent-usage-worker
 ```
 
 `restart` 不重新加载 env；生产使用对应的 prod 文件组合并先排空任务。具体能力声明及套餐授权要求见
-[OpenLux 接入说明](../../docs/engineering/llm-api-foundation.md#openlux)。
+[OpenLux 接入说明](../../docs/engineering/llm-api-foundation.md#openlux-验证入口)。
 
 ## 四种运行模式
 

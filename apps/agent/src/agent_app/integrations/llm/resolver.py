@@ -1,4 +1,4 @@
-"""Load declarative definitions + legacy environment settings into one registry."""
+"""Load declarative catalogs and trusted deployment overrides into one registry."""
 from __future__ import annotations
 
 import json
@@ -12,12 +12,6 @@ from agent_app.integrations.llm.registry import (
 )
 
 CATALOG_PATH = Path(__file__).with_name('catalog.json')
-# Exact upstream IDs verified by scripts/autodl_probe.py; priority is intentional.
-AUTODL_DEFAULT_MODELS = (
-    'DeepSeek-V4.1-Flash-1017',
-    'Qwen3.5-397B-A17B',
-    'Kimi-K2.5',
-)
 
 
 def _read_catalog(path: Path) -> Catalog:
@@ -40,91 +34,42 @@ def model_definition(model_id: str, provider_id: str, upstream: str) -> ModelSpe
                      capabilities=Capabilities())
 
 
-def _openlux_definitions() -> tuple[list[ProviderSpec], list[ModelSpec]]:
-    """Explicit deployment declarations; never infer capabilities from model names."""
-    upstreams = list(dict.fromkeys(item.strip() for item in
-                                 os.getenv('OPENLUX_MODELS', '').split(',') if item.strip()))
-    if not os.getenv('OPENLUX_API_KEY', '').strip() or not upstreams:
-        return [], []
-    agent_models = {item.strip() for item in os.getenv('OPENLUX_AGENT_MODELS', '').split(',')
-                    if item.strip()}
-    if agent_models - set(upstreams):
-        raise RegistryConfigError('OPENLUX_AGENT_MODELS 必须是 OPENLUX_MODELS 的子集')
-    try:
-        provider = ProviderSpec(id='openlux', base_url=os.getenv('OPENLUX_BASE_URL', '').strip(),
-                                api_key_env='OPENLUX_API_KEY')
-    except ValidationError:
-        raise RegistryConfigError('OPENLUX_BASE_URL 必须配置为可信 HTTPS 端点') from None
-    models = [ModelSpec(id=f'openlux/{upstream}', provider_id='openlux', upstream_model=upstream,
-                        label=f'OpenLux · {upstream}', brand='openlux',
-                        capabilities=Capabilities(tool_calling=upstream in agent_models))
-              for upstream in upstreams]
-    return [provider], models
-
-
 def load_registry() -> ModelRegistry:
-    builtins = _read_catalog(CATALOG_PATH)
-    providers = [provider.model_copy(update={
-        'base_url': os.getenv(f'{provider.id.upper()}_BASE_URL', provider.base_url).strip().rstrip('/'),
-    }) for provider in builtins.providers]
-    # Revalidate environment URLs too; model_copy deliberately skips validation.
-    try:
-        providers = [ProviderSpec.model_validate(provider.model_dump()) for provider in providers]
-    except ValidationError:
-        raise RegistryConfigError('Provider 地址必须为可信 HTTPS 端点') from None
-    legacy = 'dashscope' if os.getenv('DASHSCOPE_API_KEY', '').strip() else 'deepseek'
-    default_names = {'dashscope': 'qwen-plus', 'deepseek': 'deepseek-chat', 'zhipu': ''}
-    names = {provider: os.getenv(f'{provider.upper()}_MODEL', default).strip()
-             for provider, default in default_names.items()}
-    models: list[ModelSpec] = []
-    aliases: dict[str, str] = {}
-    # Persist qualified IDs so changing default credentials never rebinds a saved
-    # model to a different provider. Raw IDs remain explicit legacy aliases.
-    for provider in dict.fromkeys([legacy, 'dashscope', 'deepseek', 'zhipu']):
-        upstreams = [names[provider]]
-        if provider == legacy:
-            upstreams += [item.strip() for item in os.getenv('AI_ALLOWED_MODELS', '').split(',')]
-        for upstream in dict.fromkeys(filter(None, upstreams)):
-            model_id = f'{provider}/{upstream}'
-            models.append(model_definition(model_id, provider, upstream))
-            aliases.setdefault(upstream, model_id)
-    if os.getenv('AUTODL_API_KEY', '').strip():
-        autodl_models = list(dict.fromkeys(item.strip() for item in
-                                         os.getenv('AUTODL_MODELS', '').split(',') if item.strip()))
-        for upstream in autodl_models or AUTODL_DEFAULT_MODELS:
-            models.append(model_definition(f'autodl/{upstream}', 'autodl', upstream))
-    openlux_providers, openlux_models = _openlux_definitions()
-    providers.extend(openlux_providers)
-    models.extend(openlux_models)
-    defaults: dict[str, str] = {}
+    catalog = _read_catalog(CATALOG_PATH)
+    # Validate the source before replacement so duplicate/invalid built-ins cannot hide.
+    ModelRegistry(catalog, {})
+    providers = list(catalog.providers)
+    models = list(catalog.models)
+    aliases = dict(catalog.aliases)
+    defaults = dict(catalog.defaults)
     path = os.getenv('AI_MODEL_REGISTRY_FILE', '').strip()
     if path:
         custom = _read_catalog(Path(path))
-        # A custom definition intentionally replaces a generated legacy entry.
-        # Duplicate IDs *inside* the file remain errors.
-        if len({item.id for item in custom.models}) != len(custom.models):
-            raise RegistryConfigError('声明文件存在重复 Model ID')
-        if len({item.id for item in custom.providers}) != len(custom.providers):
-            raise RegistryConfigError('声明文件存在重复 Provider ID')
-        providers = [item for item in providers if item.id not in {p.id for p in custom.providers}] + custom.providers
-        models = [item for item in models if item.id not in {m.id for m in custom.models}] + custom.models
+        for items, label in [(custom.models, 'Model'), (custom.providers, 'Provider')]:
+            if len({item.id for item in items}) != len(items):
+                raise RegistryConfigError(f'声明文件存在重复 {label} ID')
+        # Replace in place: changing a definition must not change default priority.
+        def merge(original, replacements):
+            overrides = {item.id: item for item in replacements}
+            return [overrides.pop(item.id, item) for item in original] + list(overrides.values())
+        providers = merge(providers, custom.providers)
+        models = merge(models, custom.models)
         aliases = {alias: target for alias, target in aliases.items()
                    if alias not in {model.id for model in custom.models}}
         aliases.update(custom.aliases)
-        defaults = dict(custom.defaults)
-    # Explicit defaults take precedence over file defaults and legacy order.
+        defaults.update(custom.defaults)
+    # The naming convention works for built-in and file-defined providers alike.
+    try:
+        providers = [ProviderSpec.model_validate({**provider.model_dump(), 'base_url':
+            os.getenv(f'{provider.id.upper()}_BASE_URL', provider.base_url).strip()})
+            for provider in providers]
+    except (ValidationError, ValueError):
+        raise RegistryConfigError('Provider 地址必须为可信 HTTPS 端点') from None
+    catalog = Catalog(providers=providers, models=models, aliases=aliases, defaults=defaults)
     for purpose, env in [('chat', 'AI_DEFAULT_MODEL'), ('agent', 'AI_AGENT_DEFAULT_MODEL')]:
         if os.getenv(env, '').strip():
             defaults[purpose] = os.environ[env].strip()
-    # Explicit new provider definitions can supply a configured-first default.
-    # With only old environment settings, retain DashScope -> DeepSeek priority.
-    configured_new = any(provider.enabled and provider.id not in ('dashscope', 'deepseek')
-                         and os.getenv(provider.api_key_env, '').strip() for provider in providers)
-    if ('chat' not in defaults and (os.getenv('DASHSCOPE_API_KEY', '').strip()
-                                   or os.getenv('DEEPSEEK_API_KEY', '').strip()
-                                   or not configured_new)):
-        defaults['chat'] = names[legacy]
-    return ModelRegistry(Catalog(providers=providers, models=models, aliases=aliases, defaults=defaults), dict(os.environ))
+    return ModelRegistry(catalog.model_copy(update={'defaults': defaults}), dict(os.environ))
 
 
 def registry_from_config(config) -> ModelRegistry:

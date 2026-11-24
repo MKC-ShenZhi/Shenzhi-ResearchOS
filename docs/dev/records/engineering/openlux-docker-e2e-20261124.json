@@ -1,0 +1,124 @@
+{
+  "scope": "local-docker-only",
+  "deep_research_executed": false,
+  "web_page_status": 200,
+  "authenticated_web_session": true,
+  "web_catalog_openlux": [
+    "openlux/deepseek-v4.1-flash",
+    "openlux/qwen3.8-flash",
+    "openlux/glm-5.3-flash",
+    "openlux/kimi-k2.6"
+  ],
+  "session_id": "ses_753d692b2649495aa38b22a06cde3ea8",
+  "run_http_status": 200,
+  "event_names": [
+    "run_start",
+    "turn_start",
+    "delta",
+    "turn_end",
+    "run_end",
+    "result"
+  ],
+  "result": {
+    "status": "done",
+    "stop_reason": "stop",
+    "final_text": "OPENLUX_ACCEPTANCE_OK",
+    "output": null,
+    "question": null,
+    "turns": 1,
+    "duration_ms": 7563,
+    "prompt_tokens": null,
+    "completion_tokens": null,
+    "truncated": false,
+    "error": null
+  },
+  "errors": [],
+  "turn_status": "done",
+  "task_id": "79186897d5824503ad289dc460e730da",
+  "answer_matches": true,
+  "settlement": {
+    "task_id": "79186897d5824503ad289dc460e730da",
+    "root": {
+      "grant_id": "41f10ebbde9f427f9cab715284204db6",
+      "status": "closed",
+      "settlement_status": "settled",
+      "overage": false
+    },
+    "permits": [
+      {
+        "call_id": "cfa78d8d2931437b9e88c4e31bc3d845",
+        "state": "completed",
+        "start_recorded": true
+      }
+    ],
+    "usage": [
+      {
+        "verification_status": "verified",
+        "reason": null,
+        "usage_status": "unknown",
+        "usage_source": null,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "outcome": "in_progress"
+      },
+      {
+        "verification_status": "verified",
+        "reason": null,
+        "usage_status": "measured",
+        "usage_source": "provider_usage",
+        "prompt_tokens": 2205,
+        "completion_tokens": 74,
+        "outcome": "succeeded"
+      }
+    ],
+    "ledger": [
+      {
+        "kind": "held",
+        "held_delta": 12609,
+        "used_delta": 0
+      },
+      {
+        "kind": "reconciliation_required",
+        "held_delta": 0,
+        "used_delta": 0
+      },
+      {
+        "kind": "used",
+        "held_delta": -12609,
+        "used_delta": 2279
+      }
+    ],
+    "projections": [
+      {
+        "settlement_status": "settled"
+      }
+    ]
+  },
+  "agent_delivery": {
+    "task_id": "79186897d5824503ad289dc460e730da",
+    "outbox": [
+      {
+        "state": "delivered",
+        "attempts": 1
+      },
+      {
+        "state": "delivered",
+        "attempts": 0
+      }
+    ],
+    "executions": [
+      {
+        "sealed": true
+      }
+    ],
+    "capabilities": [
+      "model:openlux/deepseek-v4.1-flash"
+    ],
+    "manifests": [
+      {
+        "acknowledged": true
+      }
+    ]
+  },
+  "passed": true
+}

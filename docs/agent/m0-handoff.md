@@ -32,7 +32,7 @@ Backend 不直接访问 Agent 数据库；Worker 经 Agent API，不直接执行
 | --- | --- |
 | Backend | `CHAT_DATABASE_URL`、`AGENT_INTERNAL_URL`、`AGENT_SERVICE_TOKEN`、`BACKEND_BFF_SECRET`、`KNOWLEDGE_BASE_API_URL`；按需 `KNOWLEDGE_BASE_TIMEOUT_SEC`；验收起步关闭 `BACKGROUND_JOBS_ENABLED` |
 | Agent API / Worker | `AGENT_DATABASE_URL`（API/迁移）、`AGENT_INTERNAL_URL`（Worker）、`AGENT_SERVICE_TOKEN`、`AGENT_WORKSPACE_ROOT`、`BACKEND_INTERNAL_URL`（Knowledge Adapter） |
-| Agent 模型/检索 | 至少一个可用 Provider：`DASHSCOPE_API_KEY`、`DEEPSEEK_API_KEY`、`ZHIPU_API_KEY` 或 `AUTODL_API_KEY`；按需 `AI_ALLOWED_MODELS`、`AI_DEFAULT_MODEL`、`AI_AGENT_DEFAULT_MODEL`、`AI_MODEL_REGISTRY_FILE` 及 Provider 覆盖配置；联网检索按选定 Provider 配置 `TAVILY_API_KEY`、`SEARXNG_BASE_URL` 或 `EXA_API_KEY` |
+| Agent 模型/检索 | 至少一个可用 Provider：`DASHSCOPE_API_KEY`、`DEEPSEEK_API_KEY`、`ZHIPU_API_KEY` 或 `AUTODL_API_KEY`；型号来自统一 Catalog；按需 `AI_DEFAULT_MODEL`、`AI_AGENT_DEFAULT_MODEL`、`AI_MODEL_REGISTRY_FILE` 及 Provider 覆盖配置；联网检索按选定 Provider 配置 `TAVILY_API_KEY`、`SEARXNG_BASE_URL` 或 `EXA_API_KEY` |
 | Web | `BUSINESS_BACKEND_URL`、`BACKEND_BFF_SECRET`、`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`；完整登录另需 `DATABASE_URL` 及 [认证配置](../auth/CONFIGURATION.md) 中相应变量 |
 
 Web/Backend 的 BFF secret 一致；Backend/Agent API/Worker 的 Agent token 一致，两类凭据分离。`BACKEND_INTERNAL_URL` 要包含 Backend Agent API 前缀，不能只填服务根路径。模型/搜索凭据配置在 Agent 进程，Knowledge 上游配置在 Backend。`BACKEND_ALLOW_INSECURE_LOCAL_BFF` 只用于明确的 loopback 开发，不作为完整验收配置。
