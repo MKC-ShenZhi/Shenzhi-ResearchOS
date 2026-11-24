@@ -1,7 +1,7 @@
 # Docker 运行体系
 
 应用目录维护镜像；这里维护运行编排。原生 Node/Python 启动方式继续有效。
-所有命令从本目录执行，要求 Python 3.12+、Docker Engine/Desktop（Linux containers）、Compose >=2.30。
+所有命令从本目录执行，要求 Python 3.12+、Docker Engine/Desktop（Linux containers）、Compose >=2.32.2（开发使用 Watch initial_sync）。
 首次拉镜像、安装锁定依赖需要访问 Docker Hub、GHCR、npm 和锁文件指定的 PyPI 镜像。
 Windows 使用 Docker Desktop WSL2 后端，确认 `docker version` 的 Server 可用。
 Linux 安装 Docker Engine 和 Compose plugin；不要使用旧 `docker-compose` v1。
@@ -87,13 +87,18 @@ docker compose stop postgres
 docker compose -f compose.yml -f compose.dev.yml --profile app up -d --build --wait
 # 完整 Agent V2 联调：包含 Usage Worker
 docker compose -f compose.yml -f compose.dev.yml --profile full up -d --build --wait
+# 在当前终端持续运行 Web 源码同步（上面 app / full 启动方式均适用）
+docker compose -f compose.yml -f compose.dev.yml --profile full watch --no-up web
 ```
 
 开发地址：Web `http://localhost:3300`，Backend `http://localhost:8800`，Agent API `http://localhost:8811`。
 所有映射均绑定宿主 loopback；内部调用使用 `backend:8000`、`agent-api:8101`、`postgres:5432`。
-Web 选择性挂载源码目录，不挂载原生 `.env.local`、Windows node_modules 或 .next。
+Web 使用 Turbopack + Compose Watch，将源码同步到容器内部，不挂载宿主源码、env 或 node_modules；.next 使用独立 named volume。
 Python 环境位于 `/opt/venv`，源码挂载不覆盖环境；本地 contracts 包以相同仓库相对路径 editable 安装。
-容器 Next.js 使用 `next dev --webpack` + `WATCHPACK_POLLING`，兼容 Windows 文件事件；原生 `pnpm dev` 仍用 Turbopack。
+源码变化触发 Turbopack Fast Refresh；Next/TypeScript/PostCSS 配置和 proxy 变化使用 `sync+restart`；
+package.json、pnpm-lock.yaml、pnpm-workspace.yaml 变化使用 `rebuild`。
+Watch 需保持运行；Ctrl+C 仅停止同步。单独 `up -d` 不会后台开启 Watch。
+Watch 停止期间发生删除/重命名后，先 `up -d --build --force-recreate --no-deps web` 重建 Web，再启动 Watch，避免残留文件。
 Backend Uvicorn reload；Agent 三进程按既有运行约定手动一起重启：
 
 ```powershell

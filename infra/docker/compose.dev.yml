@@ -1,34 +1,55 @@
+x-web-source-sync: &web-source-sync
+  action: sync
+  initial_sync: true
+  # Paths are relative to each watched directory. Never sync host dependencies,
+  # build output or local credentials, including files nested in source folders.
+  ignore:
+    - .env*
+    - '**/.env*'
+    - '*.env'
+    - '**/*.env'
+    - '*.pem'
+    - '**/*.pem'
+    - secrets/
+    - '**/secrets/'
+    - node_modules/
+    - '**/node_modules/'
+    - .next/
+    - '**/.next/'
+
 services:
   web:
     image: ${IMAGE_PREFIX:-shenzhi}/web:${IMAGE_TAG:-local}-dev
     build:
       target: development
-    # Polling works across Docker Desktop Windows bind mounts. Native pnpm dev
-    # remains Turbopack; this is only the container development entrypoint.
-    command: [pnpm, exec, next, dev, --webpack, --hostname, 0.0.0.0]
+    command: [pnpm, dev, --hostname, 0.0.0.0]
     environment:
       NODE_ENV: development
-      WATCHPACK_POLLING: 'true'
     volumes:
-      # Mount source selectively: native .env.local and Windows node_modules
-      # must never shadow the container configuration/dependencies.
-      - ../../apps/web/app:/repo/apps/web/app
-      - ../../apps/web/clients:/repo/apps/web/clients
-      - ../../apps/web/components:/repo/apps/web/components
-      - ../../apps/web/config:/repo/apps/web/config
-      - ../../apps/web/features:/repo/apps/web/features
-      - ../../apps/web/hooks:/repo/apps/web/hooks
-      - ../../apps/web/lib:/repo/apps/web/lib
-      - ../../apps/web/providers:/repo/apps/web/providers
-      - ../../apps/web/public:/repo/apps/web/public
-      - ../../apps/web/stores:/repo/apps/web/stores
-      - ../../apps/web/styles:/repo/apps/web/styles
-      - ../../apps/web/types:/repo/apps/web/types
-      - ../../apps/web/next.config.mjs:/repo/apps/web/next.config.mjs
-      - ../../apps/web/tsconfig.json:/repo/apps/web/tsconfig.json
-      - ../../apps/web/postcss.config.mjs:/repo/apps/web/postcss.config.mjs
-      - ../../apps/web/proxy.ts:/repo/apps/web/proxy.ts
       - web-next:/repo/apps/web/.next
+    develop:
+      watch:
+        # Write into the container filesystem so Turbopack receives file events
+        # on Windows as well as Linux. Do not bind mount these same paths.
+        - { <<: *web-source-sync, path: ../../apps/web/app, target: /repo/apps/web/app }
+        - { <<: *web-source-sync, path: ../../apps/web/clients, target: /repo/apps/web/clients }
+        - { <<: *web-source-sync, path: ../../apps/web/components, target: /repo/apps/web/components }
+        - { <<: *web-source-sync, path: ../../apps/web/config, target: /repo/apps/web/config }
+        - { <<: *web-source-sync, path: ../../apps/web/features, target: /repo/apps/web/features }
+        - { <<: *web-source-sync, path: ../../apps/web/hooks, target: /repo/apps/web/hooks }
+        - { <<: *web-source-sync, path: ../../apps/web/lib, target: /repo/apps/web/lib }
+        - { <<: *web-source-sync, path: ../../apps/web/providers, target: /repo/apps/web/providers }
+        - { <<: *web-source-sync, path: ../../apps/web/public, target: /repo/apps/web/public }
+        - { <<: *web-source-sync, path: ../../apps/web/stores, target: /repo/apps/web/stores }
+        - { <<: *web-source-sync, path: ../../apps/web/styles, target: /repo/apps/web/styles }
+        - { <<: *web-source-sync, path: ../../apps/web/types, target: /repo/apps/web/types }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/web/next.config.mjs, target: /repo/apps/web/next.config.mjs }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/web/tsconfig.json, target: /repo/apps/web/tsconfig.json }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/web/postcss.config.mjs, target: /repo/apps/web/postcss.config.mjs }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/web/proxy.ts, target: /repo/apps/web/proxy.ts }
+        - { action: rebuild, path: ../../apps/web/package.json }
+        - { action: rebuild, path: ../../apps/web/pnpm-lock.yaml }
+        - { action: rebuild, path: ../../apps/web/pnpm-workspace.yaml }
   backend:
     command: [uvicorn, 'app.main:app', --host, 0.0.0.0, --port, '8000', --reload, --no-proxy-headers]
     environment:
