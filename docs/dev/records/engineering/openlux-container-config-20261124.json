@@ -1,0 +1,41 @@
+[
+  {
+    "configured": true,
+    "models": [
+      "openlux/deepseek-v4.1-flash",
+      "openlux/qwen3.8-flash",
+      "openlux/glm-5.3-flash",
+      "openlux/kimi-k2.6"
+    ],
+    "protocol": "2",
+    "admission": "drain_only",
+    "key_matches_native": true,
+    "service": "agent-api"
+  },
+  {
+    "configured": true,
+    "models": [
+      "openlux/deepseek-v4.1-flash",
+      "openlux/qwen3.8-flash",
+      "openlux/glm-5.3-flash",
+      "openlux/kimi-k2.6"
+    ],
+    "protocol": "2",
+    "admission": "drain_only",
+    "key_matches_native": true,
+    "service": "agent-worker"
+  },
+  {
+    "configured": true,
+    "models": [
+      "openlux/deepseek-v4.1-flash",
+      "openlux/qwen3.8-flash",
+      "openlux/glm-5.3-flash",
+      "openlux/kimi-k2.6"
+    ],
+    "protocol": "2",
+    "admission": "drain_only",
+    "key_matches_native": true,
+    "service": "agent-usage-worker"
+  }
+]

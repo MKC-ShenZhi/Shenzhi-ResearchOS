@@ -86,6 +86,64 @@ class FormalPlanTests(unittest.IsolatedAsyncioTestCase):
             rows=(await db.scalars(select(EntitlementAuditRow).where(EntitlementAuditRow.operation_id=='assign-test'))).all()
             self.assertEqual(len(rows),1)
 
+    async def test_admin_http_policy_upload_publish_and_assignment(self):
+        """Real routes and business transactions; only the Agent catalog is synthetic."""
+        import json
+        import os
+        import httpx
+        from contextlib import asynccontextmanager
+        from fastapi import FastAPI
+        from app.api import admin_console
+
+        await self.formal_setup()
+        bundle = build(self.catalog, release='http-test',
+            model_budgets=self.bundle['policies'][0]['model_budget_profiles'],
+            risk_profile='test-risk-explicitly-approved')
+        runtime = {'models': [{'value': 'test/m1', 'enabled': True}], 'skills': [{'name': 'deep-research'}]}
+
+        @asynccontextmanager
+        async def scope():
+            async with self.backend() as db, db.begin():
+                yield db
+
+        app = FastAPI()
+        app.include_router(admin_console.router)
+        with patch.object(admin_console, 'session_scope', scope), patch.object(
+                admin_console, 'get_capabilities', return_value=runtime), patch.dict(os.environ, {
+                    'ENVIRONMENT': 'development', 'ADMIN_AUTH_MODE': 'local_password',
+                    'ADMIN_AUTH_LOCAL_ONLY': 'true', 'ADMIN_LOCAL_USERNAME': 'shenzhi',
+                    'ADMIN_LOCAL_PASSWORD': 'shenzhi-dev', 'ADMIN_SESSION_SECRET': 'test-secret-' * 4}):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=('127.0.0.1', 123)),
+                    base_url='http://localhost:3101', headers={'x-admin-request': '1'}) as browser:
+                response = await browser.post('/api/v1/admin-console/auth/login',
+                    json={'username': 'shenzhi', 'password': 'shenzhi-dev'})
+                self.assertEqual(response.status_code, 200)
+                # Same JSON payload that the existing file-upload UI submits.
+                payload = json.loads(json.dumps(bundle))
+                payload.update(operation_id='http-publish', reason='test upload',
+                    approval_ref='test-policy-review', risk_approval_ref='test-risk-review')
+                response = await browser.post('/api/v1/admin-console/plans/publish', json=payload)
+                self.assertEqual(response.status_code, 200, response.text)
+                response = await browser.get('/api/v1/admin-console/plans')
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(all(p['published'] for p in response.json()['data']['items']))
+                assignment = dict(operation_id='http-assign', reason='test assignment', user_ids=['new'],
+                    plan_id='basic', policy_revision='basic-v1-http-test', preview=True)
+                response = await browser.post('/api/v1/admin-console/entitlements/assign', json=assignment)
+                self.assertEqual(response.json()['data']['items'][0]['status'], 'preview')
+                async with self.backend() as db:
+                    self.assertIsNone(await db.get(OwnerEntitlementRow, 'user:new'))
+                assignment['preview'] = False
+                for _ in range(2):
+                    response = await browser.post('/api/v1/admin-console/entitlements/assign', json=assignment)
+                    self.assertEqual(response.json()['data']['items'][0]['status'], 'success')
+        async with self.backend() as db:
+            self.assertEqual((await db.get(OwnerEntitlementRow, 'user:new')).policy_revision, 'basic-v1-http-test')
+            rows = (await db.scalars(select(EntitlementAuditRow).where(
+                EntitlementAuditRow.operation_id.in_(['http-publish', 'http-assign'])))).all()
+            self.assertEqual(len(rows), 2)
+            self.assertTrue(all(row.principal == 'local-admin:shenzhi' for row in rows))
+
     async def test_formal_registration_never_auto_assigns(self):
         from app.services.agent_entitlements.defaults import initialize_free
         await self.formal_setup()

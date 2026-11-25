@@ -26,6 +26,19 @@
 
 原阿里云 ECS + GHCR + Watchtower 链路已完全停用，相关 `infra/` 与 GitHub Actions 配置已移除。仓库当前**没有 CI 门禁**，提交前的检查需本地执行（见 [ONBOARDING](../../ONBOARDING.md)）。
 
+当前新增的 `infra/docker/` 是独立 Compose 运行体系，不恢复旧自动发布链路。
+镜像由 `apps/web/Dockerfile`、`apps/backend/Dockerfile`、`apps/agent/Dockerfile` 维护；
+Agent API、执行 Worker、Usage Worker 共用镜像。运行支持 infra-only、dev、full 和生产配置基础，
+命令及边界见 [Docker 运行指南](../../infra/docker/README.md)。本次不改变线上环境。
+业务与 Agent 分库共用 PostgreSQL 16 named volume；独立迁移服务串行执行认证 SQL 和 Backend Alembic，
+Agent Alembic 在独立库执行。Workspace 与 Usage Spool 分别持久化；升级须备份并保留未决用量恢复能力。
+Compose dev 仅绑定宿主 loopback，生产 override 不发布数据库端口，Backend/Agent 只在内部网络可达，
+Web loopback 端口供宿主 HTTPS 反向代理接入。所有跨容器调用使用匹配的服务凭据，禁用本地 BFF 免密。
+Docker 配置集中于本地 `infra/docker/.env`、`env/*.env`、`secrets/`，不修改原生应用环境文件。
+生产配置仍需正式域名、TLS、授权/模型预算批准、监控、备份恢复演练及镜像发布流程；不表示可直接上线。
+Admin 仅加入开发 override 的 full profile，宿主 loopback:3101 发布；与 Backend 共享网络命名空间，代理仍经 loopback。默认开发凭据和随机 Session Secret 仅由开发 override 注入，生产 override 清空管理认证配置。Backend local-only 保持，Vite 开发入口校验 Host/Origin，不信任转发 Header。此开发接入不表示已实现下文生产 SSH 隧道入口。
+公共 Web BFF 显式拒绝 `admin-console` 路径（包括编码的路径段），不将管理请求转发给 Backend。
+
 ## 二、环境变量与运行约束
 
 - 配置项见 [Web 示例](../../apps/web/.env.example) 、[Backend 示例](../../apps/backend/.env.example) 和 [Agent 示例](../../apps/agent/.env.example)。真实值只写在本地环境文件或由部署环境注入。`NEXT_PUBLIC_` 变量由 Next.js 在构建时内联，修改后需重新构建 Web。
@@ -36,6 +49,7 @@
 - Backend 以常驻进程运行，`lifespan` 负责恢复会话投影并启动已启用的调度器。Backend 的 SSE 缓冲在进程内，已关联的 Task / Run 可通过 Agent 持久事件重建投影。详见 [Agent 会话持久化](../agent/session-persistence.md)。
 - Agent 使用独立的 `AGENT_DATABASE_URL`，迁移在 `apps/agent` 单独执行。Backend 和 Worker 使用 `AGENT_INTERNAL_URL` 调用 Agent API，Agent 的 Knowledge Adapter 使用 `BACKEND_INTERNAL_URL` 调用 Backend。V1 使用 `AGENT_SERVICE_TOKEN`；V2 的 gateway、fact reader、control、worker 角色凭据各自隔离，并与旧 service token 不同，同一角色的调用方/接收方配置保持一致。Agent API、执行 Worker 和 Usage Worker 使用一致的 Agent 环境，Usage Worker 不可省略。
 - Agent API 与 Worker 配置同一个持久化 `AGENT_WORKSPACE_ROOT`。模型和搜索 Provider 变量配置在 Agent 侧。Agent 健康端点 `GET /internal/v2/health` 仅检查 API 进程存活。启动说明见 [Agent README](../../apps/agent/README.md)。
+- Docker 运行时，OpenLux 等模型配置填写在 `infra/docker/env/agent.env`，由共享的 `x-agent.env_file` 注入 Agent API、执行 Worker 和 Usage Worker；不要只修改原生启动的 `apps/agent/.env` 或 Compose 插值文件 `infra/docker/.env`。示例见 [Docker Agent env](../../infra/docker/env/agent.env.example)，能力与型号声明见 [OpenLux](llm-api-foundation.md#openlux)。配置变更需重新创建容器，`docker restart` 不重新读取 `env_file`；使用 Registry JSON 时须配置容器可读的挂载路径。本地 env 与 secrets 不入库，具体命令见 [Docker 运行指南](../../infra/docker/README.md)。
 - Backend 的 Agent Gateway 直接访问配置的内部服务，不继承编辑器/进程的 HTTP 代理环境，避免本机 Agent 配置和运行请求被 Internet 代理返回 502。此约定仅作用于 Backend→Agent Client，不改变模型、搜索和 Knowledge 等外部服务的代理设置。
 
 ---

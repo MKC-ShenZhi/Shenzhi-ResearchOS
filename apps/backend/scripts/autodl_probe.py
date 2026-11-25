@@ -168,13 +168,13 @@ def public(result: dict) -> dict:
     return {name: value for name, value in result.items() if not name.startswith('_')}
 
 
-def run(probe: Probe, models: list[str], *, list_only: bool = False) -> dict:
+def run(probe: Probe, models: list[str], *, list_only: bool = False, require_v41: bool = True) -> dict:
     report = {'probed_at': datetime.now(timezone.utc).isoformat(), 'T0': probe.models(), 'models': {}}
     ids = report['T0']['ids']
     if report['T0']['status'] != 200:
         report['stop_reason'] = 'T0 请求失败，无法确认模型列表'
         return report
-    if not any('deepseek' in name.lower() and re.search(r'v4[.\-]?1', name.lower()) for name in ids):
+    if require_v41 and not any('deepseek' in name.lower() and re.search(r'v4[.\-]?1', name.lower()) for name in ids):
         report['stop_reason'] = 'T0 中找不到 DeepSeek V4.1，停止探测'
         return report
     if list_only:

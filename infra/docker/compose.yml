@@ -1,0 +1,163 @@
+name: ${COMPOSE_PROJECT_NAME:-shenzhi-docker}
+
+x-python: &python
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 45s
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
+x-agent: &agent
+  <<: *python
+  image: ${IMAGE_PREFIX:-shenzhi}/agent:${IMAGE_TAG:-local}
+  build:
+    context: ../..
+    dockerfile: apps/agent/Dockerfile
+  env_file:
+    - path: env/agent.env
+      format: raw
+  volumes:
+    - agent-workspace:/var/lib/shenzhi/workspace
+    - agent-spool:/var/lib/shenzhi/usage-spool
+    - ./secrets/agent:/run/secrets/agent:ro
+
+services:
+  postgres:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shenzhi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run prepare-env.py first}
+      POSTGRES_DB: ${POSTGRES_DB:-shenzhi}
+      AGENT_DB: ${AGENT_DB:-shenzhi_agent}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
+    ports:
+      - 127.0.0.1:${POSTGRES_PORT:-55432}:5432
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+  auth-migrate:
+    <<: *python
+    profiles: [app, full]
+    image: ${IMAGE_PREFIX:-shenzhi}/backend:${IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/backend/Dockerfile
+    env_file:
+      - path: env/backend.env
+        format: raw
+    restart: 'no'
+    command: [python, /opt/docker/migrate.py, auth]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  backend-migrate:
+    <<: *python
+    profiles: [app, full]
+    image: ${IMAGE_PREFIX:-shenzhi}/backend:${IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/backend/Dockerfile
+    env_file:
+      - path: env/backend.env
+        format: raw
+    restart: 'no'
+    command: [python, /opt/docker/migrate.py, backend]
+    depends_on:
+      auth-migrate: {condition: service_completed_successfully}
+
+  backend:
+    <<: *python
+    profiles: [app, full]
+    image: ${IMAGE_PREFIX:-shenzhi}/backend:${IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/backend/Dockerfile
+    env_file:
+      - path: env/backend.env
+        format: raw
+    volumes:
+      - ./secrets/backend:/run/secrets/backend:ro
+    depends_on:
+      backend-migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, /opt/docker/healthcheck.py, backend]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+      start_period: 30s
+
+  web:
+    init: true
+    profiles: [app, full]
+    image: ${IMAGE_PREFIX:-shenzhi}/web:${IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      target: runtime
+      args:
+        NEXT_PUBLIC_KNOWLEDGE_SOURCE: ${NEXT_PUBLIC_KNOWLEDGE_SOURCE:-bff}
+        NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED: ${NEXT_PUBLIC_PAPER_THUMBNAIL_ENABLED:-false}
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
+    env_file:
+      - path: env/web.env
+        format: raw
+    ports:
+      - 127.0.0.1:${WEB_PORT:-3300}:3000
+    restart: unless-stopped
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+    logging: *logging
+
+  agent-migrate:
+    <<: *agent
+    profiles: [agent, full, usage]
+    restart: 'no'
+    command: [python, /opt/docker/migrate.py, agent]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  agent-api:
+    <<: *agent
+    profiles: [agent, full, usage]
+    depends_on:
+      agent-migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, /opt/docker/healthcheck.py, agent]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+
+  agent-worker:
+    <<: *agent
+    profiles: [agent, full]
+    command: [python, -m, agent_app.worker_main]
+    depends_on:
+      agent-api: {condition: service_healthy}
+
+  agent-usage-worker:
+    <<: *agent
+    profiles: [usage, full]
+    command: [python, -m, agent_app.usage_worker]
+    depends_on:
+      agent-api: {condition: service_healthy}
+
+volumes:
+  postgres-data:
+  agent-workspace:
+  agent-spool:

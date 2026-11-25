@@ -126,13 +126,7 @@ uv run --env-file .env python -m app.services.agent_entitlements.plans --capabil
 
 这会复用现有逐模型预算与风险配置，不伪造审批。如果旧包的风险引用或逐模型预算为空，命令提前报错，不再生成到运行时才失败的包。`--model-budgets` 按模型ID合并覆盖旧配置；允许只配置要启用的模型，其余没有预算的模型仍拒绝调用。只有决定采用较宽松的输入估算时才追加 `--input-bytes-per-token 2`，并记录该风险参数的依据；不追加则保持原值。无旧发布包时继续使用原 `--model-budgets`、`--risk-profile` 参数。生成文件在现有 Admin「套餐管理」上传发布，再在「用户管理」预览并分配新修订；发布不自动迁移用户，也不重置当日余额。不需要数据库迁移或新增服务。
 
-仅补齐 DeepSeek 风险预算时，在 Backend 目录使用：
-
-```powershell
-uv run --env-file .env python -m app.services.agent_entitlements.plans --capabilities ../agent/workspace/formal-capabilities.json --previous-bundle workspace/formal-plans-availability.json --model-budgets app/data/agent_deepseek_model_budget.json --risk-profile autodl-deepseek-bounded-v1 --release 20261120-availability-deepseek-budget-r1 --output workspace/formal-plans-deepseek-budget.json
-```
-
-此配置将 DeepSeek 的输出上限设为4096，输入UTF-8字节按1:1加1024封装余量预留。历史兼容字段context_window_tokens=32768保留在Policy中，但不再作为额外的单次输入限额；真实模型上下文上限只采用Worker Registry明确声明的值，未知时不编造上限。风险ID本身不证明Provider语义；现有Provider必须遵守max_tokens覆盖completion（含思考）的接入契约。Policy预算O经Permit/start回传后覆盖实际请求max_tokens，发送前再次核对正文摘要、O与唯一发送权；不修改模型身份，因此单纯补Policy预算不需重新导出能力。复用现有Admin风险记录和发布/分配流程，不自动修改已发布Policy。
+逐模型预算由部署负责人在本地审核文件中维护，通过 `--model-budgets <REVIEWED_MODEL_BUDGETS_JSON>` 合并到正式三档套餐；仓库不再内置 Free 演示 Policy 或某个 Provider 的固定预算 JSON。历史 Policy、task_fixed Grant 与消费记录继续按既有兼容逻辑读取和结算，不删除数据库记录。
 
 开发环境可显式设置 `ENVIRONMENT=development` 与 `AGENT_ALLOW_TEST_POLICY=true` 使用已批准并已分配的 test_only Policy；不自动创建用户、分配权益或绕过认证。生产环境必须保持该开关为false；在非显式development环境开启会拒绝服务。开发联调也可直接复用上述正式发布包生成方式，使用现有 Admin 分配，不必建立第二套注册或授权流程。
 

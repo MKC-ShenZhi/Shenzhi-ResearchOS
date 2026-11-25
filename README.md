@@ -12,6 +12,13 @@
 
 ## 快速开始
 
+Docker 可选运行方式：`python infra/docker/prepare-env.py --from-local`，随后进入
+`infra/docker` 执行 `docker compose up -d --wait postgres`（只运行数据库），或
+`docker compose -f compose.yml -f compose.dev.yml --profile full up -d --build --wait`（完整容器开发）。
+默认 Web 为 `http://localhost:3300`，不占用原生 3000 端口。
+四种模式、迁移、认证边界和数据保护见 [Docker 运行指南](infra/docker/README.md)。
+正常停止使用 `down`，不要加 `-v`；以下原生启动方式继续保留。
+
 Web:
 
 ```bash

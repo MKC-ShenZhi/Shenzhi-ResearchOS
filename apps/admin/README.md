@@ -57,6 +57,22 @@ pnpm dev --host 127.0.0.1 --port 3101
 
 访问 http://127.0.0.1:3101 。Admin `.env.local` 可配置服务端 `ADMIN_BACKEND_ORIGIN`（默认 http://127.0.0.1:8000），没有 VITE_ 前缀，不暴露到浏览器。检查：`pnpm typecheck`、`pnpm build`。Backend：`uv run python -m unittest discover -s tests -p test_admin_console.py`。
 
+## Docker 开发
+
+从仓库根目录执行：
+
+```powershell
+python infra/docker/prepare-env.py
+cd infra/docker
+docker compose -f compose.yml -f compose.dev.yml --profile full up -d --build --wait
+```
+
+访问 http://localhost:3101 ，开发账号 `shenzhi`，密码 `shenzhi-dev`。Session Secret 由现有 prepare-env.py 随机生成到本地 `.env` 的 `ADMIN_DEV_SESSION_SECRET`，重复运行保持不变。默认凭据只由 dev override 注入 Backend，生产 override 清空管理认证配置，并拒绝在非 development 环境使用该密码。
+
+Admin 与 Backend 共享网络命名空间，Vite 以 `127.0.0.1:8000` 代理 Backend，Backend 保留 loopback、Cookie 和写操作门禁。3101 端口仅在宿主 `127.0.0.1` 发布；Vite 仅在显式 Docker development 模式接受容器入口流量，校验本地 Host/Origin、拒绝 cross-site 请求并移除转发 Header。普通 Web 不代理管理 API。
+
+Admin 仅定义在 compose.dev.yml 的 full profile，不属于基础或生产 Compose。开发镜像只安装现有锁定依赖。源码同步可执行 `docker compose -f compose.yml -f compose.dev.yml --profile full watch --no-up admin`。Backend 重建/重新创建后，执行相同 up 命令重新关联 Admin 网络命名空间；不要只更新 Backend 后继续使用旧 Admin 容器。
+
 ## 认证与部署边界
 
 认证独立封装于 Backend `core/admin_auth.py`。常量时间比较账号密码；会话包含签发时间、随机 nonce 与 HMAC-SHA256 签名；校验签名、时间及配置。轮换密码或密钥使已有会话失效。退出清除浏览器 Cookie；V1 无服务端撤销列表，被复制的已签发 Cookie 在过期或密钥轮换前仍有效。
@@ -92,7 +108,7 @@ uv run --env-file .env alembic upgrade head
 2. 在 Backend 目录生成发布包：
 
 ```powershell
-uv run --env-file .env python -m app.services.agent_entitlements.plans --capabilities ../agent/workspace/formal-capabilities.json --release 20261120 --model-budgets workspace/reviewed-model-budgets.json --output workspace/formal-plans-20261120.json
+uv run --env-file .env python -m app.services.agent_entitlements.plans --capabilities ../agent/workspace/formal-capabilities.json --release 20261120 --model-budgets workspace/reviewed-model-budgets.json --risk-profile <APPROVED_PROFILE> --output workspace/formal-plans-20261120.json
 ```
 
 三个版本为 basic-v1-20261120、pro-v1-20261120、research-v1-20261120。正式套餐不再使用 --call-upper-bound：每日规则的 reservation_units/call_upper_bound 均为0，明确由 dynamic_model_budget=true 的独立逐调用预算路径处理，不代表无限授权。旧策略仍保留旧字段语义。
@@ -116,7 +132,7 @@ uv run --env-file .env python -m app.services.agent_entitlements.plans --capabil
 
 `model_risk_profile=null` 的历史包会拒绝 TOKEN_BOUND_UNPROVEN；生成命令现在提前拒绝风险配置或逐模型预算为空的发布包。指定 `--risk-profile <APPROVED_PROFILE>` 和 `--model-budgets <BUDGET_JSON>`，并在控制台填写对应风险记录。允许仅为本次要启用的模型提供约束；其他模型仍拒绝 MODEL_BUDGET_UNCONFIGURED，不因共享风险引用而放行。`--model-budgets` 按模型ID合并覆盖旧包配置，保留未指定的其他模型预算。
 
-DeepSeek 的有限预算配置见 `apps/backend/app/data/agent_deepseek_model_budget.json`：输出最多4096 Token、输入按完整请求UTF-8字节加1024余量预留。历史context_window_tokens=32768字段仅保留兼容，不再作为单次输入限额；输入按每日剩余额度检查，真实上下文上限仅采用Worker Registry明确声明的值。输出限制语义仍依赖已接入Provider的max_tokens契约，不代表本次做过新的实测。使用时须确认现有Provider遵守包含思考Token的completion输出上限。
+逐模型预算由部署负责人在本地审核文件中维护，不再提供仓库内固定 Provider 预算。使用 `--model-budgets <REVIEWED_MODEL_BUDGETS_JSON>` 合并覆盖，或通过 `--previous-bundle` 复用已经批准的预算。历史 `context_window_tokens` 字段继续兼容；真实上下文上限仅采用 Worker Registry 明确声明的值。
 
 3. Admin → 套餐管理 → 发布与迁移 → 发布套餐新版本 → 上传发布包 → 填写原因、Policy 审批引用、模型风险审批引用（如有）→ 确认发布。Backend 校验受控身份摘要、固定三档规则与当前 Agent 的公开 Model/Skill 集合。Tool build 身份由离线导出和管理员审批保证，当前配置 HTTP 接口无法远程验证 build 摘要。
 4. 用户管理 → 勾选一个/多个用户 → 选择套餐、原因 → 预览 → 确认执行。成功、失败和部分成功均分用户返回；失败不覆盖该用户权益。网络失败保留操作 ID 供原请求重试。

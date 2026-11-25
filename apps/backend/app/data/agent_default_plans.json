@@ -1,0 +1,1435 @@
+{
+  "policies": [
+    {
+      "schema_version": 1,
+      "reservation_mode": "per_call",
+      "dynamic_model_budget": true,
+      "model_budget_profiles": {
+        "model:openlux/deepseek-v4.1-flash": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        },
+        "model:openlux/glm-5.3-flash": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        },
+        "model:openlux/kimi-k2.6": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        },
+        "model:openlux/qwen3.8-flash": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        }
+      },
+      "policy_revision": "basic-v1-docker-openlux-dev-20261124-r1",
+      "plan_id": "basic",
+      "permission_snapshot": {
+        "schema_version": 1,
+        "permission_snapshot_id": "basic-v1-docker-openlux-dev-20261124-r1:snapshot",
+        "policy_revision": "basic-v1-docker-openlux-dev-20261124-r1",
+        "catalog_revision": "sha256:7e6b42be11870b371bf4d3f79e96d77744ac9b26759a9c879ad7aab0bbd74a56",
+        "capabilities": [
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/deepseek-v4.1-flash",
+            "capability_version": "sha256:eb27d439509b37b343583979e46af776ba174c84a0fd5c273c36c8f2d2cc3e3c",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/qwen3.8-flash",
+            "capability_version": "sha256:ece1d7cf49ab5ea6a87fc064baf2dec387d2806722e4d6e43028f2527e30b0ac",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/glm-5.3-flash",
+            "capability_version": "sha256:56d5a8b5b17c2e096ebd50f97f01e6a206b89d62ba49bc7d520638d904458ffb",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/kimi-k2.6",
+            "capability_version": "sha256:346bb05de95635777da094e1738172bdd4dbcde75a2ba2c9b837cccc8f56c9ad",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:web_search",
+            "capability_version": "sha256:80208f6bfb89a30074317faf680cd5634c091cb6581be78f2fd415ef3f2dd10a",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:read_paper",
+            "capability_version": "sha256:7548cf06ab50a6173a585c4d3573cf4aab4c6e2abb9ee36ed6ad10cd93b561eb",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:fetch_url",
+            "capability_version": "sha256:4a3a3e088595ded8a828fe5e86000bedfb0c6a1bf22cd332b95a1519d24507e8",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:paper_search",
+            "capability_version": "sha256:e5af0053b47a0c3cf2432e0321fe5041930a9114f1e788948d643218179af0cd",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:paper_detail",
+            "capability_version": "sha256:ff55577e574dd5a203f809bacec899bc4eac5e5d46467df3d2786328b2042929",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:citation_graph",
+            "capability_version": "sha256:29df817aeb4332a731aafbd9ecb62fe546f917d1442847d1d1d05d3ff37fed47",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:read_file",
+            "capability_version": "sha256:ec0d92e30d63c0fbb9916a07e7fd5e9ddaf5be07b37cf6cbae7e5f75473501d1",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:write_file",
+            "capability_version": "sha256:92f2907f61ba4a0e55cf080c77f2eb06ae16e8120f84decd8770909bf301aad8",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:edit_file",
+            "capability_version": "sha256:586613591985ac26ab9744d855c33126e9f1cb9975d62254f029deef12b50a10",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:draw_chart",
+            "capability_version": "sha256:f387819afc09a92e5ac47ead29b1f642ffd3c29cdd4667061d7efe5ac10a0733",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:image_search",
+            "capability_version": "sha256:b55a31ca41098455eca8c09daaa12c237b421147fad059552b12091d59ada749",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:read_skill",
+            "capability_version": "sha256:c366695d493a6c6f7b7c7419b14dd0cef0772968740e9b8ca71e6c8aebd8a6b8",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:ask_user",
+            "capability_version": "sha256:94779033d708f51c68fc6bb7e349efd35319fa664947c6d621fe44d4179f2c53",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          }
+        ]
+      },
+      "rules": [
+        {
+          "schema_version": 1,
+          "rule_id": "daily-tokens",
+          "metric": "tokens",
+          "unit": "token",
+          "capability_id": null,
+          "purpose": "all",
+          "limit_units": 200000,
+          "reservation_units": 0,
+          "call_upper_bound": 0,
+          "accounting_basis": "trusted_start",
+          "window_type": "natural",
+          "duration_seconds": null,
+          "timezone": "Asia/Shanghai",
+          "anchor": null,
+          "quota_pool": "formal-daily-tokens-v1"
+        },
+        {
+          "schema_version": 1,
+          "rule_id": "tools-free",
+          "metric": "attempted_units",
+          "unit": "call",
+          "capability_id": null,
+          "purpose": "tool",
+          "limit_units": 0,
+          "reservation_units": 0,
+          "call_upper_bound": 0,
+          "accounting_basis": "free",
+          "window_type": "natural",
+          "duration_seconds": null,
+          "timezone": "Asia/Shanghai",
+          "anchor": null,
+          "quota_pool": null
+        },
+        {
+          "schema_version": 1,
+          "rule_id": "skills-free",
+          "metric": "attempted_units",
+          "unit": "activation",
+          "capability_id": null,
+          "purpose": "skill_activation",
+          "limit_units": 0,
+          "reservation_units": 0,
+          "call_upper_bound": 0,
+          "accounting_basis": "free",
+          "window_type": "natural",
+          "duration_seconds": null,
+          "timezone": "Asia/Shanghai",
+          "anchor": null,
+          "quota_pool": null
+        }
+      ],
+      "grant_ttl_seconds": 7200,
+      "permit_ttl_seconds": 120,
+      "start_ttl_seconds": 30,
+      "conservative_clock_skew_ms": 1000,
+      "token_scope": "prompt_plus_completion",
+      "missing_usage_strategy": "hold_and_reconcile",
+      "overage_strategy": "record_and_block",
+      "unused_release_strategy": "sealed_complete_only",
+      "model_risk_profile": "openlux-local-dev-completion-bounded-v1",
+      "disable_scope": "every_start",
+      "emergency_scope": "grant_root"
+    },
+    {
+      "schema_version": 1,
+      "reservation_mode": "per_call",
+      "dynamic_model_budget": true,
+      "model_budget_profiles": {
+        "model:openlux/deepseek-v4.1-flash": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        },
+        "model:openlux/glm-5.3-flash": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        },
+        "model:openlux/kimi-k2.6": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        },
+        "model:openlux/qwen3.8-flash": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        }
+      },
+      "policy_revision": "pro-v1-docker-openlux-dev-20261124-r1",
+      "plan_id": "pro",
+      "permission_snapshot": {
+        "schema_version": 1,
+        "permission_snapshot_id": "pro-v1-docker-openlux-dev-20261124-r1:snapshot",
+        "policy_revision": "pro-v1-docker-openlux-dev-20261124-r1",
+        "catalog_revision": "sha256:7e6b42be11870b371bf4d3f79e96d77744ac9b26759a9c879ad7aab0bbd74a56",
+        "capabilities": [
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/deepseek-v4.1-flash",
+            "capability_version": "sha256:eb27d439509b37b343583979e46af776ba174c84a0fd5c273c36c8f2d2cc3e3c",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/qwen3.8-flash",
+            "capability_version": "sha256:ece1d7cf49ab5ea6a87fc064baf2dec387d2806722e4d6e43028f2527e30b0ac",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/glm-5.3-flash",
+            "capability_version": "sha256:56d5a8b5b17c2e096ebd50f97f01e6a206b89d62ba49bc7d520638d904458ffb",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/kimi-k2.6",
+            "capability_version": "sha256:346bb05de95635777da094e1738172bdd4dbcde75a2ba2c9b837cccc8f56c9ad",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:web_search",
+            "capability_version": "sha256:80208f6bfb89a30074317faf680cd5634c091cb6581be78f2fd415ef3f2dd10a",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:read_paper",
+            "capability_version": "sha256:7548cf06ab50a6173a585c4d3573cf4aab4c6e2abb9ee36ed6ad10cd93b561eb",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:fetch_url",
+            "capability_version": "sha256:4a3a3e088595ded8a828fe5e86000bedfb0c6a1bf22cd332b95a1519d24507e8",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:paper_search",
+            "capability_version": "sha256:e5af0053b47a0c3cf2432e0321fe5041930a9114f1e788948d643218179af0cd",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:paper_detail",
+            "capability_version": "sha256:ff55577e574dd5a203f809bacec899bc4eac5e5d46467df3d2786328b2042929",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:citation_graph",
+            "capability_version": "sha256:29df817aeb4332a731aafbd9ecb62fe546f917d1442847d1d1d05d3ff37fed47",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:read_file",
+            "capability_version": "sha256:ec0d92e30d63c0fbb9916a07e7fd5e9ddaf5be07b37cf6cbae7e5f75473501d1",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:write_file",
+            "capability_version": "sha256:92f2907f61ba4a0e55cf080c77f2eb06ae16e8120f84decd8770909bf301aad8",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:edit_file",
+            "capability_version": "sha256:586613591985ac26ab9744d855c33126e9f1cb9975d62254f029deef12b50a10",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:draw_chart",
+            "capability_version": "sha256:f387819afc09a92e5ac47ead29b1f642ffd3c29cdd4667061d7efe5ac10a0733",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:image_search",
+            "capability_version": "sha256:b55a31ca41098455eca8c09daaa12c237b421147fad059552b12091d59ada749",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:read_skill",
+            "capability_version": "sha256:c366695d493a6c6f7b7c7419b14dd0cef0772968740e9b8ca71e6c8aebd8a6b8",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:ask_user",
+            "capability_version": "sha256:94779033d708f51c68fc6bb7e349efd35319fa664947c6d621fe44d4179f2c53",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          }
+        ]
+      },
+      "rules": [
+        {
+          "schema_version": 1,
+          "rule_id": "daily-tokens",
+          "metric": "tokens",
+          "unit": "token",
+          "capability_id": null,
+          "purpose": "all",
+          "limit_units": 1000000,
+          "reservation_units": 0,
+          "call_upper_bound": 0,
+          "accounting_basis": "trusted_start",
+          "window_type": "natural",
+          "duration_seconds": null,
+          "timezone": "Asia/Shanghai",
+          "anchor": null,
+          "quota_pool": "formal-daily-tokens-v1"
+        },
+        {
+          "schema_version": 1,
+          "rule_id": "tools-free",
+          "metric": "attempted_units",
+          "unit": "call",
+          "capability_id": null,
+          "purpose": "tool",
+          "limit_units": 0,
+          "reservation_units": 0,
+          "call_upper_bound": 0,
+          "accounting_basis": "free",
+          "window_type": "natural",
+          "duration_seconds": null,
+          "timezone": "Asia/Shanghai",
+          "anchor": null,
+          "quota_pool": null
+        },
+        {
+          "schema_version": 1,
+          "rule_id": "skills-free",
+          "metric": "attempted_units",
+          "unit": "activation",
+          "capability_id": null,
+          "purpose": "skill_activation",
+          "limit_units": 0,
+          "reservation_units": 0,
+          "call_upper_bound": 0,
+          "accounting_basis": "free",
+          "window_type": "natural",
+          "duration_seconds": null,
+          "timezone": "Asia/Shanghai",
+          "anchor": null,
+          "quota_pool": null
+        }
+      ],
+      "grant_ttl_seconds": 7200,
+      "permit_ttl_seconds": 120,
+      "start_ttl_seconds": 30,
+      "conservative_clock_skew_ms": 1000,
+      "token_scope": "prompt_plus_completion",
+      "missing_usage_strategy": "hold_and_reconcile",
+      "overage_strategy": "record_and_block",
+      "unused_release_strategy": "sealed_complete_only",
+      "model_risk_profile": "openlux-local-dev-completion-bounded-v1",
+      "disable_scope": "every_start",
+      "emergency_scope": "grant_root"
+    },
+    {
+      "schema_version": 1,
+      "reservation_mode": "per_call",
+      "dynamic_model_budget": true,
+      "model_budget_profiles": {
+        "model:openlux/deepseek-v4.1-flash": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        },
+        "model:openlux/glm-5.3-flash": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        },
+        "model:openlux/kimi-k2.6": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        },
+        "model:openlux/qwen3.8-flash": {
+          "schema_version": 1,
+          "input_basis": "risk_assessed_utf8_v1",
+          "input_overhead_tokens": 1024,
+          "input_bytes_per_token": 1,
+          "context_window_tokens": 4096,
+          "max_output_tokens": 4096,
+          "output_limit_semantics": "completion_including_reasoning"
+        }
+      },
+      "policy_revision": "research-v1-docker-openlux-dev-20261124-r1",
+      "plan_id": "research",
+      "permission_snapshot": {
+        "schema_version": 1,
+        "permission_snapshot_id": "research-v1-docker-openlux-dev-20261124-r1:snapshot",
+        "policy_revision": "research-v1-docker-openlux-dev-20261124-r1",
+        "catalog_revision": "sha256:7e6b42be11870b371bf4d3f79e96d77744ac9b26759a9c879ad7aab0bbd74a56",
+        "capabilities": [
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/deepseek-v4.1-flash",
+            "capability_version": "sha256:eb27d439509b37b343583979e46af776ba174c84a0fd5c273c36c8f2d2cc3e3c",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/qwen3.8-flash",
+            "capability_version": "sha256:ece1d7cf49ab5ea6a87fc064baf2dec387d2806722e4d6e43028f2527e30b0ac",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/glm-5.3-flash",
+            "capability_version": "sha256:56d5a8b5b17c2e096ebd50f97f01e6a206b89d62ba49bc7d520638d904458ffb",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "model:openlux/kimi-k2.6",
+            "capability_version": "sha256:346bb05de95635777da094e1738172bdd4dbcde75a2ba2c9b837cccc8f56c9ad",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "main",
+              "summary"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:web_search",
+            "capability_version": "sha256:80208f6bfb89a30074317faf680cd5634c091cb6581be78f2fd415ef3f2dd10a",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:read_paper",
+            "capability_version": "sha256:7548cf06ab50a6173a585c4d3573cf4aab4c6e2abb9ee36ed6ad10cd93b561eb",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:fetch_url",
+            "capability_version": "sha256:4a3a3e088595ded8a828fe5e86000bedfb0c6a1bf22cd332b95a1519d24507e8",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:paper_search",
+            "capability_version": "sha256:e5af0053b47a0c3cf2432e0321fe5041930a9114f1e788948d643218179af0cd",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:paper_detail",
+            "capability_version": "sha256:ff55577e574dd5a203f809bacec899bc4eac5e5d46467df3d2786328b2042929",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:citation_graph",
+            "capability_version": "sha256:29df817aeb4332a731aafbd9ecb62fe546f917d1442847d1d1d05d3ff37fed47",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:read_file",
+            "capability_version": "sha256:ec0d92e30d63c0fbb9916a07e7fd5e9ddaf5be07b37cf6cbae7e5f75473501d1",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:write_file",
+            "capability_version": "sha256:92f2907f61ba4a0e55cf080c77f2eb06ae16e8120f84decd8770909bf301aad8",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:edit_file",
+            "capability_version": "sha256:586613591985ac26ab9744d855c33126e9f1cb9975d62254f029deef12b50a10",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:draw_chart",
+            "capability_version": "sha256:f387819afc09a92e5ac47ead29b1f642ffd3c29cdd4667061d7efe5ac10a0733",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:image_search",
+            "capability_version": "sha256:b55a31ca41098455eca8c09daaa12c237b421147fad059552b12091d59ada749",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:read_skill",
+            "capability_version": "sha256:c366695d493a6c6f7b7c7419b14dd0cef0772968740e9b8ca71e6c8aebd8a6b8",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "tool:ask_user",
+            "capability_version": "sha256:94779033d708f51c68fc6bb7e349efd35319fa664947c6d621fe44d4179f2c53",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "tool"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          },
+          {
+            "schema_version": 1,
+            "capability_id": "skill:deep-research",
+            "capability_version": "sha256:e716c6909643bca5a2e02c817f29836dc278325e32194329d9f0e6204c323135",
+            "invocation_modes": [
+              "internal",
+              "model_selected",
+              "forced",
+              "explicit_user"
+            ],
+            "purposes": [
+              "skill_activation"
+            ],
+            "max_attempts": null,
+            "dependency_versions": {}
+          }
+        ]
+      },
+      "rules": [
+        {
+          "schema_version": 1,
+          "rule_id": "daily-tokens",
+          "metric": "tokens",
+          "unit": "token",
+          "capability_id": null,
+          "purpose": "all",
+          "limit_units": 3000000,
+          "reservation_units": 0,
+          "call_upper_bound": 0,
+          "accounting_basis": "trusted_start",
+          "window_type": "natural",
+          "duration_seconds": null,
+          "timezone": "Asia/Shanghai",
+          "anchor": null,
+          "quota_pool": "formal-daily-tokens-v1"
+        },
+        {
+          "schema_version": 1,
+          "rule_id": "tools-free",
+          "metric": "attempted_units",
+          "unit": "call",
+          "capability_id": null,
+          "purpose": "tool",
+          "limit_units": 0,
+          "reservation_units": 0,
+          "call_upper_bound": 0,
+          "accounting_basis": "free",
+          "window_type": "natural",
+          "duration_seconds": null,
+          "timezone": "Asia/Shanghai",
+          "anchor": null,
+          "quota_pool": null
+        },
+        {
+          "schema_version": 1,
+          "rule_id": "skills-free",
+          "metric": "attempted_units",
+          "unit": "activation",
+          "capability_id": null,
+          "purpose": "skill_activation",
+          "limit_units": 0,
+          "reservation_units": 0,
+          "call_upper_bound": 0,
+          "accounting_basis": "free",
+          "window_type": "natural",
+          "duration_seconds": null,
+          "timezone": "Asia/Shanghai",
+          "anchor": null,
+          "quota_pool": null
+        }
+      ],
+      "grant_ttl_seconds": 7200,
+      "permit_ttl_seconds": 120,
+      "start_ttl_seconds": 30,
+      "conservative_clock_skew_ms": 1000,
+      "token_scope": "prompt_plus_completion",
+      "missing_usage_strategy": "hold_and_reconcile",
+      "overage_strategy": "record_and_block",
+      "unused_release_strategy": "sealed_complete_only",
+      "model_risk_profile": "openlux-local-dev-completion-bounded-v1",
+      "disable_scope": "every_start",
+      "emergency_scope": "grant_root"
+    }
+  ],
+  "capabilities": {
+    "implementation_build_digest": "sha256:8042a9343a37e7d1baaeb07fe67091df2a179bdec53758a7bb15b325ab63a6a1",
+    "capabilities": [
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "model",
+          "capability_id": "model:openlux/deepseek-v4.1-flash",
+          "provider_id": "openlux",
+          "registry_model_id": "openlux/deepseek-v4.1-flash",
+          "upstream_model": "deepseek-v4.1-flash",
+          "configuration_release_digest": "sha256:972ad0443c12b7dbb4c9d017aebf87e5b250fe080cb7217fac938420e052b7f1",
+          "dependency_digests": []
+        },
+        "version": "sha256:eb27d439509b37b343583979e46af776ba174c84a0fd5c273c36c8f2d2cc3e3c"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "model",
+          "capability_id": "model:openlux/qwen3.8-flash",
+          "provider_id": "openlux",
+          "registry_model_id": "openlux/qwen3.8-flash",
+          "upstream_model": "qwen3.8-flash",
+          "configuration_release_digest": "sha256:972ad0443c12b7dbb4c9d017aebf87e5b250fe080cb7217fac938420e052b7f1",
+          "dependency_digests": []
+        },
+        "version": "sha256:ece1d7cf49ab5ea6a87fc064baf2dec387d2806722e4d6e43028f2527e30b0ac"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "model",
+          "capability_id": "model:openlux/glm-5.3-flash",
+          "provider_id": "openlux",
+          "registry_model_id": "openlux/glm-5.3-flash",
+          "upstream_model": "glm-5.3-flash",
+          "configuration_release_digest": "sha256:972ad0443c12b7dbb4c9d017aebf87e5b250fe080cb7217fac938420e052b7f1",
+          "dependency_digests": []
+        },
+        "version": "sha256:56d5a8b5b17c2e096ebd50f97f01e6a206b89d62ba49bc7d520638d904458ffb"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "model",
+          "capability_id": "model:openlux/kimi-k2.6",
+          "provider_id": "openlux",
+          "registry_model_id": "openlux/kimi-k2.6",
+          "upstream_model": "kimi-k2.6",
+          "configuration_release_digest": "sha256:2d6e1c2e74fee3f4770eeb91aa848450925854112b4ad8b4b23e7bbd8a7b0593",
+          "dependency_digests": []
+        },
+        "version": "sha256:346bb05de95635777da094e1738172bdd4dbcde75a2ba2c9b837cccc8f56c9ad"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:web_search",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:75ca4b46708315c022799543303af8116a5988bc220664e98d7a2fefce0d8324",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:80208f6bfb89a30074317faf680cd5634c091cb6581be78f2fd415ef3f2dd10a"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:read_paper",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:06499ab13df1801f57b2a37e32968ac1532ef5eff6f33bc2b5a446b8f47b3c3f",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:7548cf06ab50a6173a585c4d3573cf4aab4c6e2abb9ee36ed6ad10cd93b561eb"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:fetch_url",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:ca83dfa0124f9d02836b29ced7d57f6596542fecd23767ad532152f31bcb3365",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:4a3a3e088595ded8a828fe5e86000bedfb0c6a1bf22cd332b95a1519d24507e8"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:paper_search",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:6fdea5cf87531f45336ffc1b83494a7b27887452b4bf46cf6a9e27825a277f01",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:e5af0053b47a0c3cf2432e0321fe5041930a9114f1e788948d643218179af0cd"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:paper_detail",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:851a4db278685bc35c4661237d26e147f715320a190aa1d510ef88e0b55985c9",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:ff55577e574dd5a203f809bacec899bc4eac5e5d46467df3d2786328b2042929"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:citation_graph",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:c85b45e2f8322f0c3e8cb76b80918f7545f4648126cee3d3f49c996e0f99a71d",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:29df817aeb4332a731aafbd9ecb62fe546f917d1442847d1d1d05d3ff37fed47"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:read_file",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:ec631460575521573528fb07255f4745e047a96ee751a3e0b10507793f25dc80",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:ec0d92e30d63c0fbb9916a07e7fd5e9ddaf5be07b37cf6cbae7e5f75473501d1"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:write_file",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:f3cd909440eecdc4b202f8a9dd4aefebc8e202b041fa46a58f7a8de786496bbc",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:92f2907f61ba4a0e55cf080c77f2eb06ae16e8120f84decd8770909bf301aad8"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:edit_file",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:e54519a5b788ed8f1e3380cb1c5bf796ce5de598340695c26892e4552a478c12",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:586613591985ac26ab9744d855c33126e9f1cb9975d62254f029deef12b50a10"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:draw_chart",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:a36fb061ec411704d610aec9126550f655fc5572eb162c0bf25ec0418210f48d",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:f387819afc09a92e5ac47ead29b1f642ffd3c29cdd4667061d7efe5ac10a0733"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:image_search",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:f3f9fc252ee551193a347df756f34da1e3ba79838fff1406992d8602396c3cd0",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:b55a31ca41098455eca8c09daaa12c237b421147fad059552b12091d59ada749"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:read_skill",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:f3ac6e8a0be392b0d69fc92eb49c56ab8c8fe3d8e3534c78bd6924d59927312e",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:c366695d493a6c6f7b7c7419b14dd0cef0772968740e9b8ca71e6c8aebd8a6b8"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "tool",
+          "capability_id": "tool:ask_user",
+          "implementation_build_digest": "sha256:d8fe4de9db2829947f9476839a2ad4b0ddde34b7d35887b0db0cf075aaf439a0",
+          "parameter_schema_digest": "sha256:9052b386e2908b01a6b2c94d4aaf85e68ba38760df1718bb037e107e7a4ec933",
+          "dependency_digests": [
+            "sha256:bd718b951db839b8f092715ad82fb8555c7f271a2ea14ca14fafd6730fb1e328"
+          ]
+        },
+        "version": "sha256:94779033d708f51c68fc6bb7e349efd35319fa664947c6d621fe44d4179f2c53"
+      },
+      {
+        "identity": {
+          "schema_version": 1,
+          "kind": "skill",
+          "capability_id": "skill:deep-research",
+          "resource_content_digest": "sha256:c4cbb6ddc55c4117ab9725dee248efc4150ff133b93b36d9fc5d19a2391247bc",
+          "dependency_digests": []
+        },
+        "version": "sha256:e716c6909643bca5a2e02c817f29836dc278325e32194329d9f0e6204c323135"
+      }
+    ]
+  }
+}

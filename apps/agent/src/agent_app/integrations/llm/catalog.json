@@ -19,6 +19,13 @@
       "id": "autodl",
       "base_url": "https://www.autodl.art/api/v1",
       "api_key_env": "AUTODL_API_KEY"
+    },
+    {
+      "id": "openlux",
+      "protocol": "openai_chat_completions",
+      "base_url": "https://api.openlux.ai/v1",
+      "api_key_env": "OPENLUX_API_KEY",
+      "enabled": true
     }
   ],
   "models": [
@@ -33,7 +40,8 @@
         "thinking": "enable_thinking",
         "stream_options": true,
         "max_output_tokens": 32768
-      }
+      },
+      "enabled": true
     },
     {
       "id": "dashscope/qwen-max",
@@ -46,7 +54,8 @@
         "thinking": "none",
         "stream_options": true,
         "max_output_tokens": 32768
-      }
+      },
+      "enabled": false
     },
     {
       "id": "dashscope/qwen-turbo",
@@ -59,7 +68,8 @@
         "thinking": "none",
         "stream_options": true,
         "max_output_tokens": 32768
-      }
+      },
+      "enabled": false
     },
     {
       "id": "dashscope/deepseek-v3",
@@ -74,7 +84,8 @@
         "max_output_tokens": 32768,
         "tool_calling": true,
         "stream_options": true
-      }
+      },
+      "enabled": false
     },
     {
       "id": "dashscope/deepseek-r1",
@@ -89,7 +100,8 @@
         "max_output_tokens": 32768,
         "tool_calling": false,
         "stream_options": true
-      }
+      },
+      "enabled": false
     },
     {
       "id": "deepseek/deepseek-chat",
@@ -101,7 +113,8 @@
         "tool_calling": true,
         "stream_options": true,
         "max_output_tokens": 8192
-      }
+      },
+      "enabled": true
     },
     {
       "id": "deepseek/deepseek-reasoner",
@@ -115,7 +128,8 @@
         "chat_max_tokens": 8192,
         "max_output_tokens": 32768,
         "stream_options": true
-      }
+      },
+      "enabled": false
     },
     {
       "id": "zhipu/glm-4-plus",
@@ -126,7 +140,8 @@
       "capabilities": {
         "tool_calling": true,
         "max_output_tokens": 4096
-      }
+      },
+      "enabled": true
     },
     {
       "id": "autodl/DeepSeek-V4.1-Flash-1017",
@@ -140,7 +155,8 @@
         "reasoning": true,
         "stream_options": true,
         "max_output_tokens": 32768
-      }
+      },
+      "enabled": true
     },
     {
       "id": "autodl/Qwen3.5-397B-A17B",
@@ -154,7 +170,8 @@
         "reasoning": true,
         "stream_options": true,
         "max_output_tokens": 32768
-      }
+      },
+      "enabled": true
     },
     {
       "id": "autodl/Kimi-K2.5",
@@ -167,7 +184,104 @@
         "tool_calling": true,
         "stream_options": true,
         "max_output_tokens": 32768
+      },
+      "enabled": true
+    },
+    {
+      "id": "openlux/deepseek-v4.1-flash",
+      "provider_id": "openlux",
+      "upstream_model": "deepseek-v4.1-flash",
+      "label": "DeepSeek V4.1 Flash",
+      "brand": "deepseek",
+      "enabled": true,
+      "capabilities": {
+        "tool_calling": true,
+        "reasoning": true,
+        "stream_options": true,
+        "temperature": true,
+        "chat_max_tokens": 4096,
+        "agent_max_tokens": 4096,
+        "max_output_tokens": 4096
       }
+    },
+    {
+      "id": "openlux/qwen3.8-flash",
+      "provider_id": "openlux",
+      "upstream_model": "qwen3.8-flash",
+      "label": "Qwen3.8 Flash",
+      "brand": "platform",
+      "enabled": true,
+      "capabilities": {
+        "tool_calling": true,
+        "reasoning": true,
+        "stream_options": true,
+        "temperature": true,
+        "chat_max_tokens": 4096,
+        "agent_max_tokens": 4096,
+        "max_output_tokens": 4096
+      }
+    },
+    {
+      "id": "openlux/glm-5.3-flash",
+      "provider_id": "openlux",
+      "upstream_model": "glm-5.3-flash",
+      "label": "GLM-5.3 Flash",
+      "brand": "zhipu",
+      "enabled": true,
+      "capabilities": {
+        "tool_calling": true,
+        "reasoning": true,
+        "stream_options": true,
+        "temperature": true,
+        "chat_max_tokens": 4096,
+        "agent_max_tokens": 4096,
+        "max_output_tokens": 4096
+      }
+    },
+    {
+      "id": "openlux/kimi-k2.6",
+      "provider_id": "openlux",
+      "upstream_model": "kimi-k2.6",
+      "label": "Kimi K2.6",
+      "brand": "moonshot",
+      "enabled": true,
+      "capabilities": {
+        "tool_calling": true,
+        "reasoning": false,
+        "stream_options": true,
+        "temperature": true,
+        "chat_max_tokens": 4096,
+        "agent_max_tokens": 4096,
+        "max_output_tokens": 4096
+      }
+    },
+    {
+      "id": "openlux/gemini-3.8-flash",
+      "provider_id": "openlux",
+      "upstream_model": "gemini-3.8-flash",
+      "label": "Gemini 3.8 Flash",
+      "brand": "google",
+      "enabled": true,
+      "capabilities": {
+        "tool_calling": false,
+        "reasoning": false,
+        "stream_options": true,
+        "temperature": true,
+        "chat_max_tokens": 4096,
+        "agent_max_tokens": 4096,
+        "max_output_tokens": 4096
+      },
+      "description": "输出 Token 限制待确认，暂不开放 Agent"
     }
-  ]
+  ],
+  "aliases": {
+    "qwen-plus": "dashscope/qwen-plus",
+    "qwen-max": "dashscope/qwen-max",
+    "qwen-turbo": "dashscope/qwen-turbo",
+    "deepseek-v3": "dashscope/deepseek-v3",
+    "deepseek-r1": "dashscope/deepseek-r1",
+    "deepseek-chat": "deepseek/deepseek-chat",
+    "deepseek-reasoner": "deepseek/deepseek-reasoner",
+    "glm-4-plus": "zhipu/glm-4-plus"
+  }
 }

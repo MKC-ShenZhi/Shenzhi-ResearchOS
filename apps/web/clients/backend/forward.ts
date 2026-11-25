@@ -37,6 +37,20 @@ export async function forwardToBusinessBackend(
   backendOrigin: string,
   path: string[],
 ) {
+  // The public BFF must never become a route to the dedicated Admin entrypoint.
+  // Next decodes route params; decode once more for the downstream HTTP parser
+  // and reject embedded separators as well as ordinary Admin path segments.
+  try {
+    if (path.some((part) => decodeURIComponent(part).split(/[\\/]/).includes("admin-console"))) {
+      return NextResponse.json({ code: 10001, message: "Not found" }, {
+        status: 404, headers: { "Cache-Control": "no-store" },
+      });
+    }
+  } catch {
+    return NextResponse.json({ code: 10001, message: "Not found" }, {
+      status: 404, headers: { "Cache-Control": "no-store" },
+    });
+  }
   const route = `/api/v1/${path.join("/")}`;
   const dest = `${backendOrigin.replace(/\/$/, "")}${route}${req.nextUrl.search}`;
   const requestId = resolveRequestId(req.headers.get(REQUEST_ID_HEADER));

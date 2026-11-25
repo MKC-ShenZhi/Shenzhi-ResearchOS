@@ -11,7 +11,7 @@ from agent_app.application.policies import run_deadline_s, tool_call_budget
 class FastSearchRuntimeTests(unittest.TestCase):
     def setUp(self):
         env = patch.dict('os.environ', {
-            'DEEPSEEK_API_KEY': 'test', 'DEEPSEEK_MODEL': 'deepseek-chat',
+            'DEEPSEEK_API_KEY': 'test',
             'DASHSCOPE_API_KEY': '', 'SKILLS_VENDOR': '',
         })
         env.start()

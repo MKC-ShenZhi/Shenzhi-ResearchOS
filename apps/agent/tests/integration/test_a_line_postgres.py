@@ -28,19 +28,23 @@ from app.services.agent_entitlements.service import EntitlementError
                      'two isolated local A-line PostgreSQL databases not selected')
 class PostgresALineTests(suite.ALinePersistenceTests):
     async def seed_users(self):
-        from app.services.agent_entitlements.free_policy import build, REVISION
         from app.models.agent_entitlements import EntitlementPolicyRow
-        from agent_contracts.canonical import digest
-        payload = build({'capabilities': [{'identity': self.identity.model_dump(mode='json'),
-                                          'version': digest(self.identity.model_dump(mode='json'))}]})
+        # Historical task_fixed Free data stays readable without a retired CLI.
+        revision = 'historical-free-test'
+        payload = self.policy.model_dump(mode='json')
+        payload.update(policy_revision=revision, plan_id='free')
+        payload['permission_snapshot'].update(policy_revision=revision, permission_snapshot_id=revision + ':snapshot')
+        payload['rules'][0].update(rule_id='daily-tokens', limit_units=200000,
+            reservation_units=100000, call_upper_bound=16000, window_type='natural',
+            timezone='Asia/Shanghai', duration_seconds=None, anchor=None)
         async with self.backend() as db, db.begin():
             await db.execute(text('''CREATE TABLE "user" (id text PRIMARY KEY, name text, email text,
                 "emailVerified" boolean, image text, "createdAt" timestamptz, "updatedAt" timestamptz)'''))
             await db.execute(text('''INSERT INTO "user" (id,name,email,"createdAt") VALUES
                 ('new','新用户','new@example.test',now()), ('test','Special','special@example.test',now()),
                 ('missing','待初始化','missing@example.test',now())'''))
-            db.add(EntitlementPolicyRow(policy_revision=REVISION, approved=True, test_only=False, payload=payload['policy']))
-        return REVISION
+            db.add(EntitlementPolicyRow(policy_revision=revision, approved=True, test_only=False, payload=payload))
+        return revision
 
     async def test_retired_free_backfill_preserves_pending_and_special_assignment(self):
         from unittest.mock import patch
