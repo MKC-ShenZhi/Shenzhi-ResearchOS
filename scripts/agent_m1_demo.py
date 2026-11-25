@@ -127,7 +127,7 @@ def stop(processes):
 
 def ready(processes):
     deadline = time.monotonic() + 90
-    pending = {'Agent API': 'http://127.0.0.1:18101/internal/v1/health',
+    pending = {'Agent API': 'http://127.0.0.1:18101/internal/v2/health',
                'Backend': 'http://127.0.0.1:18000/health',
                'Web': 'http://127.0.0.1:13000/agents',
                '匿名身份 BFF': 'http://127.0.0.1:13000/api/v1/identity/bootstrap',

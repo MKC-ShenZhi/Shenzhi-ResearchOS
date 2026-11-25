@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import logging
 
-from app.services.agent_gateway.client import agent_gateway
+from app.services.agent_gateway.v2 import AgentGatewayV2
 from app.services.agent_sessions.repository import agent_session_repository
 from app.services.agent_uploads import agent_upload_store
 
 logger = logging.getLogger(__name__)
+agent_gateway = AgentGatewayV2()
 
 
 async def claim_anonymous_sessions(source_owner: str, target_owner: str) -> dict:

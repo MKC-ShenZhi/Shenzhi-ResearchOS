@@ -28,7 +28,15 @@ from agent_app.infrastructure.database import get_session
 from agent_app.infrastructure.models import RunRow, TaskRow
 from agent_app.infrastructure.metering_models import CallRow, ExecutionRow, TaskMeteringRow, GrantHistoryRow, GrantRevocationRow
 from agent_app.integrations.backend.entitlements import EntitlementClient
-from .routes import _task_json
+from .routes import (
+    _task_json, agent_config as shared_agent_config,
+    new_workspace as shared_new_workspace,
+    prepare_workspace_claim as shared_prepare_workspace_claim,
+    commit_workspace_claim as shared_commit_workspace_claim,
+    put_workspace_file as shared_put_workspace_file,
+    get_session_file as shared_get_session_file,
+)
+from agent_contracts import WorkspaceClaimRequestWire, WorkspaceCreateRequestWire, WorkspaceFileWriteRequestWire
 
 
 class V2Route(APIRoute):
@@ -58,7 +66,38 @@ def role(env):
 gateway = role('AGENT_GATEWAY_TOKEN')
 worker = role('AGENT_WORKER_TOKEN')
 fact_reader = role('AGENT_FACT_READER_TOKEN')
+service = role('AGENT_SERVICE_TOKEN')
 router = APIRouter(prefix='/internal/v2', route_class=V2Route)
+
+
+@router.get('/config', dependencies=[Depends(service)])
+async def agent_config():
+    return await shared_agent_config()
+
+
+@router.post('/workspaces', dependencies=[Depends(service)])
+async def new_workspace(body: WorkspaceCreateRequestWire):
+    return await shared_new_workspace(body)
+
+
+@router.post('/workspaces/claim/prepare', dependencies=[Depends(service)])
+async def prepare_workspace_claim(body: WorkspaceClaimRequestWire):
+    return await shared_prepare_workspace_claim(body)
+
+
+@router.post('/workspaces/claim/commit', dependencies=[Depends(service)])
+async def commit_workspace_claim(body: WorkspaceClaimRequestWire):
+    return await shared_commit_workspace_claim(body)
+
+
+@router.post('/workspaces/{workspace_id}/files', dependencies=[Depends(service)])
+async def put_workspace_file(workspace_id: str, body: WorkspaceFileWriteRequestWire):
+    return await shared_put_workspace_file(workspace_id, body)
+
+
+@router.get('/sessions/{session_id}/files', dependencies=[Depends(service)])
+async def get_session_file(session_id: str, owner_id: str, path: str):
+    return await shared_get_session_file(session_id, owner_id, path)
 
 
 def metering_control():

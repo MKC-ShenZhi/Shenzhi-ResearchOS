@@ -1,4 +1,5 @@
 """V2 Gateway reuses the HTTP boundary and persists before remote submission."""
+import base64
 import os
 
 from sqlalchemy import select
@@ -14,7 +15,12 @@ from app.models.agent_entitlements import (
 from app.services.agent_entitlements.config import entitlement_service
 from app.services.agent_entitlements.policy import EntitlementPolicy
 from app.services.agent_entitlements.service import require, uid
-from .client import AgentGateway
+from .client import (
+    AgentConfigWire, AgentGateway, SessionFileReadRequestWire, SessionFileReadResponseWire,
+    WorkspaceClaimCommitResponseWire, WorkspaceClaimPrepareResponseWire,
+    WorkspaceClaimRequestWire, WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
+    WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire,
+)
 
 
 class AgentGatewayV2(AgentGateway):
@@ -24,15 +30,52 @@ class AgentGatewayV2(AgentGateway):
         kwargs.setdefault('token', os.getenv('AGENT_GATEWAY_TOKEN', '').strip())
         super().__init__(**kwargs)
 
-    async def request(self, method, path, *, params=None, payload=None):
-        # Shared V1 capabilities still require the distinct service role. The
-        # V2 gateway credential must never be forwarded to V1 internal routes.
-        if path.startswith('/internal/v1/'):
-            service_gateway = AgentGateway(
-                base_url=self.base_url, transport=self.transport,
-            )
-            return await service_gateway.request(method, path, params=params, payload=payload)
-        return await super().request(method, path, params=params, payload=payload)
+    def service_gateway(self):
+        """V2 shared capabilities use the isolated service role credential."""
+        return AgentGateway(base_url=self.base_url, token=os.getenv('AGENT_SERVICE_TOKEN', '').strip(),
+                            transport=self.transport)
+
+    async def config(self):
+        result = await self.service_gateway().request('GET', '/internal/v2/config')
+        return AgentConfigWire.model_validate(result).model_dump(mode='json')
+
+    async def create_workspace(self, owner):
+        body = WorkspaceCreateRequestWire(owner_id=owner)
+        result = await self.service_gateway().request('POST', '/internal/v2/workspaces',
+                                                       payload=body.model_dump(mode='json'))
+        return WorkspaceCreateResponseWire.model_validate(result).model_dump(mode='json')
+
+    async def prepare_workspace_claim(self, source_owner, target_owner, session_ids):
+        body = WorkspaceClaimRequestWire(source_owner=source_owner, target_owner=target_owner,
+                                         session_ids=session_ids)
+        result = await self.service_gateway().request('POST', '/internal/v2/workspaces/claim/prepare',
+                                                       payload=body.model_dump(mode='json'))
+        return WorkspaceClaimPrepareResponseWire.model_validate(result).model_dump(mode='json')
+
+    async def commit_workspace_claim(self, source_owner, target_owner, session_ids):
+        body = WorkspaceClaimRequestWire(source_owner=source_owner, target_owner=target_owner,
+                                         session_ids=session_ids)
+        result = await self.service_gateway().request('POST', '/internal/v2/workspaces/claim/commit',
+                                                       payload=body.model_dump(mode='json'))
+        return WorkspaceClaimCommitResponseWire.model_validate(result).model_dump(mode='json')
+
+    async def write_workspace_file(self, workspace_id, owner, path, content):
+        body = WorkspaceFileWriteRequestWire(owner_id=owner, workspace_id=workspace_id, path=path,
+            content_base64=base64.b64encode(content).decode('ascii'))
+        result = await self.service_gateway().request('POST', f'/internal/v2/workspaces/{workspace_id}/files',
+                                                       payload=body.model_dump(mode='json'))
+        return WorkspaceFileWriteResponseWire.model_validate(result).model_dump(mode='json')
+
+    async def read_session_file(self, owner, session_id, path):
+        query = SessionFileReadRequestWire(owner_id=owner, path=path)
+        result = await self.service_gateway().request('GET', f'/internal/v2/sessions/{session_id}/files',
+                                                       params=query.model_dump(mode='json'))
+        response = SessionFileReadResponseWire.model_validate(result)
+        try:
+            content = base64.b64decode(response.content_base64, validate=True)
+        except (ValueError, TypeError) as exc:
+            raise BusinessError(20004, 'Agent 文件响应无效', 502) from exc
+        return content, response.media_type
 
     async def submit(self, payload, *, client_request_digest=None):
         request = TaskSubmissionWire.model_validate(payload)

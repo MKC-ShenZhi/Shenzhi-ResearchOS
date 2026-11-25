@@ -17,6 +17,6 @@ async def business_error_handler(_request: Request, exc: BusinessError):
                         content={'error': {'code': exc.code, 'message': exc.message}})
 
 
-@app.get('/internal/v1/health')
+@app.get('/internal/v2/health')
 async def health() -> dict[str, str]:
     return {'status': 'ok', 'service': 'agent'}

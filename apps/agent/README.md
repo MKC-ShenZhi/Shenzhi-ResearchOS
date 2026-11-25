@@ -31,4 +31,4 @@ $env:AGENT_WORKSPACE_ROOT = 'D:\\shenzhi-agent-workspace'
 uv run python -m agent_app.worker_main
 ```
 
-Agent 内部 API 使用 Bearer 服务凭据；Task/Run/Event/Control 数据不会写入 Backend 数据库。Knowledge Tools 通过受服务凭据保护的 Backend Platform Adapter 调用；附件正文由 Backend 校验后随 Task 提交，`input_ref` 尚未启用。
+Agent V2 内部 API 按调用角色使用隔离的 Bearer 凭据：Backend Gateway、Service 能力、Worker、Fact Reader 各用其专属凭据；Task/Run/Event/Control 数据不会写入 Backend 数据库。Knowledge Tools 通过受服务凭据保护的 Backend Platform Adapter 调用；附件正文由 Backend 校验后随 Task 提交，`input_ref` 尚未启用。

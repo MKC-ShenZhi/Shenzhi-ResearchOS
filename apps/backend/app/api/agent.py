@@ -150,7 +150,7 @@ async def agent_knowledge_graph(paper_id: str, depth: int = Query(default=1, ge=
 @router.get('/config')
 async def config(_credential: None = Depends(require_bff)):
     """运行配置：可选模型、技能清单、附件限制。"""
-    config = await agent_gateway.config()
+    config = await submission_gateway().config()
     return ok({
         'models': config.get('models', []),
         'default_model': config.get('default_model'),
@@ -387,9 +387,7 @@ async def session_file(session_id: str, path: str, download: bool = False,
     # session has been deleted.  The existence/owner check is deliberately at
     # the HTTP boundary, before resolving the physical path.
     await agent_session_repository.get(session_id, owner)
-    # File access remains a shared V1 internal capability and uses the isolated
-    # Agent service credential; AgentGatewayV2's token is gateway-role only.
-    content, media_type = await agent_gateway.read_session_file(owner, session_id, path)
+    content, media_type = await submission_gateway().read_session_file(owner, session_id, path)
     filename = PurePosixPath(path).name or 'file'
     disposition = 'attachment' if download else 'inline'
     return Response(
@@ -415,7 +413,7 @@ async def session_asset(session_id: str, path: str, owner: str = Depends(request
     图片继续 inline 展示；只放行图形所需的内联样式和 data 图片。
     """
     await agent_session_repository.get(session_id, owner)
-    content, media_type = await agent_gateway.read_session_file(owner, session_id, path)
+    content, media_type = await submission_gateway().read_session_file(owner, session_id, path)
     filename = PurePosixPath(path).name or 'asset'
     headers = {
         # Deletion must take effect for a previously copied URL as well; a
@@ -447,7 +445,7 @@ def export_session(body: ExportBody, _credential: None = Depends(require_bff)):
 
 @router.post('/workspace')
 async def create_workspace(owner: str = Depends(request_owner)):
-    return ok(await agent_gateway.create_workspace(owner))
+    return ok(await submission_gateway().create_workspace(owner))
 
 
 @router.post('/workspace/{workspace_id}/files')
@@ -460,4 +458,4 @@ async def upload_workspace_file(workspace_id: str, request: Request,
     if not isinstance(upload, UploadFile) or not relative_path:
         raise BusinessError(20001, '需要 file 与 path 字段')
     data = await upload.read()
-    return ok(await agent_gateway.write_workspace_file(workspace_id, owner, relative_path, data))
+    return ok(await submission_gateway().write_workspace_file(workspace_id, owner, relative_path, data))

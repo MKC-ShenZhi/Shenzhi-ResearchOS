@@ -41,7 +41,9 @@ async def start_session_run(
     idempotency_fingerprint: str | None = None, gateway=None,
 ) -> LiveRun:
     """Validate ownership and concurrency before starting an independent run task."""
-    gateway = gateway or agent_gateway
+    if gateway is None:
+        from app.services.agent_gateway.v2 import AgentGatewayV2
+        gateway = AgentGatewayV2()
     if idempotency_key is not None:
         existing = await agent_session_repository.find_idempotent_turn(
             session_id, owner, idempotency_key, idempotency_fingerprint or '',

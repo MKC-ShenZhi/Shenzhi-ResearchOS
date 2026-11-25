@@ -1,19 +1,14 @@
 """Authenticated Backend-to-Agent HTTP boundary."""
 from __future__ import annotations
 
-import base64
 import os
 from typing import Any
 
 import httpx
 from agent_contracts import (
-    AgentConfigWire, OwnerQueryWire, PlatformEventWire, RunEventsQueryWire,
+    OwnerQueryWire, PlatformEventWire, RunEventsQueryWire,
     RunRecordWire, RunSteerRequestWire, RunSteerResponseWire,
-    SessionFileReadRequestWire, SessionFileReadResponseWire, TaskRecordWire,
-    TaskRunsResponseWire, TaskSubmissionWire, WorkspaceClaimCommitResponseWire,
-    WorkspaceClaimPrepareResponseWire, WorkspaceClaimRequestWire,
-    WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
-    WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire,
+    TaskRecordWire, TaskRunsResponseWire,
 )
 
 from app.core.errors import BusinessError
@@ -56,18 +51,6 @@ class AgentGateway:
             raise BusinessError(20004, 'Agent 服务返回格式无效', 502)
         return data
 
-    async def config(self) -> dict[str, Any]:
-        result = await self.request('GET', '/internal/v1/config')
-        return AgentConfigWire.model_validate(result).model_dump(mode='json')
-
-    async def submit(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if os.getenv('AGENT_V2_ADMISSION') == 'authorized':
-            raise BusinessError(20004, '正式权益准入已启用，请使用 v2 提交', 409)
-        body = TaskSubmissionWire.model_validate(payload)
-        result = await self.request('POST', '/internal/v1/tasks',
-                                    payload=body.model_dump(mode='json'))
-        return TaskRecordWire.model_validate(result).model_dump(mode='json')
-
     async def task(self, task_id: str, owner: str) -> dict[str, Any]:
         query = OwnerQueryWire(owner_id=owner)
         result = await self.request('GET', f'/internal/v1/tasks/{task_id}',
@@ -106,63 +89,6 @@ class AgentGateway:
             payload=body.model_dump(mode='json'),
         )
         return RunSteerResponseWire.model_validate(result).model_dump(mode='json')
-
-    async def create_workspace(self, owner: str) -> dict[str, Any]:
-        body = WorkspaceCreateRequestWire(owner_id=owner)
-        result = await self.request(
-            'POST', '/internal/v1/workspaces', payload=body.model_dump(mode='json'),
-        )
-        return WorkspaceCreateResponseWire.model_validate(result).model_dump(mode='json')
-
-    async def prepare_workspace_claim(self, source_owner: str, target_owner: str,
-                                     session_ids: list[str]) -> dict[str, Any]:
-        body = WorkspaceClaimRequestWire(
-            source_owner=source_owner, target_owner=target_owner, session_ids=session_ids,
-        )
-        result = await self.request(
-            'POST', '/internal/v1/workspaces/claim/prepare',
-            payload=body.model_dump(mode='json'),
-        )
-        return WorkspaceClaimPrepareResponseWire.model_validate(result).model_dump(mode='json')
-
-    async def commit_workspace_claim(self, source_owner: str, target_owner: str,
-                                    session_ids: list[str]) -> dict[str, Any]:
-        body = WorkspaceClaimRequestWire(
-            source_owner=source_owner, target_owner=target_owner, session_ids=session_ids,
-        )
-        result = await self.request(
-            'POST', '/internal/v1/workspaces/claim/commit',
-            payload=body.model_dump(mode='json'),
-        )
-        return WorkspaceClaimCommitResponseWire.model_validate(result).model_dump(mode='json')
-
-    async def write_workspace_file(self, workspace_id: str, owner: str,
-                                   path: str, content: bytes) -> dict[str, Any]:
-        body = WorkspaceFileWriteRequestWire(
-            owner_id=owner, workspace_id=workspace_id, path=path,
-            content_base64=base64.b64encode(content).decode('ascii'),
-        )
-        result = await self.request(
-            'POST', f'/internal/v1/workspaces/{workspace_id}/files',
-            payload=body.model_dump(mode='json'),
-        )
-        return WorkspaceFileWriteResponseWire.model_validate(result).model_dump(mode='json')
-
-    async def read_session_file(self, owner: str, session_id: str,
-                                path: str) -> tuple[bytes, str]:
-        query = SessionFileReadRequestWire(owner_id=owner, path=path)
-        result = await self.request(
-            'GET', f'/internal/v1/sessions/{session_id}/files',
-            params=query.model_dump(mode='json'),
-        )
-        try:
-            response = SessionFileReadResponseWire.model_validate(result)
-            content = base64.b64decode(response.content_base64, validate=True)
-            media_type = response.media_type
-        except (KeyError, ValueError, TypeError) as exc:
-            raise BusinessError(20004, 'Agent 文件响应无效', 502) from exc
-        return content, media_type
-
 
 async def read_run_update(gateway: AgentGateway, run_id: str, owner: str,
                           after_seq: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
