@@ -151,9 +151,9 @@ async def get_run(session: AsyncSession, run_id: str, owner_id: str, *, v2=False
     return found
 
 
-async def list_task_runs(session: AsyncSession, task_id: str, owner_id: str) -> list[str]:
+async def list_task_runs(session: AsyncSession, task_id: str, owner_id: str, *, v2=False) -> list[str]:
     """Enumerate every retry without relying on the latest current_run_id."""
-    await get_task(session, task_id, owner_id)
+    await get_task(session, task_id, owner_id, v2=v2)
     return list((await session.scalars(select(RunRow.run_id).join(
         TaskRow, TaskRow.task_id == RunRow.task_id,
     ).where(RunRow.task_id == task_id, TaskRow.owner_id == owner_id)

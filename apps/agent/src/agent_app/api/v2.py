@@ -235,10 +235,13 @@ async def close_facts(task_id: str, db=Depends(get_session), control=Depends(met
 
 @router.post('/worker/claim', dependencies=[Depends(worker)])
 async def claim(body: dict, db=Depends(get_session), control=Depends(metering_control)):
-    check(set(body) == {'schema_version', 'worker_id'} and body['schema_version'] == 1 and bool(body['worker_id']), 'PROTOCOL_INVALID')
+    check(set(body) == {'schema_version', 'worker_id', 'demo_mode'}
+          and body['schema_version'] == 1 and bool(body['worker_id'])
+          and type(body['demo_mode']) is bool, 'PROTOCOL_INVALID')
+    check(body['demo_mode'] == (os.getenv('AGENT_DEMO_MODE') == '1'), 'WORKER_MODE_CONFLICT')
     # Claim only locally bound v2 tasks. Authorized current-state online check
     # precedes execution; every real call still repeats Backend start validation.
-    claimed = await repository.claim_run(db, body['worker_id'], v2=True)
+    claimed = await repository.claim_run(db, body['worker_id'], demo_mode=body['demo_mode'], v2=True)
     if claimed is None:
         return {'schema_version': 1, 'run': None}
     request, lease_token, event_seq = claimed
@@ -370,7 +373,7 @@ async def steer(run_id: str, body: RunSteerV2, db=Depends(get_session)):
 
 @router.post('/runs/{run_id}/heartbeat', dependencies=[Depends(worker)])
 async def heartbeat(run_id: str, body: WorkerIdentity, db=Depends(get_session), control=Depends(metering_control)):
-    await control.lock_execution(db, body, run_id=run_id)
+    await control.lock_execution(db, body, run_id=run_id, allow_cancel_requested=True)
     active, cancelled = await repository.heartbeat(db, run_id, body.worker_id, body.lease_token)
     return dict(schema_version=1, active=active, cancel_requested=cancelled)
 
@@ -379,7 +382,9 @@ async def heartbeat(run_id: str, body: WorkerIdentity, db=Depends(get_session), 
 async def controls(run_id: str, worker_id: str, lease_token: int, execution_id: str,
                    after_seq: int = 0, db=Depends(get_session), control=Depends(metering_control)):
     body = WorkerIdentity(schema_version=1, worker_id=worker_id, lease_token=lease_token, execution_id=execution_id)
-    execution, _, _, _ = await control.lock_execution(db, body, run_id=run_id)
+    execution, _, _, _ = await control.lock_execution(
+        db, body, run_id=run_id, allow_cancel_requested=True,
+    )
     from agent_app.infrastructure.models import RunControlRow
     rows = (await db.scalars(select(RunControlRow).where(RunControlRow.run_id == run_id,
                     RunControlRow.seq > after_seq).order_by(RunControlRow.seq))).all()

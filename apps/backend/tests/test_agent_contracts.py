@@ -1,4 +1,4 @@
-"""Backend Gateway contract tests for the shared Agent HTTP wire models."""
+"""Backend Gateway contract tests for the unified V2 HTTP boundary."""
 from __future__ import annotations
 
 import unittest
@@ -6,13 +6,13 @@ import unittest
 import httpx
 from pydantic import ValidationError
 
-from app.services.agent_gateway.client import AgentGateway
+from app.services.agent_gateway.v2 import AgentGatewayV2
 
 
 class AgentGatewayContractTests(unittest.IsolatedAsyncioTestCase):
     def gateway(self, handler):
-        return AgentGateway(
-            base_url='http://agent.test', token='service-secret',
+        return AgentGatewayV2(
+            base_url='http://agent.test', token='gateway-secret',
             transport=httpx.MockTransport(handler),
         )
 
@@ -27,8 +27,7 @@ class AgentGatewayContractTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200, json={
                 'run_id': 'r1', 'task_id': 't1', 'attempt': 1, 'status': 'completed',
                 'created_at': '2026-11-11T00:00:00+00:00', 'started_at': None,
-                'completed_at': '2026-11-11T00:00:01+00:00',
-                'task_status': 'completed',
+                'completed_at': '2026-11-11T00:00:01+00:00', 'task_status': 'completed',
                 'report': {
                     'run_id': 'r1', 'task_id': 't1', 'status': 'completed',
                     'result': {'final_text': 'answer'},
@@ -43,12 +42,12 @@ class AgentGatewayContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(run['report']['result']['final_text'], 'answer')
         self.assertEqual(events[0]['seq'], 2)
 
-    async def test_task_runs_preserves_order_and_forwards_owner_and_service_auth(self):
+    async def test_task_runs_preserves_order_and_forwards_owner_and_gateway_auth(self):
         def handler(request):
             self.assertEqual(request.method, 'GET')
-            self.assertEqual(request.url.path, '/internal/v1/tasks/t1/runs')
+            self.assertEqual(request.url.path, '/internal/v2/tasks/t1/runs')
             self.assertEqual(request.url.params['owner_id'], 'anon:1')
-            self.assertEqual(request.headers['authorization'], 'Bearer service-secret')
+            self.assertEqual(request.headers['authorization'], 'Bearer gateway-secret')
             return httpx.Response(200, json={'run_ids': ['r3', 'r1', 'r2']})
 
         self.assertEqual(await self.gateway(handler).task_runs('t1', 'anon:1'), ['r3', 'r1', 'r2'])

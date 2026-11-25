@@ -32,7 +32,7 @@ class ConfigApiTests(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn(secret, response.text)
         self.assertNotIn('api_key', json.dumps(app.openapi()).lower())
 
-    async def test_config_no_key_never_claims_agent_availability(self):
+    async def test_config_availability_uses_catalog_not_removed_model_env(self):
         with patch.dict(os.environ, {'AGENT_SERVICE_TOKEN': 'test-token'}, clear=True):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1', headers={'Authorization': 'Bearer test-token'}) as client:
                 data = (await client.get('/internal/v2/config')).json()
@@ -40,8 +40,11 @@ class ConfigApiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(data['default_model'])
         with patch.dict(os.environ, {'ZHIPU_API_KEY': 'glm-private', 'ZHIPU_MODEL': 'unknown-version',
                                      'AGENT_SERVICE_TOKEN': 'test-token'}, clear=True):
+            registry = load_registry()
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1', headers={'Authorization': 'Bearer test-token'}) as client:
-                self.assertEqual((await client.get('/internal/v2/config')).json()['models'], [])
+                data = (await client.get('/internal/v2/config')).json()
+                self.assertEqual(data['models'], registry.public_models('agent'))
+                self.assertEqual(data['default_model'], registry.public_default('agent'))
 
     async def test_autodl_only_catalog_branding_capability_filter_and_no_key_in_response_or_logs(self):
         env = {'AUTODL_API_KEY': 'autodl-private', 'AGENT_SERVICE_TOKEN': 'test-token'}

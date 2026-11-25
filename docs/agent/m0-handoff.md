@@ -2,7 +2,7 @@
 
 更新：2026-11-18。**M0 = PARTIAL**。M0-R1-B 已由 ChatGPT 独立代码审查通过（用户确认）；真实 PostgreSQL、独立进程、上游服务和故障恢复尚待 M0-C 验收。以下启动、迁移和测试命令是后续执行指引，本次整理未运行。
 
-> 本文件是 M0 阶段的历史交接快照，分支、迁移版本和接口路径已过时，不作为当前运行手册。当前 Agent 产品入口为 `/api/v2/agent/*`，Agent 共享能力为 `/internal/v2/*`；`/internal/v1/*` 仅保留历史 Task/Run 与 Worker drain 接口。请以 [Agent 开发边界](development.md)、[执行与权益](entitlements.md) 和 [部署文档](../engineering/deployment.md) 为准。
+> 本文件是 M0 阶段的历史交接快照，分支、迁移版本和接口路径已过时，不作为当前运行手册。当前 Agent 产品入口为 `/api/v2/agent/*`，Agent 通信只提供 `/internal/v2/*`；历史 `/internal/v1/*` 路径已从当前代码移除。请以 [Agent 开发边界](development.md)、[执行与权益](entitlements.md) 和 [部署文档](../engineering/deployment.md) 为准。
 
 ## Git 与阶段
 

@@ -14,6 +14,7 @@ from app.core.idempotency import request_fingerprint
 from app.core.errors import BusinessError
 from app.main import app
 from app.services.agent_sessions import live as live_runs
+from app.services.agent_sessions import service
 from app.services.agent_sessions.repository import MemoryAgentSessionRepository
 from app.services.agent_sessions.service import TimelineCapture, get_session_detail
 from app.services.agent_uploads import agent_upload_store
@@ -166,29 +167,29 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.env.start()
         self.repo = MemoryAgentSessionRepository()
         self.gateway = FakeAgentGateway()
+        self._request_number = 0
         self.live_registry = patch.object(live_runs, '_live', {})
         self.live_registry.start()
         self.api_repo = patch('app.api.agent.agent_session_repository', self.repo)
         self.service_repo = patch('app.services.agent_sessions.service.agent_session_repository', self.repo)
-        self.api_gateway = patch('app.api.agent.agent_gateway', self.gateway)
-        self.service_gateway = patch('app.services.agent_sessions.service.agent_gateway', self.gateway)
         # New Session Turns submit through the unified V2 boundary; substitute the
         # same deterministic fake so the projection assertions stay unchanged.
         self.v2_gateway = patch('app.services.agent_gateway.v2.AgentGatewayV2',
                                 return_value=self.gateway)
-        for patcher in (self.api_repo, self.service_repo, self.api_gateway,
-                        self.service_gateway, self.v2_gateway):
+        for patcher in (self.api_repo, self.service_repo, self.v2_gateway):
             patcher.start()
 
     def tearDown(self):
-        for patcher in (self.v2_gateway, self.service_gateway, self.api_gateway,
-                        self.service_repo, self.api_repo):
+        for patcher in (self.v2_gateway, self.service_repo, self.api_repo):
             patcher.stop()
         self.live_registry.stop()
         self.env.stop()
 
     async def request(self, method: str, path: str, *, owner=None, json_body=None, headers=None):
         request_headers = {**(owner or self.OWNER_A), **(headers or {})}
+        if method.upper() == 'POST' and path.endswith('/run') and 'Idempotency-Key' not in request_headers:
+            self._request_number += 1
+            request_headers['Idempotency-Key'] = f'session-test-{self._request_number}'
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
                                      base_url='http://test') as client:
             return await client.request(method, path, headers=request_headers, json=json_body)
@@ -340,15 +341,15 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(BusinessError):
             await agent_upload_store.get(owner, upload['file_id'])
 
-    async def test_gateway_submit_failure_is_projected_as_failed_turn(self):
+    async def test_indeterminate_v2_submit_failure_stays_running_for_safe_recovery(self):
         session_id = await self.create('提交失败')
         self.gateway.submit_error = BusinessError(20004, 'Agent 服务不可用', 503)
         response = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
                                       json_body={'prompt': '提交失败'})
         self.assertEqual(response.status_code, 503)
         turn = self.repo.sessions[session_id].turns[0]
-        self.assertEqual(turn.status, 'failed')
-        self.assertIn('Agent 服务提交失败', turn.error)
+        self.assertEqual(turn.status, 'running')
+        self.assertNotIn('Agent 服务提交失败', turn.error or '')
 
     async def test_failed_event_replay_keeps_partial_product_timeline(self):
         session_id = await self.create('投影失败')
@@ -376,6 +377,46 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parse_sse(recovered.text)[-1][1]['final_text'], '部分答案')
         self.assertEqual(turn.status, 'done')
         self.assertEqual(len(self.gateway.submissions), 1)
+
+    async def test_running_v1_turn_is_retired_without_remote_call(self):
+        session_id = await self.create('旧协议运行')
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        await self.repo.start_turn(session_id, owner, '旧问题', {
+            '_agent_owner_id': owner, '_agent_protocol': 1,
+            'agent_task_id': 'old-task', 'agent_run_id': 'old-run',
+        }, [])
+        with patch('app.services.agent_gateway.v2.AgentGatewayV2', side_effect=AssertionError('must not call Agent')):
+            with self.assertRaises(BusinessError) as error:
+                await service.resume_session_run(session_id, owner)
+        self.assertEqual(error.exception.status, 410)
+
+    async def test_memory_session_detail_closes_running_v1_turn_with_task_link(self):
+        session_id = await self.create('旧协议内存态')
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        await self.repo.start_turn(session_id, owner, '旧问题', {
+            '_agent_owner_id': owner, '_agent_protocol': 1,
+            'agent_task_id': 'old-task', 'agent_run_id': 'old-run',
+        }, [])
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].status, 'stopped')
+        self.assertIn('已中断', detail.turns[-1].error)
+
+    async def test_terminal_v1_turn_replays_backend_projection_without_remote_call(self):
+        session_id = await self.create('旧协议历史')
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        turn, _ = await self.repo.start_turn(session_id, owner, '旧问题', {
+            '_agent_owner_id': owner, '_agent_protocol': 1,
+            'agent_task_id': 'old-task', 'agent_run_id': 'old-run',
+        }, [])
+        await self.repo.finish_turn(session_id, owner, turn.id, {
+            'status': 'done', 'assistant_content': '保留的旧结果',
+            'transcript': [{'kind': 'user', 'text': '旧问题'},
+                           {'kind': 'assistant', 'content': '保留的旧结果'}],
+        })
+        with patch('app.services.agent_gateway.v2.AgentGatewayV2', side_effect=AssertionError('must not call Agent')):
+            live = await service.resume_session_run(session_id, owner, turn_id=turn.id)
+        self.assertEqual(live.events[-1][0], 'result')
+        self.assertEqual(live.events[-1][1]['final_text'], '保留的旧结果')
 
     async def test_orphan_reconciliation_preserves_previous_transcript(self):
         owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"

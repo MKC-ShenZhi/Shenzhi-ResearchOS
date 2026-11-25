@@ -73,7 +73,7 @@ TaskCloseManifest 核对 Permit/call、Run/execution、所有 sequence/revision�
 
 API/Worker/Backend 的角色 Token 必须互不相同，并与旧 AGENT_SERVICE_TOKEN 隔离。Backend 私钥/Agent 公钥文件、issuer/audience、Agent 的模型路由和工具非敏感配置修订、持久 spool、Usage Worker 的容量/退避/批量参数均需显式配置；见各 `.env.example`。`BACKEND_ENTITLEMENTS_URL` 是服务 origin，不能复用带 `/api/v2/agent` 的 Knowledge `BACKEND_INTERNAL_URL`。
 
-Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 与 admission revision；A2 改 authorized 前停止旧 observation 新准入，已有 Task 模式不变、按原 ID 排空。正式 Agent 部署将 V1 新 Task 固定拒绝；V1 与 V2 Worker 仍以 `AGENT_WORKER_PROTOCOL=1/2` 分开排空，旧 Worker 不能领取、操作或序列化 V2 Task。V2 授权准入由 Backend `AGENT_V2_ADMISSION` 和签名 Grant 控制，不依赖 V1 admission。`AGENT_V1_ADMISSION=legacy` 只在隔离 Mock 演示环境启用，生产进程即使设置该值也不会恢复 V1 Task 准入。
+Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 与 admission revision；A2 改 authorized 前停止旧 observation 新准入，已有 Task 模式不变、按原 ID 排空。当前 Agent 执行 API 与 Worker 仅支持 V2；V1 router、V1 Worker 分支及 admission 配置已退役。V2 授权准入由 Backend `AGENT_V2_ADMISSION` 和签名 Grant 控制。历史 V1 Task/Run/Turn 保留供审计，不由新代码调用旧协议执行。
 
 本 Adapter 没有可信输入 tokenizer 上界验证器，任意 evidence_ref 字符串不被视为证明；没有批准的 model_risk_profile 时拒绝正式模型调用。批准风险策略不等于数学意义上保证真实消耗不超额。显式 max_model_tokens 的单 Run 限制仍沿用原 Worker 的执行前拒绝。
 

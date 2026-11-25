@@ -18,7 +18,8 @@ async def local_server(payload, status=200):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             requests.append((self.path, self.headers.get('Authorization')))
-            body = json.dumps(payload).encode()
+            response_payload = {'run_ids': ['run-1']} if urlsplit(self.path).path.endswith('/runs') else payload
+            body = json.dumps(response_payload).encode()
             self.send_response(status)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(body)))

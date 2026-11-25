@@ -37,6 +37,7 @@ HANG = object()  # 挂起占位：永不完成
 
 class FakeProvider:
     """可编排的脚本化 Provider；float 项表示 sleep，HANG 表示挂起，异常项原样抛出。"""
+    supports_call_metering = True
 
     def __init__(self, scripts):
         self.scripts = list(scripts)

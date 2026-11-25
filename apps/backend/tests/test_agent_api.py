@@ -39,6 +39,9 @@ class FakeAgentGateway:
     async def task(self, task_id, owner):
         return {'current_run_id': 'run-1'}
 
+    async def usage(self, task_id, owner):
+        return {'turns': 1, 'duration_ms': 5, 'truncated': False}
+
     async def config(self):
         return {'models': [], 'default_model': None, 'skills': []}
 
@@ -77,30 +80,32 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
             'CHAT_DATABASE_URL': ''})
         self.env.start()
         self.repo = MemoryAgentSessionRepository()
+        self._post_number = 0
         self.gateway = FakeAgentGateway()
         self.api_repo = patch('app.api.agent.agent_session_repository', self.repo)
-        self.gateway_patch = patch('app.api.agent.agent_gateway', self.gateway)
         # New product tasks always use the unified V2 boundary. Tests substitute
         # the same deterministic fake so existing SSE assertions stay valid.
         self.v2_patch = patch('app.services.agent_gateway.v2.AgentGatewayV2',
                               return_value=self.gateway)
         self.api_repo.start()
-        self.gateway_patch.start()
         self.v2_patch.start()
 
     def tearDown(self):
         self.v2_patch.stop()
-        self.gateway_patch.stop()
         self.api_repo.stop()
         self.env.stop()
 
     OWNER = {'x-shenzhi-anonymous-id': '00000000-0000-4000-8000-000000000001'}
 
-    async def post(self, payload, headers=None):
+    async def post(self, payload, headers=None, *, include_idempotency=True):
+        self._post_number += 1
+        request_headers = {**self.OWNER, **(headers or {})}
+        if include_idempotency and 'Idempotency-Key' not in request_headers:
+            request_headers['Idempotency-Key'] = f'api-test-{self._post_number}'
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
             return await client.post('/api/v2/agent/run', json=payload,
-                                     headers={**self.OWNER, **(headers or {})})
+                                     headers=request_headers)
 
     async def test_v1_product_routes_are_not_registered(self):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
@@ -160,7 +165,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_anonymous_new_task_requires_idempotency_key(self):
         v2 = FakeAgentGateway()
         with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
-            response = await self.post({'prompt': '缺少幂等键'})
+            response = await self.post({'prompt': '缺少幂等键'}, include_idempotency=False)
         self.assertEqual(response.status_code, 422)
         self.assertEqual(v2.submissions, [])
 

@@ -33,7 +33,7 @@ from app.services.agent_sessions.service import (
     get_session_detail, resume_session_run, start_session_run,
 )
 from app.services.agent_sessions import export as agent_export
-from app.services.agent_gateway.client import agent_gateway, read_run_update
+from app.services.agent_gateway.client import read_run_update
 from app.services.agent_attachments import resolve_agent_attachments
 from app.services.agent_uploads import agent_upload_store
 from app.services.uploads.parser import parse_document
@@ -44,11 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 def submission_gateway():
-    """Unified execution boundary for every new product task.
-
-    New submissions always use the V2 internal protocol; owner type no longer
-    selects a protocol. V1 remains reachable only for draining existing tasks.
-    """
+    """Create the only execution Gateway used by product Agent traffic."""
     from app.services.agent_gateway.v2 import AgentGatewayV2
     return AgentGatewayV2()
 
@@ -91,19 +87,9 @@ async def _recover_stateless_submission(gateway, owner: str, key: str,
 
 
 async def gateway_for_run(run_id, owner):
-    """Resolve an existing Run by its persisted protocol, not by owner type.
-
-    V2 is authoritative; a 404 falls back to the V1 read boundary while legacy
-    tasks drain. The fallback never retries a submission or changes its
-    authorization/metering context.
-    """
+    """Resolve an existing Run through the V2 execution Gateway."""
     gateway = submission_gateway()
-    try:
-        return gateway, await gateway.run(run_id, owner)
-    except BusinessError as exc:
-        if exc.status != 404:
-            raise
-    return agent_gateway, await agent_gateway.run(run_id, owner)
+    return gateway, await gateway.run(run_id, owner)
 
 
 # Workspace bytes are untrusted documents, including HTML and SVG. Apply this
@@ -165,7 +151,7 @@ async def run(body: AgentRunBody, owner: str = Depends(request_owner),
     gateway = submission_gateway()
     key = validate_idempotency_key(idempotency_key)
     # The V2 execution boundary requires a stable retry key for submission.
-    if gateway is not agent_gateway and key is None:
+    if key is None:
         raise BusinessError(20001, 'Idempotency-Key 必填', 422)
     try:
         validate_history(body.history)
@@ -197,7 +183,7 @@ async def run(body: AgentRunBody, owner: str = Depends(request_owner),
 
 
 async def _agent_task_stream(owner: str, task: dict, warnings: list[str], *, gateway=None):
-    gateway = gateway or agent_gateway
+    gateway = gateway or submission_gateway()
     task_id = task['task_id']
     run_id = task['current_run_id']
     after_seq = 0
@@ -337,7 +323,7 @@ async def run_agent_session(
     key = validate_idempotency_key(idempotency_key)
     gateway = submission_gateway()
     # The V2 execution boundary requires a stable retry key for submission.
-    if gateway is not agent_gateway and key is None:
+    if key is None:
         raise BusinessError(20001, 'Idempotency-Key 必填', 422)
     live = await start_session_run(
         owner=owner, session_id=session_id, prompt=body.prompt, model=body.model,

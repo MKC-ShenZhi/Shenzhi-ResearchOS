@@ -30,6 +30,9 @@ class RetryGateway:
         self.reads.append(('runs', owner))
         return self.ids[:] if self.ready.is_set() else self.ids[:1]
 
+    async def usage(self, task_id, owner):
+        return {}
+
     async def run(self, run_id, owner):
         self.reads.append(('run', run_id))
         if not self.ready.is_set():
@@ -59,11 +62,11 @@ class SessionRetrySseTests(unittest.IsolatedAsyncioTestCase):
         self.owner = 'anon:retries'
 
     async def start(self, gateway, *, recover=False):
-        self.enterContext(patch.object(service, 'agent_gateway', gateway))
+        self.enterContext(patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=gateway))
         session = await self.repo.create(self.owner, 'retry', {})
         if recover:
             await self.repo.start_turn(session.id, self.owner, 'retry', {
-                'agent_task_id': 't1', 'agent_run_id': gateway.ids[-1],
+                '_agent_protocol': 2, 'agent_task_id': 't1', 'agent_run_id': gateway.ids[-1],
             }, [])
             live = await service.resume_session_run(session.id, self.owner)
         else:

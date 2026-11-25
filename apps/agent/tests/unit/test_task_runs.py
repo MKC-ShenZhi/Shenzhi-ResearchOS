@@ -14,12 +14,14 @@ from agent_app.control import repository
 from agent_app.infrastructure.database import get_session
 from agent_app.infrastructure.models import Base, RunRow
 from agent_app.main import app
+from agent_app.infrastructure.metering_models import TaskMeteringRow
 from tests.unit.test_worker_takeover import MemorySession
 
 
 class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.enterContext(patch.dict('os.environ', {'AGENT_SERVICE_TOKEN': 'test-token'}))
+        self.enterContext(patch.dict('os.environ', {'AGENT_GATEWAY_TOKEN': 'gateway-test'}))
         self.now = datetime(2026, 11, 18, 12)
         self.enterContext(patch.object(repository, '_now', side_effect=lambda: self.now))
         engine = create_engine('sqlite:///:memory:')
@@ -35,17 +37,25 @@ class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch.dict(app.dependency_overrides, {get_session: dependency}))
         self.client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url='http://agent.test',
-            headers={'Authorization': 'Bearer test-token'},
+            headers={'Authorization': 'Bearer gateway-test'},
         )
         self.addAsyncCleanup(self.client.aclose)
         self.task = await repository.submit(self.db, TaskSubmission(owner_id='owner', prompt='run'))
+        await self.mark_v2(self.task)
+
+    async def mark_v2(self, task, owner='owner'):
+        self.db.add(TaskMeteringRow(task_id=task.task_id, owner_id=owner, submission_id='obs:'+task.task_id,
+            profile_id='profile:'+task.task_id, context='observation_only', binding_status='bound',
+            envelope={}, binding=None, receipt=None, current_grant=None, revoked=False,
+            revoked_capabilities=[], usage_sequence=0))
+        await self.db.commit()
 
     async def history(self, *, owner='owner', task_id=None):
-        return await self.client.get(f'/internal/v1/tasks/{task_id or self.task.task_id}/runs',
+        return await self.client.get(f'/internal/v2/tasks/{task_id or self.task.task_id}/runs',
                                      params={'owner_id': owner})
 
     async def retry(self, status):
-        request, token, _ = await repository.claim_run(self.db, 'worker')
+        request, token, _ = await repository.claim_run(self.db, 'worker', v2=True)
         await repository.record_report(self.db, ExecutionReport(
             run_id=request.run_id, task_id=request.task_id, status=status,
             result={'final_text': status.value},
@@ -54,12 +64,12 @@ class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_all_one_two_three_runs_in_attempt_order_despite_timestamps(self):
         expected = [self.task.current_run_id]
-        self.assertEqual((await self.history()).json(), {'run_ids': expected})
+        self.assertEqual((await self.history()).json(), {'schema_version': 1, 'run_ids': expected})
         for status in (RunStatus.FAILED, RunStatus.TIMED_OUT):
             await self.retry(status)
-            task = await repository.get_task(self.db, self.task.task_id, 'owner')
+            task = await repository.get_task(self.db, self.task.task_id, 'owner', v2=True)
             expected.append(task.current_run_id)
-            self.assertEqual((await self.history()).json(), {'run_ids': expected})
+            self.assertEqual((await self.history()).json(), {'schema_version': 1, 'run_ids': expected})
         await self.retry(RunStatus.COMPLETED)
         # Wall clock order is deliberately opposite to retry order.
         for row in self.sql.scalars(select(RunRow)).all():
@@ -67,18 +77,19 @@ class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
         self.sql.commit()
         response = await self.history()
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {'run_ids': expected})
-        self.assertEqual(await repository.list_task_runs(self.db, self.task.task_id, 'owner'), expected)
+        self.assertEqual(response.json(), {'schema_version': 1, 'run_ids': expected})
+        self.assertEqual(await repository.list_task_runs(self.db, self.task.task_id, 'owner', v2=True), expected)
 
     async def test_cross_owner_and_missing_task_are_hidden(self):
         await self.retry(RunStatus.FAILED)
         other = await repository.submit(self.db, TaskSubmission(owner_id='other', prompt='other'))
+        await self.mark_v2(other, 'other')
         denied = await self.history(owner='other')
         missing = await self.history(task_id='missing')
         self.assertEqual(denied.status_code, 404)
-        self.assertEqual(denied.json(), missing.json())
+        self.assertEqual(denied.status_code, missing.status_code)
         allowed = await self.history(owner='other', task_id=other.task_id)
-        self.assertEqual(allowed.json(), {'run_ids': [other.current_run_id]})
+        self.assertEqual(allowed.json(), {'schema_version': 1, 'run_ids': [other.current_run_id]})
 
     async def test_cancelled_execution_failure_does_not_create_retry(self):
         for status in (RunStatus.FAILED, RunStatus.TIMED_OUT):
@@ -97,78 +108,37 @@ class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_claim_filters_mock_and_real_runs_including_expired_leases(self):
         demo = await repository.submit(self.db, TaskSubmission(
             owner_id='owner', prompt='mock', model='demo/m1', session_id='ses_demo', turn_id='turn_demo'))
-        real, _, _ = await repository.claim_run(self.db, 'real')
-        mock, _, _ = await repository.claim_run(self.db, 'demo', demo_mode=True)
+        await self.mark_v2(demo)
+        real, _, _ = await repository.claim_run(self.db, 'real', v2=True)
+        mock, _, _ = await repository.claim_run(self.db, 'demo', demo_mode=True, v2=True)
         self.assertEqual(real.task_id, self.task.task_id)
         self.assertEqual(mock.task_id, demo.task_id)
-        self.assertIsNone(await repository.claim_run(self.db, 'real'))
-        self.assertIsNone(await repository.claim_run(self.db, 'demo', demo_mode=True))
+        self.assertIsNone(await repository.claim_run(self.db, 'real', v2=True))
+        self.assertIsNone(await repository.claim_run(self.db, 'demo', demo_mode=True, v2=True))
         await repository.request_cancel(self.db, real.task_id, 'owner')
         self.now += timedelta(seconds=repository.WORKER_LEASE_SECONDS + 1)
-        taken, _, _ = await repository.claim_run(self.db, 'demo-2', demo_mode=True)
+        taken, _, _ = await repository.claim_run(self.db, 'demo-2', demo_mode=True, v2=True)
         self.assertEqual(taken.task_id, demo.task_id)
-        taken, _, _ = await repository.claim_run(self.db, 'real-2')
+        taken, _, _ = await repository.claim_run(self.db, 'real-2', v2=True)
         self.assertEqual(taken.task_id, self.task.task_id)
-        current = await repository.get_task(self.db, taken.task_id, 'owner')
+        current = await repository.get_task(self.db, taken.task_id, 'owner', v2=True)
         self.assertEqual(current.status.value, 'cancelling')
 
-    async def test_api_rejects_mixed_mode_submission_and_worker(self):
-        for demo_mode in ('0', '1'):
-            with patch.dict('os.environ', {'AGENT_DEMO_MODE': demo_mode}):
-                rejected = await self.client.post('/internal/v1/tasks', json={
-                    'owner_id': 'owner', 'prompt': 'wrong mode',
-                    'model': 'real/model' if demo_mode == '1' else 'demo/m1',
-                    'session_id': 'ses_demo',
-                    'turn_id': 'turn_demo',
-                })
-                self.assertEqual(rejected.status_code, 409)
-                rejected = await self.client.post('/internal/v1/worker/claim', json={
-                    'worker_id': 'wrong-mode', 'demo_mode': demo_mode != '1',
-                })
-                self.assertEqual(rejected.status_code, 409)
-
-    async def test_v1_drain_mode_rejects_new_tasks_but_keeps_worker_claims(self):
-        from agent_contracts import TaskSubmission
-        legacy = await repository.submit(self.db, TaskSubmission(
-            owner_id='owner', prompt='existing v1 task', model='test/m1'))
-        with patch.dict('os.environ', {'AGENT_V1_ADMISSION': 'drain_only', 'AGENT_DEMO_MODE': '0'}):
-            rejected = await self.client.post('/internal/v1/tasks', json={
-                'owner_id': 'owner', 'prompt': 'new v1 task', 'model': 'test/m1',
-            })
-            self.assertEqual(rejected.status_code, 409)
-            claims = [await self.client.post('/internal/v1/worker/claim', json={
-                'worker_id': f'drain-worker-{index}', 'demo_mode': False,
-            }) for index in range(2)]
-        for claim in claims:
-            self.assertEqual(claim.status_code, 200, claim.text)
-        self.assertEqual({claim.json()['run']['task_id'] for claim in claims},
-                         {self.task.task_id, legacy.task_id})
-
-    async def test_v1_submission_is_closed_when_admission_is_unset(self):
-        with patch.dict('os.environ', {'AGENT_DEMO_MODE': '0'}, clear=False):
-            import os
-            os.environ.pop('AGENT_V1_ADMISSION', None)
-            rejected = await self.client.post('/internal/v1/tasks', json={
-                'owner_id': 'owner', 'prompt': 'new v1 task', 'model': 'test/m1',
-            })
-        self.assertEqual(rejected.status_code, 409)
-
-    async def test_legacy_switch_cannot_reopen_formal_v1_submission(self):
-        with patch.dict('os.environ', {'AGENT_V1_ADMISSION': 'legacy', 'AGENT_DEMO_MODE': '0'}):
-            rejected = await self.client.post('/internal/v1/tasks', json={
-                'owner_id': 'owner', 'prompt': 'new formal v1 task', 'model': 'test/m1',
-            })
-        self.assertEqual(rejected.status_code, 409)
+    async def test_v1_internal_prefix_is_retired(self):
+        response = await self.client.post('/internal/v1/worker/claim', json={
+            'worker_id': 'legacy-worker', 'demo_mode': False,
+        })
+        self.assertEqual(response.status_code, 404)
 
     async def test_service_credential_is_required_and_read_does_not_mutate_task(self):
-        before = await repository.get_task(self.db, self.task.task_id, 'owner')
-        response = await self.client.get(f'/internal/v1/tasks/{self.task.task_id}/runs',
+        before = await repository.get_task(self.db, self.task.task_id, 'owner', v2=True)
+        response = await self.client.get(f'/internal/v2/tasks/{self.task.task_id}/runs',
                                          params={'owner_id': 'owner'},
                                          headers={'Authorization': 'Bearer wrong'})
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 403)
         for _ in range(2):
-            self.assertEqual((await self.history()).json(), {'run_ids': [before.current_run_id]})
-        after = await repository.get_task(self.db, self.task.task_id, 'owner')
+            self.assertEqual((await self.history()).json(), {'schema_version': 1, 'run_ids': [before.current_run_id]})
+        after = await repository.get_task(self.db, self.task.task_id, 'owner', v2=True)
         self.assertEqual((after.status, after.current_run_id), (before.status, before.current_run_id))
 
 

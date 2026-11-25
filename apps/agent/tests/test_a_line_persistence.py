@@ -546,7 +546,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual((await db.get(WindowCounterRow, target_id)).held, 30)
                     await db.rollback()
 
-    async def test_sync_settlement_requires_backend_ack_and_keeps_original_outbox(self):
+    async def test_pending_settlement_keeps_outbox_without_blocking_new_calls(self):
         from agent_app.control.usage_delivery import settle_observation
         from agent_contracts.v2 import UsageBatch, UsageBatchAck
         await self.prepare()
@@ -558,8 +558,9 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         async with self.agent() as db:
             with self.assertRaises(TimeoutError):
                 await settle_observation(db, Unavailable(), completed)
-        with self.assertRaises(GateDenied):
-            await self.start_call('before-ack')
+        # Pending usage remains reserved at Backend; it does not globally
+        # block another call while the durable Outbox is below its cap.
+        await self.start_call('before-ack')
         async with self.agent() as db:
             self.assertEqual((await db.get(UsageOutboxRow, completed.measurement_id)).state, 'pending')
         suite = self
@@ -574,7 +575,6 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         async with self.backend() as db:
             counter = await db.scalar(select(WindowCounterRow))
             self.assertEqual((counter.used, counter.held), (10, 30))
-        await self.start_call('after-ack')
 
     async def test_partial_retains_unmeasured_reservation(self):
         await self.prepare()
@@ -743,7 +743,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as spool,patch.dict(os.environ,{
             'AGENT_GATEWAY_TOKEN':'gateway-test','AGENT_FACT_READER_TOKEN':'reader-test',
             'AGENT_WORKER_TOKEN':'worker-test','AGENT_CONTROL_TOKEN':'control-test','AGENT_SERVICE_TOKEN':'legacy-test',
-            'AGENT_V2_ADMISSION':'authorized','AGENT_V1_ADMISSION':'drain_only','AGENT_WORKER_PROTOCOL':'2','AGENT_MODEL_ROUTE_REVISION':'test-route',
+            'AGENT_V2_ADMISSION':'authorized','AGENT_MODEL_ROUTE_REVISION':'test-route',
             'AGENT_USAGE_SPOOL_ROOT':spool,'BACKEND_BFF_SECRET':'bff-test'}),patch.object(backend_api,'session_scope',backend_scope),\
             patch.object(gateway_module,'session_scope',backend_scope),patch.object(gateway_module,'entitlement_service',lambda:self.service),\
             patch.object(agent_api,'EntitlementClient',Bridge),\
@@ -767,9 +767,8 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                 row.payload=self.policy.model_dump(mode='json')
             async with httpx.AsyncClient(transport=backend_transport,base_url='http://backend.invalid',
                 headers={'x-shenzhi-bff-secret':'bff-test','x-shenzhi-user-id':'test','Idempotency-Key':'http-test'}) as browser:
-                # Formal V2 admission is controlled at Backend; legacy V1
-                # submissions remain closed independently of that gate.
-                with patch.dict(os.environ, {'AGENT_V1_ADMISSION':'authorized'}):
+                # Obsolete V1 admission settings cannot affect V2 execution.
+                with patch.dict(os.environ, {'AGENT_V1_ADMISSION':'legacy'}):
                     held=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
                 self.assertEqual(held.status_code,200,held.text)
                 response=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})

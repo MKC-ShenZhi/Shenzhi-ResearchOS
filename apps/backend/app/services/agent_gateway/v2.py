@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from agent_contracts import (
     AgentConfigWire, SessionFileReadRequestWire, SessionFileReadResponseWire,
+    TaskRunsResponseWire,
     WorkspaceClaimCommitResponseWire, WorkspaceClaimPrepareResponseWire,
     WorkspaceClaimRequestWire, WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
     WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire,
@@ -192,7 +193,8 @@ class AgentGatewayV2(AgentHttpClient):
         return await self.request('GET', f'/internal/v2/runs/{run_id}', params={'owner_id': owner})
 
     async def task_runs(self, task_id, owner):
-        return (await self.request('GET', f'/internal/v2/tasks/{task_id}/runs', params={'owner_id': owner}))['run_ids']
+        response = await self.request('GET', f'/internal/v2/tasks/{task_id}/runs', params={'owner_id': owner})
+        return TaskRunsResponseWire.model_validate(response).run_ids
 
     async def events(self, run_id, owner, after_seq):
         return (await self.request('GET', f'/internal/v2/runs/{run_id}/events',

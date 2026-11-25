@@ -18,6 +18,30 @@ function forwardedHeaders(requestHeaders: Headers): Headers {
   return headers;
 }
 
+function decodedPathSegments(path: string[]): string[] | null {
+  const segments: string[] = [];
+  for (const part of path) {
+    let decoded = part;
+    let stable = false;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      let next: string;
+      try {
+        next = decodeURIComponent(decoded);
+      } catch {
+        return null;
+      }
+      if (next === decoded) {
+        stable = true;
+        break;
+      }
+      decoded = next;
+    }
+    if (!stable) return null;
+    segments.push(...decoded.split(/[\\/]/));
+  }
+  return segments;
+}
+
 /** Node fetch cannot deliver a 401 response to a non-replayable request body.
  * Keep small JSON protocol bodies replayable; binary uploads still stream.
  */
@@ -40,15 +64,10 @@ export async function forwardToBusinessBackend(
 ) {
   // V2 BFF traffic is limited to Agent product routes. Keep Control APIs
   // unreachable even if another Next route calls this helper directly.
+  const segments = decodedPathSegments(path);
   if (apiVersion === "v2") {
-    let segments: string[];
-    try {
-      segments = path.map((part) => decodeURIComponent(part));
-    } catch {
-      segments = [];
-    }
-    if (segments[0] !== "agent" || segments.some((part) =>
-      part.split(/[\\/]/).some((segment) => segment === "internal" || segment === "admin-console"))) {
+    if (!segments || segments[0] !== "agent" ||
+        segments.some((segment) => segment === "internal" || segment === "admin-console")) {
       return NextResponse.json({ code: 10001, message: "Not found" }, {
         status: 404, headers: { "Cache-Control": "no-store" },
       });
@@ -57,13 +76,7 @@ export async function forwardToBusinessBackend(
   // The public BFF must never become a route to the dedicated Admin entrypoint.
   // Next decodes route params; decode once more for the downstream HTTP parser
   // and reject embedded separators as well as ordinary Admin path segments.
-  try {
-    if (path.some((part) => decodeURIComponent(part).split(/[\\/]/).includes("admin-console"))) {
-      return NextResponse.json({ code: 10001, message: "Not found" }, {
-        status: 404, headers: { "Cache-Control": "no-store" },
-      });
-    }
-  } catch {
+  if (!segments || segments.includes("admin-console")) {
     return NextResponse.json({ code: 10001, message: "Not found" }, {
       status: 404, headers: { "Cache-Control": "no-store" },
     });

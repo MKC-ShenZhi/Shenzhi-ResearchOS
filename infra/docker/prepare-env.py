@@ -130,6 +130,9 @@ def main(argv=None):
                         for key, value in defaults.items()}
         values[name].update({key: value for key, value in existing[name].items()
                              if nonempty(value) or key not in values[name]})
+    # These controls belonged to the retired V1 admission/dual-protocol worker.
+    values['agent'].pop('AGENT_V1_ADMISSION', None)
+    values['agent'].pop('AGENT_WORKER_PROTOCOL', None)
     # Empty BASE_URL overrides disable the registry default, so import only
     # explicitly configured nonempty Provider overrides.
     # Import only the optional nonempty overrides declared in the template.
@@ -244,8 +247,6 @@ def main(argv=None):
                 files[destination] = content
             values[name][key] = f'/run/secrets/{name}/{filename}'
     if backend['AGENT_V2_ADMISSION'] != 'disabled':
-        if agent['AGENT_V1_ADMISSION'] != 'drain_only' or agent['AGENT_WORKER_PROTOCOL'] != '2':
-            raise ValueError('V2 requires drain_only and protocol=2; configure explicitly')
         if not backend['AGENT_GRANT_PRIVATE_KEY_FILE'] or not agent['AGENT_GRANT_PUBLIC_KEYS_FILE']:
             raise ValueError('V2 signing keys required; no admission downgrade performed')
     # Public values must agree with the production image build configuration.
