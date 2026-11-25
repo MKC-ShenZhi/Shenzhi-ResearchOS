@@ -15,6 +15,7 @@ from app.core.idempotency import ensure_same_request
 from app.core.worker_lease import LEASE_SECONDS, current_worker_id
 from app.models.agent_session import AgentSessionRow, AgentTurnRow
 from app.services.agent_sessions.entities import AgentSession, AgentTurn
+from app.services.agent_sessions.messages import copy_message
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ def _turn_from_row(row: AgentTurnRow) -> AgentTurn:
         idempotency_fingerprint=row.idempotency_fingerprint,
         worker_id=row.worker_id,
         lease_expires_at=row.lease_expires_at,
+        message=copy_message(row.message, status=row.status),
     )
 
 
@@ -58,6 +60,7 @@ def _turn_row(turn: AgentTurn) -> AgentTurnRow:
         warnings=turn.warnings, error=turn.error, stopped=turn.stopped,
         stop_reason=turn.stop_reason, status=turn.status, usage=turn.usage,
         transcript=turn.transcript,
+        message=copy_message(turn.message, status=turn.status),
         idempotency_key=turn.idempotency_key,
         idempotency_fingerprint=turn.idempotency_fingerprint,
         worker_id=turn.worker_id,
@@ -274,8 +277,11 @@ class PostgresAgentSessionRepository:
         allowed = {
             'assistant_content', 'reasoning', 'process', 'steers', 'report', 'sources',
             'question', 'warnings', 'error', 'stopped', 'stop_reason', 'status', 'usage', 'transcript',
+            'message',
         }
         values = {key: value for key, value in payload.items() if key in allowed}
+        if 'message' in values:
+            values['message'] = copy_message(values['message'], status=values.get('status'))
         values['completed_at'] = func.now()
         worker_id = worker_id or current_worker_id()
         values['worker_id'] = worker_id

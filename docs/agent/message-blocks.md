@@ -1,6 +1,8 @@
-# Agent 结构化消息 V1（第一阶段）
+# Agent 结构化消息 V1
 
 本阶段验证 Agent Service 的消息组织边界，只定义 Message Metadata、MarkdownBlock、Reference，以及六类结构化消息事件。协议版本为 `schema_version=1`，与内部 API 的 v1/v2 版本独立。
+
+Backend 已接入消息传输、存储和历史读取；实现与部署迁移见 [会话持久化](session-persistence.md#结构化消息投影)。当前仍未扩展其他 Block 类型。
 
 ## 代码职责
 
@@ -51,10 +53,12 @@ Provider 的 `AssistantMessage` 是模型上下文与工具往返 transcript；`
 
 新增 Block 时，在共享协议增加具体模型并扩展 `ContentBlock` 的 `type` 判别集合，在消息组装层增加对应写入逻辑与校验，再接入消费者。不要在 Provider、Worker 或 SSE 传输中增加按具体 Block 类型分支的处理。来源适配继续通过 `ToolOutput.references`，不把工具名称或上游返回格式写入消息组装器。
 
-本轮未改 Platform Backend 的产品消息投影、Web Client 或 Renderer，因此不代表产品 UI 已完成 Block 渲染和引用展示。报告文件与反问等原有制品继续使用原通道。
+Backend 在最终 SSE `result.message` 和历史详情 `turns[].message` 返回同一份结构化快照，存储于 `agent_turns.message`，不重新组织正文或来源。Web Client 与 Renderer 尚未接入，因此不代表产品 UI 已完成 Block 渲染和引用展示。报告文件与反问等原有制品继续使用原通道。
 
 ## 验证
 
 在 `apps/agent` 执行 `uv run --locked python -m pytest tests -q`；共享契约在 `packages/agent-contracts` 执行 `uv run --group dev python -m pytest tests -q`。
 
 `test_message_blocks.py` 使用脚本化 Provider 验证引用分片、来源去重、连续块、事件重建/去重、终态校准、异常保留、反问、Checkpoint 和 Worker 报告。`test_worker_takeover.py` 经过真实 Agent API、Control SQL 和 Worker，核对事件落库后的最终消息；SQLite 测试不代表生产 PostgreSQL 并发验收。
+
+Backend 的 `tests/test_agent_message_blocks.py` 验证 Gateway v1/v2、产品 SSE、断线游标、重试和历史接口的数据一致性；`tests/test_agent_message_postgres.py` 在显式配置 `TEST_AGENT_MESSAGE_DATABASE_URL` 的隔离测试库中验证真实 JSONB 往返、连接重建、旧数据迁移和无效载荷不落库。测试库须先应用 Backend 迁移，禁止将该测试变量指向业务数据库。

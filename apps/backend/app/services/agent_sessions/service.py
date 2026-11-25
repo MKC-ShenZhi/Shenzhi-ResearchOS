@@ -10,6 +10,7 @@ from app.services.agent_gateway.client import agent_gateway, read_run_update
 from app.services.agent_attachments import resolve_agent_attachments
 from app.services.agent_sessions.entities import AgentSession, AgentTurn
 from app.services.agent_sessions.live import LiveRun, _tasks, append, finish, get_live, invalidate, register
+from app.services.agent_sessions.messages import copy_message
 from app.services.agent_sessions.repository import agent_session_repository
 from app.services.agent_sessions.timeline import TimelineCapture, _closed_transcript
 from app.services.agent_uploads import agent_upload_store
@@ -130,6 +131,7 @@ async def start_session_run(
                                   report.get('status'), 'failed')
                     payload = {
                         'assistant_content': result.get('final_text', ''),
+                        'message': capture.messages.result(result, status=status),
                         'reasoning': result.get('final_reasoning', ''),
                         'process': capture.process, 'steers': capture.steers,
                         'report': output.get('report'), 'sources': output.get('sources') or [],
@@ -151,6 +153,7 @@ async def start_session_run(
                     await _append_event(live, capture, 'result', {
                         'status': status, 'stop_reason': payload['stop_reason'],
                         'final_text': payload['assistant_content'], 'output': output or None,
+                        'message': payload['message'],
                         'question': payload['question'], 'turns': payload['usage']['turns'],
                         'duration_ms': payload['usage']['duration_ms'],
                         'prompt_tokens': payload['usage']['prompt_tokens'],
@@ -267,6 +270,7 @@ async def _reuse_turn(turn: AgentTurn, owner: str) -> LiveRun:
     append(live, 'result', {
         'status': turn.status, 'stop_reason': turn.stop_reason or turn.status,
         'final_text': turn.assistant_content,
+        'message': copy_message(turn.message, status=turn.status),
         'output': ({'report': turn.report, 'sources': turn.sources}
                    if turn.report or turn.sources else None),
         'question': turn.question, **(turn.usage or {}),
@@ -335,9 +339,11 @@ async def resume_session_run(session_id: str, owner: str, *, turn_id: str | None
                         usage.update(await gateway.usage(task_id, execution_owner))
                         usage.update(prompt_tokens=None, completion_tokens=None)
                     final_text = result.get('final_text', '')
+                    message = capture.messages.result(result, status=status)
                     if active_turn:
                         await agent_session_repository.finish_turn(session_id, owner, turn.id, {
                             'assistant_content': final_text,
+                            'message': message,
                             'reasoning': result.get('final_reasoning', ''),
                             'process': capture.process, 'steers': capture.steers,
                             'report': output.get('report'), 'sources': output.get('sources') or [],
@@ -352,6 +358,7 @@ async def resume_session_run(session_id: str, owner: str, *, turn_id: str | None
                     await _append_event(live, capture, 'result', {
                         'status': status, 'stop_reason': result.get('stop_reason') or status,
                         'final_text': final_text, 'output': output or None,
+                        'message': message,
                         'question': result.get('question'), **usage,
                         'error': ({'code': report.get('error_code'),
                                    'message': report.get('error_message')}

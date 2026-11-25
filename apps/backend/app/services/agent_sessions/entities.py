@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from app.services.agent_sessions.messages import copy_message
+
 
 @dataclass
 class AgentTurn:
@@ -33,12 +35,14 @@ class AgentTurn:
     idempotency_fingerprint: str | None = None
     worker_id: str | None = None
     lease_expires_at: datetime | None = None
+    message: dict[str, Any] | None = None
 
     def public(self) -> dict[str, Any]:
         return {
             'id': self.id,
             'user_content': self.user_content,
             'assistant_content': self.assistant_content,
+            'message': copy_message(self.message, status=self.status),
             'reasoning': self.reasoning,
             'process': self.process,
             'steers': self.steers,

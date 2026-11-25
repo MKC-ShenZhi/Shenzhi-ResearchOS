@@ -6,6 +6,7 @@ from sqlalchemy import select
 from agent_contracts.canonical import digest, request_digest_v1
 from agent_contracts.v2 import CallStartFact, TaskSubmissionV2
 from agent_contracts.wire import TaskSubmissionWire
+from agent_contracts.messages import AIMessage, MESSAGE_EVENT_MODELS
 from app.core.database import session_scope
 from app.models.agent_entitlements import (
     EntitlementPolicyRow, GrantRootRow, MeteringProfileRow, SubmissionRow, ObservationAdmissionRow,
@@ -124,14 +125,23 @@ class AgentGatewayV2(AgentGateway):
         return await self.request('GET', f'/internal/v2/tasks/{task_id}', params={'owner_id': owner})
 
     async def run(self, run_id, owner):
-        return await self.request('GET', f'/internal/v2/runs/{run_id}', params={'owner_id': owner})
+        response = await self.request('GET', f'/internal/v2/runs/{run_id}', params={'owner_id': owner})
+        result = (response.get('report') or {}).get('result') or {}
+        if result.get('message') is not None:
+            AIMessage.model_validate(result['message'])
+        return response
 
     async def task_runs(self, task_id, owner):
         return (await self.request('GET', f'/internal/v2/tasks/{task_id}/runs', params={'owner_id': owner}))['run_ids']
 
     async def events(self, run_id, owner, after_seq):
-        return (await self.request('GET', f'/internal/v2/runs/{run_id}/events',
-                                   params={'owner_id': owner, 'after_seq': after_seq}))['events']
+        events = (await self.request('GET', f'/internal/v2/runs/{run_id}/events',
+                                    params={'owner_id': owner, 'after_seq': after_seq}))['events']
+        for event in events:
+            model = MESSAGE_EVENT_MODELS.get(event['name'])
+            if model is not None:
+                model.model_validate(event['data'])
+        return events
 
     async def cancel(self, task_id, owner):
         return await self.request('POST', f'/internal/v2/tasks/{task_id}/cancel', params={'owner_id': owner})

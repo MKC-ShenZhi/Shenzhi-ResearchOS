@@ -146,10 +146,13 @@ async def run(body: AgentRunBody, owner: str = Depends(request_owner),
 
 
 async def _agent_task_stream(owner: str, task: dict, warnings: list[str], *, gateway=None):
+    from app.services.agent_sessions.messages import MessageCapture
+
     gateway = gateway or agent_gateway
     task_id = task['task_id']
     run_id = task['current_run_id']
     after_seq = 0
+    capture = MessageCapture()
     if warnings:
         yield f"event: meta\ndata: {json.dumps({'warnings': warnings}, ensure_ascii=False)}\n\n"
     yield f"event: run_start\ndata: {json.dumps({'run_id': run_id}, ensure_ascii=False)}\n\n"
@@ -157,6 +160,7 @@ async def _agent_task_stream(owner: str, task: dict, warnings: list[str], *, gat
     while True:
         run, events = await read_run_update(gateway, run_id, owner, after_seq)
         for event in events:
+            capture.event(event['name'], event['data'])
             after_seq = max(after_seq, int(event['seq']))
             event_id = f"id: {after_seq}\n"
             yield (f"{event_id}event: {event['name']}\n"
@@ -166,6 +170,7 @@ async def _agent_task_stream(owner: str, task: dict, warnings: list[str], *, gat
         report = run.get('report')
         if report and current_run_id and current_run_id != run_id:
             run_id, after_seq = current_run_id, 0
+            capture.event('run_start', {})
             yield f"event: run_start\ndata: {json.dumps({'run_id': run_id}, ensure_ascii=False)}\n\n"
             continue
         if report:
@@ -176,6 +181,7 @@ async def _agent_task_stream(owner: str, task: dict, warnings: list[str], *, gat
             result = {
                 'status': status, 'stop_reason': result_data.get('stop_reason') or 'error',
                 'final_text': result_data.get('final_text', ''),
+                'message': capture.result(result_data, status=status),
                 'output': result_data.get('output'), 'question': result_data.get('question'),
                 'turns': result_data.get('turns', 0),
                 'duration_ms': result_data.get('duration_ms', 0),
