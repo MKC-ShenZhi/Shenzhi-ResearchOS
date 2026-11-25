@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hmac
-import json
 import os
 import uuid
 
@@ -14,7 +13,6 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from agent_contracts.execution_v2 import GrantBindRequest, AbandonCall
-from agent_contracts.canonical import digest
 from agent_contracts.v2 import (
     CallPermitRequest, PermitStart, TaskCloseManifest, TaskMeteringBinding, UsageBatch, UsageBatchAck, V2, VoidProof,
 )
@@ -31,8 +29,6 @@ from app.services.agent_entitlements.service import EntitlementError, require
 from app.services.agent_entitlements.service import now_utc
 from app.services.agent_entitlements.usage import UsageSettlement
 from app.services.agent_gateway.gateway import AgentGateway
-from app.schemas.agent import AgentRunBody
-from app.services.agent_attachments import resolve_agent_attachments
 
 
 class V2Route(APIRoute):
@@ -59,40 +55,6 @@ async def control_role(authorization: str | None = Header(default=None)):
 
 router = APIRouter(prefix='/api/v2/agent', route_class=V2Route)
 internal = APIRouter(prefix='/internal', dependencies=[Depends(control_role)], route_class=V2Route)
-
-
-class ProductRun(AgentRunBody, V2):
-    pass
-
-
-def client_fingerprint(body):
-    return digest(json.dumps(body.model_dump(mode='json'), sort_keys=True, ensure_ascii=False,
-                             allow_nan=False, separators=(',', ':')))
-
-
-@router.post('/submissions')
-async def run_product(body: ProductRun, owner: str = Depends(request_owner),
-                      client_key: str = Header(alias='Idempotency-Key', min_length=1, max_length=200)):
-    require(body.session_id is None, 'USE_SESSION_RUN_ENDPOINT', 422)
-    gateway = AgentGateway()
-    # A persisted original request wins over expiring attachments on retries.
-    async with session_scope() as db:
-        from app.models.agent_entitlements import SubmissionRow, ObservationAdmissionRow
-        existing = await db.scalar(select(SubmissionRow).where(SubmissionRow.owner_id == owner,
-                                                              SubmissionRow.client_key == client_key))
-        if existing is None:
-            existing = await db.scalar(select(ObservationAdmissionRow).where(ObservationAdmissionRow.owner_id == owner,
-                                                                            ObservationAdmissionRow.client_key == client_key))
-        if existing:
-            require(existing.client_request_digest == client_fingerprint(body), 'IDEMPOTENCY_CONFLICT')
-    if existing:
-        task = await gateway.recover_submission(owner, client_key)
-        return dict(schema_version=1, task=task, warnings=[])
-    text, warnings, _files = await resolve_agent_attachments(body.attachments, owner)
-    task = await gateway.submit(dict(owner_id=owner, prompt=body.prompt + text, history=body.history,
-        mode=body.mode, model=body.model, workspace_id=body.workspace_id, skills=body.skills,
-        idempotency_key=client_key), client_request_digest=client_fingerprint(body))
-    return dict(schema_version=1, task=task, warnings=warnings)
 
 
 @internal.get('/protocol-capabilities')

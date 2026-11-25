@@ -123,6 +123,17 @@ class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
         current = await repository.get_task(self.db, request.task_id, 'owner')
         self.assertNotEqual(current.status.value, 'queued')
 
+    async def test_timeout_is_recorded_and_retried_as_a_new_v2_run(self):
+        request, token, _ = await repository.claim_run(self.db, 'worker')
+        await repository.record_report(self.db, ExecutionReport(
+            run_id=request.run_id, task_id=request.task_id, status=RunStatus.TIMED_OUT,
+        ), 'worker', token)
+        current = await repository.get_task(self.db, request.task_id, 'owner')
+        self.assertEqual(current.status.value, 'queued')
+        self.assertNotEqual(current.current_run_id, request.run_id)
+        self.assertEqual(await repository.list_task_runs(self.db, request.task_id, 'owner'),
+                         [request.run_id, current.current_run_id])
+
     async def test_claim_filters_mock_and_real_runs_including_expired_leases(self):
         demo = await self.submit('owner', 'mock', model='demo/m1', session_id='ses_demo', turn_id='turn_demo')
         real, _, _ = await repository.claim_run(self.db, 'real')

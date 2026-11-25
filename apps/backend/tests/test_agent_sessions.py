@@ -612,6 +612,30 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detail.turns[-1].status, 'done')
         self.assertEqual(detail.turns[-1].settings.get('agent_task_id'), 'task-1')
 
+    async def test_session_detail_preserves_v2_turn_after_lost_submit_response(self):
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('详情查询恢复')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        original_submit = v2.submit
+        async def persist_then_lose(payload):
+            await original_submit(payload)
+            raise TimeoutError('response lost after Agent persisted task')
+        v2.submit = AsyncMock(side_effect=persist_then_lose)
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
+            first = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
+                json_body={'prompt': '详情后恢复'}, headers={'Idempotency-Key': 'detail-recovery-key'})
+        self.assertEqual(first.status_code, 500, first.text)
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].status, 'running')
+        self.assertNotIn('agent_task_id', detail.turns[-1].settings)
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
+            recovered = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
+                json_body={'prompt': '详情后恢复'}, headers={'Idempotency-Key': 'detail-recovery-key'})
+        self.assertEqual(recovered.status_code, 200, recovered.text)
+        self.assertEqual(len(v2.runs), 1)
+        self.assertEqual(detail.turns[-1].idempotency_key, 'detail-recovery-key')
+
 
 class TimelineCaptureTests(unittest.TestCase):
     def test_system_and_compaction_are_not_persisted_but_user_notes_are(self):

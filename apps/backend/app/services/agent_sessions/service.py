@@ -473,7 +473,8 @@ async def get_session_detail(session_id: str, owner: str) -> AgentSession:
     for turn in session.turns:
         if (turn.status == 'running'
                 and (turn.settings.get('_agent_protocol') != 2
-                     or not turn.settings.get('agent_task_id'))):
+                     or (not turn.settings.get('agent_task_id')
+                         and not turn.settings.get('_agent_recovery_request')))):
             payload = {
                 'status': 'stopped', 'stop_reason': 'interrupted', 'stopped': True,
                 'error': '运行已中断（服务重启或异常退出），请重新发送',

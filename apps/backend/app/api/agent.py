@@ -16,6 +16,7 @@ from agent_contracts import (
     KnowledgeSearchRequestWire, KnowledgeSearchResponseWire, validate_history,
 )
 from agent_contracts.canonical import digest
+from agent_contracts.v2 import V2
 
 from app.api._support.upload_reader import read_upload
 from app.core.config import MAX_FILES, UPLOAD_ACCEPT
@@ -38,8 +39,10 @@ from app.services.agent_attachments import resolve_agent_attachments
 from app.services.agent_uploads import agent_upload_store
 from app.services.uploads.parser import parse_document
 from app.schemas.knowledge import KnowledgeSearchRequest
+from app.api.agent_control import V2Route
 
 router = APIRouter(prefix='/api/v2/agent', tags=['agent'])
+product_router = APIRouter(route_class=V2Route)
 logger = logging.getLogger(__name__)
 
 
@@ -56,14 +59,24 @@ def _client_request_digest(body: AgentRunBody) -> str:
     return digest(serialized)
 
 
+class ProductRun(AgentRunBody, V2):
+    """JSON adapter for the same stateless V2 submission accepted by SSE."""
+
+
+def _product_client_request_digest(body: ProductRun) -> str:
+    serialized = json.dumps(body.model_dump(mode='json'), sort_keys=True, ensure_ascii=False,
+                            allow_nan=False, separators=(',', ':'))
+    return digest(serialized)
+
+
 async def _recover_stateless_submission(gateway, owner: str, key: str,
-                                        body: AgentRunBody) -> tuple[dict | None, str | None]:
+                                        body: AgentRunBody, *, client_digest: str | None = None) -> tuple[dict | None, str | None]:
     """Recover a previously admitted V2 request before resolving short-lived uploads."""
     from sqlalchemy import select
     from app.core.database import database_url, session_scope
     from app.models.agent_entitlements import SubmissionRow, ObservationAdmissionRow
 
-    client_digest = _client_request_digest(body)
+    client_digest = client_digest if client_digest is not None else _client_request_digest(body)
     if not database_url():
         return None, client_digest
     async with session_scope() as db:
@@ -84,6 +97,50 @@ async def _recover_stateless_submission(gateway, owner: str, key: str,
     if stored_client_digest != client_digest:
         raise BusinessError(20009, 'Idempotency-Key 已用于不同请求', 409)
     return await gateway.recover_submission(owner, key), client_digest
+
+
+async def _submit_stateless_request(gateway, owner: str, key: str, body: AgentRunBody,
+                                   *, client_digest: str | None = None):
+    """Share fingerprint recovery, attachment resolution and V2 submission across product adapters."""
+    recovered, submit_digest = await _recover_stateless_submission(
+        gateway, owner, key, body, client_digest=client_digest)
+    if recovered is not None:
+        return recovered, [], None
+    attachment_text, warnings, files = await resolve_agent_attachments(body.attachments, owner)
+    payload = {
+        'owner_id': owner, 'prompt': body.prompt + attachment_text,
+        'session_id': body.session_id, 'mode': body.mode, 'model': body.model,
+        'workspace_id': body.workspace_id, 'skills': body.skills, 'history': body.history,
+        'idempotency_key': key,
+    }
+    task = await gateway.submit(payload, client_request_digest=submit_digest)
+    return task, warnings, files
+
+
+@product_router.post('/submissions')
+async def run_product(body: ProductRun, owner: str = Depends(request_owner),
+                      client_key: str = Header(alias='Idempotency-Key', min_length=1, max_length=200)):
+    client_key = validate_idempotency_key(client_key)
+    if client_key is None:
+        raise BusinessError(20001, 'Idempotency-Key 必填', 422)
+    if body.session_id is not None:
+        raise BusinessError(20001, 'USE_SESSION_RUN_ENDPOINT', 422)
+    try:
+        validate_history(body.history)
+    except ValueError as exc:
+        raise BusinessError(20001, '历史消息格式无效', 400) from exc
+    gateway = submission_gateway()
+    task, warnings, files = await _submit_stateless_request(
+        gateway, owner, client_key, body, client_digest=_product_client_request_digest(body))
+    if files:
+        try:
+            await agent_upload_store.consume(owner, list(files))
+        except Exception:
+            logger.exception('Failed to consume Agent attachments after submit')
+    return dict(schema_version=1, task=task, warnings=warnings)
+
+
+router.include_router(product_router)
 
 
 async def gateway_for_run(run_id, owner):
@@ -157,21 +214,7 @@ async def run(body: AgentRunBody, owner: str = Depends(request_owner),
         validate_history(body.history)
     except ValueError as exc:
         raise BusinessError(20001, '历史消息格式无效', 400) from exc
-    recovered, submit_client_digest = await _recover_stateless_submission(gateway, owner, key, body)
-    if recovered is not None:
-        return StreamingResponse(_agent_task_stream(owner, recovered, [], gateway=gateway), media_type='text/event-stream',
-                                 headers={'Cache-Control': 'no-cache, no-transform',
-                                          'X-Accel-Buffering': 'no'})
-    attachment_text, warnings, files = await resolve_agent_attachments(body.attachments, owner)
-    payload = {
-        'owner_id': owner, 'prompt': body.prompt + attachment_text,
-        'session_id': body.session_id, 'mode': body.mode, 'model': body.model,
-        'workspace_id': body.workspace_id,
-        'skills': body.skills, 'history': body.history,
-    }
-    if key is not None:
-        payload['idempotency_key'] = key
-    task = await gateway.submit(payload, client_request_digest=submit_client_digest)
+    task, warnings, files = await _submit_stateless_request(gateway, owner, key, body)
     if files:
         try:
             await agent_upload_store.consume(owner, list(files))

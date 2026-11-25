@@ -169,6 +169,18 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(v2.submissions, [])
 
+    async def test_product_json_submission_routes_through_agent_module(self):
+        v2 = FakeAgentGateway()
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2), \
+             patch('app.api.agent.resolve_agent_attachments', new=AsyncMock(return_value=('', [], {}))):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test',
+                headers={**self.OWNER, 'Idempotency-Key': 'json-submission-key'}) as client:
+                response = await client.post('/api/v2/agent/submissions', json={'schema_version': 1, 'prompt': 'JSON 入队'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['task']['task_id'], 'task-1')
+        self.assertEqual(v2.submissions[0]['idempotency_key'], 'json-submission-key')
+        self.assertEqual(v2.submissions[0]['owner_id'], 'anon:00000000-0000-4000-8000-000000000001')
+
     async def test_stateless_retry_recovers_before_resolving_expired_attachment(self):
         from app.api.agent import _client_request_digest
         from app.schemas.agent import AgentRunBody

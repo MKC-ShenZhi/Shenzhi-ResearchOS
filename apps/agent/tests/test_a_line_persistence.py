@@ -713,6 +713,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         import httpx
         from fastapi import FastAPI
         from app.api import agent_control as backend_api
+        from app.api import agent as product_api
         from app.services.agent_gateway import gateway as gateway_module
         from agent_app.api import routes as agent_api
         from agent_app.infrastructure.database import get_session
@@ -723,6 +724,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         from agent_app.worker.host import AgentControlClient
         backend_app,agent_app=FastAPI(),FastAPI()
         backend_app.include_router(backend_api.router)
+        backend_app.include_router(product_api.router)
         agent_app.include_router(agent_api.router)
         async def agent_db():
             async with self.agent() as db:
@@ -756,7 +758,8 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
             'AGENT_USAGE_SPOOL_ROOT':spool,'BACKEND_BFF_SECRET':'bff-test'}),patch.object(backend_api,'session_scope',backend_scope),\
             patch.object(gateway_module,'session_scope',backend_scope),patch.object(gateway_module,'entitlement_service',lambda:self.service),\
             patch.object(agent_api,'EntitlementClient',Bridge),\
-            patch.object(backend_api,'AgentGateway',lambda:gateway_module.AgentGateway(transport=agent_transport)):
+            patch.object(backend_api,'AgentGateway',lambda:gateway_module.AgentGateway(transport=agent_transport)),\
+            patch.object(product_api,'submission_gateway',lambda:gateway_module.AgentGateway(transport=agent_transport)):
             provider=OpenAICompatProvider(ModelConfig(key='test-only',base_url='https://provider.invalid/v1',model='qwen-plus',
                 models=('qwen-plus',),provider='dashscope'),transport=httpx.MockTransport(provider_send))
             resolved=provider.registry.resolve_model('qwen-plus','agent')
