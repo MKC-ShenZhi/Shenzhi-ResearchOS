@@ -70,6 +70,7 @@ Turn 内部 settings 的 `_agent_owner_id` 保存原 Agent 执行身份，不返
 - `POST /api/v2/agent/sessions/import`：按 `(owner, import_key)` 幂等导入旧本地会话。
 - `POST /api/v2/agent/uploads` / `GET /api/v2/agent/uploads/{file_id}`：解析并暂存 owner 隔离的附件文本 / 查询状态（不返回正文）。配置 `CHAT_DATABASE_URL` 时存 PostgreSQL，否则存进程内存；24 小时过期，运行消费后删除。附件 ID 只在运行入参中引用，不写入 Turn。
 - `POST /api/v2/agent/run`：无状态运行接口，不是首页和正式 Agent 页的产品路径；论文详情页 Agent（`use-paper-agent.ts`）仍使用它。
+- 历史消息中的同源 `GET /api/v1/agent/assets/{session_id}/{path}` 和 `GET /api/v1/agent/session/{session_id}/file` 由 BFF 转发到对应 V2 读取接口，继续沿用 Backend 的归属与路径校验。新产物使用 V2 URL。
 
 除 config/export 等明确的 BFF 端点外，Session 端点均使用 `request_owner`。查询条件同时带 `id` 和 `owner`；他人会话与不存在会话统一返回 404，不泄露存在性。
 

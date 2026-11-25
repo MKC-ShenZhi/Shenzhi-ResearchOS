@@ -54,7 +54,7 @@ export async function readForwardedBody(request: Request): Promise<BodyInit | un
 
 /**
  * Next.js 微后端 → FastAPI 转发。
- * 浏览器只打同源 `/api/v1`；此处补上登录身份并去掉 Cookie，避免把 Better Auth 会话泄漏给 Python。
+ * 浏览器调用同源 API；此处补上登录身份并去掉 Cookie，避免把 Better Auth 会话泄漏给 Python。
  */
 export async function forwardToBusinessBackend(
   req: NextRequest,
@@ -73,11 +73,6 @@ export async function forwardToBusinessBackend(
       });
     }
   }
-  if (apiVersion === "v1" && segments?.[0] === "agent") {
-    return NextResponse.json({ code: 10001, message: "Not found" }, {
-      status: 404, headers: { "Cache-Control": "no-store" },
-    });
-  }
   // The public BFF must never become a route to the dedicated Admin entrypoint.
   // Next decodes route params; decode once more for the downstream HTTP parser
   // and reject embedded separators as well as ordinary Admin path segments.
@@ -86,7 +81,20 @@ export async function forwardToBusinessBackend(
       status: 404, headers: { "Cache-Control": "no-store" },
     });
   }
-  const route = `/api/${apiVersion}/${path.join("/")}`;
+  let route = `/api/${apiVersion}/${path.join("/")}`;
+  if (apiVersion === "v1" && segments[0] === "agent") {
+    // Historical messages contain these two read-only URLs.
+    const isAsset = segments[1] === "assets" && segments.length >= 4;
+    const isSessionFile = segments[1] === "session" && segments.length === 4 && segments[3] === "file";
+    if (req.method !== "GET" || !(isAsset || isSessionFile) ||
+        segments.length !== path.length ||
+        segments.some((segment) => !segment || segment === "." || segment === "..")) {
+      return NextResponse.json({ code: 10001, message: "Not found" }, {
+        status: 404, headers: { "Cache-Control": "no-store" },
+      });
+    }
+    route = `/api/v2/${segments.map(encodeURIComponent).join("/")}`;
+  }
   const dest = `${backendOrigin.replace(/\/$/, "")}${route}${req.nextUrl.search}`;
   const requestId = resolveRequestId(req.headers.get(REQUEST_ID_HEADER));
   const startedAt = performance.now();
