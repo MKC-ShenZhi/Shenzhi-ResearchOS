@@ -12,7 +12,7 @@ Agent Platform 服务拆分在 `feat/agent-architecture-migration` 分支落地�
 | Agent Execution | Agent | Runtime、Provider 路由、Skills、Workspace、Web/Paper 能力和 Knowledge HTTP Adapter 已迁入 |
 | Agent Control / Worker | Agent | 独立数据库迁移、Task/Run/Event/Outbox、领取、Lease/fencing、取消、steer、报告和失败重试已实现 |
 | Workspace 与产物 | Agent | 使用共享持久卷和 `AGENT_WORKSPACE_ROOT`；API 与 Worker 必须配置到同一目录 |
-| Backend Gateway | Backend | 新任务、配置、Workspace、文件与匿名认领走 V2 路由；V1 Gateway 仅供存量任务恢复、事件读取和控制临时使用；需要真实网络与恢复场景验收 |
+| Backend Gateway | Backend | 新任务、配置、Workspace、文件与匿名认领走 V2 路由；V1 Gateway 仅供存量任务恢复、事件读取和控制临时使用；旧版 Agent 的共享 V1 URL 保留至滚动部署兼容窗口结束；需要真实网络与恢复场景验收 |
 
 ## 当前执行链路
 
@@ -33,6 +33,18 @@ Backend 通过 `agent-contracts` 校验跨服务请求与响应。新提交不�
 正式 V2 授权提交要求 Agent `AGENT_V1_ADMISSION=drain_only`；该开关拒绝新的 V1 Task，但保留 V1 Worker 领取已有 V1 Task 的能力。Agent V2 Worker 只领取已绑定的 V2 Task，V1 Worker 不领取任何带 V2 metering profile 的 Task。Backend V2 提交准入和 Agent V1 drain 开关需协调切换：Agent 尚未进入 drain-only 时，正式 V2 提交返回 403；Agent 先进入 drain-only 时，仍指向 V1 的 Backend 会收到 409。部署编排应把这两个开关作为同一切换窗口处理，V1 Worker 保持运行直至存量排空。
 
 Agent 使用独立 `AGENT_DATABASE_URL` 和 `AGENT_SERVICE_TOKEN`。在 `apps/agent` 执行 `uv run alembic upgrade head`，再分别启动 `uv run uvicorn agent_app.main:app ...` 与 `uv run python -m agent_app.worker_main`。
+
+### V1 排空审计
+
+切换 `AGENT_V1_ADMISSION=drain_only` 并让 V1 Worker 排空后，可用仓库根目录的只读审计脚本核对两库数据：
+
+```powershell
+$env:AGENT_DATABASE_URL = '<只读 Agent PostgreSQL URL>'
+$env:CHAT_DATABASE_URL = '<只读 Backend PostgreSQL URL>'
+uv run --project apps/backend --frozen --no-sync python scripts/agent_v1_drain_audit.py
+```
+
+脚本在两个数据库各自的只读事务中统计无 V2 metering 记录的 Task/Run、活跃 V1 Session Turn，以及仍由 Session Turn 引用的 V1 Task；输出不包含 DSN、Owner 或记录 ID。退出码 `0` 表示数据库侧的 Task 排空与历史引用门槛均为零，`1` 表示仍有数据库门槛未清，`2` 表示连接或 schema 检查失败。即使数据库门槛通过，也必须另用部署访问日志证明没有旧 Backend、Admin 或演示 Worker 调用 V1；脚本会将 `external_v1_callers_verified` 和 `v1_retirement_proven` 保持为 `false`，不会单独批准退役。
 
 ## 后续运维与验收
 

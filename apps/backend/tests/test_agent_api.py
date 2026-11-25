@@ -410,6 +410,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_v2_session_artifact_uses_shared_service_gateway(self):
         session_id = 'ses_v2_file'
         owner = f"anon:{self.OWNER['x-shenzhi-anonymous-id']}"
+        self.gateway.read_session_file = AsyncMock()
         session = AgentSession(id=session_id, owner=owner, title='V2 文件')
         from app.services.agent_sessions.entities import AgentTurn
         session.turns.append(AgentTurn(
@@ -418,8 +419,8 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
             status='done',
         ))
         self.repo.sessions[session_id] = session
-        self.gateway.read_session_file = AsyncMock(return_value=(b'v2 artifact', 'text/plain'))
         v2 = AsyncMock()
+        v2.read_session_file.return_value = (b'v2 artifact', 'text/plain')
         with patch('app.api.agent.submission_gateway', return_value=v2):
             response = await self.client_get(
                 f'/api/v1/agent/session/{session_id}/file?path=report.txt')
@@ -429,9 +430,9 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.content, b'v2 artifact')
         self.assertEqual(asset.status_code, 200)
         self.assertEqual(asset.content, b'v2 artifact')
-        self.assertEqual(self.gateway.read_session_file.await_count, 2)
-        self.gateway.read_session_file.assert_awaited_with(owner, session_id, 'report.txt')
-        v2.read_session_file.assert_not_awaited()
+        self.assertEqual(v2.read_session_file.await_count, 2)
+        v2.read_session_file.assert_awaited_with(owner, session_id, 'report.txt')
+        self.gateway.read_session_file.assert_not_awaited()
 
     async def client_get(self, url: str) -> httpx.Response:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:

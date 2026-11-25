@@ -79,6 +79,7 @@ class AdminConsoleTests(unittest.TestCase):
             self.assertEqual(r.json()['data']['models'], payload['models'])
             self.assertEqual(r.json()['data']['tools_status'], 'not_connected')
             self.assertEqual(call.call_args.kwargs['headers']['Authorization'], 'Bearer test-token')
+            self.assertTrue(call.call_args.args[0].endswith('/internal/v2/config'))
         with patch('app.integrations.admin_console.capabilities.httpx.AsyncClient.get', new=AsyncMock(side_effect=httpx.ConnectError('offline'))):
             self.assertEqual(self.client.get(PATH + '/capabilities').status_code, 503)
         with patch.dict(os.environ, {'AGENT_SERVICE_TOKEN':''}):

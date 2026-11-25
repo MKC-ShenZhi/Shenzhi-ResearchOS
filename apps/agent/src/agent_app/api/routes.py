@@ -1,9 +1,7 @@
 """Internal task, worker, report and replay routes."""
 from __future__ import annotations
 
-import base64
 import os
-from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
@@ -13,20 +11,20 @@ from agent_app.api.auth import require_service
 from agent_app.control import repository
 from agent_app.errors import BusinessError
 from agent_app.infrastructure.database import get_session
-from agent_app.extensions.skills import default_store
-from agent_app.integrations.llm.resolver import load_registry
-from agent_app.extensions.workspace import (
-    cleanup_session_workspace, copy_session_workspace, create_workspace,
-    migrate_owner_workspaces, read_session_file, write_workspace_file,
+from agent_app.api.shared import (
+    agent_config as shared_agent_config,
+    commit_workspace_claim as shared_commit_workspace_claim,
+    get_session_file as shared_get_session_file,
+    new_workspace as shared_new_workspace,
+    prepare_workspace_claim as shared_prepare_workspace_claim,
+    put_workspace_file as shared_put_workspace_file,
+    task_json as _task_json,
 )
 from agent_contracts import (
-    AgentConfigWire, BudgetLimits, ExecutionReport, PlatformEvent, RunStatus,
-    RunSteerRequestWire, RunSteerResponseWire, SessionFileReadResponseWire,
+    BudgetLimits, ExecutionReport, PlatformEvent, RunStatus,
+    RunSteerRequestWire, RunSteerResponseWire,
     TaskRunsResponseWire, TaskSubmission, WorkerHeartbeatRequestWire, WorkerHeartbeatResponseWire,
-    WorkspaceClaimCommitResponseWire,
-    WorkspaceClaimPrepareResponseWire, WorkspaceClaimRequestWire,
-    WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
-    WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire,
+    WorkspaceClaimRequestWire, WorkspaceCreateRequestWire, WorkspaceFileWriteRequestWire,
     EventIngestWire, ReportIngestWire, TaskSubmissionWire, UsageReport,
 )
 
@@ -61,86 +59,32 @@ ReportBody = ReportIngestWire
 
 @router.get('/config')
 async def agent_config():
-    if os.getenv('AGENT_DEMO_MODE') == '1':
-        return AgentConfigWire(
-            models=[{'value': 'demo/m1', 'label': 'Mock 演示（无模型调用）',
-                     'provider': 'platform', 'enabled': True}], default_model='demo/m1',
-            skills=[{'name': 'deep-research', 'description': 'Mock 演示报告，不执行真实研究'}],
-        ).model_dump(mode='json')
-    registry = load_registry()
-    store = default_store()
-    skills = [{'name': skill.name, 'description': skill.description}
-              for name in store.names()
-              for skill in [store.get(name)]
-              if skill and not skill.disable_model_invocation]
-    return AgentConfigWire(
-        models=registry.public_models('agent'),
-        default_model=registry.public_default('agent'), skills=skills,
-    ).model_dump(mode='json')
+    return await shared_agent_config()
 
 
 @router.post('/workspaces')
 async def new_workspace(body: WorkspaceCreateRequestWire):
-    return WorkspaceCreateResponseWire.model_validate(
-        create_workspace(body.owner_id),
-    ).model_dump(mode='json')
+    return await shared_new_workspace(body)
 
 
 @router.post('/workspaces/claim/prepare')
 async def prepare_workspace_claim(body: WorkspaceClaimRequestWire):
-    prepared = []
-    for session_id in dict.fromkeys(body.session_ids):
-        if copy_session_workspace(body.source_owner, body.target_owner, session_id):
-            prepared.append(session_id)
-    return WorkspaceClaimPrepareResponseWire(
-        prepared_session_ids=prepared,
-    ).model_dump(mode='json')
+    return await shared_prepare_workspace_claim(body)
 
 
 @router.post('/workspaces/claim/commit')
 async def commit_workspace_claim(body: WorkspaceClaimRequestWire):
-    cleaned = []
-    for session_id in dict.fromkeys(body.session_ids):
-        try:
-            cleanup_session_workspace(body.source_owner, session_id)
-            cleaned.append(session_id)
-        except Exception:
-            # Ownership is already committed; stale source data is safer than
-            # turning a successful claim into a reported failure.
-            continue
-    moved_workspaces = migrate_owner_workspaces(body.source_owner, body.target_owner)
-    return WorkspaceClaimCommitResponseWire(
-        cleaned_session_ids=cleaned, moved_workspaces=moved_workspaces,
-    ).model_dump(mode='json')
+    return await shared_commit_workspace_claim(body)
 
 
 @router.post('/workspaces/{workspace_id}/files')
 async def put_workspace_file(workspace_id: str, body: WorkspaceFileWriteRequestWire):
-    if body.workspace_id != workspace_id:
-        raise BusinessError(20001, 'URL workspace_id 与请求不匹配')
-    try:
-        content = base64.b64decode(body.content_base64, validate=True)
-    except (ValueError, TypeError) as exc:
-        raise BusinessError(20001, '文件内容编码无效') from exc
-    return WorkspaceFileWriteResponseWire.model_validate(
-        write_workspace_file(workspace_id, body.owner_id, body.path, content),
-    ).model_dump(mode='json')
+    return await shared_put_workspace_file(workspace_id, body)
 
 
 @router.get('/sessions/{session_id}/files')
 async def get_session_file(session_id: str, owner_id: str, path: str):
-    content, media_type = read_session_file(owner_id, session_id, path)
-    return SessionFileReadResponseWire(
-        content_base64=base64.b64encode(content).decode('ascii'), media_type=media_type,
-    ).model_dump(mode='json')
-
-
-def _task_json(record) -> dict[str, Any]:
-    return {'task_id': record.task_id, 'owner_id': record.owner_id,
-            'session_id': record.session_id, 'turn_id': record.turn_id,
-            'status': record.status.value, 'current_run_id': record.current_run_id,
-            'cancel_requested': record.cancel_requested,
-            'created_at': record.created_at.isoformat()}
+    return await shared_get_session_file(session_id, owner_id, path)
 
 
 @router.post('/tasks')

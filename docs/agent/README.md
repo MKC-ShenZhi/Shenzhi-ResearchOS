@@ -2,7 +2,7 @@
 
 用户权益、调用级计量及独立 v2 候选协议见 [权益与执行权限](entitlements.md)。产品路径仍为 `/api/v1/agent/*`；代码中新任务统一经 V2 执行协议提交，V1 只承担存量任务排空与历史 Run 控制。Backend 的 V2 准入仍由部署配置决定（`AGENT_V2_ADMISSION`，默认 `disabled`），因此运行新版代码前必须完成 V2 准入、Worker 与角色凭据配置。
 
-Web 的 `/agents` 和论文问答继续访问 Backend 产品 API。Backend 校验 BFF 与 owner，保存 Session / Turn，解析附件，并通过 `app/services/agent_gateway/` 向独立 Agent API 通信：新任务与配置、Workspace、文件及匿名认领均使用 V2 内部路由；Service 角色调用使用独立的 `AGENT_SERVICE_TOKEN`。V1 执行读写仅临时服务存量任务排空。匿名身份和认领沿用 [认证架构](../auth/ARCHITECTURE.md#anonymous-identity-and-claim)。
+Web 的 `/agents` 和论文问答继续访问 Backend 产品 API。Backend 校验 BFF 与 owner，保存 Session / Turn，解析附件，并通过 `app/services/agent_gateway/` 向独立 Agent API 通信：新任务与配置、Workspace、文件及匿名认领均使用 V2 内部路由；Service 角色调用使用独立的 `AGENT_SERVICE_TOKEN`。V1 执行读写保留给历史任务排空，旧版共享端点在滚动部署兼容期仍注册，但当前 Backend/Admin 不再调用它们。匿名身份和认领沿用 [认证架构](../auth/ARCHITECTURE.md#anonymous-identity-and-claim)。
 
 ## 执行边界
 

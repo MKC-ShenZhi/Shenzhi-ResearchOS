@@ -14,7 +14,9 @@ from agent_contracts import (
 from app.core.errors import BusinessError
 
 
-class AgentGateway:
+class AgentHttpClient:
+    """Shared authenticated HTTP transport; it contains no protocol routes."""
+
     def __init__(self, *, base_url: str | None = None, token: str | None = None,
                  transport: httpx.AsyncBaseTransport | None = None):
         self.base_url = (base_url or os.getenv('AGENT_INTERNAL_URL', 'http://127.0.0.1:8101')).rstrip('/')
@@ -50,6 +52,10 @@ class AgentGateway:
         if not isinstance(data, dict):
             raise BusinessError(20004, 'Agent 服务返回格式无效', 502)
         return data
+
+
+class AgentGateway(AgentHttpClient):
+    """Temporary V1 adapter for draining and reading historical V1 tasks."""
 
     async def task(self, task_id: str, owner: str) -> dict[str, Any]:
         query = OwnerQueryWire(owner_id=owner)
@@ -90,7 +96,7 @@ class AgentGateway:
         )
         return RunSteerResponseWire.model_validate(result).model_dump(mode='json')
 
-async def read_run_update(gateway: AgentGateway, run_id: str, owner: str,
+async def read_run_update(gateway: AgentHttpClient, run_id: str, owner: str,
                           after_seq: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Read status before events so a terminal report cannot truncate the tail.
 

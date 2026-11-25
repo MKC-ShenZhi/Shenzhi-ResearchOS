@@ -28,8 +28,8 @@ from agent_app.infrastructure.database import get_session
 from agent_app.infrastructure.models import RunRow, TaskRow
 from agent_app.infrastructure.metering_models import CallRow, ExecutionRow, TaskMeteringRow, GrantHistoryRow, GrantRevocationRow
 from agent_app.integrations.backend.entitlements import EntitlementClient
-from .routes import (
-    _task_json, agent_config as shared_agent_config,
+from .shared import (
+    task_json as _task_json, agent_config as shared_agent_config,
     new_workspace as shared_new_workspace,
     prepare_workspace_claim as shared_prepare_workspace_claim,
     commit_workspace_claim as shared_commit_workspace_claim,

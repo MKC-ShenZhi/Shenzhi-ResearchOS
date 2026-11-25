@@ -4,6 +4,12 @@ import os
 
 from sqlalchemy import select
 
+from agent_contracts import (
+    AgentConfigWire, SessionFileReadRequestWire, SessionFileReadResponseWire,
+    WorkspaceClaimCommitResponseWire, WorkspaceClaimPrepareResponseWire,
+    WorkspaceClaimRequestWire, WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
+    WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire,
+)
 from agent_contracts.canonical import digest, request_digest_v1
 from agent_contracts.v2 import CallStartFact, TaskSubmissionV2
 from agent_contracts.wire import TaskSubmissionWire
@@ -15,15 +21,10 @@ from app.models.agent_entitlements import (
 from app.services.agent_entitlements.config import entitlement_service
 from app.services.agent_entitlements.policy import EntitlementPolicy
 from app.services.agent_entitlements.service import require, uid
-from .client import (
-    AgentConfigWire, AgentGateway, SessionFileReadRequestWire, SessionFileReadResponseWire,
-    WorkspaceClaimCommitResponseWire, WorkspaceClaimPrepareResponseWire,
-    WorkspaceClaimRequestWire, WorkspaceCreateRequestWire, WorkspaceCreateResponseWire,
-    WorkspaceFileWriteRequestWire, WorkspaceFileWriteResponseWire,
-)
+from .client import AgentHttpClient
 
 
-class AgentGatewayV2(AgentGateway):
+class AgentGatewayV2(AgentHttpClient):
     protocol_version = 2
 
     def __init__(self, **kwargs):
@@ -32,8 +33,8 @@ class AgentGatewayV2(AgentGateway):
 
     def service_gateway(self):
         """V2 shared capabilities use the isolated service role credential."""
-        return AgentGateway(base_url=self.base_url, token=os.getenv('AGENT_SERVICE_TOKEN', '').strip(),
-                            transport=self.transport)
+        return AgentHttpClient(base_url=self.base_url, token=os.getenv('AGENT_SERVICE_TOKEN', '').strip(),
+                               transport=self.transport)
 
     async def config(self):
         result = await self.service_gateway().request('GET', '/internal/v2/config')
@@ -206,11 +207,11 @@ class AgentGatewayV2(AgentGateway):
 
     async def start_fact(self, task_id, call_id):
         # Only the configured Agent environment is queried, never an event URL.
-        reader = AgentGateway(base_url=self.base_url, token=os.getenv('AGENT_FACT_READER_TOKEN', '').strip(), transport=self.transport)
+        reader = AgentHttpClient(base_url=self.base_url, token=os.getenv('AGENT_FACT_READER_TOKEN', '').strip(), transport=self.transport)
         return CallStartFact.model_validate(await reader.request('GET', f'/internal/v2/tasks/{task_id}/call-facts/{call_id}'))
 
     async def close_facts(self, task_id):
-        reader = AgentGateway(base_url=self.base_url, token=os.getenv('AGENT_FACT_READER_TOKEN', '').strip(), transport=self.transport)
+        reader = AgentHttpClient(base_url=self.base_url, token=os.getenv('AGENT_FACT_READER_TOKEN', '').strip(), transport=self.transport)
         return await reader.request('GET', f'/internal/v2/tasks/{task_id}/close-facts')
 
     async def usage(self, task_id, owner):
