@@ -1,6 +1,8 @@
 # Agent Platform 共享契约
 
-新增的独立 v2 候选模型位于 `agent_contracts.v2`、`execution_v2`、`canonical`、`signing`；消息仍为 `schema_version=1`。原 `wire.py` 未修改。v2 API、恢复与部署约束见 [权益与执行权限](entitlements.md)。本文下方原有“尚未实现”描述限定于 v1，不能用于推断新 v2 的实现或审批状态。
+Agent 结构化消息第一阶段（Metadata、MarkdownBlock、References 及对应事件）见 [消息 Blocks](message-blocks.md)。它复用下述事件 envelope 和执行报告持久化路径，产品 UI 尚未接入。
+
+新增的独立 v2 候选模型位于 `agent_contracts.v2`、`execution_v2`、`canonical`、`signing`；消息仍为 `schema_version=1`。`wire.py` 继续定义既有 HTTP envelope，并校验新增的结构化消息载荷。v2 API、恢复与部署约束见 [权益与执行权限](entitlements.md)。本文下方原有“尚未实现”描述限定于 v1，不能用于推断新 v2 的实现或审批状态。
 
 本页描述 `packages/agent-contracts/src/agent_contracts/` 中 Backend 与 Agent Platform 共用的数据和接口约定。包以 dataclass 表达领域记录，以 Pydantic Wire Model 校验 HTTP 请求与响应；Runtime 类型只存在于 Agent Worker 内部，由 Worker adapter 在进程边界转换。Backend Gateway 已接入产品 Agent API、Session 投影和 Knowledge 内部适配器；本文记录静态代码状态，不替代独立进程或可靠性验收。
 

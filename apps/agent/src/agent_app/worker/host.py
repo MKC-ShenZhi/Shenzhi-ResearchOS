@@ -168,6 +168,7 @@ def report_payload(request: dict[str, Any], result: RunResult | None,
             'truncated': result.truncated, 'prompt_tokens': result.prompt_tokens,
             'completion_tokens': result.completion_tokens, 'tool_calls': result.tool_calls,
             'usage_measured': result.usage_measured, 'question': result.question,
+            'message': result.message.model_dump(mode='json', exclude_none=True) if result.message else None,
             'error': ({'code': result.error.code, 'message': result.error.message}
                       if result.error else None),
         }

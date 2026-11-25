@@ -20,6 +20,8 @@ from contextlib import aclosing
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from agent_contracts.messages import AIMessage
+from agent_app.execution.message_stream import MessageStream, OUTPUT_INSTRUCTIONS
 from agent_app.errors import BusinessError
 from agent_app.application.policies import MAX_EXECUTION_TURNS
 from agent_app.execution.compaction import (
@@ -99,6 +101,8 @@ class _RunState:
         self.summary = ''
         self.read_files: list[str] = []
         self.modified_files: list[str] = []
+        self.presentation: MessageStream | None = None
+        self.presentation_snapshot: AIMessage | None = None
 
     def event(self, turn: int, name: str, data: dict) -> AgentEvent:
         self.seq += 1
@@ -241,6 +245,7 @@ class AgentRuntime:
         # pi coding-agent buildSystemPrompt 的 visibleTools 同机制）
         self.system = (system([tool.spec for tool in self.registry.tools.values()])
                        if callable(system) else system)
+        self.system = f'{self.system}\n\n{OUTPUT_INSTRUCTIONS}'
         # system 装配：业务 system → 技能清单（pi 两级注入；技能正文按需经 read_skill 装载）
         if skills is not None and skills.names():
             listing = skills.listing_prompt()
@@ -288,6 +293,9 @@ class AgentRuntime:
         """
         state = _RunState()
         state.run_id = checkpoint.run_id
+        state.seq = checkpoint.event_seq
+        if checkpoint.presentation is not None:
+            state.presentation_snapshot = AIMessage.model_validate(checkpoint.presentation)
         state.turn = checkpoint.turn
         state.messages = checkpoint.decoded_messages()
         # pi agent-loop:71-77/128-134：续跑前校验 transcript 形状，违规直接报错——
@@ -333,9 +341,19 @@ class AgentRuntime:
         state.deadline_at = time.monotonic() + self.deadline_s
         emit(0, RUN_START, {'run_id': state.run_id, 'model': self.model, 'resumed': resumed,
                             'tools': list(self.registry.enabled)})
+        state.presentation = MessageStream(
+            lambda name, data: emit(state.turn, name, data), model=self.model,
+            snapshot=state.presentation_snapshot,
+        )
+        state.presentation.start()
+        # Legacy transcripts have no source collection; structured ones retain trusted sources.
+        for message in state.messages:
+            if isinstance(message, ToolResultMessage) and not message.is_error:
+                state.presentation.register(message.references)
         logger.info('agent.run.start run_id=%s model=%s resumed=%s tools=%s',
                     state.run_id, self.model, resumed, list(self.registry.enabled))
         started = time.monotonic()
+        cancelled_error = None
         try:
             async with asyncio.timeout(self.deadline_s):
                 while True:
@@ -414,18 +432,20 @@ class AgentRuntime:
                         if outcome is None:
                             continue  # 本轮执行了交付工具 → 让模型继续收口
                         break  # 自然停笔（交付完成）或已被终态化（停止/错误）
-            except asyncio.CancelledError:
-                raise
+            except asyncio.CancelledError as exc:
+                _close_pending(state, emit, '未执行：运行被取消')
+                state.finalize(StopReason.CANCELLED)
+                cancelled_error = exc
             except Exception:
                 logger.exception('agent.run.delivery_window run_id=%s', state.run_id)
             state.finalize(StopReason.TIMEOUT)
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as exc:
             _close_pending(state, emit, '未执行：运行被取消')
             state.finalize(StopReason.CANCELLED)
             state.duration_ms = int((time.monotonic() - started) * 1000)
             logger.info('agent.run.end run_id=%s status=stopped(cancelled) turns=%s',
                         state.run_id, state.turn)
-            raise
+            cancelled_error = exc
         except BusinessError as exc:
             # transcript 恒闭合（types.py 的契约）：任何失败路径都不得留下未答的 tool_call，
             # 否则这份 messages 作为 history/resume 再发就会被上游拒收
@@ -437,6 +457,7 @@ class AgentRuntime:
             state.finalize(StopReason.ERROR, BusinessError(20004, 'Agent 运行发生错误，请重试'))
         state.duration_ms = int((time.monotonic() - started) * 1000)
         result = state.build()
+        result.message = state.presentation.finish(result.status, duration_ms=state.duration_ms)
         emit(state.turn, RUN_END, {
             'status': result.status, 'stop_reason': result.stop_reason.value,
             'turns': result.turns, 'duration_ms': result.duration_ms,
@@ -445,6 +466,8 @@ class AgentRuntime:
         })
         logger.info('agent.run.end run_id=%s status=%s turns=%s duration_ms=%s',
                     state.run_id, result.status, result.turns, result.duration_ms)
+        if cancelled_error is not None:
+            raise cancelled_error
         return result
 
     def _budget_spent(self, state: _RunState) -> bool:
@@ -478,7 +501,9 @@ class AgentRuntime:
             modified_files=state.modified_files,
             loaded_skills=sorted(state.loaded_skills),
             pinned_chars=state.pinned_chars,
-            executed_tools=state.executed_tools)
+            executed_tools=state.executed_tools,
+            presentation=state.presentation.snapshot().model_dump(mode='json'),
+            event_seq=state.seq)
 
     async def _run_turn(self, state: _RunState, emit: Callable, stop_requested: Callable,
                         pending_steering: Callable[[], list[UserMessage]]) -> StopReason | None:
@@ -488,6 +513,7 @@ class AgentRuntime:
         None 表示继续下一轮。位点顺序照 pi：turn_end 在工具执行**之后**发，
         steering / 预算治理由 _drive 在 turn_end 之后依次处理。
         """
+        state.presentation.end_block()  # Also close a partial turn before the deadline grace turn.
         state.turn += 1
         emit(state.turn, TURN_START, {'turn': state.turn})
         await self._maybe_compact(state, emit)  # pi transformContext 位点：下一请求前按需压缩
@@ -523,6 +549,7 @@ class AgentRuntime:
                     break
                 if isinstance(event, TextDelta):
                     assistant.content += event.text
+                    state.presentation.append(event.text)
                     delta_buffer.append(event.text)
                     if sum(len(piece) for piece in delta_buffer) >= 24:
                         emit(state.turn, DELTA, {'text': ''.join(delta_buffer)})
@@ -552,6 +579,7 @@ class AgentRuntime:
                                                    + event.usage.completion_tokens)
                     else:
                         state.usage_measured = False
+        state.presentation.end_block()
         calls = assistant.tool_calls
         # stop_reason 从不改写（pi agent-loop:222-233）：是否续跑只看"有没有工具调用"，
         # transcript 里保留模型给的原始语义（此前把 stop+calls 改成 tool_calls、
@@ -771,8 +799,19 @@ class AgentRuntime:
 
     def _record_tool_result(self, state: _RunState, emit: Callable, call: ToolCall,
                             result: ToolResult, duration_ms: int) -> None:
+        references = state.presentation.register(result.references) if not result.is_error else []
+        content = result.content
+        if references:
+            try:
+                payload = json.loads(content)
+            except ValueError:
+                payload = content
+            payload = dict(payload) if isinstance(payload, dict) else {'result': payload}
+            payload['references'] = [ref.model_dump(exclude_none=True) for ref in references]
+            content = json.dumps(payload, ensure_ascii=False)
         state.messages.append(ToolResultMessage(result.call_id, result.name,
-                                                result.content, result.is_error, result.pinned))
+                                                content, result.is_error, result.pinned,
+                                                tuple(references)))
         emit(state.turn, TOOL_END, {'tool_call_id': result.call_id, 'name': result.name,
                                     'is_error': result.is_error, 'duration_ms': duration_ms,
                                     'summary': result.content[:200]})

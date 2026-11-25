@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Union
 
+from agent_contracts.messages import AIMessage, Reference
+
 from agent_app.errors import BusinessError
 
 
@@ -62,6 +64,7 @@ class ToolResult:
     # 指令性内容（如技能说明）：随 ToolResultMessage 落账后豁免上下文截断。
     # 通用属性——任何工具（或 policy 钩子）都能声明，不与具体工具绑定。
     pinned: bool = False
+    references: tuple[Reference, ...] = ()
 
 
 @dataclass
@@ -87,6 +90,7 @@ class ToolResultMessage:
     content: str
     is_error: bool = False
     pinned: bool = False  # 指令性内容（如 read_skill 结果）豁免上下文截断
+    references: tuple[Reference, ...] = ()
 
 
 AgentMessage = Union[UserMessage, AssistantMessage, ToolResultMessage]
@@ -139,6 +143,7 @@ class RunResult:
     completion_tokens: int = 0
     tool_calls: int | None = None
     usage_measured: bool = False
+    message: AIMessage | None = None
 
     @property
     def status(self) -> str:
@@ -189,6 +194,8 @@ def message_to_dict(message: AgentMessage) -> dict[str, Any]:
         'content': message.content,
         'is_error': message.is_error,
         'pinned': message.pinned,
+        **({'references': [ref.model_dump(exclude_none=True) for ref in message.references]}
+           if message.references else {}),
     }
 
 
@@ -227,5 +234,6 @@ def message_from_dict(data: dict[str, Any]) -> AgentMessage:
             content=str(data.get('content', '')),
             is_error=bool(data.get('is_error', False)),
             pinned=bool(data.get('pinned', False)),
+            references=tuple(Reference.model_validate(ref) for ref in data.get('references', [])),
         )
     raise ValueError(f'未知消息类型: {kind!r}')

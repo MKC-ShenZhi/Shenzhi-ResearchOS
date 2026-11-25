@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import httpx
-from agent_contracts import TaskSubmission
+from agent_contracts import AIMessage, TaskSubmission
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
@@ -117,6 +117,10 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         run = self.session.get(RunRow, claim['run']['run_id'])
         self.assertEqual(run.report_json['status'], 'completed')
         self.assertEqual(run.report_json['result']['final_text'], 'complete')
+        message = AIMessage.model_validate(run.report_json['result']['message'])
+        self.assertEqual(message.blocks[0].content, 'complete')
+        end = next(row for row in rows if row.name == 'message_end')
+        self.assertEqual(AIMessage.model_validate(end.data['message']), message)
 
     async def test_takeover_worker_continues_sequence_and_completes(self):
         first = await self.control.claim('worker-a')

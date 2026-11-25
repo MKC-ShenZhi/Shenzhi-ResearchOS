@@ -7,7 +7,8 @@ from typing import Any
 from pydantic import BaseModel
 
 from agent_app.errors import BusinessError
-from agent_app.execution.tools import Tool, tool
+from agent_app.execution.tools import Tool, ToolOutput, tool
+from agent_app.execution.references import source_reference
 from agent_app.integrations.backend.knowledge import BackendKnowledgeClient
 
 ABSTRACT_CHARS = 300
@@ -44,7 +45,7 @@ def knowledge_tools(client: BackendKnowledgeClient | None = None) -> list[Tool]:
     @tool(name='paper_search',
           description='检索 CS/AI 论文知识库，可按年份、venue 和关键词过滤；换角度检索扩大覆盖。',
           params=SearchArgs, timeout_s=90.0)
-    async def paper_search(args: SearchArgs) -> str:
+    async def paper_search(args: SearchArgs) -> ToolOutput:
         payload: dict[str, Any] = {
             'query': args.query, 'topK': max(1, min(args.limit, MAX_SEARCH_LIMIT)),
         }
@@ -67,12 +68,16 @@ def knowledge_tools(client: BackendKnowledgeClient | None = None) -> list[Tool]:
             results.pop()
             output['omitted'] = output.get('omitted', 0) + 1
             serialized = json.dumps(output, ensure_ascii=False)
-        return serialized
+        return ToolOutput(content=serialized, references=tuple(
+            source_reference(type='paper', entity_id=item['paper_id'], title=item['title'],
+                             authors=item['authors'], year=item['year'], venue=item['venue'])
+            for item in results if item.get('paper_id') and item.get('title')
+        ))
 
     @tool(name='paper_detail',
           description='按 paper_id 获取论文完整摘要、作者、DOI 和 PDF 地址。',
           params=PaperArgs, timeout_s=90.0)
-    async def paper_detail(args: PaperArgs) -> str:
+    async def paper_detail(args: PaperArgs) -> ToolOutput:
         try:
             detail = await knowledge.get_paper(args.paper_id)
         except Exception as exc:
@@ -80,7 +85,12 @@ def knowledge_tools(client: BackendKnowledgeClient | None = None) -> list[Tool]:
         payload = brief(vars(detail))
         payload.update({key: getattr(detail, key, None) for key in
                         ('doi', 'pdf_url', 'citation_count', 'reference_count')})
-        return json.dumps(payload, ensure_ascii=False)
+        return ToolOutput(content=json.dumps(payload, ensure_ascii=False), references=tuple(
+            [source_reference(type='paper', entity_id=payload['paper_id'], title=payload['title'],
+                              authors=payload['authors'], year=payload['year'], venue=payload['venue'],
+                              doi=payload.get('doi'), url=payload.get('pdf_url'))]
+            if payload.get('paper_id') and payload.get('title') else []
+        ))
 
     @tool(name='citation_graph',
           description='返回论文引用邻域与主题标签；若没有 CITES 边，改用 paper_search 追后续工作。',
