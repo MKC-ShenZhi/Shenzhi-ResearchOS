@@ -6,7 +6,8 @@ repository's predicates, persistence and fencing, with an explicit lease clock.
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timedelta
+import tempfile
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import httpx
@@ -17,8 +18,10 @@ from sqlalchemy.orm import Session
 from agent_app.control import repository
 from agent_app.execution.runtime import AgentRuntime
 from agent_app.execution.types import StopReason
+from agent_app.errors import BusinessError
 from agent_app.infrastructure.database import get_session
 from agent_app.infrastructure.models import Base, RunEventRow, RunRow, TaskRow
+from agent_app.infrastructure.metering_models import TaskMeteringRow
 from agent_app.integrations.llm.agent_stream import Finish, TextDelta
 from agent_app.main import app
 from agent_app.worker import host
@@ -37,6 +40,9 @@ class MemorySession:
     async def execute(self, statement):
         return self.session.execute(statement)
 
+    async def get(self, model, identity, **kwargs):
+        return self.session.get(model, identity)
+
     async def scalar(self, statement):
         return self.session.scalar(statement)
 
@@ -52,9 +58,15 @@ class MemorySession:
 
 class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.enterContext(patch.dict('os.environ', {'AGENT_SERVICE_TOKEN': 'test-token'}))
+        spool = self.enterContext(tempfile.TemporaryDirectory())
+        self.enterContext(patch.dict('os.environ', {
+            'AGENT_WORKER_TOKEN': 'worker-token', 'AGENT_AUDIENCE': 'agent-test',
+            'AGENT_GRANT_ISSUER': 'backend-test', 'AGENT_USAGE_OUTBOX_CAPACITY': '100',
+            'AGENT_USAGE_SPOOL_ROOT': spool, 'AGENT_MODEL_ROUTE_REVISION': 'test-route',
+            'AGENT_TOOL_CONFIGURATION_RELEASE': 'test-tools',
+        }))
         # SQLite returns naive datetimes; keep the controlled clock consistent.
-        self.now = datetime(2026, 11, 18, 12)
+        self.now = datetime.now(timezone.utc).replace(tzinfo=None)
         self.enterContext(patch.object(repository, '_now', side_effect=lambda: self.now))
         engine = create_engine('sqlite:///:memory:')
         self.addCleanup(engine.dispose)
@@ -69,14 +81,28 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch.dict(app.dependency_overrides, {get_session: session_dependency}))
         self.control = host.AgentControlClient(transport=httpx.ASGITransport(app=app))
         self.addAsyncCleanup(self.control.close)
-        self.task = await repository.submit(self.db, TaskSubmission(owner_id='owner', prompt='run'))
+        submission = TaskSubmission(owner_id='owner', prompt='run')
+        from agent_contracts.v2 import TaskSubmissionV2
+        from agent_contracts.wire import TaskSubmissionWire
+        from agent_contracts.canonical import request_digest_v1
+        request = TaskSubmissionWire(owner_id='owner', prompt='run')
+        metering = TaskSubmissionV2(schema_version=1, request=request, owner_id='owner',
+            metering_profile_id='profile:'+submission.idempotency_key if submission.idempotency_key else 'profile:test',
+            metering_context='observation_only', submission_id=None,
+            request_digest=request_digest_v1(request.model_dump(mode='json')),
+            agent_audience='agent-test', budget_grant=None, permission_snapshot=None, call_bounds={})
+        self.task = await repository.submit(self.db, submission, metering=metering)
+        profile = await self.db.get(TaskMeteringRow, self.task.task_id)
+        profile.binding_status = 'bound'
+        await self.db.commit()
 
     def expire_lease(self):
-        self.now += timedelta(seconds=46)
+        self.now += timedelta(seconds=repository.WORKER_LEASE_SECONDS + 1)
 
     async def emit(self, claim, worker, seq, *, text='partial'):
         run = claim['run']
-        return await self.control.post(f"/internal/v1/runs/{run['run_id']}/events", {
+        self.control.execution_id = claim['execution_id']
+        return await self.control.post(f"/internal/v2/runs/{run['run_id']}/events", {
             'task_id': run['task_id'], 'run_id': run['run_id'], 'seq': seq,
             'turn': 1, 'name': 'delta', 'data': {'text': text},
             'occurred_at': self.now.isoformat(),
@@ -85,16 +111,18 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
 
     async def report(self, claim, worker, *, status='completed', text='complete'):
         run = claim['run']
-        return await self.control.post(f"/internal/v1/runs/{run['run_id']}/report", {
+        self.control.execution_id = claim['execution_id']
+        return await self.control.post(f"/internal/v2/runs/{run['run_id']}/report", {
             'task_id': run['task_id'], 'run_id': run['run_id'], 'status': status,
             'result': {'final_text': text}, 'usage': {},
             'worker_id': worker, 'lease_token': claim['lease_token'],
         })
 
     async def rejected(self, operation):
-        with self.assertRaises(httpx.HTTPStatusError) as error:
+        with self.assertRaises((httpx.HTTPStatusError, BusinessError)) as error:
             await operation
-        self.assertEqual(error.exception.response.status_code, 409)
+        status = error.exception.response.status_code if isinstance(error.exception, httpx.HTTPStatusError) else error.exception.status
+        self.assertIn(status, (403, 409))
 
     def events(self, run_id):
         return self.session.scalars(select(RunEventRow).where(
@@ -139,8 +167,11 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         second = await self.control.claim('worker-b')
         await self.rejected(self.emit(first, 'worker-a', 2, text='stale'))
         await self.rejected(self.report(first, 'worker-a', status='failed', text='stale'))
-        stale = await self.control.heartbeat(first['run']['run_id'], 'worker-a', 1)
-        self.assertFalse(stale.active)
+        self.control.execution_id = first['execution_id']
+        with self.assertRaises(BusinessError) as stale:
+            await self.control.heartbeat(first['run']['run_id'], 'worker-a', 1)
+        self.assertEqual(stale.exception.message, 'LEASE_INACTIVE')
+        self.control.execution_id = second['execution_id']
         current = await self.control.heartbeat(second['run']['run_id'], 'worker-b', 2)
         self.assertTrue(current.active)
         run = self.session.get(RunRow, second['run']['run_id'])

@@ -7,8 +7,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agent_app.errors import BusinessError
-from agent_app.integrations.llm.registry import Capabilities, Catalog, ModelRegistry, RegistryConfigError
-from agent_app.integrations.llm.resolver import AUTODL_DEFAULT_MODELS, load_registry
+from agent_app.integrations.llm.registry import Catalog, ModelRegistry, RegistryConfigError
+from agent_app.integrations.llm.resolver import load_registry
+
+VERIFIED_AUTODL_UPSTREAMS = ('DeepSeek-V4.1-Flash-1017', 'Qwen3.5-397B-A17B', 'Kimi-K2.5')
 
 
 @contextmanager
@@ -24,31 +26,56 @@ class RegistryTests(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             return load_registry()
 
-    def test_autodl_key_gates_registration_and_empty_allowlist_uses_verified_defaults(self):
-        for env in ({}, {'AUTODL_API_KEY': '  ', 'AUTODL_MODELS': 'Kimi-K2.5'}):
-            self.assertFalse(any(m.provider_id == 'autodl' for m in self.load(env).models.values()))
-        self.assertEqual(AUTODL_DEFAULT_MODELS,
-                         ('DeepSeek-V4.1-Flash-1017', 'Qwen3.5-397B-A17B', 'Kimi-K2.5'))
-        for value in ('', '  , , '):
-            registry = self.load({'AUTODL_API_KEY': 'autodl-private', 'AUTODL_MODELS': value})
-            self.assertEqual([m.upstream_model for m in registry.models.values() if m.provider_id == 'autodl'],
-                             list(AUTODL_DEFAULT_MODELS))
-            self.assertEqual(registry.default_model().id, f'autodl/{AUTODL_DEFAULT_MODELS[0]}')
-            self.assertEqual(registry.default_model('agent').id, f'autodl/{AUTODL_DEFAULT_MODELS[0]}')
+    def test_all_builtins_key_only_and_stable_multi_provider_order(self):
+        expected = {'dashscope': ['qwen-plus'], 'deepseek': ['deepseek-chat'],
+                    'zhipu': ['glm-4-plus'], 'autodl': list(VERIFIED_AUTODL_UPSTREAMS), 'openlux': ['deepseek-v4.1-flash', 'qwen3.8-flash', 'glm-5.3-flash', 'kimi-k2.6']}
+        for provider, upstreams in expected.items():
+            with self.subTest(provider=provider):
+                registry = self.load({f'{provider.upper()}_API_KEY': 'private'})
+                actual = [m['value'] for m in registry.public_models('agent') if m['enabled']]
+                self.assertEqual(actual, [f'{provider}/{m}' for m in upstreams])
+                self.assertEqual(registry.public_default('agent'), actual[0] if actual else None)
+        keys = {f'{p.upper()}_API_KEY': 'private' for p in expected}
+        registry = self.load(keys)
+        self.assertEqual(registry.public_default('agent'), 'dashscope/qwen-plus')
+        self.assertEqual(len([m for m in registry.public_models('agent') if m['enabled']]), 10)
+        for model in registry.models.values():
+            if not model.enabled:
+                with self.assertRaisesRegex(BusinessError, '禁用'):
+                    registry.resolve_model(model.id)
 
-    def test_autodl_allowlist_preserves_case_deduplicates_and_unknown_is_conservative(self):
-        registry = self.load({'AUTODL_API_KEY': 'autodl-private',
-                              'AUTODL_MODELS': ' , Untested-ID , Kimi-K2.5,Untested-ID, ,Kimi-K2.5, '})
+    def test_catalog_extension_needs_no_resolver_branch(self):
+        data = {'providers': [{'id': 'future', 'base_url': 'https://future.example/v1',
+                               'api_key_env': 'UNUSUAL_CREDENTIAL'}],
+                'models': [{'id': 'future/m', 'provider_id': 'future', 'upstream_model': 'm',
+                            'label': 'Future', 'capabilities': {'tool_calling': True}}]}
+        with json_catalog(data) as path, patch('agent_app.integrations.llm.resolver.CATALOG_PATH', Path(path)):
+            registry = self.load({'UNUSUAL_CREDENTIAL': 'private'})
+            self.assertEqual(registry.public_default('agent'), 'future/m')
+            self.assertEqual(self.load({}).public_models('agent'), [])
+            with self.assertRaisesRegex(BusinessError, '凭据'):
+                self.load({}).resolve_model('future/m')
+
+    def test_custom_replacement_preserves_default_order_and_explicit_missing_key_does_not_fallback(self):
+        with json_catalog({'models': [{'id': 'dashscope/qwen-plus', 'provider_id': 'dashscope',
+            'upstream_model': 'qwen-plus', 'label': 'Reviewed', 'capabilities': {'tool_calling': True}}]}) as path:
+            registry = self.load({'AI_MODEL_REGISTRY_FILE': path, 'DASHSCOPE_API_KEY': 'dash',
+                                  'DEEPSEEK_API_KEY': 'deep'})
+            self.assertEqual(registry.public_default('agent'), 'dashscope/qwen-plus')
+        registry = self.load({'AUTODL_API_KEY': 'private', 'AI_DEFAULT_MODEL': 'deepseek/deepseek-chat'})
+        self.assertIsNone(registry.public_default('agent'))
+        with self.assertRaisesRegex(BusinessError, '凭据'):
+            registry.resolve_model(None, 'agent')
+
+    def test_autodl_definitions_remain_without_key_and_unknown_requires_declaration(self):
+        registry = self.load({})
         self.assertEqual([m.upstream_model for m in registry.models.values() if m.provider_id == 'autodl'],
-                         ['Untested-ID', 'Kimi-K2.5'])
-        self.assertEqual(registry.resolve_model('autodl/Untested-ID').spec.capabilities, Capabilities())
-        self.assertEqual(registry.default_model().id, 'autodl/Untested-ID')
-        self.assertEqual(registry.default_model('agent').id, 'autodl/Kimi-K2.5')
-        with self.assertRaisesRegex(BusinessError, 'Tool Calling'):
-            registry.resolve_model('autodl/Untested-ID', 'agent')
-        for bare in ('Untested-ID', 'Kimi-K2.5'):
-            with self.assertRaisesRegex(BusinessError, '未注册'):
-                registry.resolve_model(bare)
+                         list(VERIFIED_AUTODL_UPSTREAMS))
+        self.assertEqual(registry.public_models('agent'), [])
+        with self.assertRaisesRegex(BusinessError, '未注册'):
+            self.load({'AUTODL_API_KEY': 'private'}).resolve_model('autodl/Untested-ID')
+        with self.assertRaisesRegex(BusinessError, '未注册'):
+            self.load({'AUTODL_API_KEY': 'private'}).resolve_model('Kimi-K2.5')
 
     def test_autodl_explicit_defaults_override_order_and_old_providers_keep_priority(self):
         env = {'AUTODL_API_KEY': 'autodl-private'}
@@ -94,34 +121,33 @@ class RegistryTests(unittest.TestCase):
             resolved = registry.resolve_model(None)
             self.assertEqual((resolved.spec.id, resolved.provider.spec.id), (f'{provider}/{model}', provider))
 
-    def test_legacy_allowed_models_belong_to_legacy_provider(self):
-        registry = self.load({'DASHSCOPE_API_KEY': 'dash', 'DEEPSEEK_API_KEY': 'deep',
-                              'AI_ALLOWED_MODELS': 'deepseek-chat,deepseek-r1'})
-        self.assertEqual(registry.resolve_model('deepseek-chat').provider.spec.id, 'dashscope')
-        self.assertEqual(registry.resolve_model('deepseek/deepseek-chat').provider.spec.id, 'deepseek')
-        self.assertEqual(registry.resolve_model('deepseek-r1').spec.brand, 'deepseek')
-
     def test_same_upstream_different_providers(self):
-        registry = self.load({'DASHSCOPE_API_KEY': 'dash', 'DEEPSEEK_API_KEY': 'deep',
-                              'DASHSCOPE_MODEL': 'shared', 'DEEPSEEK_MODEL': 'shared'})
-        self.assertEqual(registry.resolve_model('shared').provider.spec.id, 'dashscope')
-        self.assertEqual(registry.resolve_model('deepseek/shared').upstream_model, 'shared')
+        data = {'models': [{'id': f'{p}/shared', 'provider_id': p, 'upstream_model': 'shared',
+                            'label': p} for p in ('dashscope', 'deepseek')],
+                'aliases': {'shared': 'dashscope/shared'}}
+        with json_catalog(data) as path:
+            registry = self.load({'DASHSCOPE_API_KEY': 'dash', 'DEEPSEEK_API_KEY': 'deep',
+                                  'AI_MODEL_REGISTRY_FILE': path})
+            self.assertEqual(registry.resolve_model('shared').provider.spec.id, 'dashscope')
+            self.assertEqual(registry.resolve_model('deepseek/shared').upstream_model, 'shared')
+            registry = self.load({'DEEPSEEK_API_KEY': 'deep', 'AI_MODEL_REGISTRY_FILE': path})
+            self.assertEqual(registry.resolve_model('shared', require_configured=False).provider.spec.id, 'dashscope')
+            with self.assertRaisesRegex(BusinessError, '凭据'):
+                registry.resolve_model('shared')
+            self.assertEqual(registry.resolve_model('deepseek/shared').provider.spec.id, 'deepseek')
 
-    def test_zhipu_requires_model_and_key_and_unknown_has_no_tools(self):
+    def test_zhipu_key_only_and_unknown_requires_declaration(self):
         registry = self.load({'ZHIPU_API_KEY': 'glm'})
-        self.assertFalse(any(item.provider_id == 'zhipu' for item in registry.list_models()))
-        registry = self.load({'ZHIPU_API_KEY': 'glm', 'ZHIPU_MODEL': 'custom-glm'})
-        self.assertEqual(registry.default_model().id, 'zhipu/custom-glm')
-        with self.assertRaisesRegex(BusinessError, 'Tool Calling'):
-            registry.resolve_model('custom-glm', 'agent')
-        registry = self.load({'ZHIPU_MODEL': 'glm-4-plus'})
+        self.assertEqual(registry.public_default('agent'), 'zhipu/glm-4-plus')
+        with self.assertRaisesRegex(BusinessError, '未注册'):
+            registry.resolve_model('zhipu/custom-glm')
         with self.assertRaisesRegex(BusinessError, '凭据'):
-            registry.resolve_model('glm-4-plus')
+            self.load({}).resolve_model('glm-4-plus')
 
     def test_invalid_and_unsupported_models(self):
-        registry = self.load({'DEEPSEEK_API_KEY': 'deep', 'AI_ALLOWED_MODELS': 'deepseek-reasoner'})
+        registry = self.load({'DEEPSEEK_API_KEY': 'deep'})
         for model, purpose, message in [('missing', 'chat', '未注册'),
-                                        ('deepseek-reasoner', 'agent', 'Tool Calling'),
+                                        ('deepseek-reasoner', 'agent', '禁用'),
                                         ('qwen-plus', 'chat', '凭据')]:
             with self.subTest(model=model), self.assertRaisesRegex(BusinessError, message):
                 registry.resolve_model(model, purpose)
@@ -170,20 +196,20 @@ class RegistryTests(unittest.TestCase):
         self.assertNotIn('SECRET_VALUE', json.dumps(registry.public_models('chat')))
 
     def test_qualified_model_keeps_provider_when_legacy_priority_changes(self):
-        env = {'DASHSCOPE_API_KEY': 'dash', 'DEEPSEEK_API_KEY': 'deep',
-               'DASHSCOPE_MODEL': 'shared', 'DEEPSEEK_MODEL': 'shared'}
-        first = self.load(env)
-        second = self.load({**env, 'DASHSCOPE_API_KEY': ''})
-        self.assertEqual(first.resolve_model('deepseek/shared').provider.spec.id, 'deepseek')
-        self.assertEqual(second.resolve_model('deepseek/shared').provider.spec.id, 'deepseek')
+        for keys in ({'DASHSCOPE_API_KEY': 'dash', 'DEEPSEEK_API_KEY': 'deep'},
+                     {'DEEPSEEK_API_KEY': 'deep'}):
+            registry = self.load(keys)
+            self.assertEqual(registry.resolve_model('deepseek-chat').provider.spec.id, 'deepseek')
+            self.assertEqual(registry.resolve_model('deepseek/deepseek-chat').provider.spec.id, 'deepseek')
         with self.assertRaisesRegex(BusinessError, '凭据'):
-            second.resolve_model('dashscope/shared')
+            self.load({'DEEPSEEK_API_KEY': 'deep'}).resolve_model('dashscope/qwen-plus')
 
     def test_file_duplicate_ids_and_invalid_params_fail_without_input_leak(self):
         provider = {'id': 'p', 'base_url': 'https://p.example', 'api_key_env': 'P_KEY'}
         model = {'id': 'm', 'provider_id': 'p', 'upstream_model': 'm', 'label': 'M'}
         for data in [
             {'providers': [provider], 'models': [model, model]},
+            {'aliases': {'invalid-alias': 'unknown-model'}},
             {'providers': [provider, provider], 'models': [model]},
             {'providers': [provider], 'models': [{**model, 'request_params': {'api_key': 'PRIVATE_INPUT'}}]},
             {'providers': [{**provider, 'protocol': 'unsupported'}], 'models': [model]},

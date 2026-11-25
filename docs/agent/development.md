@@ -1,44 +1,50 @@
 # Agent Platform 开发边界
 
-Agent Platform 服务拆分在 `feat/agent-architecture-migration` 分支落地。共享协议位于 `packages/agent-contracts/`；Agent 独立应用、Runtime、Provider、能力、Skills、Workspace、Task/Run API、PostgreSQL Repository、Outbox 和 Worker 位于 `apps/agent/`。本页描述代码归属；双进程和可靠性验收仍需在配置真实数据库与服务后执行。
+当前分支将 Agent 执行通信统一为 V2。Backend 产品 API 只注册 `/api/v2/agent/*`，Backend Gateway、Agent API 和 Worker 均只使用 `/internal/v2/*`。Backend 产品 API 位于 `app/api/agent.py`，权益、计量及内部控制接口位于 `app/api/agent_control.py`；唯一 Gateway 位于 `app/services/agent_gateway/gateway.py`；Agent 内部路由位于 `agent_app/api/routes.py`。这些文件按职责命名，HTTP 路径与 V2 wire 契约保持不变。V1 HTTP router、Backend V1 Gateway adapter、Worker V1 分支和基于 V1 的 M1 Mock 启动器已从当前实现移除。历史数据库数据保留，不执行数据清理或迁移删除。
 
 ## 当前所有权
 
 | 区域 | 权威所有者 | 当前实现与边界 |
 | --- | --- | --- |
-| 共享协议 | `packages/agent-contracts/` | 领域 dataclass 与共享 Pydantic Wire Model；Gateway 与 Agent 路由使用同一组提交、Task、Run、事件和报告结构 |
-| 产品 API 与身份 | Backend | `/api/v1/agent/*` 保持产品入口；配置、Task、SSE 事件、控制和文件操作通过 `agent_gateway` |
-| Session / Turn / Upload | Backend | 产品对话、附件 owner 权限、用户身份和产品 Timeline 由 Backend 持有；Task/Run 状态通过 Agent API 投影 |
-| Agent Execution | Agent | Runtime、Provider 路由、Skills、Workspace、Web/Paper 能力和 Knowledge HTTP Adapter 已迁入 |
-| Agent Control / Worker | Agent | 独立数据库迁移、Task/Run/Event/Outbox、领取、Lease/fencing、取消、steer、报告和失败重试已实现 |
-| Workspace 与产物 | Agent | 使用共享持久卷和 `AGENT_WORKSPACE_ROOT`；API 与 Worker 必须配置到同一目录 |
-| Backend Gateway | Backend | 已实现 Task/Run/Event/Control、配置、文件、Workspace 和匿名认领边界；需要真实网络与恢复场景验收 |
+| 共享协议 | `packages/agent-contracts/` | 领域 dataclass 与共享 Pydantic Wire Model；V2 提交、Task、Run、事件、计量与报告结构 |
+| 产品 API 与身份 | Backend | `/api/v2/agent/*` 是唯一 Agent 产品 BFF 路径；Session run 保持 SSE 契约，独立 Task JSON 使用 `/submissions` |
+| Session / Turn / Upload | Backend | 产品对话、附件 owner 权限、身份和产品 Timeline 由 Backend 持有；Agent 状态通过 V2 API 投影 |
+| Agent Execution | Agent | Runtime、Provider 路由、Skills、Workspace、Web/Paper 能力和 Knowledge HTTP Adapter |
+| Agent Control / Worker | Agent | 独立数据库中的 Task/Run/Event/Outbox、V2 领取、Lease/fencing、取消、steer、报告、重试和 metering |
+| Backend Gateway | Backend | 所有执行和共享能力通信走 V2；V2 准入由 `AGENT_V2_ADMISSION` 与签名 Grant 控制 |
 
 ## 当前执行链路
 
 ```text
 Backend 产品 API / Session 投影
-       │
-       ▼
-Backend AgentGateway ──HTTP──> Agent Internal API
-                                  ├── Task/Run + Outbox
-                                  ├── PostgreSQL SKIP LOCKED + Worker Lease/fencing
-                                  ├── Agent Runtime / Provider / Tools
-                                  └── 持久 Run Events / ExecutionReport
+       ├── 执行与控制 ──V2 Gateway──> Agent /internal/v2/*
+       ├── 配置、Workspace、文件 ──V2 Service Gateway──> Agent /internal/v2/*
+       └── Knowledge ──Service Adapter──> Backend Knowledge API
+                                      │
+                                      ├── PostgreSQL SKIP LOCKED + Worker Lease/fencing
+                                      ├── Agent Runtime / Provider / Tools
+                                      └── 持久 Run Events / ExecutionReport / Usage Facts
 ```
 
-Backend 通过 `agent-contracts` 校验跨服务请求与响应。Knowledge 仍归 Backend，Agent 通过受服务凭据保护的内部 API 调用。上传附件目前由 Backend 校验 owner、解析并以内联文本随 Task 提交；`input_ref` 尚未启用，Agent 收到非空引用会明确失败。Agent API 与 Worker 必须使用同一个 `AGENT_WORKSPACE_ROOT` 共享持久目录。
+Agent Repository 只创建携带 metering envelope 的 Task，Worker 只领取已绑定且未撤销的计量 Task。Session Turn 持久 `_agent_protocol` 仅用于识别旧历史数据。新 Turn 固定写入 V2 标记；终态旧 Turn 从 Backend 已持久化的产品投影重放，未终态旧 Turn 不会回调任何 Agent 执行 API。过期的旧协议运行由 Backend Session Repository 收敛为失败状态。Agent API 与 Worker 必须使用同一持久 `AGENT_WORKSPACE_ROOT`。
 
-Agent 使用独立 `AGENT_DATABASE_URL` 和 `AGENT_SERVICE_TOKEN`。在 `apps/agent` 执行 `uv run alembic upgrade head`，再分别启动 `uv run uvicorn agent_app.main:app ...` 与 `uv run python -m agent_app.worker_main`。
+## 退役审计与部署证据
 
-## 后续运维与验收
+源代码移除 V1 不会证明部署环境已没有旧实例或外部调用方。发布后仍应从 Backend 与 Agent 的**只读** PostgreSQL 对照运行：
 
-- Backend 旧 Runtime、Provider、Tool Executor、Worker Executor 与重复的 Agent 专属 LLM/Web 集成已删除；相关模型目录和搜索集成测试归入 Agent。
-- `agent_sessions/live.py` 仅作为 Backend 进程内 SSE 订阅缓冲，恢复时从 Agent 持久事件重放，不作为权威事件来源。
-- 附件正文仍由 Backend 校验 owner 并以内联文本随 Task 提交；`input_ref` 未启用，Agent 收到非空引用会明确失败。
-- Agent API 与 Worker 的共享 Workspace 卷必须在实际部署中指向同一持久目录。
-- 真实服务联调需覆盖独立进程、重启恢复、事件重放、Lease fencing、重试、取消、附件、Knowledge、Session 投影与 SSE 重连。本次迁移按用户要求未运行自动化测试或真实服务验收。
+```powershell
+$env:AGENT_DATABASE_URL = '<只读 Agent PostgreSQL URL>'
+$env:CHAT_DATABASE_URL = '<只读 Backend PostgreSQL URL>'
+uv run --project apps/backend --frozen --no-sync python scripts/agent_v1_drain_audit.py
+```
 
-Session/Turn 与 Task/Run 的关联规则见 [生命周期](lifecycle.md)，共享 Wire Model 与当前能力边界见 [共享契约](contracts.md)。
+审计脚本只读统计 V1 Task/Run、活跃旧 Session Turn 与历史引用；不输出 DSN、Owner 或记录 ID。数据库侧清零仍不证明外部调用方已迁移，需另外检索入口代理、Backend、Agent API 日志，覆盖已知重试周期、后台周期与发布窗口。脚本将 `external_v1_callers_verified` 和 `v1_retirement_proven` 保持为 `false`，不得据此单独宣称生产切换验收完成。不要删除历史 Task、Run、Turn 或事件来让计数归零。
 
-M1 的独立 Mock Worker、浏览器操作说明与隔离环境启动方式见 [本地产品演示](local-demo.md)。它复用现有 Worker Host 的事件、租约、控制与报告交付，仅替换显式注入的 Runtime factory；普通 Worker 默认路径不变。`AGENT_DEMO_MODE=1` 只公布带标记的 `demo/m1` 模型，并拒绝启动普通模型 Worker。
+完整双库审计、生产部署日志和真实 V2 Worker/数据库联调尚未在本地环境验证；它们是运行环境验收项，不再作为保留 V1 源码或运行时分支的理由。
+
+## 后续验收
+
+- 本地自动化验证覆盖 Agent V2 API/Worker、Backend V2 Gateway 与产品 Session/SSE 路径。
+- 真实服务验收需使用隔离 Backend/Agent PostgreSQL，覆盖双进程启动、重启恢复、事件重放、租约 fencing、重试、取消、附件、Knowledge、计量和 SSE 重连。
+- M1 V1 Mock 启动器已退役；当前没有可运行的 V2 Mock 准入 fixture，见 [本地演示状态](local-demo.md)。
+- 真正生产退役状态还需结合部署版本、访问日志和只读双库审计确认。

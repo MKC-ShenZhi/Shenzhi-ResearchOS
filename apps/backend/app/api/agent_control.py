@@ -1,14 +1,13 @@
-"""Thin v2 product and authenticated Control endpoints, isolated from v1."""
+"""Agent entitlement, metering and authenticated internal control endpoints."""
 from __future__ import annotations
 
 import hmac
-import json
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, Header, Request, Query
+from fastapi import APIRouter, Depends, Header
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -29,27 +28,7 @@ from app.services.agent_entitlements.policy import EntitlementPolicy
 from app.services.agent_entitlements.service import EntitlementError, require
 from app.services.agent_entitlements.service import now_utc
 from app.services.agent_entitlements.usage import UsageSettlement
-from app.services.agent_gateway.v2 import AgentGatewayV2
-from app.schemas.agent import AgentRunBody, AgentSessionRun
-from app.services.agent_attachments import resolve_agent_attachments
-from app.services.agent_sessions.service import start_session_run, resume_session_run
-from app.services.agent_sessions.live import subscribe
-from agent_contracts.canonical import digest
-
-
-class ProductRun(AgentRunBody, V2):
-    pass
-
-
-class SessionRun(AgentSessionRun, V2):
-    pass
-
-
-def client_fingerprint(body):
-    # Preserve parsed JSON value types while retaining a frozen source key for
-    # recovery after upload slots have expired. This is not the signed Task digest.
-    return digest(json.dumps(body.model_dump(mode='json'), sort_keys=True, ensure_ascii=False,
-                             allow_nan=False, separators=(',', ':')))
+from app.services.agent_gateway.gateway import AgentGateway
 
 
 class V2Route(APIRoute):
@@ -76,73 +55,6 @@ async def control_role(authorization: str | None = Header(default=None)):
 
 router = APIRouter(prefix='/api/v2/agent', route_class=V2Route)
 internal = APIRouter(prefix='/internal', dependencies=[Depends(control_role)], route_class=V2Route)
-
-
-@router.post('/run')
-async def run_product(body: ProductRun, owner: str = Depends(request_owner),
-                      client_key: str = Header(alias='Idempotency-Key', min_length=1, max_length=200)):
-    require(body.session_id is None, 'USE_SESSION_RUN_ENDPOINT', 422)
-    gateway = AgentGatewayV2()
-    # A persisted original request wins over expiring attachments on retries.
-    async with session_scope() as db:
-        from app.models.agent_entitlements import SubmissionRow, ObservationAdmissionRow
-        existing = await db.scalar(select(SubmissionRow).where(SubmissionRow.owner_id == owner,
-                                                              SubmissionRow.client_key == client_key))
-        if existing is None:
-            existing = await db.scalar(select(ObservationAdmissionRow).where(ObservationAdmissionRow.owner_id == owner,
-                                                                            ObservationAdmissionRow.client_key == client_key))
-        if existing:
-            require(existing.client_request_digest == client_fingerprint(body), 'IDEMPOTENCY_CONFLICT')
-    if existing:
-        task = await gateway.recover_submission(owner, client_key)
-        return dict(schema_version=1, task=task, warnings=[])
-    text, warnings, files = await resolve_agent_attachments(body.attachments, owner)
-    task = await gateway.submit(dict(owner_id=owner, prompt=body.prompt + text, history=body.history,
-        mode=body.mode, model=body.model, workspace_id=body.workspace_id, skills=body.skills,
-        idempotency_key=client_key), client_request_digest=client_fingerprint(body))
-    return dict(schema_version=1, task=task, warnings=warnings)
-
-
-@router.post('/sessions/{session_id}/run')
-async def run_session(session_id: str, body: SessionRun, owner: str = Depends(request_owner),
-                      client_key: str = Header(alias='Idempotency-Key', min_length=1, max_length=200)):
-    live = await start_session_run(owner=owner, session_id=session_id, prompt=body.prompt,
-        model=body.model, mode=body.mode, attachments=body.attachments, workspace_id=body.workspace_id,
-        skills=body.skills, allow_shell=False, idempotency_key=client_key,
-        idempotency_fingerprint=client_fingerprint(body), gateway=AgentGatewayV2())
-    return dict(schema_version=1, session_id=session_id, turn_id=live.turn_id)
-
-
-@router.get('/sessions/{session_id}/run/stream')
-async def resume(session_id: str, owner: str = Depends(request_owner), after: int = Query(default=0, ge=0)):
-    from app.services.agent_sessions.repository import agent_session_repository
-    session = await agent_session_repository.get(session_id, owner)
-    require(session.turns and session.turns[-1].settings.get('_agent_protocol') == 2, 'V2_SESSION_REQUIRED', 404)
-    live = await resume_session_run(session_id, owner)
-    async def events():
-        async for event in subscribe(live, after):
-            if event is None:
-                yield ': keepalive\n\n'
-            else:
-                index, name, data = event
-                yield f'id: {index}\nevent: {name}\ndata: {json.dumps(dict(data, schema_version=1), ensure_ascii=False)}\n\n'
-    return StreamingResponse(events(), media_type='text/event-stream')
-
-
-@router.post('/run/{run_id}/stop')
-async def stop_run(run_id: str, owner: str = Depends(request_owner)):
-    gateway = AgentGatewayV2()
-    run = await gateway.run(run_id, owner)
-    return await gateway.cancel(run['task_id'], owner)
-
-
-class Steer(V2):
-    text: str
-
-
-@router.post('/run/{run_id}/steer')
-async def steer_run(run_id: str, body: Steer, owner: str = Depends(request_owner)):
-    return await AgentGatewayV2().steer(run_id, owner, body.text)
 
 
 @internal.get('/protocol-capabilities')
@@ -233,7 +145,7 @@ async def void_permit(permit_id: str, body: VoidProof, service=Depends(entitleme
 async def usage_batch(body: UsageBatch, service=Depends(entitlement_service)):
     require(body.producer_id == service.audience, 'PRODUCER_AUDIENCE_CONFLICT', 403)
     results = []
-    gateway = AgentGatewayV2()
+    gateway = AgentGateway()
     for item in body.items:
         fact, error = None, None
         try:

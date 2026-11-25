@@ -18,6 +18,30 @@ function forwardedHeaders(requestHeaders: Headers): Headers {
   return headers;
 }
 
+function decodedPathSegments(path: string[]): string[] | null {
+  const segments: string[] = [];
+  for (const part of path) {
+    let decoded = part;
+    let stable = false;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      let next: string;
+      try {
+        next = decodeURIComponent(decoded);
+      } catch {
+        return null;
+      }
+      if (next === decoded) {
+        stable = true;
+        break;
+      }
+      decoded = next;
+    }
+    if (!stable) return null;
+    segments.push(...decoded.split(/[\\/]/));
+  }
+  return segments;
+}
+
 /** Node fetch cannot deliver a 401 response to a non-replayable request body.
  * Keep small JSON protocol bodies replayable; binary uploads still stream.
  */
@@ -36,8 +60,33 @@ export async function forwardToBusinessBackend(
   req: NextRequest,
   backendOrigin: string,
   path: string[],
+  apiVersion: "v1" | "v2" = "v1",
 ) {
-  const route = `/api/v1/${path.join("/")}`;
+  // V2 BFF traffic is limited to Agent product routes. Keep Control APIs
+  // unreachable even if another Next route calls this helper directly.
+  const segments = decodedPathSegments(path);
+  if (apiVersion === "v2") {
+    if (!segments || segments[0] !== "agent" ||
+        segments.some((segment) => segment === "internal" || segment === "admin-console")) {
+      return NextResponse.json({ code: 10001, message: "Not found" }, {
+        status: 404, headers: { "Cache-Control": "no-store" },
+      });
+    }
+  }
+  if (apiVersion === "v1" && segments?.[0] === "agent") {
+    return NextResponse.json({ code: 10001, message: "Not found" }, {
+      status: 404, headers: { "Cache-Control": "no-store" },
+    });
+  }
+  // The public BFF must never become a route to the dedicated Admin entrypoint.
+  // Next decodes route params; decode once more for the downstream HTTP parser
+  // and reject embedded separators as well as ordinary Admin path segments.
+  if (!segments || segments.includes("admin-console")) {
+    return NextResponse.json({ code: 10001, message: "Not found" }, {
+      status: 404, headers: { "Cache-Control": "no-store" },
+    });
+  }
+  const route = `/api/${apiVersion}/${path.join("/")}`;
   const dest = `${backendOrigin.replace(/\/$/, "")}${route}${req.nextUrl.search}`;
   const requestId = resolveRequestId(req.headers.get(REQUEST_ID_HEADER));
   const startedAt = performance.now();

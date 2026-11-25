@@ -22,10 +22,11 @@ ToolRegistry 在 `execute_prepared` 登记，prepare/校验失败不登记。顺
 
 | 调用方 | 路径 | 用途 |
 | --- | --- | --- |
-| BFF/用户 | `POST /api/v2/agent/run` | 非 Session 提交；必需 Idempotency-Key，owner 来自可信 BFF |
-| BFF/用户 | `POST /api/v2/agent/sessions/{id}/run` | 复用原 Session/Turn 服务，稳定 Turn→Submission |
-| BFF/用户 | `GET /api/v2/agent/sessions/{id}/run/stream` | 原 Task 及全部 Run 回放；每条 SSE data 含 schema_version |
-| BFF/用户 | `POST /api/v2/agent/run/{id}/stop`、`/steer` | v2 owner 过滤的运行控制 |
+| BFF/用户 | `POST /api/v2/agent/run` | 非 Session SSE 提交；必需 Idempotency-Key，owner 来自可信 BFF |
+| BFF/用户 | `POST /api/v2/agent/submissions` | 独立 Task JSON 提交；与 SSE 入口使用不同路径 |
+| BFF/用户 | `POST /api/v2/agent/sessions/{id}/run` | Session/Turn SSE 提交，稳定 Turn→Submission |
+| BFF/用户 | `GET /api/v2/agent/sessions/{id}/run/stream` | 产品 SSE 续接与历史恢复 |
+| BFF/用户 | `POST /api/v2/agent/run/{id}/stop`、`/steer` | 产品运行控制；V2 存量先查，明确 404 时才查历史 V1 Run |
 | BFF/用户 | `GET /api/v2/agent/entitlements` | 当前 policy、权限快照、逐规则窗口/used/held/remaining |
 | BFF/用户 | `GET /api/v2/agent/tasks/{id}/usage`、`/ledger` | 实测、估算、未知、预留/已用/释放、结算/对账和审计引用 |
 | Gateway | `/internal/v2/tasks`、`/tasks/{id}`、`/tasks/{id}/runs`、`/submissions/{id}` | 提交、pending 绑定恢复及查询；submissions 不接受 obs: ID |
@@ -70,9 +71,9 @@ TaskCloseManifest 核对 Permit/call、Run/execution、所有 sequence/revision�
 
 分别在 Backend、Agent 执行已有 Alembic `upgrade head`，当前版本为 Backend `028_formal_plans`（授权基础表始于 `027_agent_entitlements`）、Agent `0003_agent_metering`。迁移冻结建表定义，分别含 15 和 8 张新表；原 Task/Run/Session 表不加新协议字段。新增唯一约束、FK、状态/关联/投递索引随各库独立维护。生产连接隐藏 SQL 参数，避免日志包含租约/签名封套。
 
-API/Worker/Backend 的角色 Token 必须互不相同，并与旧 AGENT_SERVICE_TOKEN 隔离。Backend 私钥/Agent 公钥文件、issuer/audience、Agent 的模型路由和工具非敏感配置修订、持久 spool、Usage Worker 的容量/退避/批量参数均需显式配置；见各 `.env.example`。`BACKEND_ENTITLEMENTS_URL` 是服务 origin，不能复用带 `/api/v1/agent` 的 Knowledge `BACKEND_INTERNAL_URL`。
+API/Worker/Backend 的角色 Token 必须互不相同，并与旧 AGENT_SERVICE_TOKEN 隔离。Backend 私钥/Agent 公钥文件、issuer/audience、Agent 的模型路由和工具非敏感配置修订、持久 spool、Usage Worker 的容量/退避/批量参数均需显式配置；见各 `.env.example`。`BACKEND_ENTITLEMENTS_URL` 是服务 origin，不能复用带 `/api/v2/agent` 的 Knowledge `BACKEND_INTERNAL_URL`。
 
-Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 与 admission revision；A2 改 authorized 前停止旧 observation 新准入，已有 Task 模式不变、按原 ID 排空。A2 同时设置 Agent `AGENT_V1_ADMISSION=drain_only`，新旧 Worker 以 `AGENT_WORKER_PROTOCOL=2/1` 分开；旧 Worker 不能领取、操作或序列化 v2 Task。示例保留 v1 默认值，仅在完成评审后显式切换。
+Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 与 admission revision；A2 改 authorized 前停止旧 observation 新准入，已有 Task 模式不变、按原 ID 排空。当前 Agent 执行 API 与 Worker 仅支持 V2；V1 router、V1 Worker 分支及 admission 配置已退役。V2 授权准入由 Backend `AGENT_V2_ADMISSION` 和签名 Grant 控制。历史 V1 Task/Run/Turn 保留供审计，不由新代码调用旧协议执行。
 
 本 Adapter 没有可信输入 tokenizer 上界验证器，任意 evidence_ref 字符串不被视为证明；没有批准的 model_risk_profile 时拒绝正式模型调用。批准风险策略不等于数学意义上保证真实消耗不超额。显式 max_model_tokens 的单 Run 限制仍沿用原 Worker 的执行前拒绝。
 
@@ -126,13 +127,7 @@ uv run --env-file .env python -m app.services.agent_entitlements.plans --capabil
 
 这会复用现有逐模型预算与风险配置，不伪造审批。如果旧包的风险引用或逐模型预算为空，命令提前报错，不再生成到运行时才失败的包。`--model-budgets` 按模型ID合并覆盖旧配置；允许只配置要启用的模型，其余没有预算的模型仍拒绝调用。只有决定采用较宽松的输入估算时才追加 `--input-bytes-per-token 2`，并记录该风险参数的依据；不追加则保持原值。无旧发布包时继续使用原 `--model-budgets`、`--risk-profile` 参数。生成文件在现有 Admin「套餐管理」上传发布，再在「用户管理」预览并分配新修订；发布不自动迁移用户，也不重置当日余额。不需要数据库迁移或新增服务。
 
-仅补齐 DeepSeek 风险预算时，在 Backend 目录使用：
-
-```powershell
-uv run --env-file .env python -m app.services.agent_entitlements.plans --capabilities ../agent/workspace/formal-capabilities.json --previous-bundle workspace/formal-plans-availability.json --model-budgets app/data/agent_deepseek_model_budget.json --risk-profile autodl-deepseek-bounded-v1 --release 20261120-availability-deepseek-budget-r1 --output workspace/formal-plans-deepseek-budget.json
-```
-
-此配置将 DeepSeek 的输出上限设为4096，输入UTF-8字节按1:1加1024封装余量预留。历史兼容字段context_window_tokens=32768保留在Policy中，但不再作为额外的单次输入限额；真实模型上下文上限只采用Worker Registry明确声明的值，未知时不编造上限。风险ID本身不证明Provider语义；现有Provider必须遵守max_tokens覆盖completion（含思考）的接入契约。Policy预算O经Permit/start回传后覆盖实际请求max_tokens，发送前再次核对正文摘要、O与唯一发送权；不修改模型身份，因此单纯补Policy预算不需重新导出能力。复用现有Admin风险记录和发布/分配流程，不自动修改已发布Policy。
+逐模型预算由部署负责人在本地审核文件中维护，通过 `--model-budgets <REVIEWED_MODEL_BUDGETS_JSON>` 合并到正式三档套餐；仓库不再内置 Free 演示 Policy 或某个 Provider 的固定预算 JSON。历史 Policy、task_fixed Grant 与消费记录继续按既有兼容逻辑读取和结算，不删除数据库记录。
 
 开发环境可显式设置 `ENVIRONMENT=development` 与 `AGENT_ALLOW_TEST_POLICY=true` 使用已批准并已分配的 test_only Policy；不自动创建用户、分配权益或绕过认证。生产环境必须保持该开关为false；在非显式development环境开启会拒绝服务。开发联调也可直接复用上述正式发布包生成方式，使用现有 Admin 分配，不必建立第二套注册或授权流程。
 

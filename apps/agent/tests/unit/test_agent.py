@@ -37,6 +37,7 @@ HANG = object()  # 挂起占位：永不完成
 
 class FakeProvider:
     """可编排的脚本化 Provider；float 项表示 sleep，HANG 表示挂起，异常项原样抛出。"""
+    supports_call_metering = True
 
     def __init__(self, scripts):
         self.scripts = list(scripts)
@@ -1021,7 +1022,7 @@ class ServiceComposeTests(unittest.TestCase):
     硬编码工具清单（现由 registry 动态生成，pi visibleTools 机制）。"""
 
     def setUp(self):
-        env = patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'test', 'DEEPSEEK_MODEL': 'deepseek-chat',
+        env = patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'test',
                                         'DASHSCOPE_API_KEY': ''})
         env.start()
         self.addCleanup(env.stop)
@@ -1323,7 +1324,7 @@ class ProjectContextTests(unittest.TestCase):
     """工作区项目指令注入（pi contextFiles / AGENTS.md 机制）。"""
 
     def setUp(self):
-        env = patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'test', 'DEEPSEEK_MODEL': 'deepseek-chat',
+        env = patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'test',
                                         'DASHSCOPE_API_KEY': ''})
         env.start()
         self.addCleanup(env.stop)

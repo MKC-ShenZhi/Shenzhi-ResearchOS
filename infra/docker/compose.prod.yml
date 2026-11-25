@@ -1,0 +1,27 @@
+# Deployment foundation. Use reviewed production env files and versioned images.
+# Compose >=2.30 required (raw env_file and !reset).
+services:
+  postgres:
+    ports: !reset []
+  backend:
+    environment:
+      ENVIRONMENT: production
+      BACKEND_ALLOW_INSECURE_LOCAL_BFF: 'false'
+      AGENT_ALLOW_TEST_POLICY: 'false'
+      AGENT_V2_ADMISSION: authorized
+      ADMIN_AUTH_LOCAL_ONLY: 'true'
+      # Never inherit a local development administrator from an env_file.
+      ADMIN_AUTH_MODE: disabled
+      ADMIN_LOCAL_USERNAME: ''
+      ADMIN_LOCAL_PASSWORD: ''
+      ADMIN_SESSION_SECRET: ''
+  web:
+    environment:
+      NODE_ENV: production
+      BACKEND_ALLOW_INSECURE_LOCAL_BFF: 'false'
+  agent-api:
+    environment:
+      AGENT_DEMO_MODE: '0'
+  agent-worker:
+    environment:
+      AGENT_DEMO_MODE: '0'

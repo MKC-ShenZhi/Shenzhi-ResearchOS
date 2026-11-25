@@ -14,6 +14,18 @@ def events(*deltas):
 
 
 class AutoDLProbeTests(unittest.TestCase):
+    def test_openlux_directory_does_not_require_autodl_version(self):
+        def handler(request):
+            self.assertEqual(request.url.path, '/v1/models')
+            return httpx.Response(200, json={'data': [{'id': 'Exact-Other-ID'}]})
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            probe = Probe(client, 'https://probe.example/v1', 'private-key')
+            report = run(probe, [], list_only=True, require_v41=False)
+            self.assertNotIn('stop_reason', report)
+            self.assertEqual(report['T0']['ids'], ['Exact-Other-ID'])
+            self.assertIn('stop_reason', run(probe, [], list_only=True))
+            self.assertIn('stop_reason', run(probe, ['undeclared'], require_v41=False))
+
     def test_fragmented_two_turn_tools_twice_without_reasoning_in_history(self):
         seen = []
 

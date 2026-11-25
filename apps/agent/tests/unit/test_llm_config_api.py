@@ -1,16 +1,18 @@
 import json
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 
 from agent_app.main import app
-from agent_app.integrations.llm.resolver import AUTODL_DEFAULT_MODELS, load_registry
+from agent_app.integrations.llm.resolver import load_registry
+
+VERIFIED_AUTODL_UPSTREAMS = ('DeepSeek-V4.1-Flash-1017', 'Qwen3.5-397B-A17B', 'Kimi-K2.5')
 
 ENV = {'DASHSCOPE_API_KEY': 'dash-private', 'DEEPSEEK_API_KEY': 'deep-private',
-       'ZHIPU_API_KEY': 'glm-private', 'ZHIPU_MODEL': 'glm-4-plus',
-       'AI_ALLOWED_MODELS': 'deepseek-r1', 'AGENT_SERVICE_TOKEN': 'test-token'}
+       'ZHIPU_API_KEY': 'glm-private',
+       'AGENT_SERVICE_TOKEN': 'test-token'}
 
 
 class ConfigApiTests(unittest.IsolatedAsyncioTestCase):
@@ -18,7 +20,7 @@ class ConfigApiTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ, ENV, clear=True):
             registry = load_registry()
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1', headers={'Authorization': 'Bearer test-token'}) as client:
-                response = await client.get('/internal/v1/config')
+                response = await client.get('/internal/v2/config')
                 self.assertEqual(response.status_code, 200, response.text)
                 data = response.json()
                 self.assertEqual(data['models'], registry.public_models('agent'))
@@ -30,33 +32,60 @@ class ConfigApiTests(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn(secret, response.text)
         self.assertNotIn('api_key', json.dumps(app.openapi()).lower())
 
-    async def test_config_no_key_or_unknown_glm_never_claims_agent_availability(self):
-        with patch.dict(os.environ, {'ZHIPU_MODEL': 'unknown-version',
-                                     'AGENT_SERVICE_TOKEN': 'test-token'}, clear=True):
+    async def test_config_availability_uses_catalog_not_removed_model_env(self):
+        with patch.dict(os.environ, {'AGENT_SERVICE_TOKEN': 'test-token'}, clear=True):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1', headers={'Authorization': 'Bearer test-token'}) as client:
-                data = (await client.get('/internal/v1/config')).json()
+                data = (await client.get('/internal/v2/config')).json()
                 self.assertEqual(data['models'], [])
                 self.assertIsNone(data['default_model'])
         with patch.dict(os.environ, {'ZHIPU_API_KEY': 'glm-private', 'ZHIPU_MODEL': 'unknown-version',
                                      'AGENT_SERVICE_TOKEN': 'test-token'}, clear=True):
+            registry = load_registry()
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1', headers={'Authorization': 'Bearer test-token'}) as client:
-                self.assertEqual((await client.get('/internal/v1/config')).json()['models'], [])
+                data = (await client.get('/internal/v2/config')).json()
+                self.assertEqual(data['models'], registry.public_models('agent'))
+                self.assertEqual(data['default_model'], registry.public_default('agent'))
 
     async def test_autodl_only_catalog_branding_capability_filter_and_no_key_in_response_or_logs(self):
-        env = {'AUTODL_API_KEY': 'autodl-private', 'AGENT_SERVICE_TOKEN': 'test-token',
-               'AUTODL_MODELS': ','.join((*AUTODL_DEFAULT_MODELS, 'Untested-ID'))}
+        env = {'AUTODL_API_KEY': 'autodl-private', 'AGENT_SERVICE_TOKEN': 'test-token'}
         with patch.dict(os.environ, env, clear=True):
             registry = load_registry()
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1', headers={'Authorization': 'Bearer test-token'}) as client:
-                response = await client.get('/internal/v1/config')
+                response = await client.get('/internal/v2/config')
                 self.assertEqual(response.status_code, 200)
                 data = response.json()
-                expected = [f'autodl/{name}' for name in AUTODL_DEFAULT_MODELS]
+                expected = [f'autodl/{name}' for name in VERIFIED_AUTODL_UPSTREAMS]
                 self.assertEqual([m['value'] for m in data['models']], expected)
                 self.assertEqual(data['models'], registry.public_models('agent'))
-                self.assertEqual(data['default_model'], f'autodl/{AUTODL_DEFAULT_MODELS[0]}')
+                self.assertEqual(data['default_model'], f'autodl/{VERIFIED_AUTODL_UPSTREAMS[0]}')
                 self.assertTrue(all(m['provider_id'] == 'autodl' for m in data['models']))
                 self.assertEqual([m['brand'] for m in data['models'][:3]], ['deepseek', 'platform', 'moonshot'])
                 self.assertTrue(all(m['provider'] == m['brand'] for m in data['models']))
                 self.assertNotIn('autodl-private', response.text)
                 self.assertNotIn('api_key', response.text)
+
+    async def test_v2_config_requires_the_service_role(self):
+        with patch.dict(os.environ, {'AGENT_SERVICE_TOKEN': 'service-token',
+                                     'AGENT_GATEWAY_TOKEN': 'gateway-token'}, clear=True):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                         base_url='http://127.0.0.1') as client:
+                denied = await client.get('/internal/v2/config',
+                                          headers={'Authorization': 'Bearer gateway-token'})
+                self.assertEqual(denied.status_code, 403)
+                accepted = await client.get('/internal/v2/config',
+                                            headers={'Authorization': 'Bearer service-token'})
+                self.assertEqual(accepted.status_code, 200, accepted.text)
+
+    async def test_v2_workspace_route_uses_service_role_and_shared_handler(self):
+        with patch.dict(os.environ, {'AGENT_SERVICE_TOKEN': 'service-token'}, clear=True), \
+             patch('agent_app.api.routes.shared_new_workspace', new=AsyncMock(
+                 return_value={'workspace_id': 'workspace123'})) as create:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                         base_url='http://127.0.0.1',
+                                         headers={'Authorization': 'Bearer service-token'}) as client:
+                response = await client.post('/internal/v2/workspaces',
+                                             json={'owner_id': 'user:123'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), {'workspace_id': 'workspace123'})
+        create.assert_awaited_once()
+        self.assertEqual(create.await_args.args[0].owner_id, 'user:123')

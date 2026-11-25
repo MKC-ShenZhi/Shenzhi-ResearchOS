@@ -1,0 +1,892 @@
+{
+  "probed_at": "2026-11-24T10:31:53.586045+00:00",
+  "T0": {
+    "status": 200,
+    "ids": [
+      "deepseek-v4.1-flash",
+      "qwen3.8-flash",
+      "gemini-3.8-flash",
+      "glm-5.3-flash",
+      "kimi-k2.6"
+    ]
+  },
+  "models": {
+    "deepseek-v4.1-flash": {
+      "T1": {
+        "status": 200,
+        "content_nonempty": true,
+        "finish_reasons": [],
+        "reasoning_content": true,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": false,
+        "tool_call_fragments": 0,
+        "completed": true,
+        "pass": true
+      },
+      "T2": {
+        "status": 200,
+        "content_nonempty": true,
+        "finish_reasons": [
+          "stop"
+        ],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": true,
+        "tool_call_fragments": 0,
+        "completed": true,
+        "pass": true
+      },
+      "T3": {
+        "accepted_max_tokens": 32768,
+        "attempts": [
+          {
+            "max_tokens": 32768,
+            "status": 200,
+            "content_nonempty": false,
+            "finish_reasons": [],
+            "reasoning_content": false,
+            "reasoning": false,
+            "think_tag": false,
+            "usage": false,
+            "tool_call_fragments": 0,
+            "completed": false,
+            "first_chunk_received": true
+          }
+        ]
+      },
+      "T4": {
+        "status": 200,
+        "content_nonempty": false,
+        "finish_reasons": [],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": false,
+        "tool_call_fragments": 0,
+        "completed": false,
+        "first_chunk_received": true,
+        "pass": true
+      },
+      "T5": {
+        "request_params": {},
+        "runs": [
+          {
+            "round1": {
+              "status": 200,
+              "content_nonempty": false,
+              "finish_reasons": [],
+              "reasoning_content": true,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 10,
+              "completed": true
+            },
+            "arguments_valid_json": true,
+            "pass": true,
+            "round2": {
+              "status": 200,
+              "content_nonempty": true,
+              "finish_reasons": [],
+              "reasoning_content": false,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 0,
+              "completed": true
+            }
+          },
+          {
+            "round1": {
+              "status": 200,
+              "content_nonempty": false,
+              "finish_reasons": [],
+              "reasoning_content": true,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 8,
+              "completed": true
+            },
+            "arguments_valid_json": true,
+            "pass": true,
+            "round2": {
+              "status": 200,
+              "content_nonempty": true,
+              "finish_reasons": [],
+              "reasoning_content": false,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 0,
+              "completed": true
+            }
+          }
+        ],
+        "pass": true
+      },
+      "T6": {
+        "enable_thinking": {
+          "request_params": {
+            "enable_thinking": false
+          },
+          "runs": [
+            {
+              "round1": {
+                "status": 200,
+                "content_nonempty": false,
+                "finish_reasons": [],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 8,
+                "completed": true
+              },
+              "arguments_valid_json": true,
+              "pass": true,
+              "round2": {
+                "status": 200,
+                "content_nonempty": true,
+                "finish_reasons": [],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 0,
+                "completed": true
+              }
+            },
+            {
+              "round1": {
+                "status": 200,
+                "content_nonempty": false,
+                "finish_reasons": [],
+                "reasoning_content": true,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 10,
+                "completed": true
+              },
+              "arguments_valid_json": true,
+              "pass": true,
+              "round2": {
+                "status": 200,
+                "content_nonempty": true,
+                "finish_reasons": [],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 0,
+                "completed": true
+              }
+            }
+          ],
+          "pass": true
+        },
+        "thinking": {
+          "request_params": {
+            "thinking": {
+              "type": "disabled"
+            }
+          },
+          "runs": [
+            {
+              "round1": {
+                "status": 200,
+                "content_nonempty": false,
+                "finish_reasons": [],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 8,
+                "completed": true
+              },
+              "arguments_valid_json": true,
+              "pass": true,
+              "round2": {
+                "status": 200,
+                "content_nonempty": true,
+                "finish_reasons": [],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 0,
+                "completed": true
+              }
+            },
+            {
+              "round1": {
+                "status": 200,
+                "content_nonempty": false,
+                "finish_reasons": [],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 8,
+                "completed": true
+              },
+              "arguments_valid_json": true,
+              "pass": true,
+              "round2": {
+                "status": 200,
+                "content_nonempty": true,
+                "finish_reasons": [],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 0,
+                "completed": true
+              }
+            }
+          ],
+          "pass": true
+        }
+      }
+    },
+    "qwen3.8-flash": {
+      "T1": {
+        "status": 200,
+        "content_nonempty": true,
+        "finish_reasons": [
+          "stop"
+        ],
+        "reasoning_content": true,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": false,
+        "tool_call_fragments": 0,
+        "completed": true,
+        "pass": true
+      },
+      "T2": {
+        "status": 200,
+        "content_nonempty": true,
+        "finish_reasons": [
+          "stop"
+        ],
+        "reasoning_content": true,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": true,
+        "tool_call_fragments": 0,
+        "completed": true,
+        "pass": true
+      },
+      "T3": {
+        "accepted_max_tokens": 32768,
+        "attempts": [
+          {
+            "max_tokens": 32768,
+            "status": 200,
+            "content_nonempty": false,
+            "finish_reasons": [],
+            "reasoning_content": false,
+            "reasoning": false,
+            "think_tag": false,
+            "usage": false,
+            "tool_call_fragments": 0,
+            "completed": false,
+            "first_chunk_received": true
+          }
+        ]
+      },
+      "T4": {
+        "status": 200,
+        "content_nonempty": false,
+        "finish_reasons": [],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": false,
+        "tool_call_fragments": 0,
+        "completed": false,
+        "first_chunk_received": true,
+        "pass": true
+      },
+      "T5": {
+        "request_params": {},
+        "runs": [
+          {
+            "round1": {
+              "status": 200,
+              "content_nonempty": false,
+              "finish_reasons": [
+                "tool_calls"
+              ],
+              "reasoning_content": true,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 5,
+              "completed": true
+            },
+            "arguments_valid_json": true,
+            "pass": true,
+            "round2": {
+              "status": 200,
+              "content_nonempty": true,
+              "finish_reasons": [
+                "stop"
+              ],
+              "reasoning_content": true,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 0,
+              "completed": true
+            }
+          },
+          {
+            "round1": {
+              "status": 200,
+              "content_nonempty": false,
+              "finish_reasons": [
+                "tool_calls"
+              ],
+              "reasoning_content": true,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 5,
+              "completed": true
+            },
+            "arguments_valid_json": true,
+            "pass": true,
+            "round2": {
+              "status": 200,
+              "content_nonempty": true,
+              "finish_reasons": [
+                "stop"
+              ],
+              "reasoning_content": true,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 0,
+              "completed": true
+            }
+          }
+        ],
+        "pass": true
+      },
+      "T6": {
+        "enable_thinking": {
+          "request_params": {
+            "enable_thinking": false
+          },
+          "runs": [
+            {
+              "round1": {
+                "status": 200,
+                "content_nonempty": false,
+                "finish_reasons": [
+                  "tool_calls"
+                ],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 7,
+                "completed": true
+              },
+              "arguments_valid_json": true,
+              "pass": true,
+              "round2": {
+                "status": 200,
+                "content_nonempty": true,
+                "finish_reasons": [
+                  "stop"
+                ],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 0,
+                "completed": true
+              }
+            },
+            {
+              "round1": {
+                "status": 200,
+                "content_nonempty": false,
+                "finish_reasons": [
+                  "tool_calls"
+                ],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 7,
+                "completed": true
+              },
+              "arguments_valid_json": true,
+              "pass": true,
+              "round2": {
+                "status": 200,
+                "content_nonempty": true,
+                "finish_reasons": [
+                  "stop"
+                ],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 0,
+                "completed": true
+              }
+            }
+          ],
+          "pass": true
+        },
+        "thinking": {
+          "request_params": {
+            "thinking": {
+              "type": "disabled"
+            }
+          },
+          "runs": [
+            {
+              "round1": {
+                "status": 200,
+                "content_nonempty": false,
+                "finish_reasons": [
+                  "tool_calls"
+                ],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 7,
+                "completed": true
+              },
+              "arguments_valid_json": true,
+              "pass": true,
+              "round2": {
+                "status": 200,
+                "content_nonempty": true,
+                "finish_reasons": [
+                  "stop"
+                ],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 0,
+                "completed": true
+              }
+            },
+            {
+              "round1": {
+                "status": 200,
+                "content_nonempty": false,
+                "finish_reasons": [
+                  "tool_calls"
+                ],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 7,
+                "completed": true
+              },
+              "arguments_valid_json": true,
+              "pass": true,
+              "round2": {
+                "status": 200,
+                "content_nonempty": true,
+                "finish_reasons": [
+                  "stop"
+                ],
+                "reasoning_content": false,
+                "reasoning": false,
+                "think_tag": false,
+                "usage": false,
+                "tool_call_fragments": 0,
+                "completed": true
+              }
+            }
+          ],
+          "pass": true
+        }
+      }
+    },
+    "glm-5.3-flash": {
+      "T1": {
+        "status": 200,
+        "content_nonempty": true,
+        "finish_reasons": [],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": false,
+        "tool_call_fragments": 0,
+        "completed": true,
+        "pass": true
+      },
+      "T2": {
+        "status": 200,
+        "content_nonempty": true,
+        "finish_reasons": [
+          "stop"
+        ],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": true,
+        "tool_call_fragments": 0,
+        "completed": true,
+        "pass": true
+      },
+      "T3": {
+        "accepted_max_tokens": 32768,
+        "attempts": [
+          {
+            "max_tokens": 32768,
+            "status": 200,
+            "content_nonempty": false,
+            "finish_reasons": [],
+            "reasoning_content": false,
+            "reasoning": false,
+            "think_tag": false,
+            "usage": false,
+            "tool_call_fragments": 0,
+            "completed": false,
+            "first_chunk_received": true
+          }
+        ]
+      },
+      "T4": {
+        "status": 200,
+        "content_nonempty": false,
+        "finish_reasons": [],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": false,
+        "tool_call_fragments": 0,
+        "completed": false,
+        "first_chunk_received": true,
+        "pass": true
+      },
+      "T5": {
+        "request_params": {},
+        "runs": [
+          {
+            "round1": {
+              "status": 200,
+              "content_nonempty": false,
+              "finish_reasons": [],
+              "reasoning_content": true,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 6,
+              "completed": true
+            },
+            "arguments_valid_json": true,
+            "pass": true,
+            "round2": {
+              "status": 200,
+              "content_nonempty": true,
+              "finish_reasons": [],
+              "reasoning_content": false,
+              "reasoning": true,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 0,
+              "completed": true
+            }
+          },
+          {
+            "round1": {
+              "status": 200,
+              "content_nonempty": false,
+              "finish_reasons": [],
+              "reasoning_content": true,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 6,
+              "completed": true
+            },
+            "arguments_valid_json": true,
+            "pass": true,
+            "round2": {
+              "status": 200,
+              "content_nonempty": true,
+              "finish_reasons": [],
+              "reasoning_content": false,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 0,
+              "completed": true
+            }
+          }
+        ],
+        "pass": true
+      },
+      "T6": {}
+    },
+    "kimi-k2.6": {
+      "T1": {
+        "status": 200,
+        "content_nonempty": true,
+        "finish_reasons": [],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": false,
+        "tool_call_fragments": 0,
+        "completed": true,
+        "pass": true
+      },
+      "T2": {
+        "status": 200,
+        "content_nonempty": true,
+        "finish_reasons": [
+          "stop"
+        ],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": true,
+        "tool_call_fragments": 0,
+        "completed": true,
+        "pass": true
+      },
+      "T3": {
+        "accepted_max_tokens": 32768,
+        "attempts": [
+          {
+            "max_tokens": 32768,
+            "status": 200,
+            "content_nonempty": false,
+            "finish_reasons": [],
+            "reasoning_content": false,
+            "reasoning": false,
+            "think_tag": false,
+            "usage": false,
+            "tool_call_fragments": 0,
+            "completed": false,
+            "first_chunk_received": true
+          }
+        ]
+      },
+      "T4": {
+        "status": 200,
+        "content_nonempty": false,
+        "finish_reasons": [],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": false,
+        "tool_call_fragments": 0,
+        "completed": false,
+        "first_chunk_received": true,
+        "pass": true
+      },
+      "T5": {
+        "request_params": {},
+        "runs": [
+          {
+            "round1": {
+              "status": 200,
+              "content_nonempty": false,
+              "finish_reasons": [],
+              "reasoning_content": false,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 6,
+              "completed": true
+            },
+            "arguments_valid_json": true,
+            "pass": true,
+            "round2": {
+              "status": 200,
+              "content_nonempty": true,
+              "finish_reasons": [],
+              "reasoning_content": false,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 0,
+              "completed": true
+            }
+          },
+          {
+            "round1": {
+              "status": 200,
+              "content_nonempty": false,
+              "finish_reasons": [],
+              "reasoning_content": false,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 6,
+              "completed": true
+            },
+            "arguments_valid_json": true,
+            "pass": true,
+            "round2": {
+              "status": 200,
+              "content_nonempty": true,
+              "finish_reasons": [],
+              "reasoning_content": false,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 0,
+              "completed": true
+            }
+          }
+        ],
+        "pass": true
+      },
+      "T6": {}
+    },
+    "gemini-3.8-flash": {
+      "T1": {
+        "status": 200,
+        "content_nonempty": true,
+        "finish_reasons": [
+          "stop"
+        ],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": false,
+        "tool_call_fragments": 0,
+        "completed": true,
+        "pass": true
+      },
+      "T2": {
+        "status": 200,
+        "content_nonempty": true,
+        "finish_reasons": [
+          "stop"
+        ],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": true,
+        "tool_call_fragments": 0,
+        "completed": true,
+        "pass": true
+      },
+      "T3": {
+        "accepted_max_tokens": 32768,
+        "attempts": [
+          {
+            "max_tokens": 32768,
+            "status": 200,
+            "content_nonempty": false,
+            "finish_reasons": [],
+            "reasoning_content": false,
+            "reasoning": false,
+            "think_tag": false,
+            "usage": false,
+            "tool_call_fragments": 0,
+            "completed": false,
+            "first_chunk_received": true
+          }
+        ]
+      },
+      "T4": {
+        "status": 200,
+        "content_nonempty": false,
+        "finish_reasons": [],
+        "reasoning_content": false,
+        "reasoning": false,
+        "think_tag": false,
+        "usage": false,
+        "tool_call_fragments": 0,
+        "completed": false,
+        "first_chunk_received": true,
+        "pass": true
+      },
+      "T5": {
+        "request_params": {},
+        "runs": [
+          {
+            "round1": {
+              "status": 200,
+              "content_nonempty": false,
+              "finish_reasons": [
+                "tool_calls",
+                "stop"
+              ],
+              "reasoning_content": false,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 1,
+              "completed": true
+            },
+            "arguments_valid_json": true,
+            "pass": true,
+            "round2": {
+              "status": 200,
+              "content_nonempty": true,
+              "finish_reasons": [
+                "stop"
+              ],
+              "reasoning_content": false,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 0,
+              "completed": true
+            }
+          },
+          {
+            "round1": {
+              "status": 200,
+              "content_nonempty": false,
+              "finish_reasons": [
+                "tool_calls",
+                "stop"
+              ],
+              "reasoning_content": false,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 1,
+              "completed": true
+            },
+            "arguments_valid_json": true,
+            "pass": true,
+            "round2": {
+              "status": 200,
+              "content_nonempty": true,
+              "finish_reasons": [
+                "stop"
+              ],
+              "reasoning_content": false,
+              "reasoning": false,
+              "think_tag": false,
+              "usage": false,
+              "tool_call_fragments": 0,
+              "completed": true
+            }
+          }
+        ],
+        "pass": true
+      },
+      "T6": {}
+    }
+  },
+  "T7": {
+    "status": 401
+  }
+}

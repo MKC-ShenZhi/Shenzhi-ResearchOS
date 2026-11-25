@@ -75,7 +75,6 @@ class PostgresAgentSessionRepository:
                                      worker_id: str | None = None) -> None:
         statement = update(AgentTurnRow).where(
             AgentTurnRow.status == 'running',
-            ~AgentTurnRow.settings.has_key('agent_task_id'),
             or_(AgentTurnRow.settings['_agent_protocol'].as_integer().is_(None),
                 AgentTurnRow.settings['_agent_protocol'].as_integer() != 2),
         )

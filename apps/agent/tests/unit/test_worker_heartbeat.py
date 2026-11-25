@@ -1,40 +1,40 @@
-import os
+import json
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import httpx
 
-from agent_app.api import routes
-from agent_app.infrastructure.database import get_session
-from agent_app.main import app
 from agent_app.worker.host import AgentControlClient
 
 
 class WorkerHeartbeatTests(unittest.IsolatedAsyncioTestCase):
-    async def test_worker_and_api_agree_on_renewal_and_cancellation(self):
-        session = object()
+    async def test_worker_heartbeat_uses_v2_identity_and_response_contract(self):
+        requests = []
 
-        async def fake_session():
-            yield session
+        async def respond(request):
+            requests.append(request)
+            return httpx.Response(200, json={
+                'schema_version': 1, 'active': True, 'cancel_requested': True,
+            })
 
-        renew = AsyncMock(side_effect=[(True, False), (True, True), (False, False)])
-        with (
-            patch.dict(os.environ, {'AGENT_SERVICE_TOKEN': 'test-token'}),
-            patch.dict(app.dependency_overrides, {get_session: fake_session, routes.require_v1_record: lambda: None}),
-            patch.object(routes.repository, 'heartbeat', renew),
-        ):
-            control = AgentControlClient(transport=httpx.ASGITransport(app=app))
+        with patch.dict('os.environ', {'AGENT_WORKER_TOKEN': 'worker-token'}, clear=True):
+            control = AgentControlClient(transport=httpx.MockTransport(respond))
+            control.execution_id = 'execution-1'
             try:
-                renewed = await control.heartbeat('run-1', 'worker-1', 1)
-                cancelling = await control.heartbeat('run-1', 'worker-1', 1)
-                stale = await control.heartbeat('run-1', 'worker-1', 1)
+                state = await control.heartbeat('run-1', 'worker-1', 3)
             finally:
                 await control.close()
 
-        self.assertTrue(renewed.active)
-        self.assertFalse(renewed.cancel_requested)
-        self.assertTrue(cancelling.active)
-        self.assertTrue(cancelling.cancel_requested)
-        self.assertFalse(stale.active)
-        self.assertEqual(renew.await_count, 3)
-        renew.assert_awaited_with(session, 'run-1', 'worker-1', 1)
+        self.assertTrue(state.active)
+        self.assertTrue(state.cancel_requested)
+        request = requests[0]
+        self.assertEqual(request.url.path, '/internal/v2/runs/run-1/heartbeat')
+        self.assertEqual(request.headers['authorization'], 'Bearer worker-token')
+        body = json.loads(request.content)
+        self.assertEqual(body['execution_id'], 'execution-1')
+        self.assertEqual(body['worker_id'], 'worker-1')
+        self.assertEqual(body['lease_token'], 3)
+
+
+if __name__ == '__main__':
+    unittest.main()

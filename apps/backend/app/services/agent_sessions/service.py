@@ -6,7 +6,7 @@ import logging
 
 from app.core.errors import BusinessError
 from app.core.worker_lease import current_worker_id, run_with_heartbeat
-from app.services.agent_gateway.client import agent_gateway, read_run_update
+from app.services.agent_gateway.client import read_run_update
 from app.services.agent_attachments import resolve_agent_attachments
 from app.services.agent_sessions.entities import AgentSession, AgentTurn
 from app.services.agent_sessions.live import LiveRun, _tasks, append, finish, get_live, invalidate, register
@@ -17,6 +17,23 @@ from app.services.agent_uploads import agent_upload_store
 logger = logging.getLogger(__name__)
 
 
+def _definite_submission_rejection(exc: Exception) -> bool:
+    """True only when the Agent cannot have received the submission.
+
+    Local authorization/validation rejections never cross the HTTP boundary.
+    Remote HTTP errors stay indeterminate: the Agent may have persisted the
+    Task before returning an error, so recovery must use the persisted
+    idempotency key instead of inventing a terminal result.
+    """
+    from pydantic import ValidationError
+
+    from app.services.agent_entitlements.service import EntitlementError
+    # AgentGateway validates TaskSubmissionWire/TaskSubmissionV2 before its
+    # first HTTP request. Such a rejection, like local entitlement gating,
+    # cannot leave a Task in Agent even though the Turn is already persisted.
+    return isinstance(exc, (EntitlementError, ValidationError))
+
+
 async def start_session_run(
     *, owner: str, session_id: str, prompt: str, model: str | None, mode: str,
     attachments: list[dict], workspace_id: str | None, skills: list[str],
@@ -24,7 +41,9 @@ async def start_session_run(
     idempotency_fingerprint: str | None = None, gateway=None,
 ) -> LiveRun:
     """Validate ownership and concurrency before starting an independent run task."""
-    gateway = gateway or agent_gateway
+    if gateway is None:
+        from app.services.agent_gateway.gateway import AgentGateway
+        gateway = AgentGateway()
     if idempotency_key is not None:
         existing = await agent_session_repository.find_idempotent_turn(
             session_id, owner, idempotency_key, idempotency_fingerprint or '',
@@ -50,7 +69,13 @@ async def start_session_run(
     settings = {
         'model': model, 'mode': mode, 'attachments': display_attachments,
         'workspace_id': workspace_id, 'skills': skills,
-        '_agent_owner_id': owner, '_agent_protocol': getattr(gateway, 'protocol_version', 1),
+        '_agent_owner_id': owner, '_agent_protocol': 2,
+    }
+    # Keep the normalized request until Agent confirms admission, so a Backend
+    # restart can safely resume the same idempotent submission.
+    settings['_agent_recovery_request'] = {
+        'prompt': prompt + attachment_text,
+        'history': runtime_history,
     }
     worker_id = current_worker_id()
     turn, created = await agent_session_repository.start_turn(
@@ -74,30 +99,28 @@ async def start_session_run(
             'history': runtime_history,
         })
         settings.update({'agent_task_id': task['task_id'], 'agent_run_id': task['current_run_id']})
+        settings.pop('_agent_recovery_request', None)
         await agent_session_repository.update_turn_settings(
             session_id, owner, turn.id, settings, worker_id=worker_id,
         )
     except Exception as cause:
-        if getattr(gateway, 'protocol_version', 1) == 2:
-            # A remote timeout is not evidence of failure or unused reserve.
-            finish(live)
-            invalidate(live)
-            await agent_session_repository.release_turn_projection(turn.id, worker_id)
-            raise
-        if task is not None:
+        if _definite_submission_rejection(cause):
+            # A defensive rejection never reached the Agent. Close the product
+            # Turn with existing error semantics instead of leaving it running.
             try:
-                await gateway.cancel(task['task_id'], owner)
-            except Exception:
-                logger.exception('Failed to cancel unlinked Agent task: %s', task.get('task_id'))
-        error = f'Agent 服务提交失败：{cause}'
-        try:
-            await agent_session_repository.finish_turn(session_id, owner, turn.id, {
-                'status': 'failed', 'stop_reason': 'error', 'error': error,
-                'warnings': warnings, 'usage': {},
-                'transcript': _closed_transcript(runtime_history, prompt + attachment_text, ''),
-            }, worker_id=worker_id)
-        finally:
-            finish(live)
+                await agent_session_repository.finish_turn(session_id, owner, turn.id, {
+                    'status': 'failed', 'stop_reason': 'error',
+                    'error': f'Agent 服务提交失败：{cause}',
+                    'warnings': warnings, 'usage': {},
+                    'transcript': _closed_transcript(runtime_history, prompt + attachment_text, ''),
+                }, worker_id=worker_id)
+            finally:
+                finish(live)
+            raise
+        # A remote timeout is not evidence of failure or unused reserve.
+        finish(live)
+        invalidate(live)
+        await agent_session_repository.release_turn_projection(turn.id, worker_id)
         raise
 
     async def _drive() -> None:
@@ -142,9 +165,8 @@ async def start_session_run(
                         )},
                         'transcript': transcript,
                     }
-                    if getattr(gateway, 'protocol_version', 1) == 2:
-                        payload['usage'].update(await gateway.usage(task_id, owner))
-                        payload['usage'].update(prompt_tokens=None, completion_tokens=None)
+                    payload['usage'].update(await gateway.usage(task_id, owner))
+                    payload['usage'].update(prompt_tokens=None, completion_tokens=None)
                     await agent_session_repository.finish_turn(
                         session_id, owner, turn.id, payload, worker_id=worker_id,
                     )
@@ -210,7 +232,10 @@ async def _next_task_run(task_id: str, owner: str, current_run_id: str | None = 
     Advance only after draining that terminal Run's events, so each sealed prefix
     has the same length (and thus SSE IDs) in live and reconstructed streams.
     """
-    run_ids = await (gateway or agent_gateway).task_runs(task_id, owner)
+    if gateway is None:
+        from app.services.agent_gateway.gateway import AgentGateway
+        gateway = AgentGateway()
+    run_ids = await gateway.task_runs(task_id, owner)
     index = run_ids.index(current_run_id) + 1 if current_run_id is not None else 0
     return run_ids[index] if index < len(run_ids) else None
 
@@ -220,14 +245,66 @@ async def _reuse_turn(turn: AgentTurn, owner: str) -> LiveRun:
     live = get_live(turn.session_id, owner)
     if live is not None and live.turn_id == turn.id:
         return live
-    if turn.settings.get('_agent_protocol') == 2 and not turn.settings.get('agent_task_id'):
-        from app.services.agent_gateway.v2 import AgentGatewayV2
-        restored = await AgentGatewayV2().recover_submission(
-            turn.settings.get('_agent_owner_id', owner), f'backend-turn:{turn.id}')
+    if turn.settings.get('_agent_protocol') != 2:
+        if turn.status == 'running':
+            raise BusinessError(20004, '该 V1 会话运行已退役，无法恢复执行；历史结果仍可查看', 410)
+        return _replay_terminal_turn(turn, owner)
+    if not turn.settings.get('agent_task_id') and turn.settings.get('_agent_recovery_request'):
+        from app.services.agent_gateway.gateway import AgentGateway
+        gateway = AgentGateway()
+        restored = await gateway.recover_submission(
+            turn.settings.get('_agent_owner_id', owner), f'backend-turn:{turn.id}', allow_missing=True)
+        if restored is None:
+            # Admission never started before the previous Backend stopped.
+            # Reuse the persisted Turn and its stable submission key; the V2
+            # gateway's database idempotency remains authoritative.
+            retry_settings = turn.settings
+            recovery = retry_settings.get('_agent_recovery_request')
+            if not isinstance(recovery, dict) or not isinstance(recovery.get('prompt'), str) or not isinstance(recovery.get('history'), list):
+                raise BusinessError(20004, '该 V2 Turn 缺少安全恢复快照，请重新发送', 409)
+            retry_live = LiveRun(session_id=turn.session_id, owner=owner, turn_id=turn.id)
+            worker_id = current_worker_id()
+            if not await agent_session_repository.claim_turn_projection(
+                    turn.session_id, owner, turn.id, worker_id):
+                raise BusinessError(20009, '会话投影正在恢复', 409)
+            register(retry_live)
+            request = {
+                'owner_id': retry_settings.get('_agent_owner_id', owner),
+                'prompt': recovery['prompt'],
+                'session_id': turn.session_id, 'turn_id': turn.id,
+                'idempotency_key': f'backend-turn:{turn.id}',
+                'mode': retry_settings.get('mode', 'fast'),
+                'model': retry_settings.get('model'),
+                'workspace_id': retry_settings.get('workspace_id'),
+                'skills': retry_settings.get('skills') or [],
+                'history': recovery['history'],
+            }
+            try:
+                task = await gateway.submit(request)
+                settings = dict(retry_settings, agent_task_id=task['task_id'],
+                                agent_run_id=task['current_run_id'])
+                settings.pop('_agent_recovery_request', None)
+                updated_turn = await agent_session_repository.update_turn_settings(
+                    turn.session_id, owner, turn.id, settings, worker_id=worker_id)
+                # Release the bootstrap claim before the normal projection
+                # acquires its own lease. PostgreSQL does not allow a live
+                # lease to be claimed again, even by the same worker.
+                await agent_session_repository.release_turn_projection(turn.id, worker_id)
+                finish(retry_live)
+                invalidate(retry_live)
+                recovered = await resume_session_run(
+                    turn.session_id, owner, turn_id=updated_turn.id)
+                return recovered
+            except Exception:
+                finish(retry_live)
+                invalidate(retry_live)
+                await agent_session_repository.release_turn_projection(turn.id, worker_id)
+                raise
         worker_id = current_worker_id()
         if not await agent_session_repository.claim_turn_projection(turn.session_id, owner, turn.id, worker_id):
             raise BusinessError(20009, '会话投影正在恢复', 409)
         settings = dict(turn.settings, agent_task_id=restored['task_id'], agent_run_id=restored['current_run_id'])
+        settings.pop('_agent_recovery_request', None)
         await agent_session_repository.update_turn_settings(turn.session_id, owner, turn.id, settings, worker_id=worker_id)
         await agent_session_repository.release_turn_projection(turn.id, worker_id)
         turn.settings = settings
@@ -240,6 +317,11 @@ async def _reuse_turn(turn: AgentTurn, owner: str) -> LiveRun:
 
     # Imported legacy turns predate Agent Task IDs. Reconstruct their final product
     # stream from the persisted projection so idempotent retries remain replayable.
+    return _replay_terminal_turn(turn, owner)
+
+
+def _replay_terminal_turn(turn: AgentTurn, owner: str) -> LiveRun:
+    """Build a client stream from the persisted product projection only."""
     live = LiveRun(session_id=turn.session_id, owner=owner, turn_id=turn.id)
     # An old idempotency key must not replace the latest Session subscription.
     run_id = str(turn.settings.get('agent_run_id') or turn.id)
@@ -283,12 +365,14 @@ async def resume_session_run(session_id: str, owner: str, *, turn_id: str | None
                  if turn_id is None or item.id == turn_id), None)
     if turn is None:
         raise BusinessError(20004, '当前没有可回放的 Agent 运行', 404)
+    if turn.settings.get('_agent_protocol') != 2:
+        if turn.status == 'running':
+            raise BusinessError(20004, '该 V1 会话运行已退役，无法恢复执行；历史结果仍可查看', 410)
+        return _replay_terminal_turn(turn, owner)
     if not (turn.settings.get('agent_task_id') and turn.settings.get('agent_run_id')):
         return await _reuse_turn(turn, owner)
-    gateway = agent_gateway
-    if turn.settings.get('_agent_protocol') == 2:
-        from app.services.agent_gateway.v2 import AgentGatewayV2
-        gateway = AgentGatewayV2()
+    from app.services.agent_gateway.gateway import AgentGateway
+    gateway = AgentGateway()
     task_id = turn.settings.get('agent_task_id')
     worker_id = current_worker_id()
     execution_owner = turn.settings.get('_agent_owner_id', owner)
@@ -331,9 +415,8 @@ async def resume_session_run(session_id: str, owner: str, *, turn_id: str | None
                         ('prompt_tokens', 0), ('completion_tokens', 0), ('turns', 0),
                         ('duration_ms', 0), ('truncated', False),
                     )}
-                    if getattr(gateway, 'protocol_version', 1) == 2:
-                        usage.update(await gateway.usage(task_id, execution_owner))
-                        usage.update(prompt_tokens=None, completion_tokens=None)
+                    usage.update(await gateway.usage(task_id, execution_owner))
+                    usage.update(prompt_tokens=None, completion_tokens=None)
                     final_text = result.get('final_text', '')
                     if active_turn:
                         await agent_session_repository.finish_turn(session_id, owner, turn.id, {
@@ -388,8 +471,10 @@ async def get_session_detail(session_id: str, owner: str) -> AgentSession:
     history: list[dict] = []
     reconciled = False
     for turn in session.turns:
-        if (turn.status == 'running' and not turn.settings.get('agent_task_id')
-                and turn.settings.get('_agent_protocol') != 2):
+        if (turn.status == 'running'
+                and (turn.settings.get('_agent_protocol') != 2
+                     or (not turn.settings.get('agent_task_id')
+                         and not turn.settings.get('_agent_recovery_request')))):
             payload = {
                 'status': 'stopped', 'stop_reason': 'interrupted', 'stopped': True,
                 'error': '运行已中断（服务重启或异常退出），请重新发送',

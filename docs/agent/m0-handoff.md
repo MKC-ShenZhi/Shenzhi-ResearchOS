@@ -2,6 +2,8 @@
 
 更新：2026-11-18。**M0 = PARTIAL**。M0-R1-B 已由 ChatGPT 独立代码审查通过（用户确认）；真实 PostgreSQL、独立进程、上游服务和故障恢复尚待 M0-C 验收。以下启动、迁移和测试命令是后续执行指引，本次整理未运行。
 
+> 本文件是 M0 阶段的历史交接快照，分支、迁移版本和接口路径已过时，不作为当前运行手册。当前 Agent 产品入口为 `/api/v2/agent/*`，Agent 通信只提供 `/internal/v2/*`；历史 `/internal/v1/*` 路径已从当前代码移除。请以 [Agent 开发边界](development.md)、[执行与权益](entitlements.md) 和 [部署文档](../engineering/deployment.md) 为准。
+
 ## Git 与阶段
 
 - 仓库：`D:\Projects\Shenzhi-ResearchOS`；本地分支：`feat/agent-m0-integration`。
@@ -32,7 +34,7 @@ Backend 不直接访问 Agent 数据库；Worker 经 Agent API，不直接执行
 | --- | --- |
 | Backend | `CHAT_DATABASE_URL`、`AGENT_INTERNAL_URL`、`AGENT_SERVICE_TOKEN`、`BACKEND_BFF_SECRET`、`KNOWLEDGE_BASE_API_URL`；按需 `KNOWLEDGE_BASE_TIMEOUT_SEC`；验收起步关闭 `BACKGROUND_JOBS_ENABLED` |
 | Agent API / Worker | `AGENT_DATABASE_URL`（API/迁移）、`AGENT_INTERNAL_URL`（Worker）、`AGENT_SERVICE_TOKEN`、`AGENT_WORKSPACE_ROOT`、`BACKEND_INTERNAL_URL`（Knowledge Adapter） |
-| Agent 模型/检索 | 至少一个可用 Provider：`DASHSCOPE_API_KEY`、`DEEPSEEK_API_KEY`、`ZHIPU_API_KEY` 或 `AUTODL_API_KEY`；按需 `AI_ALLOWED_MODELS`、`AI_DEFAULT_MODEL`、`AI_AGENT_DEFAULT_MODEL`、`AI_MODEL_REGISTRY_FILE` 及 Provider 覆盖配置；联网检索按选定 Provider 配置 `TAVILY_API_KEY`、`SEARXNG_BASE_URL` 或 `EXA_API_KEY` |
+| Agent 模型/检索 | 至少一个可用 Provider：`DASHSCOPE_API_KEY`、`DEEPSEEK_API_KEY`、`ZHIPU_API_KEY` 或 `AUTODL_API_KEY`；型号来自统一 Catalog；按需 `AI_DEFAULT_MODEL`、`AI_AGENT_DEFAULT_MODEL`、`AI_MODEL_REGISTRY_FILE` 及 Provider 覆盖配置；联网检索按选定 Provider 配置 `TAVILY_API_KEY`、`SEARXNG_BASE_URL` 或 `EXA_API_KEY` |
 | Web | `BUSINESS_BACKEND_URL`、`BACKEND_BFF_SECRET`、`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`；完整登录另需 `DATABASE_URL` 及 [认证配置](../auth/CONFIGURATION.md) 中相应变量 |
 
 Web/Backend 的 BFF secret 一致；Backend/Agent API/Worker 的 Agent token 一致，两类凭据分离。`BACKEND_INTERNAL_URL` 要包含 Backend Agent API 前缀，不能只填服务根路径。模型/搜索凭据配置在 Agent 进程，Knowledge 上游配置在 Backend。`BACKEND_ALLOW_INSECURE_LOCAL_BFF` 只用于明确的 loopback 开发，不作为完整验收配置。

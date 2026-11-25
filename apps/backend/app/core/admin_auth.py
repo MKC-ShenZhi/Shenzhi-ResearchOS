@@ -29,6 +29,7 @@ def settings(request: Request):
     if (os.getenv('ADMIN_AUTH_MODE') != 'local_password'
             or os.getenv('ADMIN_AUTH_LOCAL_ONLY', 'true').lower() != 'true'
             or not username or not password or password == 'CHANGE_ME' or len(secret) < 32
+            or (password == 'shenzhi-dev' and os.getenv('ENVIRONMENT') != 'development')
             or not 0 < ttl <= 86400):
         raise BusinessError(10002, '管理员认证配置缺失或无效', 503)
     return username, password, secret, ttl

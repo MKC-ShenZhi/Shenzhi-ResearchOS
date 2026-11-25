@@ -22,6 +22,19 @@ export interface PaperAgentState {
   activity: "reading_pdf" | null;
 }
 
+export interface PendingPaperAgentRun {
+  question: string;
+  request: ReturnType<typeof paperAgentRunRequest>;
+  idempotencyKey: string;
+}
+
+export function pendingPaperAgentRetry(
+  pendingRuns: ReadonlyMap<string, PendingPaperAgentRun>,
+  question: string,
+): PendingPaperAgentRun | null {
+  return pendingRuns.get(question) ?? null;
+}
+
 export type PaperAgentAction =
   | { type: "reset"; paperId: string }
   | { type: "start"; question: string; userId: string; assistantId: string }
