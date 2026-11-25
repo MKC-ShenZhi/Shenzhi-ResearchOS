@@ -73,6 +73,11 @@ export async function forwardToBusinessBackend(
       });
     }
   }
+  if (apiVersion === "v1" && segments?.[0] === "agent") {
+    return NextResponse.json({ code: 10001, message: "Not found" }, {
+      status: 404, headers: { "Cache-Control": "no-store" },
+    });
+  }
   // The public BFF must never become a route to the dedicated Admin entrypoint.
   // Next decodes route params; decode once more for the downstream HTTP parser
   // and reject embedded separators as well as ordinary Admin path segments.

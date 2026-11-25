@@ -64,7 +64,9 @@ def _request_dict(request: RunRequest) -> dict[str, Any]:
             'input_ref': request.input_ref, 'history': list(request.history)}
 
 
-async def submit(session: AsyncSession, submission: TaskSubmission, *, metering=None) -> TaskRecord:
+async def submit(session: AsyncSession, submission: TaskSubmission, *, metering) -> TaskRecord:
+    if metering is None:
+        raise ValueError('V2 task submission requires metering information')
     if submission.idempotency_key:
         existing = await session.scalar(select(TaskRow).where(
             TaskRow.owner_id == submission.owner_id,
@@ -120,40 +122,39 @@ async def submit(session: AsyncSession, submission: TaskSubmission, *, metering=
     await session.flush()
     session.add(OutboxRow(run_id=run_id, created_at=now, available_at=now,
                           delivery_attempts=0))
-    if metering is not None:
-        session.add(TaskMeteringRow(task_id=task_id, owner_id=submission.owner_id,
-                    submission_id=metering.submission_id or 'obs:' + uuid.uuid4().hex,
-                    profile_id=metering.metering_profile_id, context=metering.metering_context,
-                    binding_status='pending', envelope=metering.model_dump(mode='json'),
-                    revoked=False, usage_sequence=0))
+    session.add(TaskMeteringRow(task_id=task_id, owner_id=submission.owner_id,
+                submission_id=metering.submission_id or 'obs:' + uuid.uuid4().hex,
+                profile_id=metering.metering_profile_id, context=metering.metering_context,
+                binding_status='pending', envelope=metering.model_dump(mode='json'),
+                revoked=False, usage_sequence=0))
     await session.commit()
     return _task_record(task)
 
 
-async def get_task(session: AsyncSession, task_id: str, owner_id: str, *, v2=False) -> TaskRecord:
+async def get_task(session: AsyncSession, task_id: str, owner_id: str) -> TaskRecord:
     row = await session.scalar(select(TaskRow).where(
         TaskRow.task_id == task_id, TaskRow.owner_id == owner_id))
     if row is None:
         raise BusinessError(20004, '任务不存在', 404)
-    if (await session.scalar(select(TaskMeteringRow).where(TaskMeteringRow.task_id == task_id)) is not None) != v2:
+    if await session.scalar(select(TaskMeteringRow).where(TaskMeteringRow.task_id == task_id)) is None:
         raise BusinessError(20004, '任务协议不匹配', 404)
     return _task_record(row)
 
 
-async def get_run(session: AsyncSession, run_id: str, owner_id: str, *, v2=False) -> tuple[RunRow, TaskRow]:
+async def get_run(session: AsyncSession, run_id: str, owner_id: str) -> tuple[RunRow, TaskRow]:
     found = (await session.execute(select(RunRow, TaskRow).join(
         TaskRow, TaskRow.task_id == RunRow.task_id).where(
             RunRow.run_id == run_id, TaskRow.owner_id == owner_id))).first()
     if found is None:
         raise BusinessError(20004, '运行不存在', 404)
-    if (await session.scalar(select(TaskMeteringRow).where(TaskMeteringRow.task_id == found[0].task_id)) is not None) != v2:
+    if await session.scalar(select(TaskMeteringRow).where(TaskMeteringRow.task_id == found[0].task_id)) is None:
         raise BusinessError(20004, '运行协议不匹配', 404)
     return found
 
 
-async def list_task_runs(session: AsyncSession, task_id: str, owner_id: str, *, v2=False) -> list[str]:
+async def list_task_runs(session: AsyncSession, task_id: str, owner_id: str) -> list[str]:
     """Enumerate every retry without relying on the latest current_run_id."""
-    await get_task(session, task_id, owner_id, v2=v2)
+    await get_task(session, task_id, owner_id)
     return list((await session.scalars(select(RunRow.run_id).join(
         TaskRow, TaskRow.task_id == RunRow.task_id,
     ).where(RunRow.task_id == task_id, TaskRow.owner_id == owner_id)
@@ -161,7 +162,7 @@ async def list_task_runs(session: AsyncSession, task_id: str, owner_id: str, *, 
 
 
 async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = WORKER_LEASE_SECONDS,
-                    *, demo_mode: bool = False, v2=False):
+                    *, demo_mode: bool = False):
     now = _now()
     query = (select(RunRow, TaskRow, OutboxRow).join(TaskRow, TaskRow.task_id == RunRow.task_id)
              .join(OutboxRow, OutboxRow.run_id == RunRow.run_id)
@@ -175,8 +176,7 @@ async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 
                     or_(RunRow.request_json['model'].as_string().is_(None),
                         RunRow.request_json['model'].as_string() != 'demo/m1'))
              .where(TaskRow.task_id.in_(select(TaskMeteringRow.task_id).where(
-                 TaskMeteringRow.binding_status == 'bound', TaskMeteringRow.revoked.is_(False))) if v2 else
-                    ~TaskRow.task_id.in_(select(TaskMeteringRow.task_id)))
+                 TaskMeteringRow.binding_status == 'bound', TaskMeteringRow.revoked.is_(False))))
              .order_by(RunRow.created_at).with_for_update(of=TaskRow, skip_locked=True).limit(1))
     found = (await session.execute(query)).first()
     if found is None:
@@ -189,13 +189,12 @@ async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 
     run.worker_id = worker_id
     run.lease_token += 1
     run.lease_expires_at = now + timedelta(seconds=lease_seconds)
-    if v2:
-        # Sealing a superseded execution never deletes its historical calls.
-        for previous in (await session.scalars(select(ExecutionRow).where(
-                ExecutionRow.run_id == run.run_id))).all():
-            previous.sealed = True
-        session.add(ExecutionRow(execution_id=uuid.uuid4().hex, run_id=run.run_id,
-                    task_id=task.task_id, worker_id=worker_id, lease_token=run.lease_token, sealed=False))
+    # Sealing a superseded execution never deletes its historical calls.
+    for previous in (await session.scalars(select(ExecutionRow).where(
+            ExecutionRow.run_id == run.run_id))).all():
+        previous.sealed = True
+    session.add(ExecutionRow(execution_id=uuid.uuid4().hex, run_id=run.run_id,
+                task_id=task.task_id, worker_id=worker_id, lease_token=run.lease_token, sealed=False))
     run.started_at = run.started_at or now
     task.status = (TaskStatus.CANCELLING.value if task.cancel_requested else TaskStatus.RUNNING.value)
     outbox.delivered_at = outbox.delivered_at or now

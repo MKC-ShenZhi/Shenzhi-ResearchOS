@@ -116,7 +116,7 @@ def metering_control():
 
 
 async def task_v2(db, task_id, owner):
-    task = await repository.get_task(db, task_id, owner, v2=True)
+    task = await repository.get_task(db, task_id, owner)
     profile = await db.get(TaskMeteringRow, task_id)
     return dict(_task_json(task), schema_version=1, metering_profile_id=profile.profile_id,
                 metering_context=profile.context, submission_id=profile.submission_id,
@@ -241,7 +241,7 @@ async def claim(body: dict, db=Depends(get_session), control=Depends(metering_co
     check(body['demo_mode'] == (os.getenv('AGENT_DEMO_MODE') == '1'), 'WORKER_MODE_CONFLICT')
     # Claim only locally bound v2 tasks. Authorized current-state online check
     # precedes execution; every real call still repeats Backend start validation.
-    claimed = await repository.claim_run(db, body['worker_id'], demo_mode=body['demo_mode'], v2=True)
+    claimed = await repository.claim_run(db, body['worker_id'], demo_mode=body['demo_mode'])
     if claimed is None:
         return {'schema_version': 1, 'run': None}
     request, lease_token, event_seq = claimed
@@ -340,7 +340,7 @@ async def observe(body: ObservationSubmission, db=Depends(get_session), control=
 
 @router.get('/runs/{run_id}', dependencies=[Depends(gateway)])
 async def run(run_id: str, owner_id: str, db=Depends(get_session)):
-    row, task = await repository.get_run(db, run_id, owner_id, v2=True)
+    row, task = await repository.get_run(db, run_id, owner_id)
     return dict(schema_version=1, run_id=run_id, task_id=task.task_id, attempt=row.attempt,
                 status=row.status, task_status=task.status, report=row.report_json,
                 created_at=row.created_at.isoformat(), started_at=row.started_at.isoformat() if row.started_at else None,
@@ -349,7 +349,7 @@ async def run(run_id: str, owner_id: str, db=Depends(get_session)):
 
 @router.get('/runs/{run_id}/events', dependencies=[Depends(gateway)])
 async def events(run_id: str, owner_id: str, after_seq: int = 0, db=Depends(get_session)):
-    await repository.get_run(db, run_id, owner_id, v2=True)
+    await repository.get_run(db, run_id, owner_id)
     from agent_app.infrastructure.models import RunEventRow
     rows = (await db.scalars(select(RunEventRow).where(RunEventRow.run_id == run_id,
                 RunEventRow.seq > after_seq).order_by(RunEventRow.seq))).all()
@@ -359,14 +359,14 @@ async def events(run_id: str, owner_id: str, after_seq: int = 0, db=Depends(get_
 
 @router.post('/tasks/{task_id}/cancel', dependencies=[Depends(gateway)])
 async def cancel(task_id: str, owner_id: str, db=Depends(get_session)):
-    await repository.get_task(db, task_id, owner_id, v2=True)
+    await repository.get_task(db, task_id, owner_id)
     await repository.request_cancel(db, task_id, owner_id)
     return await task_v2(db, task_id, owner_id)
 
 
 @router.post('/runs/{run_id}/steer', dependencies=[Depends(gateway)])
 async def steer(run_id: str, body: RunSteerV2, db=Depends(get_session)):
-    await repository.get_run(db, run_id, body.owner_id, v2=True)
+    await repository.get_run(db, run_id, body.owner_id)
     result = await repository.append_steer(db, run_id, body.owner_id, body.text)
     return dict(result, schema_version=1)
 

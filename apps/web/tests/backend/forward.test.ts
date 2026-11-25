@@ -35,24 +35,14 @@ test("BFF forwards and returns the same request ID", async (t) => {
   assert.equal(response.headers.get("X-Request-ID"), "request-forward-1");
 });
 
-test("BFF forwards the idempotency key without treating it as a request ID", async (t) => {
-  t.mock.method(identity, "resolveBackendIdentity", async () => ({ kind: "anonymous" }));
-
-  let outgoingHeaders: Headers | undefined;
-  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
-    outgoingHeaders = new Headers(init.headers);
-    return new Response(null, { status: 204 });
-  });
-
+test("V1 BFF rejects retired Agent submissions", async () => {
   const response = await forwardToBusinessBackend(
     request("trace-request-1", undefined, "agent-operation-1"),
     "http://backend.test",
     ["agent", "sessions"],
   );
 
-  assert.equal(outgoingHeaders?.get("Idempotency-Key"), "agent-operation-1");
-  assert.equal(outgoingHeaders?.get("X-Request-ID"), "trace-request-1");
-  assert.equal(response.headers.get("X-Request-ID"), "trace-request-1");
+  assert.equal(response.status, 404);
 });
 
 test("BFF forwards Agent requests to the V2 Backend path", async (t) => {
@@ -84,6 +74,13 @@ test("V2 BFF rejects internal and non-Agent paths before identity resolution", a
     );
     assert.equal(response.status, 404);
   }
+});
+
+test("V1 BFF rejects retired Agent product paths before identity resolution", async () => {
+  const response = await forwardToBusinessBackend(
+    {} as NextRequest, "invalid-origin", ["agent", "sessions"], "v1",
+  );
+  assert.equal(response.status, 404);
 });
 
 test("BFF generates a request ID for a missing incoming ID", async (t) => {

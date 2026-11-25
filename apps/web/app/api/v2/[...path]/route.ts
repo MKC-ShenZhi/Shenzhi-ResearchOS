@@ -18,18 +18,7 @@ async function handle(req: NextRequest, ctx: Ctx) {
   }
 
   const path = (await ctx.params).path ?? [];
-  // This public route is reserved for Agent product APIs. Internal control
-  // endpoints remain inaccessible through the browser-facing BFF.
-  let segments: string[];
-  try {
-    segments = path.map((part) => decodeURIComponent(part));
-  } catch {
-    return NextResponse.json({ code: 10001, message: "Not found" }, { status: 404 });
-  }
-  if (segments[0] !== "agent" || segments.some((part) =>
-    part.split(/[\\/]/).some((segment) => segment === "internal" || segment === "admin-console"))) {
-    return NextResponse.json({ code: 10001, message: "Not found" }, { status: 404 });
-  }
+  // forward.ts owns decoded path validation and public/internal isolation.
   return forwardToBusinessBackend(req, base, path, "v2");
 }
 

@@ -174,7 +174,7 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.service_repo = patch('app.services.agent_sessions.service.agent_session_repository', self.repo)
         # New Session Turns submit through the unified V2 boundary; substitute the
         # same deterministic fake so the projection assertions stay unchanged.
-        self.v2_gateway = patch('app.services.agent_gateway.v2.AgentGatewayV2',
+        self.v2_gateway = patch('app.services.agent_gateway.gateway.AgentGateway',
                                 return_value=self.gateway)
         for patcher in (self.api_repo, self.service_repo, self.v2_gateway):
             patcher.start()
@@ -385,7 +385,7 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
             '_agent_owner_id': owner, '_agent_protocol': 1,
             'agent_task_id': 'old-task', 'agent_run_id': 'old-run',
         }, [])
-        with patch('app.services.agent_gateway.v2.AgentGatewayV2', side_effect=AssertionError('must not call Agent')):
+        with patch('app.services.agent_gateway.gateway.AgentGateway', side_effect=AssertionError('must not call Agent')):
             with self.assertRaises(BusinessError) as error:
                 await service.resume_session_run(session_id, owner)
         self.assertEqual(error.exception.status, 410)
@@ -413,7 +413,7 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
             'transcript': [{'kind': 'user', 'text': '旧问题'},
                            {'kind': 'assistant', 'content': '保留的旧结果'}],
         })
-        with patch('app.services.agent_gateway.v2.AgentGatewayV2', side_effect=AssertionError('must not call Agent')):
+        with patch('app.services.agent_gateway.gateway.AgentGateway', side_effect=AssertionError('must not call Agent')):
             live = await service.resume_session_run(session_id, owner, turn_id=turn.id)
         self.assertEqual(live.events[-1][0], 'result')
         self.assertEqual(live.events[-1][1]['final_text'], '保留的旧结果')
@@ -474,7 +474,7 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         v2 = FakeAgentGateway()
         v2.protocol_version = 2
         v2.enqueue(final_text='v2 回答')
-        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
             response = await self.request(
                 'POST', f'/api/v2/agent/sessions/{session_id}/run',
                 json_body={'prompt': '统一路径问题'},
@@ -510,10 +510,10 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         v2.recovery_prompt = '恢复任务 附件文本'
         v2.recovery_history = [{'kind': 'user', 'text': '之前'}]
         self.v2_gateway.stop()
-        self.v2_gateway = patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2)
+        self.v2_gateway = patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2)
         self.v2_gateway.start()
         v2.enqueue(final_text='恢复后提交')
-        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
             response = await self.request(
                 'POST', f'/api/v2/agent/sessions/{session_id}/run',
                 json_body={'prompt': '恢复任务'},
@@ -534,7 +534,7 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         v2 = FakeAgentGateway()
         v2.protocol_version = 2
         v2.enqueue(final_text='首次失败', status='failed')
-        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
             response = await self.request(
                 'POST', f'/api/v2/agent/sessions/{session_id}/run',
                 json_body={'prompt': '验证重试'},
@@ -551,7 +551,7 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         v2 = FakeAgentGateway()
         v2.protocol_version = 2
         v2.submit = AsyncMock(side_effect=EntitlementError('ENTITLEMENT_UNAVAILABLE', 403))
-        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
             response = await self.request(
                 'POST', f'/api/v2/agent/sessions/{session_id}/run',
                 json_body={'prompt': '匿名任务'},
@@ -575,7 +575,7 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         else:
             self.fail('Expected invalid TaskSubmissionWire to fail validation')
         v2.submit = AsyncMock(side_effect=validation_error)
-        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
             response = await self.request(
                 'POST', f'/api/v2/agent/sessions/{session_id}/run',
                 json_body={'prompt': '应结束本轮'},
@@ -595,7 +595,7 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
             raise TimeoutError('response lost after remote task creation')
         submit_mock = AsyncMock(side_effect=submit_then_lose_response)
         v2.submit = submit_mock
-        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
             first = await self.request(
                 'POST', f'/api/v2/agent/sessions/{session_id}/run',
                 json_body={'prompt': '同一个请求'},

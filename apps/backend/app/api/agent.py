@@ -45,8 +45,8 @@ logger = logging.getLogger(__name__)
 
 def submission_gateway():
     """Create the only execution Gateway used by product Agent traffic."""
-    from app.services.agent_gateway.v2 import AgentGatewayV2
-    return AgentGatewayV2()
+    from app.services.agent_gateway.gateway import AgentGateway
+    return AgentGateway()
 
 
 def _client_request_digest(body: AgentRunBody) -> str:

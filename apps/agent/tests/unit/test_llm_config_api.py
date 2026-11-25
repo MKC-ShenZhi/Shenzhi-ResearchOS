@@ -78,7 +78,7 @@ class ConfigApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_v2_workspace_route_uses_service_role_and_shared_handler(self):
         with patch.dict(os.environ, {'AGENT_SERVICE_TOKEN': 'service-token'}, clear=True), \
-             patch('agent_app.api.v2.shared_new_workspace', new=AsyncMock(
+             patch('agent_app.api.routes.shared_new_workspace', new=AsyncMock(
                  return_value={'workspace_id': 'workspace123'})) as create:
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                          base_url='http://127.0.0.1',

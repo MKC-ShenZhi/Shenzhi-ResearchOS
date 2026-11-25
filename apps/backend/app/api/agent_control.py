@@ -1,4 +1,4 @@
-"""Thin v2 product and authenticated Control endpoints, isolated from v1."""
+"""Agent entitlement, metering and authenticated internal control endpoints."""
 from __future__ import annotations
 
 import hmac
@@ -30,7 +30,7 @@ from app.services.agent_entitlements.policy import EntitlementPolicy
 from app.services.agent_entitlements.service import EntitlementError, require
 from app.services.agent_entitlements.service import now_utc
 from app.services.agent_entitlements.usage import UsageSettlement
-from app.services.agent_gateway.v2 import AgentGatewayV2
+from app.services.agent_gateway.gateway import AgentGateway
 from app.schemas.agent import AgentRunBody
 from app.services.agent_attachments import resolve_agent_attachments
 
@@ -74,7 +74,7 @@ def client_fingerprint(body):
 async def run_product(body: ProductRun, owner: str = Depends(request_owner),
                       client_key: str = Header(alias='Idempotency-Key', min_length=1, max_length=200)):
     require(body.session_id is None, 'USE_SESSION_RUN_ENDPOINT', 422)
-    gateway = AgentGatewayV2()
+    gateway = AgentGateway()
     # A persisted original request wins over expiring attachments on retries.
     async with session_scope() as db:
         from app.models.agent_entitlements import SubmissionRow, ObservationAdmissionRow
@@ -183,7 +183,7 @@ async def void_permit(permit_id: str, body: VoidProof, service=Depends(entitleme
 async def usage_batch(body: UsageBatch, service=Depends(entitlement_service)):
     require(body.producer_id == service.audience, 'PRODUCER_AUDIENCE_CONFLICT', 403)
     results = []
-    gateway = AgentGatewayV2()
+    gateway = AgentGateway()
     for item in body.items:
         fact, error = None, None
         try:

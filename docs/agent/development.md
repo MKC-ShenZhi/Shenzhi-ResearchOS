@@ -1,6 +1,6 @@
 # Agent Platform 开发边界
 
-当前分支将 Agent 执行通信统一为 V2。Backend 产品 API 只注册 `/api/v2/agent/*`，Backend Gateway、Agent API 和 Worker 均只使用 `/internal/v2/*`。V1 HTTP router、Backend V1 Gateway adapter、Worker V1 分支和基于 V1 的 M1 Mock 启动器已从当前实现移除。历史数据库数据保留，不执行数据清理或迁移删除。
+当前分支将 Agent 执行通信统一为 V2。Backend 产品 API 只注册 `/api/v2/agent/*`，Backend Gateway、Agent API 和 Worker 均只使用 `/internal/v2/*`。Backend 产品 API 位于 `app/api/agent.py`，权益、计量及内部控制接口位于 `app/api/agent_control.py`；唯一 Gateway 位于 `app/services/agent_gateway/gateway.py`；Agent 内部路由位于 `agent_app/api/routes.py`。这些文件按职责命名，HTTP 路径与 V2 wire 契约保持不变。V1 HTTP router、Backend V1 Gateway adapter、Worker V1 分支和基于 V1 的 M1 Mock 启动器已从当前实现移除。历史数据库数据保留，不执行数据清理或迁移删除。
 
 ## 当前所有权
 
@@ -26,7 +26,7 @@ Backend 产品 API / Session 投影
                                       └── 持久 Run Events / ExecutionReport / Usage Facts
 ```
 
-Session Turn 持久 `_agent_protocol` 仅用于识别旧历史数据。新 Turn 固定写入 V2 标记；终态旧 Turn 从 Backend 已持久化的产品投影重放，未终态旧 Turn 不会回调 Agent V1。过期的旧协议运行由 Backend Session Repository 收敛为失败状态。Agent API 与 Worker 必须使用同一持久 `AGENT_WORKSPACE_ROOT`。
+Agent Repository 只创建携带 metering envelope 的 Task，Worker 只领取已绑定且未撤销的计量 Task。Session Turn 持久 `_agent_protocol` 仅用于识别旧历史数据。新 Turn 固定写入 V2 标记；终态旧 Turn 从 Backend 已持久化的产品投影重放，未终态旧 Turn 不会回调任何 Agent 执行 API。过期的旧协议运行由 Backend Session Repository 收敛为失败状态。Agent API 与 Worker 必须使用同一持久 `AGENT_WORKSPACE_ROOT`。
 
 ## 退役审计与部署证据
 

@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-from app.services.agent_gateway.v2 import AgentGatewayV2
+from app.services.agent_gateway.gateway import AgentGateway
 from app.core.errors import BusinessError
 
 
@@ -52,8 +52,8 @@ async def local_server(payload, status=200):
 
 class AgentGatewayTransportTests(unittest.IsolatedAsyncioTestCase):
     async def test_recover_submission_allows_missing_only_for_session_recovery(self):
-        gateway = AgentGatewayV2()
-        with patch('app.services.agent_gateway.v2.session_scope') as scope:
+        gateway = AgentGateway()
+        with patch('app.services.agent_gateway.gateway.session_scope') as scope:
             from unittest.mock import MagicMock
             db = MagicMock()
             db.scalar = AsyncMock(return_value=None)
@@ -74,7 +74,7 @@ class AgentGatewayTransportTests(unittest.IsolatedAsyncioTestCase):
                 'NO_PROXY': '', 'no_proxy': '',
             }):
                 with patch.dict('os.environ', {'AGENT_SERVICE_TOKEN': 'test-only-service-token'}):
-                    config = await AgentGatewayV2(base_url=origin, token='gateway-token').config()
+                    config = await AgentGateway(base_url=origin, token='gateway-token').config()
             self.assertEqual(config['models'], [])
             self.assertEqual(calls, [('/internal/v2/config', 'Bearer test-only-service-token')])
             self.assertEqual(proxy_calls, [])
@@ -85,7 +85,7 @@ class AgentGatewayTransportTests(unittest.IsolatedAsyncioTestCase):
             'events': [], 'report': None, 'cancel_requested': True, 'stored': True,
         }
         async with local_server(payload) as (origin, calls):
-            gateway = AgentGatewayV2(base_url=origin, token='gateway-token')
+            gateway = AgentGateway(base_url=origin, token='gateway-token')
             await gateway.task('task-1', 'anon:owner')
             await gateway.run('run-1', 'anon:owner')
             await gateway.task_runs('task-1', 'anon:owner')
@@ -102,7 +102,7 @@ class AgentGatewayTransportTests(unittest.IsolatedAsyncioTestCase):
     async def test_v2_gateway_reads_shared_v2_files_with_service_credential(self):
         async with local_server({'content_base64': 'cmVwb3J0', 'media_type': 'text/markdown'}) as (origin, calls):
             with patch.dict('os.environ', {'AGENT_SERVICE_TOKEN': 'service-token'}):
-                gateway = AgentGatewayV2(base_url=origin, token='gateway-token')
+                gateway = AgentGateway(base_url=origin, token='gateway-token')
                 content, media_type = await gateway.read_session_file(
                     'anon:owner', 'session-1', 'report.md')
         self.assertEqual((content, media_type), (b'report', 'text/markdown'))
@@ -121,7 +121,7 @@ class AgentGatewayTransportTests(unittest.IsolatedAsyncioTestCase):
             {'path': 'notes.txt', 'size': 4},
             {'content_base64': 'bm90ZQ==', 'media_type': 'text/plain'},
         ]
-        gateway = AgentGatewayV2(base_url='http://agent.invalid', token='gateway-token')
+        gateway = AgentGateway(base_url='http://agent.invalid', token='gateway-token')
         gateway.service_gateway = Mock(return_value=service)
 
         workspace = await gateway.create_workspace('user:1')

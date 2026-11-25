@@ -6,12 +6,12 @@ import unittest
 import httpx
 from pydantic import ValidationError
 
-from app.services.agent_gateway.v2 import AgentGatewayV2
+from app.services.agent_gateway.gateway import AgentGateway
 
 
 class AgentGatewayContractTests(unittest.IsolatedAsyncioTestCase):
     def gateway(self, handler):
-        return AgentGatewayV2(
+        return AgentGateway(
             base_url='http://agent.test', token='gateway-secret',
             transport=httpx.MockTransport(handler),
         )

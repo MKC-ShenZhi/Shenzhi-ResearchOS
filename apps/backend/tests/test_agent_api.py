@@ -85,7 +85,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         self.api_repo = patch('app.api.agent.agent_session_repository', self.repo)
         # New product tasks always use the unified V2 boundary. Tests substitute
         # the same deterministic fake so existing SSE assertions stay valid.
-        self.v2_patch = patch('app.services.agent_gateway.v2.AgentGatewayV2',
+        self.v2_patch = patch('app.services.agent_gateway.gateway.AgentGateway',
                               return_value=self.gateway)
         self.api_repo.start()
         self.v2_patch.start()
@@ -132,7 +132,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         from app.services.agent_entitlements.service import EntitlementError
         v2 = FakeAgentGateway()
         with patch.dict('os.environ', {'AGENT_V2_ADMISSION': 'authorized'}), \
-             patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+             patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test',
                 headers={'x-shenzhi-user-id': 'registered', 'Idempotency-Key': 'stable-key'}) as browser:
                 response = await browser.post('/api/v2/agent/run', json={'prompt': 'hello', 'model': 'test/m1'})
@@ -150,7 +150,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_anonymous_new_task_uses_v2_gateway(self):
         v2 = FakeAgentGateway()
         v2.events_data = [{'seq': 1, 'name': 'delta', 'data': {'text': '你好'}}]
-        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
             response = await self.post({'prompt': '匿名任务'},
                                        headers={'Idempotency-Key': 'anon-v2-key'})
         self.assertEqual(response.status_code, 200, response.text)
@@ -164,7 +164,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_anonymous_new_task_requires_idempotency_key(self):
         v2 = FakeAgentGateway()
-        with patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
             response = await self.post({'prompt': '缺少幂等键'}, include_idempotency=False)
         self.assertEqual(response.status_code, 422)
         self.assertEqual(v2.submissions, [])

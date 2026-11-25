@@ -1,4 +1,4 @@
-"""V2 Gateway reuses the HTTP boundary and persists before remote submission."""
+"""Agent communication Gateway over the shared authenticated HTTP client."""
 import base64
 import os
 
@@ -25,9 +25,7 @@ from app.services.agent_entitlements.service import require, uid
 from .client import AgentHttpClient
 
 
-class AgentGatewayV2(AgentHttpClient):
-    protocol_version = 2
-
+class AgentGateway(AgentHttpClient):
     def __init__(self, **kwargs):
         kwargs.setdefault('token', os.getenv('AGENT_GATEWAY_TOKEN', '').strip())
         super().__init__(**kwargs)

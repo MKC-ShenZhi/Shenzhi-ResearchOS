@@ -81,11 +81,19 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch.dict(app.dependency_overrides, {get_session: session_dependency}))
         self.control = host.AgentControlClient(transport=httpx.ASGITransport(app=app))
         self.addAsyncCleanup(self.control.close)
-        self.task = await repository.submit(self.db, TaskSubmission(owner_id='owner', prompt='run'))
-        self.db.add(TaskMeteringRow(task_id=self.task.task_id, owner_id='owner',
-            submission_id='obs:'+self.task.task_id, profile_id='profile:'+self.task.task_id,
-            context='observation_only', binding_status='bound', envelope={}, binding=None,
-            receipt=None, current_grant=None, revoked=False, revoked_capabilities=[], usage_sequence=0))
+        submission = TaskSubmission(owner_id='owner', prompt='run')
+        from agent_contracts.v2 import TaskSubmissionV2
+        from agent_contracts.wire import TaskSubmissionWire
+        from agent_contracts.canonical import request_digest_v1
+        request = TaskSubmissionWire(owner_id='owner', prompt='run')
+        metering = TaskSubmissionV2(schema_version=1, request=request, owner_id='owner',
+            metering_profile_id='profile:'+submission.idempotency_key if submission.idempotency_key else 'profile:test',
+            metering_context='observation_only', submission_id=None,
+            request_digest=request_digest_v1(request.model_dump(mode='json')),
+            agent_audience='agent-test', budget_grant=None, permission_snapshot=None, call_bounds={})
+        self.task = await repository.submit(self.db, submission, metering=metering)
+        profile = await self.db.get(TaskMeteringRow, self.task.task_id)
+        profile.binding_status = 'bound'
         await self.db.commit()
 
     def expire_lease(self):

@@ -62,7 +62,7 @@ class SessionRetrySseTests(unittest.IsolatedAsyncioTestCase):
         self.owner = 'anon:retries'
 
     async def start(self, gateway, *, recover=False):
-        self.enterContext(patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=gateway))
+        self.enterContext(patch('app.services.agent_gateway.gateway.AgentGateway', return_value=gateway))
         session = await self.repo.create(self.owner, 'retry', {})
         if recover:
             await self.repo.start_turn(session.id, self.owner, 'retry', {

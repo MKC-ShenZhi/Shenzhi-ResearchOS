@@ -28,7 +28,7 @@ def _definite_submission_rejection(exc: Exception) -> bool:
     from pydantic import ValidationError
 
     from app.services.agent_entitlements.service import EntitlementError
-    # AgentGatewayV2 validates TaskSubmissionWire/TaskSubmissionV2 before its
+    # AgentGateway validates TaskSubmissionWire/TaskSubmissionV2 before its
     # first HTTP request. Such a rejection, like local entitlement gating,
     # cannot leave a Task in Agent even though the Turn is already persisted.
     return isinstance(exc, (EntitlementError, ValidationError))
@@ -42,8 +42,8 @@ async def start_session_run(
 ) -> LiveRun:
     """Validate ownership and concurrency before starting an independent run task."""
     if gateway is None:
-        from app.services.agent_gateway.v2 import AgentGatewayV2
-        gateway = AgentGatewayV2()
+        from app.services.agent_gateway.gateway import AgentGateway
+        gateway = AgentGateway()
     if idempotency_key is not None:
         existing = await agent_session_repository.find_idempotent_turn(
             session_id, owner, idempotency_key, idempotency_fingerprint or '',
@@ -71,8 +71,8 @@ async def start_session_run(
         'workspace_id': workspace_id, 'skills': skills,
         '_agent_owner_id': owner, '_agent_protocol': 2,
     }
-    # Keep the exact normalized request available if Backend exits after Turn
-    # persistence but before V2 admission starts.
+    # Keep the normalized request until Agent confirms admission, so a Backend
+    # restart can safely resume the same idempotent submission.
     settings['_agent_recovery_request'] = {
         'prompt': prompt + attachment_text,
         'history': runtime_history,
@@ -233,8 +233,8 @@ async def _next_task_run(task_id: str, owner: str, current_run_id: str | None = 
     has the same length (and thus SSE IDs) in live and reconstructed streams.
     """
     if gateway is None:
-        from app.services.agent_gateway.v2 import AgentGatewayV2
-        gateway = AgentGatewayV2()
+        from app.services.agent_gateway.gateway import AgentGateway
+        gateway = AgentGateway()
     run_ids = await gateway.task_runs(task_id, owner)
     index = run_ids.index(current_run_id) + 1 if current_run_id is not None else 0
     return run_ids[index] if index < len(run_ids) else None
@@ -245,11 +245,13 @@ async def _reuse_turn(turn: AgentTurn, owner: str) -> LiveRun:
     live = get_live(turn.session_id, owner)
     if live is not None and live.turn_id == turn.id:
         return live
-    if turn.settings.get('_agent_protocol') != 2 and turn.status == 'running':
-        raise BusinessError(20004, '该 V1 会话运行已退役，无法恢复执行；历史结果仍可查看', 410)
-    if turn.settings.get('_agent_protocol') == 2 and not turn.settings.get('agent_task_id'):
-        from app.services.agent_gateway.v2 import AgentGatewayV2
-        gateway = AgentGatewayV2()
+    if turn.settings.get('_agent_protocol') != 2:
+        if turn.status == 'running':
+            raise BusinessError(20004, '该 V1 会话运行已退役，无法恢复执行；历史结果仍可查看', 410)
+        return _replay_terminal_turn(turn, owner)
+    if not turn.settings.get('agent_task_id') and turn.settings.get('_agent_recovery_request'):
+        from app.services.agent_gateway.gateway import AgentGateway
+        gateway = AgentGateway()
         restored = await gateway.recover_submission(
             turn.settings.get('_agent_owner_id', owner), f'backend-turn:{turn.id}', allow_missing=True)
         if restored is None:
@@ -302,18 +304,24 @@ async def _reuse_turn(turn: AgentTurn, owner: str) -> LiveRun:
         if not await agent_session_repository.claim_turn_projection(turn.session_id, owner, turn.id, worker_id):
             raise BusinessError(20009, '会话投影正在恢复', 409)
         settings = dict(turn.settings, agent_task_id=restored['task_id'], agent_run_id=restored['current_run_id'])
+        settings.pop('_agent_recovery_request', None)
         await agent_session_repository.update_turn_settings(turn.session_id, owner, turn.id, settings, worker_id=worker_id)
         await agent_session_repository.release_turn_projection(turn.id, worker_id)
         turn.settings = settings
     task_id = turn.settings.get('agent_task_id')
     run_id = turn.settings.get('agent_run_id')
-    if task_id and run_id and turn.settings.get('_agent_protocol') == 2:
+    if task_id and run_id:
         return await resume_session_run(turn.session_id, owner, turn_id=turn.id)
     if turn.status == 'running':
         raise BusinessError(20009, '会话运行尚未关联 Agent Task，请稍后重试', 409)
 
     # Imported legacy turns predate Agent Task IDs. Reconstruct their final product
     # stream from the persisted projection so idempotent retries remain replayable.
+    return _replay_terminal_turn(turn, owner)
+
+
+def _replay_terminal_turn(turn: AgentTurn, owner: str) -> LiveRun:
+    """Build a client stream from the persisted product projection only."""
     live = LiveRun(session_id=turn.session_id, owner=owner, turn_id=turn.id)
     # An old idempotency key must not replace the latest Session subscription.
     run_id = str(turn.settings.get('agent_run_id') or turn.id)
@@ -357,15 +365,14 @@ async def resume_session_run(session_id: str, owner: str, *, turn_id: str | None
                  if turn_id is None or item.id == turn_id), None)
     if turn is None:
         raise BusinessError(20004, '当前没有可回放的 Agent 运行', 404)
-    if not (turn.settings.get('agent_task_id') and turn.settings.get('agent_run_id')):
-        return await _reuse_turn(turn, owner)
     if turn.settings.get('_agent_protocol') != 2:
         if turn.status == 'running':
             raise BusinessError(20004, '该 V1 会话运行已退役，无法恢复执行；历史结果仍可查看', 410)
+        return _replay_terminal_turn(turn, owner)
+    if not (turn.settings.get('agent_task_id') and turn.settings.get('agent_run_id')):
         return await _reuse_turn(turn, owner)
-    if turn.settings.get('_agent_protocol') == 2:
-        from app.services.agent_gateway.v2 import AgentGatewayV2
-        gateway = AgentGatewayV2()
+    from app.services.agent_gateway.gateway import AgentGateway
+    gateway = AgentGateway()
     task_id = turn.settings.get('agent_task_id')
     worker_id = current_worker_id()
     execution_owner = turn.settings.get('_agent_owner_id', owner)
@@ -465,7 +472,8 @@ async def get_session_detail(session_id: str, owner: str) -> AgentSession:
     reconciled = False
     for turn in session.turns:
         if (turn.status == 'running'
-                and turn.settings.get('_agent_protocol') != 2):
+                and (turn.settings.get('_agent_protocol') != 2
+                     or not turn.settings.get('agent_task_id'))):
             payload = {
                 'status': 'stopped', 'stop_reason': 'interrupted', 'stopped': True,
                 'error': '运行已中断（服务重启或异常退出），请重新发送',

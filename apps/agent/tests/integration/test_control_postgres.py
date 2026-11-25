@@ -15,6 +15,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from agent_contracts import ExecutionReport, RunStatus, TaskSubmission
+from agent_contracts.v2 import TaskSubmissionV2
 from agent_app.control import repository
 from agent_app.errors import BusinessError
 from agent_app.infrastructure.models import RunRow, TaskRow
@@ -45,8 +46,13 @@ class ControlPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
 
     async def submit(self, **kwargs):
+        submission = TaskSubmission(owner_id=self.owner, **kwargs)
+        envelope = TaskSubmissionV2(schema_version=1, request=submission,
+            metering_profile_id='profile:'+uuid.uuid4().hex, metering_context='observation_only',
+            submission_id='obs:'+uuid.uuid4().hex, request_digest='a'*64,
+            agent_audience='agent-test', budget_grant=None)
         async with self.factory() as db:
-            return await repository.submit(db, TaskSubmission(owner_id=self.owner, **kwargs))
+            return await repository.submit(db, submission, metering=envelope)
 
     async def race_submissions(self, prompts):
         ready = asyncio.Event()
@@ -69,9 +75,13 @@ class ControlPostgresTests(unittest.IsolatedAsyncioTestCase):
         factory = async_sessionmaker(self.engine, class_=RacingSession, expire_on_commit=False)
 
         async def send(prompt):
+            submission = TaskSubmission(owner_id=self.owner, prompt=prompt, idempotency_key='concurrent-key')
+            envelope = TaskSubmissionV2(schema_version=1, request=submission,
+                metering_profile_id='profile:concurrent', metering_context='observation_only',
+                submission_id='obs:concurrent', request_digest='a'*64,
+                agent_audience='agent-test', budget_grant=None)
             async with factory() as db:
-                return await repository.submit(db, TaskSubmission(
-                    owner_id=self.owner, prompt=prompt, idempotency_key='concurrent-key'))
+                return await repository.submit(db, submission, metering=envelope)
 
         return await asyncio.wait_for(asyncio.gather(
             *(send(prompt) for prompt in prompts), return_exceptions=True), timeout=10)
