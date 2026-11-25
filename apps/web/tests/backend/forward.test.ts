@@ -83,6 +83,39 @@ test("V1 BFF rejects retired Agent product paths before identity resolution", as
   assert.equal(response.status, 404);
 });
 
+test("V1 BFF serves historical Agent assets through the V2 read routes", async (t) => {
+  t.mock.method(identity, "resolveBackendIdentity", async () => ({ kind: "anonymous" }));
+  const targets: string[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    targets.push(url);
+    return new Response("chart", { headers: { "content-type": "image/png" } });
+  });
+
+  const asset = await forwardToBusinessBackend(
+    request(), "http://backend.test", ["agent", "assets", "ses_1", "figures", "旧 图.png"],
+  );
+  const file = await forwardToBusinessBackend(
+    new NextRequest("http://web.test/api/v1/agent/session/_/file?path=figures%2Fchart.png"),
+    "http://backend.test",
+    ["agent", "session", "_", "file"],
+  );
+  const post = await forwardToBusinessBackend(
+    new NextRequest("http://web.test", { method: "POST" }),
+    "http://backend.test",
+    ["agent", "assets", "ses_1", "figures", "chart.png"],
+  );
+
+  assert.deepEqual(targets, [
+    "http://backend.test/api/v2/agent/assets/ses_1/figures/%E6%97%A7%20%E5%9B%BE.png",
+    "http://backend.test/api/v2/agent/session/_/file?path=figures%2Fchart.png",
+  ]);
+  assert.equal(asset.status, 200);
+  assert.equal(asset.headers.get("content-type"), "image/png");
+  assert.equal(await asset.text(), "chart");
+  assert.equal(file.status, 200);
+  assert.equal(post.status, 404);
+});
+
 test("BFF generates a request ID for a missing incoming ID", async (t) => {
   t.mock.method(identity, "resolveBackendIdentity", async () => ({ kind: "anonymous" }));
   let outgoingHeaders: Headers | undefined;
