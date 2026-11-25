@@ -74,6 +74,7 @@ class AgentSseTailTests(unittest.IsolatedAsyncioTestCase):
 
     def gateway(self, **options):
         gateway = TailGateway(**options)
+        self._gateway = gateway
         self.enterContext(patch.object(service, 'agent_gateway', gateway))
         self.enterContext(patch.object(api, 'agent_gateway', gateway))
         return gateway
@@ -89,6 +90,7 @@ class AgentSseTailTests(unittest.IsolatedAsyncioTestCase):
             live = await service.start_session_run(
                 owner=self.owner, session_id=session.id, prompt='tail', model=None,
                 mode='fast', attachments=[], workspace_id=None, skills=[],
+                gateway=self._gateway,
             )
         else:
             await self.repo.start_turn(session.id, self.owner, 'tail', {

@@ -70,6 +70,7 @@ class SessionRetrySseTests(unittest.IsolatedAsyncioTestCase):
             live = await service.start_session_run(
                 owner=self.owner, session_id=session.id, prompt='retry', model=None,
                 mode='fast', attachments=[], workspace_id=None, skills=[],
+                gateway=gateway,
             )
         self.addAsyncCleanup(self.stop_projection, live)
         return session.id, live

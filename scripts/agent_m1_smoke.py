@@ -63,12 +63,12 @@ async def verify_sql(session_id, detail, expected):
 
 async def scenario(client, prompt, mode, expected):
     body = {'prompt': prompt, 'mode': mode, 'model': 'demo/m1', 'attachments': [], 'skills': []}
-    session = data(await client.post('/api/v1/agent/sessions', json=body))
+    session = data(await client.post('/api/v2/agent/sessions', json=body))
     session_id = session['id']
     key = str(uuid.uuid4())
     run_id = None
     # Close the original subscription once execution is accepted; attach without resubmitting.
-    async with client.stream('POST', f'/api/v1/agent/sessions/{session_id}/run', json=body,
+    async with client.stream('POST', f'/api/v2/agent/sessions/{session_id}/run', json=body,
                              headers={'Idempotency-Key': key}) as response:
         response.raise_for_status()
         async for line in response.aiter_lines():
@@ -77,12 +77,12 @@ async def scenario(client, prompt, mode, expected):
             if (run_id and expected != 'stopped') or (expected == 'stopped' and line == 'event: meta'):
                 break
     if expected == 'stopped':
-        data(await client.post(f'/api/v1/agent/run/{run_id}/stop'))
-    replay = events((await client.get(f'/api/v1/agent/sessions/{session_id}/run/stream?after=0')).text)
+        data(await client.post(f'/api/v2/agent/run/{run_id}/stop'))
+    replay = events((await client.get(f'/api/v2/agent/sessions/{session_id}/run/stream?after=0')).text)
     assert [index for index, _, _ in replay] == list(range(len(replay)))
     final = [payload for _, name, payload in replay if name == 'result']
     assert len(final) == 1 and final[0]['status'] == expected
-    detail = data(await client.get(f'/api/v1/agent/sessions/{session_id}'))
+    detail = data(await client.get(f'/api/v2/agent/sessions/{session_id}'))
     assert len(detail['turns']) == 1
     turn = detail['turns'][0]
     assert turn['status'] == expected and turn['assistant_content'] == final[0]['final_text']
@@ -90,13 +90,13 @@ async def scenario(client, prompt, mode, expected):
     if mode == 'deep':
         assert 'Mock 演示研究报告' in turn['report']
         path = final[0]['output']['report_path']
-        file_response = await client.get(f'/api/v1/agent/session/{session_id}/file', params={'path': path})
+        file_response = await client.get(f'/api/v2/agent/session/{session_id}/file', params={'path': path})
         file_response.raise_for_status()
         assert file_response.content.decode('utf-8') == turn['report']
-    repeated = await client.post(f'/api/v1/agent/sessions/{session_id}/run', json=body,
+    repeated = await client.post(f'/api/v2/agent/sessions/{session_id}/run', json=body,
                                  headers={'Idempotency-Key': key})
     assert events(repeated.text) == replay
-    assert len(data(await client.get(f'/api/v1/agent/sessions/{session_id}'))['turns']) == 1
+    assert len(data(await client.get(f'/api/v2/agent/sessions/{session_id}'))['turns']) == 1
     result = await verify_sql(session_id, detail, expected)
     result.update(reconnect=True, unique_result=True, idempotent=True, file_matches=mode == 'deep')
     print(json.dumps(result, ensure_ascii=False), flush=True)
@@ -106,7 +106,7 @@ async def scenario(client, prompt, mode, expected):
 async def main():
     async with httpx.AsyncClient(base_url='http://127.0.0.1:13000', timeout=90, trust_env=False) as client:
         data(await client.get('/api/v1/identity/bootstrap'))
-        config = data(await client.get('/api/v1/agent/config'))
+        config = data(await client.get('/api/v2/agent/config'))
         assert config['default_model'] == 'demo/m1', '拒绝执行：只允许 Mock 演示环境'
         results = []
         for prompt, mode, expected in [
@@ -116,8 +116,8 @@ async def main():
         ]:
             results.append(await scenario(client, prompt, mode, expected))
         async with httpx.AsyncClient(base_url='http://127.0.0.1:13000', trust_env=False) as other:
-            assert (await other.get('/api/v1/agent/sessions/' + results[0]['session_id'])).status_code == 404
-        assert len(data(await client.get('/api/v1/agent/sessions'))['sessions']) >= 2
+            assert (await other.get('/api/v2/agent/sessions/' + results[0]['session_id'])).status_code == 404
+        assert len(data(await client.get('/api/v2/agent/sessions'))['sessions']) >= 2
         LOGS.mkdir(parents=True, exist_ok=True)
         (LOGS / 'smoke.json').write_text(json.dumps({'scenarios': results, 'other_owner_404': True},
                                                    ensure_ascii=False, indent=2), encoding='utf-8')

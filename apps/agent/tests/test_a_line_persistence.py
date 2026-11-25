@@ -767,28 +767,27 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                 row.payload=self.policy.model_dump(mode='json')
             async with httpx.AsyncClient(transport=backend_transport,base_url='http://backend.invalid',
                 headers={'x-shenzhi-bff-secret':'bff-test','x-shenzhi-user-id':'test','Idempotency-Key':'http-test'}) as browser:
-                # The formal V2 Task endpoint stays closed until the legacy
-                # submission gate is in drain mode; replaying the same product
-                # key succeeds once that deployment gate has switched.
+                # Formal V2 admission is controlled at Backend; legacy V1
+                # submissions remain closed independently of that gate.
                 with patch.dict(os.environ, {'AGENT_V1_ADMISSION':'authorized'}):
-                    held=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
-                self.assertEqual(held.status_code,403,held.text)
-                response=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
+                    held=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
+                self.assertEqual(held.status_code,200,held.text)
+                response=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
                 self.assertEqual(response.status_code,200,response.text)
                 task=response.json()['task']
                 # Product retry reuses the durable Submission and original Task.
-                replay=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
+                replay=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
                 self.assertEqual(replay.status_code,200,replay.text)
                 self.assertEqual(replay.json()['task']['task_id'],task['task_id'])
                 with patch.dict(os.environ,{'AGENT_V2_ADMISSION':'observation_only'}):
-                    pinned=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
+                    pinned=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
                     self.assertEqual(pinned.status_code,200,pinned.text)
                     self.assertEqual(pinned.json()['task']['metering_context'],'authorized')
                 async with self.backend() as db,db.begin():
                     root=await db.scalar(select(GrantRootRow))
                     revision=await self.service.revise(db,root.grant_id,expected_revision=1,expected_binding_revision=1,
                         expires_at=(await db.get(GrantRevisionRow,(root.grant_id,1))).payload['expires_at'])
-                replay=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
+                replay=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
                 self.assertEqual(replay.status_code,200,replay.text)
                 control_client=AgentControlClient(transport=agent_transport)
                 try:
@@ -817,7 +816,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                             current_meter.reset(token)
                         self.assertEqual(len(sends),1)
                         browser.headers['Idempotency-Key']='cannot-bypass-by-new-task'
-                        denied=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'another','model':resolved.spec.id})
+                        denied=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'another','model':resolved.spec.id})
                         self.assertEqual(denied.status_code,403,denied.text)
                         self.assertEqual(denied.json()['error']['reason_code'],'QUOTA_EXHAUSTED')
                         return

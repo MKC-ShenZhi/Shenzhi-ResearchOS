@@ -144,6 +144,22 @@ class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({claim.json()['run']['task_id'] for claim in claims},
                          {self.task.task_id, legacy.task_id})
 
+    async def test_v1_submission_is_closed_when_admission_is_unset(self):
+        with patch.dict('os.environ', {'AGENT_DEMO_MODE': '0'}, clear=False):
+            import os
+            os.environ.pop('AGENT_V1_ADMISSION', None)
+            rejected = await self.client.post('/internal/v1/tasks', json={
+                'owner_id': 'owner', 'prompt': 'new v1 task', 'model': 'test/m1',
+            })
+        self.assertEqual(rejected.status_code, 409)
+
+    async def test_legacy_switch_cannot_reopen_formal_v1_submission(self):
+        with patch.dict('os.environ', {'AGENT_V1_ADMISSION': 'legacy', 'AGENT_DEMO_MODE': '0'}):
+            rejected = await self.client.post('/internal/v1/tasks', json={
+                'owner_id': 'owner', 'prompt': 'new formal v1 task', 'model': 'test/m1',
+            })
+        self.assertEqual(rejected.status_code, 409)
+
     async def test_service_credential_is_required_and_read_does_not_mutate_task(self):
         before = await repository.get_task(self.db, self.task.task_id, 'owner')
         response = await self.client.get(f'/internal/v1/tasks/{self.task.task_id}/runs',

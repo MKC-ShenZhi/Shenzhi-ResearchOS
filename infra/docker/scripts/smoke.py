@@ -35,7 +35,8 @@ async def main():
     request('http://backend:8000/health')
     request('http://web:3000/api/v1/health')
     request('http://web:3000/api/auth/get-session')
-    request('http://backend:8000/api/v1/agent/config', expected=401)
+    request('http://backend:8000/api/v2/agent/config', expected=401)
+    request('http://backend:8000/api/v1/agent/config', expected=404)
     request('http://backend:8000/api/v1/admin-console/users', expected=403)
     request('http://web:3000/api/v1/admin-console/users', expected=404)
     db = await asyncpg.connect(os.environ['CHAT_DATABASE_URL'].replace('postgresql+asyncpg://', 'postgresql://', 1))
@@ -57,10 +58,11 @@ async def main():
     if args.full:
         request('http://agent-api:8101/internal/v2/health')
         request('http://agent-api:8101/internal/v2/config', expected=401)
+        request('http://agent-api:8101/internal/v1/config', expected=404)
         service = {'Authorization': 'Bearer ' + os.environ['AGENT_SERVICE_TOKEN']}
         request('http://agent-api:8101/internal/v2/config', headers=service)
-        request('http://backend:8000/api/v1/agent/config', headers={'x-shenzhi-bff-secret': os.environ['BACKEND_BFF_SECRET']})
-        request('http://web:3000/api/v1/agent/config')
+        request('http://backend:8000/api/v2/agent/config', headers={'x-shenzhi-bff-secret': os.environ['BACKEND_BFF_SECRET']})
+        request('http://web:3000/api/v2/agent/config')
         if os.getenv('AGENT_V2_ADMISSION') != 'disabled':
             request('http://agent-api:8101/internal/v2/protocol-capabilities', headers={
                 'Authorization': 'Bearer ' + os.environ['AGENT_GATEWAY_TOKEN']})

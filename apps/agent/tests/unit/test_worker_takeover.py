@@ -52,7 +52,9 @@ class MemorySession:
 
 class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.enterContext(patch.dict('os.environ', {'AGENT_SERVICE_TOKEN': 'test-token'}))
+        self.enterContext(patch.dict('os.environ', {
+            'AGENT_SERVICE_TOKEN': 'test-token', 'AGENT_WORKER_PROTOCOL': '1',
+        }))
         # SQLite returns naive datetimes; keep the controlled clock consistent.
         self.now = datetime(2026, 11, 18, 12)
         self.enterContext(patch.object(repository, '_now', side_effect=lambda: self.now))

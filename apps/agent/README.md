@@ -30,9 +30,10 @@ uv run uvicorn agent_app.main:app --host 127.0.0.1 --port 8101
 ```powershell
 cd apps/agent
 $env:AGENT_DATABASE_URL = 'postgresql+asyncpg://<user>:<password>@<host>/<agent_db>'
-$env:AGENT_SERVICE_TOKEN = '<long-random-service-token>'
+$env:AGENT_WORKER_PROTOCOL = '2'
+$env:AGENT_WORKER_TOKEN = '<isolated-worker-token>'
 $env:AGENT_WORKSPACE_ROOT = 'D:\\shenzhi-agent-workspace'
 uv run python -m agent_app.worker_main
 ```
 
-Agent V2 内部 API 按调用角色使用隔离的 Bearer 凭据：Backend Gateway、Service 能力、Worker、Fact Reader 各用其专属凭据；Task/Run/Event/Control 数据不会写入 Backend 数据库。Knowledge Tools 通过受服务凭据保护的 Backend Platform Adapter 调用；附件正文由 Backend 校验后随 Task 提交，`input_ref` 尚未启用。
+Worker 默认使用 V2 协议和独立 `AGENT_WORKER_TOKEN`。只有排空旧 Task 的专用 Worker 才显式设置 `AGENT_WORKER_PROTOCOL=1`，并使用 `AGENT_SERVICE_TOKEN`；演示启动器也会显式选择隔离的 V1 Mock Worker。Agent V2 内部 API 按调用角色使用隔离的 Bearer 凭据：Backend Gateway、Service 能力、Worker、Fact Reader 各用其专属凭据；Task/Run/Event/Control 数据不会写入 Backend 数据库。Knowledge Tools 通过受服务凭据保护的 Backend Platform Adapter 调用；附件正文由 Backend 校验后随 Task 提交，`input_ref` 尚未启用。

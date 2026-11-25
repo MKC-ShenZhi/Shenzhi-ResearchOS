@@ -27,11 +27,15 @@ logger = logging.getLogger('agent.worker')
 class AgentControlClient:
     def __init__(self, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
         base = os.getenv('AGENT_INTERNAL_URL', 'http://127.0.0.1:8101').rstrip('/')
-        self.protocol = 2 if os.getenv('AGENT_WORKER_PROTOCOL') == '2' else 1
+        protocol = os.getenv('AGENT_WORKER_PROTOCOL', '2').strip()
+        if protocol not in {'1', '2'}:
+            raise RuntimeError('AGENT_WORKER_PROTOCOL must be 1 (legacy drain) or 2')
+        self.protocol = int(protocol)
         self.execution_id = None
         token = os.getenv('AGENT_WORKER_TOKEN' if self.protocol == 2 else 'AGENT_SERVICE_TOKEN', '').strip()
         if not token:
-            raise RuntimeError('AGENT_SERVICE_TOKEN is required by Agent Worker')
+            required_token = 'AGENT_WORKER_TOKEN' if self.protocol == 2 else 'AGENT_SERVICE_TOKEN'
+            raise RuntimeError(f'{required_token} is required by Agent Worker protocol {self.protocol}')
         self.client = httpx.AsyncClient(base_url=base, timeout=20, transport=transport,
                                         headers={'Authorization': f'Bearer {token}'})
 

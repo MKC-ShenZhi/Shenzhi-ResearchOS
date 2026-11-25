@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     headers.set(REQUEST_ID_HEADER, requestId);
     if (backendConfig.secret) headers.set("X-ShenZhi-Bff-Secret", backendConfig.secret);
     const baseUrl = backendConfig.url.replace(/\/$/, "");
-    const response = await fetch(`${baseUrl}/api/v1/agent/sessions?limit=50`, {
+    const response = await fetch(`${baseUrl}/api/v2/agent/sessions?limit=50`, {
       headers, cache: "no-store", signal: request.signal,
     });
     const body = await response.json();

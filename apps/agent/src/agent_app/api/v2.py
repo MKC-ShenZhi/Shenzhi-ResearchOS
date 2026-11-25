@@ -134,7 +134,6 @@ async def protocols():
 async def submit(body: TaskSubmissionV2, db=Depends(get_session), control=Depends(metering_control)):
     check(body.agent_audience == control.audience, 'AUDIENCE_CONFLICT')
     if body.budget_grant:
-        check(os.getenv('AGENT_V1_ADMISSION') == 'drain_only', 'LEGACY_ADMISSION_NOT_DRAINED')
         control.verify_grant(body.budget_grant)
     # Profile identity supplies stable submission idempotency even before binding.
     raw = body.request.model_dump(mode='json')

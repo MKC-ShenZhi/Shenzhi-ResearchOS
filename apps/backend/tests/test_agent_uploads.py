@@ -36,7 +36,7 @@ class AgentUploadPersistenceTests(unittest.IsolatedAsyncioTestCase):
         await dispose_engine()
 
     async def test_upload_is_shared_owner_scoped_and_consumed(self):
-        response = await self.client.post('/api/v1/agent/uploads', headers=self.headers,
+        response = await self.client.post('/api/v2/agent/uploads', headers=self.headers,
                                           files={'file': ('notes.md', b'private paper notes')})
         self.assertEqual(response.status_code, 200)
         public = response.json()['data']

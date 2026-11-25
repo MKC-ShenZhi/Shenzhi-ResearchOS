@@ -99,8 +99,16 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
     async def post(self, payload, headers=None):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
-            return await client.post('/api/v1/agent/run', json=payload,
+            return await client.post('/api/v2/agent/run', json=payload,
                                      headers={**self.OWNER, **(headers or {})})
+
+    async def test_v1_product_routes_are_not_registered(self):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url='http://test') as client:
+            old = await client.get('/api/v1/agent/config', headers=self.OWNER)
+            current = await client.get('/api/v2/agent/config', headers=self.OWNER)
+        self.assertEqual(old.status_code, 404)
+        self.assertEqual(current.status_code, 200)
 
     async def test_run_streams_events_and_result(self):
         self.gateway.events_data = [{'seq': 1, 'name': 'delta', 'data': {'text': '你好'}}]
@@ -122,14 +130,14 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
              patch('app.services.agent_gateway.v2.AgentGatewayV2', return_value=v2):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test',
                 headers={'x-shenzhi-user-id': 'registered', 'Idempotency-Key': 'stable-key'}) as browser:
-                response = await browser.post('/api/v1/agent/run', json={'prompt': 'hello', 'model': 'test/m1'})
+                response = await browser.post('/api/v2/agent/run', json={'prompt': 'hello', 'model': 'test/m1'})
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertEqual(parse_sse(response.text)[-1][1]['final_text'], '你好')
                 self.assertEqual(v2.submissions[0]['idempotency_key'], 'stable-key')
                 self.assertEqual(v2.submissions[0]['owner_id'], 'user:registered')
                 self.assertEqual(len(self.gateway.submissions), 0)
                 v2.submit = AsyncMock(side_effect=EntitlementError('QUOTA_EXHAUSTED', 403))
-                denied = await browser.post('/api/v1/agent/run', json={'prompt': 'hello', 'model': 'test/m1'})
+                denied = await browser.post('/api/v2/agent/run', json={'prompt': 'hello', 'model': 'test/m1'})
                 self.assertEqual(denied.status_code, 403)
                 self.assertEqual(denied.json()['message'], 'QUOTA_EXHAUSTED')
                 self.assertEqual(len(self.gateway.submissions), 0)
@@ -222,33 +230,33 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         self.gateway.files[('ses_file1', 'data.bin')] = (b'\x00\x01\xff', 'application/octet-stream')
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url='http://test') as client:
-            inline = await client.get('/api/v1/agent/session/ses_file1/file',
+            inline = await client.get('/api/v2/agent/session/ses_file1/file',
                                       params={'path': 'rag_review.md'}, headers=self.OWNER)
             self.assertEqual(inline.status_code, 200)
             self.assertEqual(inline.headers['content-type'].split(';')[0], 'text/markdown')
             self.assertIn('inline', inline.headers['content-disposition'])
             self.assertIn('报告', inline.text)
-            download = await client.get('/api/v1/agent/session/ses_file1/file',
+            download = await client.get('/api/v2/agent/session/ses_file1/file',
                                         params={'path': 'rag_review.md', 'download': 'true'},
                                         headers=self.OWNER)
             self.assertIn('attachment', download.headers['content-disposition'])
-            binary = await client.get('/api/v1/agent/session/ses_file1/file',
+            binary = await client.get('/api/v2/agent/session/ses_file1/file',
                                       params={'path': 'data.bin'}, headers=self.OWNER)
             self.assertEqual(binary.headers['content-type'].split(';')[0],
                              'application/octet-stream')
-            escape = await client.get('/api/v1/agent/session/ses_file1/file',
+            escape = await client.get('/api/v2/agent/session/ses_file1/file',
                                       params={'path': '../x.md'}, headers=self.OWNER)
             self.assertEqual(escape.status_code, 400)
-            missing = await client.get('/api/v1/agent/session/ses_file1/file',
+            missing = await client.get('/api/v2/agent/session/ses_file1/file',
                                        params={'path': 'nope.md'}, headers=self.OWNER)
             self.assertEqual(missing.status_code, 404)
             other = {'x-shenzhi-anonymous-id': '00000000-0000-4000-8000-000000000002'}
-            forbidden = await client.get('/api/v1/agent/session/ses_file1/file',
+            forbidden = await client.get('/api/v2/agent/session/ses_file1/file',
                                          params={'path': 'rag_review.md'}, headers=other)
             self.assertEqual(forbidden.status_code, 404)
-            deleted = await client.delete('/api/v1/agent/sessions/ses_file1', headers=self.OWNER)
+            deleted = await client.delete('/api/v2/agent/sessions/ses_file1', headers=self.OWNER)
             self.assertEqual(deleted.status_code, 200)
-            after_delete = await client.get('/api/v1/agent/session/ses_file1/file',
+            after_delete = await client.get('/api/v2/agent/session/ses_file1/file',
                                             params={'path': 'rag_review.md'}, headers=self.OWNER)
             self.assertEqual(after_delete.status_code, 404)
 
@@ -272,7 +280,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url='http://test') as client:
             # 嵌套相对路径必须命中（:path 转换器）
-            response = await client.get('/api/v1/agent/assets/ses_asset1/figures/chart-1.png',
+            response = await client.get('/api/v2/agent/assets/ses_asset1/figures/chart-1.png',
                                         headers=self.OWNER)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.headers['content-type'].split(';')[0], 'image/png')
@@ -287,15 +295,15 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
             # 逃逸：带 %2F/%2e 的形式把真实的 ".." 送进路径参数，必须由 Workspace.resolve 挡住
             for escape_path in ['..%2F..%2Fetc%2Fpasswd', '%2e%2e/%2e%2e/etc/passwd']:
                 with self.subTest(path=escape_path):
-                    escape = await client.get(f'/api/v1/agent/assets/ses_asset2/{escape_path}',
+                    escape = await client.get(f'/api/v2/agent/assets/ses_asset2/{escape_path}',
                                               headers=self.OWNER)
                     self.assertEqual(escape.status_code, 400)
                     self.assertEqual(escape.json()['code'], 20004)   # 路径超出工作区边界
             # 裸 ".." 会被 HTTP 客户端先归一掉（请求没到路由）——底线是任何形式都不得 200
-            normalized = await client.get('/api/v1/agent/assets/ses_asset2/..%2F..%2Fetc%2Fpasswd',
+            normalized = await client.get('/api/v2/agent/assets/ses_asset2/..%2F..%2Fetc%2Fpasswd',
                                           headers=self.OWNER)
             self.assertNotEqual(normalized.status_code, 200)
-            missing = await client.get('/api/v1/agent/assets/ses_asset2/figures/nope.png',
+            missing = await client.get('/api/v2/agent/assets/ses_asset2/figures/nope.png',
                                        headers=self.OWNER)
             self.assertEqual(missing.status_code, 404)
 
@@ -305,7 +313,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url='http://test') as client:
             # owner 不同 → 哈希目录不同 → 同一 session_id 也 404
-            forbidden = await client.get('/api/v1/agent/assets/ses_asset3/figures/chart-1.png',
+            forbidden = await client.get('/api/v2/agent/assets/ses_asset3/figures/chart-1.png',
                                          headers=other)
             self.assertEqual(forbidden.status_code, 404)
 
@@ -316,7 +324,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
             'image/svg+xml')
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url='http://test') as client:
-            response = await client.get('/api/v1/agent/assets/ses_asset4/figures/plot.svg',
+            response = await client.get('/api/v2/agent/assets/ses_asset4/figures/plot.svg',
                                         headers=self.OWNER)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.headers['content-type'].split(';')[0], 'image/svg+xml')
@@ -330,12 +338,12 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url='http://test') as client:
             for filename, mime in [('page.html', 'text/html'), ('plot.svg', 'image/svg+xml')]:
-                content = b'<script>fetch("/api/v1/agent/sessions")</script>'
+                content = b'<script>fetch("/api/v2/agent/sessions")</script>'
                 self.gateway.files[('ses_active', filename)] = (content, mime)
                 for url, params in [
-                    (f'/api/v1/agent/assets/ses_active/{filename}', {}),
-                    ('/api/v1/agent/session/ses_active/file', {'path': filename}),
-                    ('/api/v1/agent/session/ses_active/file', {'path': filename, 'download': 'true'}),
+                    (f'/api/v2/agent/assets/ses_active/{filename}', {}),
+                    ('/api/v2/agent/session/ses_active/file', {'path': filename}),
+                    ('/api/v2/agent/session/ses_active/file', {'path': filename, 'download': 'true'}),
                 ]:
                     response = await client.get(url, params=params, headers=self.OWNER)
                     self.assertEqual(response.status_code, 200)
@@ -353,7 +361,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         ]
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url='http://test') as client:
-            html_res = await client.post('/api/v1/agent/session/export',
+            html_res = await client.post('/api/v2/agent/session/export',
                                          json={'title': 'RAG 会话', 'messages': messages,
                                                'format': 'html'}, headers=self.OWNER)
             self.assertEqual(html_res.status_code, 200)
@@ -362,7 +370,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('RAG 是检索增强生成', html_res.text)
             self.assertIn('paper_search', html_res.text)       # 工具调用进报告
 
-            jsonl_res = await client.post('/api/v1/agent/session/export',
+            jsonl_res = await client.post('/api/v2/agent/session/export',
                                           json={'title': 't', 'messages': messages,
                                                 'format': 'jsonl'}, headers=self.OWNER)
             self.assertIn('application/jsonl', jsonl_res.headers['content-type'])
@@ -376,13 +384,13 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_steer_endpoint_and_config(self):
         # config 返回技能清单（模板机制已删，prompts/* 不再存在）
-        config_response = await self.client_get('/api/v1/agent/config')
+        config_response = await self.client_get('/api/v2/agent/config')
         self.assertEqual(config_response.status_code, 200)
         self.assertIsInstance(config_response.json()['data']['skills'], list)
 
         # 不存在的 run → 404
         response = await self.client_post_json(
-            '/api/v1/agent/run/deadbeef/steer', {'text': '插话'})
+            '/api/v2/agent/run/deadbeef/steer', {'text': '插话'})
         self.assertEqual(response.status_code, 404)
 
     async def test_run_control_resolves_v2_binding_without_owner_switch(self):
@@ -392,7 +400,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         gateway.steer.return_value = {'stored': True}
         with patch('app.api.agent.submission_gateway', return_value=gateway):
             response = await self.client_post_json(
-                '/api/v1/agent/run/run-1/steer', {'text': '聚焦结论'})
+                '/api/v2/agent/run/run-1/steer', {'text': '聚焦结论'})
         self.assertEqual(response.status_code, 200)
         # Anonymous historical owners must not force a V1 control path.
         gateway.steer.assert_awaited_once_with(
@@ -403,7 +411,7 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         gateway.run.side_effect = BusinessError(20004, 'Agent 服务凭据未配置', 503)
         with patch('app.api.agent.submission_gateway', return_value=gateway):
             response = await self.client_post_json(
-                '/api/v1/agent/run/run-1/stop', {})
+                '/api/v2/agent/run/run-1/stop', {})
         self.assertEqual(response.status_code, 503)
         self.assertEqual(self.gateway.result['status'], 'completed')
 
@@ -423,9 +431,9 @@ class AgentApiTests(unittest.IsolatedAsyncioTestCase):
         v2.read_session_file.return_value = (b'v2 artifact', 'text/plain')
         with patch('app.api.agent.submission_gateway', return_value=v2):
             response = await self.client_get(
-                f'/api/v1/agent/session/{session_id}/file?path=report.txt')
+                f'/api/v2/agent/session/{session_id}/file?path=report.txt')
             asset = await self.client_get(
-                f'/api/v1/agent/assets/{session_id}/report.txt')
+                f'/api/v2/agent/assets/{session_id}/report.txt')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b'v2 artifact')
         self.assertEqual(asset.status_code, 200)

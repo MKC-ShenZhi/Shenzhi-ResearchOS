@@ -2,7 +2,7 @@
 
 ## 产品边界
 
-Agent 正式会话以 FastAPI 中的 Agent Session Repository 为 source of truth。Web 不再向正式运行接口传入完整历史，也不再从 `shenzhi-agent-sessions` 读取 Sidebar 历史。旧 `/api/v1/agent/run` 仍保留给 Paper Agent 等兼容调用；首页和 `/agents` 使用持久化 Session API。
+Agent 正式会话以 FastAPI 中的 Agent Session Repository 为 source of truth。Web 不再向正式运行接口传入完整历史，也不再从 `shenzhi-agent-sessions` 读取 Sidebar 历史。Backend 产品路径为 `/api/v2/agent/*`；`/run` 为 Paper Agent 等无状态调用提供 SSE，独立 Task JSON 提交使用 `/submissions`；首页和 `/agents` 使用持久化 Session API。
 
 Agent 执行库另存 Task、Run、事件和控制记录。Backend 在 Turn 的 `settings` 中记录 `agent_task_id` 和 `agent_run_id`，用于轮询和恢复。
 
@@ -41,9 +41,9 @@ Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'runn
 
 ## 生命周期
 
-1. 首页智能搜索先 `POST /api/v1/agent/sessions`，即使后续运行失败，Session 也已存在。
+1. 首页智能搜索先 `POST /api/v2/agent/sessions`，即使后续运行失败，Session 也已存在。
 2. Web 将第一轮完整 `AgentRunInput` 写入 `sessionStorage` 的一次性 launch 记录，URL 只携带 `session` 和不透明 `launch` id。
-3. `/agents?session=<id>&launch=<id>` 先向后端恢复 Session，然后消费一次 launch，调用 `POST /api/v1/agent/sessions/{id}/run`。首轮的 model / mode / attachments / skills 以显式入参传入，不依赖 React state flush。
+3. `/agents?session=<id>&launch=<id>` 先向后端恢复 Session，然后消费一次 launch，调用 `POST /api/v2/agent/sessions/{id}/run`。首轮的 model / mode / attachments / skills 以显式入参传入，不依赖 React state flush。
 4. Backend 校验 owner，从最新 transcript 恢复历史，预留 running Turn，向 Agent API 提交 Task 并记录 Task / Run ID。
 5. Worker 经 Agent API 领取和执行 Run。Backend 轮询持久事件，经 SSE 发送 delta、tool、steer 等内容，并将终态投影到 Turn。Agent Control 为可重试失败创建新 Run；Backend 经只读 Task Run 列表按 attempt 顺序投影全部 Run，排空旧 Run 尾部后再进入直接后继，只在最后一个 Run 结束时生成 result。
 6. 产品 SSE 订阅与执行解耦。断开订阅后运行可继续。Backend 通过五分钟 Turn 投影租约和三十秒续租协调投影写入，Agent Worker 使用独立的 Run 租约。失去投影租约的 Backend 无法覆盖后续投影终态。
@@ -56,20 +56,20 @@ Turn 内部 settings 的 `_agent_owner_id` 保存原 Agent 执行身份，不返
 
 ## API
 
-- `GET /api/v1/agent/config`：模型、真实 Skills 和附件限制。
-- `POST /api/v1/agent/sessions`：创建 Session，后端生成 id 和初始标题。
-- `GET /api/v1/agent/sessions?limit=10&cursor=...`：按当前 owner 分页。
-- `GET /api/v1/agent/sessions/{id}`：返回 Session 和全部 Turns。
-- `PATCH /api/v1/agent/sessions/{id}`：重命名。
-- `DELETE /api/v1/agent/sessions/{id}`：删除 DB Session 及其 Turns。
-- `POST /api/v1/agent/sessions/{id}/run`：基于后端历史启动一轮 SSE Run；前端必须为一次用户提交生成并在该操作重试时复用 `Idempotency-Key`。
-- `GET /api/v1/agent/sessions/{id}/run/stream?after=<n>`：从事件索引 `after`（默认 0）起重放；Backend 会优先使用本地 `LiveRun`，缺少时尝试恢复已关联的 Agent Run。页面刷新后若最新 Turn 仍为 `running`，`ShenzhiAiPage` 用它重新订阅。
+- `GET /api/v2/agent/config`：模型、真实 Skills 和附件限制。
+- `POST /api/v2/agent/sessions`：创建 Session，后端生成 id 和初始标题。
+- `GET /api/v2/agent/sessions?limit=10&cursor=...`：按当前 owner 分页。
+- `GET /api/v2/agent/sessions/{id}`：返回 Session 和全部 Turns。
+- `PATCH /api/v2/agent/sessions/{id}`：重命名。
+- `DELETE /api/v2/agent/sessions/{id}`：删除 DB Session 及其 Turns。
+- `POST /api/v2/agent/sessions/{id}/run`：基于后端历史启动一轮 SSE Run；前端必须为一次用户提交生成并在该操作重试时复用 `Idempotency-Key`。
+- `GET /api/v2/agent/sessions/{id}/run/stream?after=<n>`：从事件索引 `after`（默认 0）起重放；Backend 会优先使用本地 `LiveRun`，缺少时尝试恢复已关联的 Agent Run。页面刷新后若最新 Turn 仍为 `running`，`ShenzhiAiPage` 用它重新订阅。
 - 同一 Task 的首次流和无缓存恢复均从最早 Run 枚举全部历史，SSE ID 保持零基事件偏移。`after` 是下一条待收事件的 ID：result ID 为 6 时，未收到传 6，已完整收到传 7。编号依据见 [共享契约](contracts.md#事件)。
-- `POST /api/v1/agent/run/{run_id}/steer`：向当前 owner 的 active run 插话。
-- `POST /api/v1/agent/run/{run_id}/stop`：请求当前 owner 的 active run 正常停止。
-- `POST /api/v1/agent/sessions/import`：按 `(owner, import_key)` 幂等导入旧本地会话。
-- `POST /api/v1/agent/uploads` / `GET /api/v1/agent/uploads/{file_id}`：解析并暂存 owner 隔离的附件文本 / 查询状态（不返回正文）。配置 `CHAT_DATABASE_URL` 时存 PostgreSQL，否则存进程内存；24 小时过期，运行消费后删除。附件 ID 只在运行入参中引用，不写入 Turn。
-- `POST /api/v1/agent/run`：无状态运行接口，不是首页和正式 Agent 页的产品路径；论文详情页 Agent（`use-paper-agent.ts`）仍使用它。
+- `POST /api/v2/agent/run/{run_id}/steer`：向当前 owner 的 active run 插话。
+- `POST /api/v2/agent/run/{run_id}/stop`：请求当前 owner 的 active run 正常停止。
+- `POST /api/v2/agent/sessions/import`：按 `(owner, import_key)` 幂等导入旧本地会话。
+- `POST /api/v2/agent/uploads` / `GET /api/v2/agent/uploads/{file_id}`：解析并暂存 owner 隔离的附件文本 / 查询状态（不返回正文）。配置 `CHAT_DATABASE_URL` 时存 PostgreSQL，否则存进程内存；24 小时过期，运行消费后删除。附件 ID 只在运行入参中引用，不写入 Turn。
+- `POST /api/v2/agent/run`：无状态运行接口，不是首页和正式 Agent 页的产品路径；论文详情页 Agent（`use-paper-agent.ts`）仍使用它。
 
 除 config/export 等明确的 BFF 端点外，Session 端点均使用 `request_owner`。查询条件同时带 `id` 和 `owner`；他人会话与不存在会话统一返回 404，不泄露存在性。
 

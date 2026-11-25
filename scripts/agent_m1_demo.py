@@ -46,8 +46,9 @@ def environments():
                 env[key] = ''
     env.update(PYTHONUTF8='1', BACKGROUND_JOBS_ENABLED='false',
                BACKEND_ALLOW_INSECURE_LOCAL_BFF='false', AGENT_DEMO_MODE='1',
+               AGENT_V1_ADMISSION='legacy', AGENT_WORKER_PROTOCOL='1',
                AGENT_INTERNAL_URL='http://127.0.0.1:18101',
-               BACKEND_INTERNAL_URL='http://127.0.0.1:18000',
+               BACKEND_INTERNAL_URL='http://127.0.0.1:18000/api/v2/agent',
                BUSINESS_BACKEND_URL='http://127.0.0.1:18000',
                CHAT_DATABASE_URL=isolated_database(backend.get('CHAT_DATABASE_URL'), 'shenzhi_m0c1_backend'),
                AGENT_DATABASE_URL=isolated_database(agent.get('AGENT_DATABASE_URL'), 'shenzhi_m0c1_agent'),
@@ -131,7 +132,7 @@ def ready(processes):
                'Backend': 'http://127.0.0.1:18000/health',
                'Web': 'http://127.0.0.1:13000/agents',
                '匿名身份 BFF': 'http://127.0.0.1:13000/api/v1/identity/bootstrap',
-               'Mock 配置 BFF': 'http://127.0.0.1:13000/api/v1/agent/config'}
+               'Mock 配置 BFF': 'http://127.0.0.1:13000/api/v2/agent/config'}
     while pending and time.monotonic() < deadline:
         if any(proc.poll() is not None for _, proc in processes):
             raise RuntimeError(f'服务启动失败，请查看 {LOGS}')

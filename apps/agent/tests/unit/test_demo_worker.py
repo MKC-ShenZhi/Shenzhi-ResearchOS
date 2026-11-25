@@ -66,7 +66,7 @@ class DemoWorkerTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict('os.environ', {'AGENT_DEMO_MODE': '1', 'AGENT_SERVICE_TOKEN': 'demo-token'}):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test',
                                          headers={'Authorization': 'Bearer demo-token'}) as client:
-                response = await client.get('/internal/v1/config')
+                response = await client.get('/internal/v2/config')
                 config = AgentConfigWire.model_validate(response.json())
                 self.assertEqual(config.default_model, 'demo/m1')
                 self.assertIn('Mock', config.models[0]['label'])

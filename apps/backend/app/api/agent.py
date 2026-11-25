@@ -39,7 +39,7 @@ from app.services.agent_uploads import agent_upload_store
 from app.services.uploads.parser import parse_document
 from app.schemas.knowledge import KnowledgeSearchRequest
 
-router = APIRouter(prefix='/api/v1/agent', tags=['agent'])
+router = APIRouter(prefix='/api/v2/agent', tags=['agent'])
 logger = logging.getLogger(__name__)
 
 

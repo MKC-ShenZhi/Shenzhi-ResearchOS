@@ -1,4 +1,9 @@
-"""Internal task, worker, report and replay routes."""
+"""Drain-only V1 task and worker routes for historical executions.
+
+New production submissions use the V2 API. V1 shared service routes have been
+removed; the remaining task/run and worker routes are retained only until the
+legacy drain audit and deployment caller review allow their retirement.
+"""
 from __future__ import annotations
 
 import os
@@ -11,20 +16,11 @@ from agent_app.api.auth import require_service
 from agent_app.control import repository
 from agent_app.errors import BusinessError
 from agent_app.infrastructure.database import get_session
-from agent_app.api.shared import (
-    agent_config as shared_agent_config,
-    commit_workspace_claim as shared_commit_workspace_claim,
-    get_session_file as shared_get_session_file,
-    new_workspace as shared_new_workspace,
-    prepare_workspace_claim as shared_prepare_workspace_claim,
-    put_workspace_file as shared_put_workspace_file,
-    task_json as _task_json,
-)
+from agent_app.api.shared import task_json as _task_json
 from agent_contracts import (
     BudgetLimits, ExecutionReport, PlatformEvent, RunStatus,
     RunSteerRequestWire, RunSteerResponseWire,
     TaskRunsResponseWire, TaskSubmission, WorkerHeartbeatRequestWire, WorkerHeartbeatResponseWire,
-    WorkspaceClaimRequestWire, WorkspaceCreateRequestWire, WorkspaceFileWriteRequestWire,
     EventIngestWire, ReportIngestWire, TaskSubmissionWire, UsageReport,
 )
 
@@ -57,41 +53,11 @@ EventBody = EventIngestWire
 ReportBody = ReportIngestWire
 
 
-@router.get('/config')
-async def agent_config():
-    return await shared_agent_config()
-
-
-@router.post('/workspaces')
-async def new_workspace(body: WorkspaceCreateRequestWire):
-    return await shared_new_workspace(body)
-
-
-@router.post('/workspaces/claim/prepare')
-async def prepare_workspace_claim(body: WorkspaceClaimRequestWire):
-    return await shared_prepare_workspace_claim(body)
-
-
-@router.post('/workspaces/claim/commit')
-async def commit_workspace_claim(body: WorkspaceClaimRequestWire):
-    return await shared_commit_workspace_claim(body)
-
-
-@router.post('/workspaces/{workspace_id}/files')
-async def put_workspace_file(workspace_id: str, body: WorkspaceFileWriteRequestWire):
-    return await shared_put_workspace_file(workspace_id, body)
-
-
-@router.get('/sessions/{session_id}/files')
-async def get_session_file(session_id: str, owner_id: str, path: str):
-    return await shared_get_session_file(session_id, owner_id, path)
-
-
 @router.post('/tasks')
 async def submit_task(body: SubmitBody, session: AsyncSession = Depends(get_session)):
-    if os.getenv('AGENT_V1_ADMISSION') == 'drain_only':
-        raise BusinessError(20004, '旧协议已停止新任务准入', 409)
     demo_mode = os.getenv('AGENT_DEMO_MODE') == '1'
+    if not demo_mode or os.getenv('AGENT_V1_ADMISSION', 'drain_only') != 'legacy':
+        raise BusinessError(20004, '旧协议已停止新任务准入', 409)
     if (body.model == 'demo/m1') != demo_mode or (demo_mode and not body.session_id):
         raise BusinessError(20001, 'Mock 与正式任务不可混用', 409)
     submission = TaskSubmission(

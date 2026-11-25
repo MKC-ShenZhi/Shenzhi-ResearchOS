@@ -195,7 +195,7 @@ def main(argv=None):
                         BACKEND_ALLOW_INSECURE_LOCAL_BFF='false', AGENT_ALLOW_TEST_POLICY='false',
                         BACKGROUND_JOBS_ENABLED='false'),
         'agent': dict(AGENT_DATABASE_URL=dsn.replace('postgresql://', 'postgresql+asyncpg://') + compose['AGENT_DB'],
-                      AGENT_INTERNAL_URL='http://agent-api:8101', BACKEND_INTERNAL_URL='http://backend:8000/api/v1/agent',
+                      AGENT_INTERNAL_URL='http://agent-api:8101', BACKEND_INTERNAL_URL='http://backend:8000/api/v2/agent',
                       BACKEND_ENTITLEMENTS_URL='http://backend:8000', AGENT_WORKSPACE_ROOT='/var/lib/shenzhi/workspace',
                       AGENT_USAGE_SPOOL_ROOT='/var/lib/shenzhi/usage-spool', AGENT_DEMO_MODE='0'),
     }

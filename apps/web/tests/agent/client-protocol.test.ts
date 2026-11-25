@@ -39,7 +39,7 @@ test("Agent run POSTs its payload and dispatches the complete SSE loop", async (
     globalThis.fetch = originalFetch;
   }
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, "/api/v1/agent/run");
+  assert.equal(requests[0].url, "/api/v2/agent/run");
   assert.equal(requests[0].init?.method, "POST");
   assert.equal(new Headers(requests[0].init?.headers).get("Idempotency-Key"), "paper-operation-retry-key");
   assert.deepEqual(JSON.parse(String(requests[0].init?.body)), {

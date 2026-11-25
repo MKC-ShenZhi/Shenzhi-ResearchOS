@@ -22,10 +22,11 @@ ToolRegistry 在 `execute_prepared` 登记，prepare/校验失败不登记。顺
 
 | 调用方 | 路径 | 用途 |
 | --- | --- | --- |
-| BFF/用户 | `POST /api/v2/agent/run` | 非 Session 提交；必需 Idempotency-Key，owner 来自可信 BFF |
-| BFF/用户 | `POST /api/v2/agent/sessions/{id}/run` | 复用原 Session/Turn 服务，稳定 Turn→Submission |
-| BFF/用户 | `GET /api/v2/agent/sessions/{id}/run/stream` | 原 Task 及全部 Run 回放；每条 SSE data 含 schema_version |
-| BFF/用户 | `POST /api/v2/agent/run/{id}/stop`、`/steer` | v2 owner 过滤的运行控制 |
+| BFF/用户 | `POST /api/v2/agent/run` | 非 Session SSE 提交；必需 Idempotency-Key，owner 来自可信 BFF |
+| BFF/用户 | `POST /api/v2/agent/submissions` | 独立 Task JSON 提交；与 SSE 入口使用不同路径 |
+| BFF/用户 | `POST /api/v2/agent/sessions/{id}/run` | Session/Turn SSE 提交，稳定 Turn→Submission |
+| BFF/用户 | `GET /api/v2/agent/sessions/{id}/run/stream` | 产品 SSE 续接与历史恢复 |
+| BFF/用户 | `POST /api/v2/agent/run/{id}/stop`、`/steer` | 产品运行控制；V2 存量先查，明确 404 时才查历史 V1 Run |
 | BFF/用户 | `GET /api/v2/agent/entitlements` | 当前 policy、权限快照、逐规则窗口/used/held/remaining |
 | BFF/用户 | `GET /api/v2/agent/tasks/{id}/usage`、`/ledger` | 实测、估算、未知、预留/已用/释放、结算/对账和审计引用 |
 | Gateway | `/internal/v2/tasks`、`/tasks/{id}`、`/tasks/{id}/runs`、`/submissions/{id}` | 提交、pending 绑定恢复及查询；submissions 不接受 obs: ID |
@@ -70,9 +71,9 @@ TaskCloseManifest 核对 Permit/call、Run/execution、所有 sequence/revision�
 
 分别在 Backend、Agent 执行已有 Alembic `upgrade head`，当前版本为 Backend `028_formal_plans`（授权基础表始于 `027_agent_entitlements`）、Agent `0003_agent_metering`。迁移冻结建表定义，分别含 15 和 8 张新表；原 Task/Run/Session 表不加新协议字段。新增唯一约束、FK、状态/关联/投递索引随各库独立维护。生产连接隐藏 SQL 参数，避免日志包含租约/签名封套。
 
-API/Worker/Backend 的角色 Token 必须互不相同，并与旧 AGENT_SERVICE_TOKEN 隔离。Backend 私钥/Agent 公钥文件、issuer/audience、Agent 的模型路由和工具非敏感配置修订、持久 spool、Usage Worker 的容量/退避/批量参数均需显式配置；见各 `.env.example`。`BACKEND_ENTITLEMENTS_URL` 是服务 origin，不能复用带 `/api/v1/agent` 的 Knowledge `BACKEND_INTERNAL_URL`。
+API/Worker/Backend 的角色 Token 必须互不相同，并与旧 AGENT_SERVICE_TOKEN 隔离。Backend 私钥/Agent 公钥文件、issuer/audience、Agent 的模型路由和工具非敏感配置修订、持久 spool、Usage Worker 的容量/退避/批量参数均需显式配置；见各 `.env.example`。`BACKEND_ENTITLEMENTS_URL` 是服务 origin，不能复用带 `/api/v2/agent` 的 Knowledge `BACKEND_INTERNAL_URL`。
 
-Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 与 admission revision；A2 改 authorized 前停止旧 observation 新准入，已有 Task 模式不变、按原 ID 排空。A2 同时设置 Agent `AGENT_V1_ADMISSION=drain_only`，新旧 Worker 以 `AGENT_WORKER_PROTOCOL=2/1` 分开；旧 Worker 不能领取、操作或序列化 v2 Task。示例保留 v1 默认值，仅在完成评审后显式切换。
+Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 与 admission revision；A2 改 authorized 前停止旧 observation 新准入，已有 Task 模式不变、按原 ID 排空。正式 Agent 部署将 V1 新 Task 固定拒绝；V1 与 V2 Worker 仍以 `AGENT_WORKER_PROTOCOL=1/2` 分开排空，旧 Worker 不能领取、操作或序列化 V2 Task。V2 授权准入由 Backend `AGENT_V2_ADMISSION` 和签名 Grant 控制，不依赖 V1 admission。`AGENT_V1_ADMISSION=legacy` 只在隔离 Mock 演示环境启用，生产进程即使设置该值也不会恢复 V1 Task 准入。
 
 本 Adapter 没有可信输入 tokenizer 上界验证器，任意 evidence_ref 字符串不被视为证明；没有批准的 model_risk_profile 时拒绝正式模型调用。批准风险策略不等于数学意义上保证真实消耗不超额。显式 max_model_tokens 的单 Run 限制仍沿用原 Worker 的执行前拒绝。
 

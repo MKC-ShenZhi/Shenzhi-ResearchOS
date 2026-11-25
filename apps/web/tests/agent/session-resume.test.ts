@@ -101,7 +101,7 @@ test("客户端导出 GET 续接入口并与新发送共享事件分发", async 
       onResult: (...args) => { received.push(["result", ...args]); },
     };
     await attachAgentSessionRun("session/encoded", handlers);
-    assert.equal(requests[0].url, "/api/v1/agent/sessions/session%2Fencoded/run/stream?after=0");
+    assert.equal(requests[0].url, "/api/v2/agent/sessions/session%2Fencoded/run/stream?after=0");
     assert.equal(requests[0].method, "GET");
     assert.equal(requests[0].body, undefined);
     assert.deepEqual(received.map(([name]) => name), events.map(([name]) => name));

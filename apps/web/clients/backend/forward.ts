@@ -36,7 +36,24 @@ export async function forwardToBusinessBackend(
   req: NextRequest,
   backendOrigin: string,
   path: string[],
+  apiVersion: "v1" | "v2" = "v1",
 ) {
+  // V2 BFF traffic is limited to Agent product routes. Keep Control APIs
+  // unreachable even if another Next route calls this helper directly.
+  if (apiVersion === "v2") {
+    let segments: string[];
+    try {
+      segments = path.map((part) => decodeURIComponent(part));
+    } catch {
+      segments = [];
+    }
+    if (segments[0] !== "agent" || segments.some((part) =>
+      part.split(/[\\/]/).some((segment) => segment === "internal" || segment === "admin-console"))) {
+      return NextResponse.json({ code: 10001, message: "Not found" }, {
+        status: 404, headers: { "Cache-Control": "no-store" },
+      });
+    }
+  }
   // The public BFF must never become a route to the dedicated Admin entrypoint.
   // Next decodes route params; decode once more for the downstream HTTP parser
   // and reject embedded separators as well as ordinary Admin path segments.
@@ -51,7 +68,7 @@ export async function forwardToBusinessBackend(
       status: 404, headers: { "Cache-Control": "no-store" },
     });
   }
-  const route = `/api/v1/${path.join("/")}`;
+  const route = `/api/${apiVersion}/${path.join("/")}`;
   const dest = `${backendOrigin.replace(/\/$/, "")}${route}${req.nextUrl.search}`;
   const requestId = resolveRequestId(req.headers.get(REQUEST_ID_HEADER));
   const startedAt = performance.now();

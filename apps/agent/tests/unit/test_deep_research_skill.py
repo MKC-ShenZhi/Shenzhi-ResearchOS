@@ -107,7 +107,7 @@ class DeepResearchServiceTests(unittest.IsolatedAsyncioTestCase):
                 base_url='http://test',
                 headers={'Authorization': 'Bearer test-token'},
             ) as client:
-                response = await client.get('/internal/v1/config')
+                response = await client.get('/internal/v2/config')
         self.assertEqual(response.status_code, 200)
         skill = next(item for item in response.json()['skills'] if item['name'] == 'deep-research')
         self.assertTrue(skill['description'])
