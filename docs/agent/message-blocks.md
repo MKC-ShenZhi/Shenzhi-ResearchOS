@@ -105,7 +105,11 @@ Feature 在每个助手 Turn 的 `structured` 中保存 `AgentMessageState`，�
 
 MessageRenderer 跨全部 Markdown Block 收集首次引用顺序，角标和来源列表共用编号；忽略来源数组的到达顺序，未引用条目不显示，同一来源重复引用使用同一编号。引用通过 remark AST 插件转换为角标，代码、公式及已有链接中的文本不参与转换。来源 JSON 尚未到达时显示不可跳转的待补全数字角标，不显示原始 ID；记录到达后启用跳转。流式未闭合标记暂不显示，最终快照校准后无效引用显示“引用不可用”。
 
-`ReferencesRenderer` 展示 title、中文 type、已有作者、年份、venue、DOI 与来源链接。超过两位作者显示第一作者加 et al.，悬停可查看完整列表；缺少作者时可显示来源域名，不补造作者。可选字段缺失时省略对应元素；无 URL/DOI 时标题仍可读，不显示跳转图标。来源链接只允许无凭证的 HTTP(S)，DOI 转为 doi.org 链接，外部跳转使用 noopener/noreferrer。
+`ReferencesRenderer` 展示 title、中文 type、已有作者、年份、venue、DOI 与来源链接。超过两位作者显示第一作者加 et al.，悬停可查看完整列表；缺少作者时可显示来源域名，不补造作者。可选字段缺失时省略对应元素。
+
+来源标题和主跳转入口按以下优先级选择：`type=paper` 且有知识库 `entity_id` 时，复用 `paperHref(entity_id)` 进入站内论文详情页；否则使用无凭证的 HTTP(S) 来源 URL，再退回 doi.org 链接；均不可用时仅显示文字。站内使用 Next Link 在当前页导航并关闭预取，外部链接在新标签打开，使用 noopener/noreferrer；DOI 字段仍保留独立的原始来源入口。正文角标继续定位到本消息的来源条目。
+
+Prompt 要求模型将知识库工具返回的真实 paper_id 原样保留到 entity_id；外部来源没有知识库 ID 时省略该字段，不根据标题或 arXiv 编号猜测。站内链接由 Web 构造，不改写协议中的原始 url，不新增检索、外部抓取或工具调用，不改变 Agent loop 的执行策略。
 
 ## 验证
 

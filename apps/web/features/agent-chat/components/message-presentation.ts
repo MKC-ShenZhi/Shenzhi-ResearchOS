@@ -1,4 +1,5 @@
 import { isMarkdownBlock, type AgentMessage, type Reference } from "../../../clients/backend/agent-message";
+import { paperHref } from "../../../lib/navigation/paper";
 import type { CitationTarget } from "./citation-markers";
 
 export const MESSAGE_STATUS: Record<AgentMessage["status"], string> = {
@@ -29,6 +30,15 @@ export function safeReferenceUrl(value?: string | null): string | null {
 export function doiUrl(doi?: string | null): string | null {
   const value = doi?.trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "").replace(/^doi:\s*/i, "");
   return value ? `https://doi.org/${encodeURIComponent(value)}` : null;
+}
+
+/** Navigation is a Web concern; keep the original source URL in the protocol. */
+export function referenceLink(reference: Reference): { href: string; external: boolean } | null {
+  if (reference.type === "paper" && reference.entity_id?.trim()) {
+    return { href: paperHref(reference.entity_id), external: false };
+  }
+  const href = safeReferenceUrl(reference.url) ?? doiUrl(reference.doi);
+  return href ? { href, external: true } : null;
 }
 
 export function referenceDetails(reference: Reference): string {

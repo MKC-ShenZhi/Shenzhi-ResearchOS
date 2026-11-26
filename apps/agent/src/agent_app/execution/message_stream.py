@@ -28,6 +28,9 @@ OUTPUT_INSTRUCTIONS = '''消息输出格式（适用于直接回复，不改变�
 JSON 中每条记录的 id 必须与正文引用键一致，必须包含 type、title；
 type 仅为 paper、author、institution、webpage、dataset、funding。
 可选字段为 url、entity_id、authors（字符串数组）、year（整数）、venue、doi。
+引用 paper_search 或 paper_detail 返回的知识库论文时，必须将真实 paper_id 原样放入 entity_id，
+不要截断、改写或猜测该 ID；未获取知识库 ID 的外部来源省略 entity_id。
+保留有依据的原始来源 url 或 doi，不自行拼写站内链接；Web 会依据 entity_id 优先跳转站内论文页。
 这些 id 只是本次输出的关联键，正式来源 ID 及消息 ID、状态、时间、版本由程序生成。
 每次模型回复单独提交自己的引用键与来源记录，不依赖上一次回复的局部键。
 不要输出整个消息 JSON，不要输出 metadata、blocks 等系统结构。
