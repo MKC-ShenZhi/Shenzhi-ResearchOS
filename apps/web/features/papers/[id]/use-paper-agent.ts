@@ -40,6 +40,8 @@ export function usePaperAgent(paper: Pick<KnowledgePaperDetail, "id" | "title">)
 
     try {
       await streamAgentRun(paperAgentRunRequest(paper, question, state.turns), {
+        onRunStart: (runId) => dispatch({ type: "run_start", assistantId, runId }),
+        onMessageEvent: (event) => dispatch({ type: "message_event", assistantId, event }),
         onDelta: (text, _reasoning, turn) => {
           dispatch({ type: "delta", assistantId, text, turn });
         },

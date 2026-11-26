@@ -1,5 +1,8 @@
 import type { AgentRunResult } from "@/clients/backend/agent";
 import type { KnowledgePaperDetail } from "@/clients/knowledge";
+import type { AgentMessageEvent } from "../../../clients/backend/agent-message";
+import { applyMessageEvent, initialMessageState, reconcileMessage, startMessageRun,
+  type AgentMessageState } from "../../agent-chat/message-state";
 
 export type PaperAgentTurnStatus = "complete" | "streaming" | "stopped" | "error";
 
@@ -13,6 +16,7 @@ export interface PaperAgentTurn {
   requestId?: string;
   /** Agent Runtime 的内部 turn，用于工具调用后的新一轮正文替换过程性文本。 */
   streamTurn?: number;
+  structured?: AgentMessageState;
 }
 
 export interface PaperAgentState {
@@ -26,6 +30,8 @@ export type PaperAgentAction =
   | { type: "reset"; paperId: string }
   | { type: "start"; question: string; userId: string; assistantId: string }
   | { type: "delta"; assistantId: string; text: string; turn: number }
+  | { type: "run_start"; assistantId: string; runId: string }
+  | { type: "message_event"; assistantId: string; event: AgentMessageEvent }
   | { type: "meta"; assistantId: string; warnings: string[] }
   | { type: "read_paper_start" }
   | { type: "read_paper_end"; assistantId: string; failed: boolean; stillReading: boolean }
@@ -59,9 +65,17 @@ export function paperAgentReducer(state: PaperAgentState, action: PaperAgentActi
         turns: [
           ...state.turns,
           { localId: action.userId, role: "user", content: action.question, status: "complete", warnings: [] },
-          { localId: action.assistantId, role: "assistant", content: "", status: "streaming", warnings: [] },
+          { localId: action.assistantId, role: "assistant", content: "", status: "streaming", warnings: [], structured: initialMessageState() },
         ],
       };
+    case "run_start":
+      return patchAssistant(state, action.assistantId, (turn) => ({
+        ...turn, structured: startMessageRun(turn.structured ?? initialMessageState(), action.runId),
+      }));
+    case "message_event":
+      return patchAssistant(state, action.assistantId, (turn) => ({
+        ...turn, structured: applyMessageEvent(turn.structured ?? initialMessageState(), action.event),
+      }));
     case "delta":
       return patchAssistant(state, action.assistantId, (turn) => ({
         ...turn,
@@ -91,6 +105,7 @@ export function paperAgentReducer(state: PaperAgentState, action: PaperAgentActi
       const next = patchAssistant(state, action.assistantId, (turn) => ({
         ...turn,
         content: turn.content || fallback,
+        structured: reconcileMessage(turn.structured ?? initialMessageState(), action.result.message),
         status: failed ? "error" : stopped ? "stopped" : "complete",
         error: failed ? action.result.error?.message || "Agent 运行失败" : undefined,
         warnings: action.result.status === "timeout"

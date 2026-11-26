@@ -13,14 +13,14 @@ import {
   attachAgentSessionRun, createWorkspace, exportAgentSession, fetchAgentConfig, getAgentSession, steerAgentRun,
   stopAgentRun, streamAgentSessionRun, uploadWorkspaceFile,
   type AgentConfig, type AgentQuestion, type AgentQuestionOption, type AgentRunInput,
-  type AgentRunResult, type AgentStoredTurn,
+  type AgentRunResult,
 } from "@/clients/backend/agent";
 import { ApiError } from "@/clients/backend/http";
 import { ReportDialog } from "./report-dialog";
 import { Timeline } from "./timeline-view";
 import {
-  applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, restoreEntries, visibleNotes, startRunStream,
-  type Entry, type StreamState,
+  applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, visibleNotes, startRunStream,
+  type Entry,
 } from "./timeline";
 import { ComposerShell, type ComposerSkill } from "@/components/common/composer/composer";
 import type { WorkspaceFile } from "@/components/common/composer/attachment-menu";
@@ -30,6 +30,8 @@ import { StreamdownRenderer } from "@/components/renderers/streamdown-renderer";
 import type { ComposerAttachment, ComposerConfig } from "@/types/ai-search";
 import { takeAgentLaunch } from "./launch-store";
 import { notifyAgentSessionsChanged } from "./session-events";
+import { storedTurns, type AgentChatTurn as Turn } from "./session-state";
+import { applyMessageEvent, initialMessageState, reconcileMessage, startMessageRun } from "./message-state";
 
 // 类型别名而非 interface：报告渲染器（ReportView）要的是带索引签名的 AgentSource，
 // interface 不满足索引签名（TS2322），别名可以直接赋给它。
@@ -92,29 +94,6 @@ function QuestionCard({ question, onAnswer, busy }: {
 /** 引用回复：选中历史回答片段 → 新消息自动附原文锚点（ChatGPT reply-to-message 同类交互）。 */
 interface QuoteDraft { text: string }
 
-interface SteerNote { text: string; kind: "steer" | "follow_up" | "system" }
-
-interface Turn {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  attachments?: ComposerAttachment[];
-  reasoning: string;
-  /** 过程流的全部状态（思考 / 正文 / 工具按到达顺序交错）；渲染与持久化都从它派生。 */
-  stream: StreamState;
-  steers: SteerNote[];
-  report?: string;
-  sources?: Source[];
-  /** agent 反问的问题（status=awaiting_input）：界面据此渲染候选项。一次一个。 */
-  question?: AgentQuestion;
-  warnings?: string[];
-  error?: string;
-  stopped?: boolean;
-  /** 终态原因（timeout / cancelled / max_turns…）：同一句"已停止"说不清是到点了还是你停的。 */
-  stopReason?: string;
-  status?: AgentStoredTurn["status"];
-}
-
 interface RunContext {
   sessionId: string;
   generation: number;
@@ -138,31 +117,6 @@ function stopLabel(reason?: string): string {
     case "error": return "（运行出错，见上方提示）";
     default: return "（本轮已停止）";
   }
-}
-
-/** 持久化形状 → 过程流（旧会话只有 activity 时按工具顺序恢复）。 */
-function fromStoredTurn(turn: AgentStoredTurn): StreamState {
-  const segments = turn.process;
-  const entries: Entry[] = segments?.length
-    ? segments.map((segment) => segment.kind === "tool"
-        ? { kind: "tool" as const, tool: segment.tool }
-        : { kind: segment.kind === "text" ? "text" as const : "thinking" as const, text: segment.text })
-    : restoreEntries(undefined, undefined);
-  return { ...initialStreamState(), entries, runStartIndex: entries.length };
-}
-
-function storedTurns(turns: AgentStoredTurn[]): Turn[] {
-  return turns.flatMap((turn) => [
-    { id: `${turn.id}:user`, role: "user" as const, content: turn.user_content, reasoning: "",
-      attachments: (turn.settings.attachments ?? []) as ComposerAttachment[],
-      stream: initialStreamState(), steers: [] },
-    { id: `${turn.id}:assistant`, role: "assistant" as const, content: turn.assistant_content,
-      reasoning: turn.reasoning ?? "", stream: fromStoredTurn(turn),
-      steers: turn.steers ?? [], report: turn.report ?? undefined,
-      sources: turn.sources, question: turn.question ?? undefined,
-      warnings: turn.warnings, error: turn.error ?? undefined,
-      stopped: turn.stopped, stopReason: turn.stop_reason ?? undefined, status: turn.status },
-  ]);
 }
 
 const FALLBACK_CONFIG: AgentConfig = {
@@ -327,8 +281,11 @@ export function ShenzhiAiPage() {
         onAccepted?.();
         if (isCurrent()) runIdRef.current = runId;
         patchAssistant(context, (turn) => ({ ...turn, content: "", reasoning: "",
-          stream: startRunStream(turn.stream) }));
+          stream: startRunStream(turn.stream), structured: startMessageRun(turn.structured, runId) }));
       },
+      onMessageEvent: (event) => patchAssistant(context, (turn) => ({
+        ...turn, structured: applyMessageEvent(turn.structured, event),
+      })),
       onDelta: (text, reasoning, turn) => patchAssistant(context, (current) => {
         // 状态机全在 timeline.ts（可测）。这里只负责把它与页面的 Turn 接起来。
         return {
@@ -368,6 +325,7 @@ export function ShenzhiAiPage() {
             stopped: result.status === "stopped" || result.status === "timeout",
             stopReason: result.stop_reason,
             status: result.status,
+            structured: reconcileMessage(turn.structured, result.message),
             // The persisted final_text is authoritative, including failure/timeout partials.
             content: result.question ? "" : result.final_text || "",
           };
@@ -421,7 +379,7 @@ export function ShenzhiAiPage() {
         if (lastTurn?.status === "running") {
           const assistant = restored.at(-1)!;
           Object.assign(assistant, {
-            stream: initialStreamState(), content: "", reasoning: "", steers: [],
+            stream: initialStreamState(), content: "", reasoning: "", steers: [], structured: initialMessageState(),
           });
         }
         setTurns(restored);
@@ -536,10 +494,10 @@ export function ShenzhiAiPage() {
     const context = { sessionId, generation, assistantId };
     const userTurn: Turn = {
       id: userId, role: "user", content: prompt, attachments: runInput.attachments as ComposerAttachment[],
-      reasoning: "", stream: initialStreamState(), steers: [],
+      reasoning: "", stream: initialStreamState(), structured: initialMessageState(), steers: [],
     };
     const assistantTurn: Turn = {
-      id: assistantId, role: "assistant", content: "", reasoning: "", stream: initialStreamState(), steers: [], status: "running",
+      id: assistantId, role: "assistant", content: "", reasoning: "", stream: initialStreamState(), structured: initialMessageState(), steers: [], status: "running",
     };
     setTurns((previous) => {
       if (retry && previous.some((turn) => turn.id === userId)
