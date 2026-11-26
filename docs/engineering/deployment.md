@@ -14,6 +14,7 @@
 |------|----------|------|
 | Web | 在 `apps/web` 执行 `pnpm dev` 本地开发，使用 `pnpm build` 构建生产版本 | Next.js 页面、认证和同源 BFF |
 | Backend | 在 `apps/backend` 通过 Uvicorn 启动 `app.main:app`，以 `GET /health` 检查服务 | FastAPI 核心业务 API 与后台任务 |
+| Payment | `apps/payment` Go 服务，Compose app/full profile 内部 `8090`，不发布宿主端口 | 微信 Native 创建/查询、通知 SDK 验签解密；默认禁用真实商户连接 |
 | Agent API | 在 `apps/agent` 通过 Uvicorn 启动 `agent_app.main:app` | 内部 Task / Run、控制与持久事件 API |
 | Agent Worker | 在 `apps/agent` 执行 `uv run --env-file .env python -m agent_app.worker_main` | 领取任务、续租、执行并上报事件与结果 |
 | Agent Usage Worker | 在 `apps/agent` 执行 `uv run --locked --env-file .env python -m agent_app.usage_worker` | V2 用量 Outbox 投递、恢复、对账与关闭清单处理 |
@@ -27,6 +28,8 @@ Full 使用 `up -d --wait` 复用镜像；先启动 Full，再运行持续的 `w
 原阿里云 ECS + GHCR + Watchtower 链路已完全停用，相关 `infra/` 与 GitHub Actions 配置已移除。仓库当前**没有 CI 门禁**，提交前的检查需本地执行（见 [ONBOARDING](../../ONBOARDING.md)）。
 
 当前新增的 `infra/docker/` 是独立 Compose 运行体系，不恢复旧自动发布链路。
+Billing 配置与支付回调路由见 [Billing 文档](../billing/README.md)。新增 `env/payment.env` 及独立内部服务凭据；
+生产环境禁止 Mock 付款。公共支付通知使用固定专用入口，保留签名 Header 和原始请求体，不开放通用 Backend 或 Admin 代理。
 镜像由 `apps/web/Dockerfile`、`apps/backend/Dockerfile`、`apps/agent/Dockerfile` 维护；
 Agent API、执行 Worker、Usage Worker 共用镜像。运行支持 infra-only、dev、full 和生产配置基础，
 命令及边界见 [Docker 运行指南](../../infra/docker/README.md)。本次不改变线上环境。

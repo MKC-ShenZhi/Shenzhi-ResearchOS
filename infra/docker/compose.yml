@@ -25,6 +25,25 @@ x-agent: &agent
     - ./secrets/agent:/run/secrets/agent:ro
 
 services:
+  payment:
+    profiles: [app, full]
+    image: ${IMAGE_PREFIX:-shenzhi}/payment:${IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/payment/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: env/payment.env
+        format: raw
+    volumes:
+      - ./secrets/payment:/run/secrets/payment:ro
+    healthcheck:
+      test: [CMD, /payment, healthcheck]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
   postgres:
     image: postgres:16-bookworm
     restart: unless-stopped

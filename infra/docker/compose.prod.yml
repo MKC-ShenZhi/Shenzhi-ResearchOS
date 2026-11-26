@@ -6,6 +6,7 @@ services:
   backend:
     environment:
       ENVIRONMENT: production
+      BILLING_MOCK_ENABLED: 'false'
       BACKEND_ALLOW_INSECURE_LOCAL_BFF: 'false'
       AGENT_ALLOW_TEST_POLICY: 'false'
       AGENT_V2_ADMISSION: authorized

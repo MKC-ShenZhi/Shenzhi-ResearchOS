@@ -13,6 +13,16 @@ DOCKER = Path(__file__).resolve().parents[1]
 
 
 class PrepareEnvTests(unittest.TestCase):
+    def test_payment_secret_is_paired_and_preserved(self):
+        self.run_setup(local=False)
+        first = self.read('payment')['PAYMENT_SERVICE_TOKEN']
+        self.assertTrue(first)
+        self.assertEqual(first, self.read('backend')['PAYMENT_SERVICE_TOKEN'])
+        self.assertEqual(self.read('payment')['WECHAT_ENABLED'], 'false')
+        self.assertEqual(self.read('backend')['PAYMENT_SERVICE_URL'], 'http://payment:8090')
+        self.run_setup(local=False)
+        self.assertEqual(first, self.read('payment')['PAYMENT_SERVICE_TOKEN'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

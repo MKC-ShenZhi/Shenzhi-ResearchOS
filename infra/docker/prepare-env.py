@@ -119,7 +119,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--from-local', action='store_true')
     args = parser.parse_args(argv)
-    paths = {name: HERE / 'env' / f'{name}.env' for name in ('web', 'backend', 'agent')}
+    paths = {name: HERE / 'env' / f'{name}.env' for name in ('web', 'backend', 'agent', 'payment')}
     existing = {name: read(path) for name, path in paths.items()}
     originals = {name: read(ROOT / 'apps' / name / ('.env.local' if name == 'web' else '.env'))
                  if args.from_local else {} for name in paths}
@@ -175,6 +175,9 @@ def main(argv=None):
                 values[n][key] = value
 
     paired('BACKEND_BFF_SECRET', ('web', 'backend'))
+    paired('PAYMENT_SERVICE_TOKEN', ('backend', 'payment'))
+    for key in ('WECHAT_APP_ID', 'WECHAT_MCH_ID'):
+        paired(key, ('backend', 'payment'), generate=False)
     for key in ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN'):
         paired(key, ('backend', 'agent'))
     agent['AGENT_WORKER_TOKEN'] = agent['AGENT_WORKER_TOKEN'] or secrets.token_urlsafe(48)
@@ -195,6 +198,7 @@ def main(argv=None):
                     BETTER_AUTH_TRUSTED_ORIGINS=f"http://localhost:{compose['WEB_PORT']}",
                     BACKEND_ALLOW_INSECURE_LOCAL_BFF='false'),
         'backend': dict(CHAT_DATABASE_URL=dsn + compose['POSTGRES_DB'], AGENT_INTERNAL_URL='http://agent-api:8101',
+                        PAYMENT_SERVICE_URL='http://payment:8090',
                         BACKEND_ALLOW_INSECURE_LOCAL_BFF='false', AGENT_ALLOW_TEST_POLICY='false',
                         BACKGROUND_JOBS_ENABLED='false'),
         'agent': dict(AGENT_DATABASE_URL=dsn.replace('postgresql://', 'postgresql+asyncpg://') + compose['AGENT_DB'],
@@ -257,7 +261,7 @@ def main(argv=None):
         files[path] = render(values[name], template=path.with_suffix('.env.example'))
     files[HERE / '.env'] = render(compose, compose=True, template=HERE / '.env.example')
     # No environment or signing file is changed before every validation passes.
-    for name in ('backend', 'agent'):
+    for name in ('backend', 'agent', 'payment'):
         (HERE / 'secrets' / name).mkdir(mode=0o700, parents=True, exist_ok=True)
     publish(files)
     print('Docker env prepared; native files untouched. Existing Docker values retained.')

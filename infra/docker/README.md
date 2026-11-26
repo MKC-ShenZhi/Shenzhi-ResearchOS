@@ -1,6 +1,8 @@
 # Docker 运行体系
 
 应用目录维护镜像；这里维护运行编排。原生 Node/Python 启动方式继续有效。
+app/full 还包含内部 Payment 容器，默认不要求商户凭据、不发布宿主端口。
+`prepare-env.py` 生成 `env/payment.env` 并与 Backend 配对独立服务凭据；支付模式、密钥挂载及 Mock 验收见 [Billing](../../docs/billing/README.md)。
 所有命令从本目录执行，要求 Python 3.12+、Docker Engine/Desktop（Linux containers）、Compose >=2.32.2（开发使用 Watch initial_sync）。
 首次拉镜像、安装锁定依赖需要访问 Docker Hub、GHCR、npm 和锁文件指定的 PyPI 镜像。
 Windows 使用 Docker Desktop WSL2 后端，确认 `docker version` 的 Server 可用。
@@ -109,6 +111,9 @@ docker compose -f compose.yml -f compose.dev.yml --profile full restart agent-ap
 Worker 运行中强制重启可能中断模型调用；正式任务应先停止新准入、排空并保留结算恢复服务。
 Lease/fencing 和 Outbox 按现有数据库协议恢复，不承诺被中断的外部模型请求恰好执行一次。
 依赖锁文件变化后重建镜像；Web .next named volume 仅是缓存，不能删除数据库卷来解决构建缓存问题。
+如果出现 `Module not found`（例如新增订阅页面提示缺少 `qrcode`），先确认已重建 Web：
+`docker compose -f compose.yml -f compose.dev.yml up -d --build --no-deps web`。
+普通 `up` 或 `restart` 复用旧镜像，不会安装新增依赖；Watch 启动前已经发生的依赖变化也需要先重建。
 Windows NTFS bind mount 较慢时，优先把仓库放入 WSL2 Linux 文件系统后从 WSL 运行，
 或选择 A 模式，保留宿主机 Next.js/Python 开发。
 
