@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 from app.models import conference_snapshot as _conference_snapshot_models
 from app.models import knowledge_conference_snapshot as _knowledge_conference_snapshot_models  # noqa: F401
 from app.models.base import Base  # noqa: E402
+from app.models import billing as _billing_models  # noqa: F401
 from app.models import agent_entitlements as _agent_entitlement_models  # noqa: F401
 from app.models import settings as _settings_models  # noqa: E402,F401
 from app.models import profile as _profile_models  # noqa: E402,F401

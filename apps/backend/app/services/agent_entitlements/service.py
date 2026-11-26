@@ -48,6 +48,10 @@ def require(condition, reason='AUTHORIZATION_CONFLICT', status=409):
         raise EntitlementError(reason, status)
 
 
+def entitlement_active(owner):
+    return owner.enabled and (owner.expires_at is None or now_utc() < owner.expires_at)
+
+
 class Entitlements:
     def __init__(self, *, issuer: str, audience: str, kid: str | None = None,
                  private_key=None, allow_test_policy=False):
@@ -58,7 +62,7 @@ class Entitlements:
     async def owner(self, db, owner_id, *, active=True):
         owner = await db.scalar(select(OwnerEntitlementRow).where(
             OwnerEntitlementRow.owner_id == owner_id).with_for_update().execution_options(populate_existing=True))
-        require(owner is not None and (owner.enabled or not active), 'ENTITLEMENT_UNAVAILABLE', 403)
+        require(owner is not None and (entitlement_active(owner) or not active), 'ENTITLEMENT_UNAVAILABLE', 403)
         return owner
 
     async def policy(self, db, owner):
@@ -296,7 +300,7 @@ class Entitlements:
         now = now_utc()
         if policy.disable_scope == 'every_start' and owner.policy_revision != grant.policy_revision:
             reason = 'POLICY_REVOKED'
-        if not owner.enabled or root.status != 'active' or root.overage or not grant.not_before <= now < grant.expires_at:
+        if not entitlement_active(owner) or root.status != 'active' or root.overage or not grant.not_before <= now < grant.expires_at:
             reason = 'GRANT_INACTIVE'
         elif (request.owner_id, request.submission_id, request.reservation_id, request.task_id,
               request.binding_receipt_id, request.grant_revision) != (
@@ -348,6 +352,8 @@ class Entitlements:
         if request.model_budget is not None and not dynamic:
             reason = reason or 'DYNAMIC_BUDGET_REQUIRES_NEW_POLICY'
         deadlines = [now + timedelta(seconds=policy.permit_ttl_seconds), grant.expires_at]
+        if owner.expires_at is not None:
+            deadlines.append(owner.expires_at)
         for a in applicable:
             requested_a = requested.get(a.allocation_id)
             allocation = await db.get(ReservationAllocationRow, a.allocation_id)
@@ -455,7 +461,7 @@ class Entitlements:
         if permit.start:
             require(permit.start['start_operation_id'] == operation.start_operation_id, 'START_OPERATION_CONFLICT')
             return {**permit.start, 'first_commit': False}
-        require(owner.enabled and root.status == 'active' and not root.overage and grant.revision == permit.request['grant_revision'], 'GRANT_INACTIVE', 403)
+        require(entitlement_active(owner) and root.status == 'active' and not root.overage and grant.revision == permit.request['grant_revision'], 'GRANT_INACTIVE', 403)
         require(permit.state == 'authorized', 'PERMIT_NOT_STARTABLE', 403)
         require([permit.request['capability_id'], permit.request['capability_version']] not in root.revoked_capabilities,
                 'CAPABILITY_REVOKED', 403)
@@ -483,6 +489,8 @@ class Entitlements:
         require(policy.disable_scope != 'every_start' or owner.policy_revision == grant.policy_revision, 'POLICY_REVOKED', 403)
         require(grant.not_before <= now < min(limit, grant.expires_at), 'START_DEADLINE_EXCEEDED', 403)
         limit = min(limit, now + timedelta(seconds=policy.start_ttl_seconds))
+        if owner.expires_at is not None:
+            limit = min(limit, owner.expires_at)
         permit.state = 'start_committed'
         permit.start = dict(schema_version=1, start_operation_id=operation.start_operation_id,
                             start_authorization_id=uid(), committed_at=now.isoformat(), start_before=limit.isoformat())

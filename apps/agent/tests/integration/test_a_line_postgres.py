@@ -154,6 +154,12 @@ class PostgresALineTests(suite.ALinePersistenceTests):
                     spec.loader.exec_module(module)
                     with Operations.context(MigrationContext.configure(sync)):
                         module.upgrade()
+                        if index == 1:
+                            # Current Owner ORM includes Billing expiry/source fields.
+                            for name in ('028_formal_plans', '029_billing'):
+                                spec=importlib.util.spec_from_file_location(name, root/'apps/backend/migrations/versions'/f'{name}.py')
+                                extra=importlib.util.module_from_spec(spec);spec.loader.exec_module(extra)
+                                extra.upgrade()
                 await connection.run_sync(migrate)
         self.agent_engine,self.backend_engine=engines
         self.agent=async_sessionmaker(self.agent_engine,expire_on_commit=False)
@@ -240,8 +246,16 @@ class PostgresALineTests(suite.ALinePersistenceTests):
                     module=importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     with Operations.context(MigrationContext.configure(sync)):
+                        extras=[]
+                        if path.name == '027_agent_entitlements.py':
+                            for name in ('028_formal_plans', '029_billing'):
+                                extra_spec=importlib.util.spec_from_file_location(name,path.parent/f'{name}.py')
+                                extra=importlib.util.module_from_spec(extra_spec);extra_spec.loader.exec_module(extra)
+                                extras.append(extra)
+                            for extra in reversed(extras):extra.downgrade()
                         module.downgrade()
                         module.upgrade()
+                        for extra in extras:extra.upgrade()
                 await c.run_sync(roundtrip)
         async with self.agent() as db:
             self.assertEqual(await db.scalar(text("SELECT to_regclass('agent_tasks')::text")),'agent_tasks')

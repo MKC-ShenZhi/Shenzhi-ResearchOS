@@ -136,3 +136,9 @@ uv run --env-file .env python -m app.services.agent_entitlements.plans --capabil
 Agent 目录：`uv run --no-sync python -m pytest tests/test_a_line_persistence.py tests/unit/test_metering_boundaries.py ../../packages/agent-contracts/tests -q`。SQLite 两库事务与 HTTP/MockTransport 测试不证明 PostgreSQL 行锁或真实 Provider。
 
 显式设置 `AGENT_A_LINE_TEST_DATABASE_URL`、`BACKEND_A_LINE_TEST_DATABASE_URL` 为两个不同本机 `shenzhi_a_line_*` PostgreSQL 库后运行 `uv run --no-sync python -m pytest tests/integration/test_a_line_postgres.py -q`。测试创建随机 `a_line_*` schema，实际执行两个新增迁移并只清理自身 schema，覆盖并发预留、同 Submission 竞争、撤销/start、Saga 旧缓存 Lease、void/tombstone、修订、投递、结算、关闭与迁移回滚。不连接生产 Provider；真实 Provider 另需批准环境和费用策略。
+
+## Billing 订阅有效期
+
+用户购买与续费通过 Backend Billing 复用现有权益行和公共分配函数，说明见 [Billing](../billing/README.md)。
+`expires_at=NULL` 保留历史长期权益；Billing 赋予有限有效期，owner/permit/start 实时检查，结算仍接受历史已启动调用。
+Admin 的发布、预览、分配与审计入口保留，跨 Revision 切换继续要求 `ACTIVE_GRANTS_REQUIRE_DRAIN`，购买不重置日额度。

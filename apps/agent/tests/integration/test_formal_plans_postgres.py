@@ -2,12 +2,8 @@
 import os
 import asyncio
 import unittest
-from pathlib import Path
-import importlib.util
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import create_async_engine
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 from tests import test_formal_plans as formal
 from tests.integration import test_a_line_postgres as pg
 from app.models.agent_entitlements import WindowCounterRow
@@ -18,14 +14,6 @@ from app.models.agent_entitlements import WindowCounterRow
 class FormalPostgresTests(formal.FormalPlanTests):
     async def create_databases(self):
         await pg.PostgresALineTests.create_databases(self)
-        path=Path(__file__).resolve().parents[4]/'apps/backend/migrations/versions/028_formal_plans.py'
-        spec=importlib.util.spec_from_file_location('formal_migration',path)
-        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        async with self.backend_engine.begin() as connection:
-            def migrate(sync):
-                with Operations.context(MigrationContext.configure(sync)):
-                    module.upgrade();module.downgrade();module.upgrade()
-            await connection.run_sync(migrate)
 
     async def asyncTearDown(self):
         await self.agent_engine.dispose();await self.backend_engine.dispose()

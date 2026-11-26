@@ -142,24 +142,9 @@ async def change_one(db, body, user_id, principal):
         require(body.plan_id and body.policy_revision, 'PLAN_REVISION_REQUIRED',422)
         release=await db.get(PlanReleaseRow,body.plan_id)
         require(release is not None and release.policy_revision==body.policy_revision, 'PLAN_RELEASE_CHANGED')
-        row=await db.get(EntitlementPolicyRow,release.policy_revision)
-        require(row and row.approved and not row.test_only, 'POLICY_NOT_APPROVED',403)
-        policy=EntitlementPolicy.model_validate(row.payload)
-        require(policy.plan_id==body.plan_id and policy.reservation_mode=='per_call', 'FORMAL_POLICY_CONFLICT')
-        if owner and owner.policy_revision!=policy.policy_revision:
-            active=await db.scalar(select(GrantRootRow.grant_id).join(SubmissionRow,
-                SubmissionRow.submission_id==GrantRootRow.submission_id).where(
-                SubmissionRow.owner_id==owner_id,GrantRootRow.status!='closed').limit(1))
-            require(active is None, 'ACTIVE_GRANTS_REQUIRE_DRAIN')
-        after={'plan_id':body.plan_id,'policy_revision':policy.policy_revision,'enabled':True}
-        if not body.preview:
-            if owner:
-                owner.plan_id=body.plan_id;owner.policy_revision=policy.policy_revision;owner.enabled=True
-            else:
-                owner=OwnerEntitlementRow(owner_id=owner_id,**after);db.add(owner);await db.flush()
-            rule=policy.rules[0];window=rule.window(owner_id,policy.policy_revision,now_utc())
-            counter=await db.get(WindowCounterRow,window.window_id)
-            if counter:counter.limit_units=rule.limit_units
+        from .assignment import assign_policy
+        owner, after = await assign_policy(db, owner, owner_id, body.plan_id, body.policy_revision,
+                                          preview=body.preview)
     else:
         require(owner is not None, 'ENTITLEMENT_UNASSIGNED',403)
         require(body.action!='restore' or owner.plan_id in PLANS, 'FORMAL_PLAN_REQUIRED',403)
@@ -167,7 +152,9 @@ async def change_one(db, body, user_id, principal):
             row = await db.get(EntitlementPolicyRow, owner.policy_revision)
             require(row and row.approved and not row.test_only, 'POLICY_NOT_APPROVED',403)
         after={**before,'enabled':body.action=='restore'}
-        if not body.preview:owner.enabled=after['enabled']
+        if not body.preview:
+            owner.enabled=after['enabled']
+            owner.source='admin'
     return {'user_id':user_id,'status':'preview' if body.preview else 'success','before':before,'after':after}
 
 
