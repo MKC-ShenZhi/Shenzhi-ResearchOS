@@ -91,6 +91,21 @@ async def protocols():
                 build_revision=os.getenv('AGENT_BUILD_REVISION', 'unconfigured'))
 
 
+@router.get('/config-admission', dependencies=[Depends(gateway)])
+async def configuration_admission(db=Depends(get_session)):
+    from agent_app.config_deployment import mode, pointer
+    from agent_app.config_scheduling import has_constraints
+    if not await has_constraints(db):
+        return {'schema_version': 1, 'open': mode() != 'enforce'}
+    current = await pointer(db)
+    is_open = not (current and current.admission_paused)
+    if mode() == 'enforce':
+        is_open = bool(is_open and current and current.active_revision)
+    elif current and current.active_revision:
+        is_open = False
+    return {'schema_version': 1, 'open': is_open}
+
+
 @router.post('/tasks', dependencies=[Depends(gateway)])
 async def submit(body: TaskSubmissionV2, db=Depends(get_session), control=Depends(metering_control)):
     check(body.agent_audience == control.audience, 'AUDIENCE_CONFLICT')
@@ -196,11 +211,14 @@ async def close_facts(task_id: str, db=Depends(get_session), control=Depends(met
 
 
 @router.post('/worker/claim', dependencies=[Depends(worker)])
-async def claim(body: dict, db=Depends(get_session), control=Depends(metering_control)):
+async def claim(body: dict, db=Depends(get_session), control=Depends(metering_control),
+                x_worker_instance: str | None = Header(default=None),
+                x_worker_report_token: str | None = Header(default=None)):
     check(set(body) == {'schema_version', 'worker_id'} and body['schema_version'] == 1 and bool(body['worker_id']), 'PROTOCOL_INVALID')
     # Claim only locally bound v2 tasks. Authorized current-state online check
     # precedes execution; every real call still repeats Backend start validation.
-    claimed = await repository.claim_run(db, body['worker_id'], v2=True)
+    claimed = await repository.claim_run(db, body['worker_id'], v2=True, worker_instance=x_worker_instance,
+                                         worker_report_token=x_worker_report_token)
     if claimed is None:
         return {'schema_version': 1, 'run': None}
     request, lease_token, event_seq = claimed
@@ -224,7 +242,11 @@ async def claim(body: dict, db=Depends(get_session), control=Depends(metering_co
         await control.lock_execution(db, WorkerIdentity(schema_version=1, worker_id=body['worker_id'], lease_token=lease_token,
                                                         execution_id=execution.execution_id))
         await db.commit()
-    return dict(schema_version=1, run=repository._request_dict(request), lease_token=lease_token,
+    from agent_app.config_deployment import mode
+    from agent_app.config_scheduling import claim_constraint
+    constraint = await claim_constraint(db, request.task_id) if mode() == 'enforce' else None
+    return dict(**({'execution_config': constraint} if constraint else {}),
+                schema_version=1, run=repository._request_dict(request), lease_token=lease_token,
                 event_seq=event_seq, execution_id=execution.execution_id,
                 metering_context=profile.context, metering_profile_id=profile.profile_id,
                 risk_profile=state['model_risk_profile'] if profile.context == 'authorized' else None,

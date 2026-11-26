@@ -35,6 +35,10 @@ def model_definition(model_id: str, provider_id: str, upstream: str) -> ModelSpe
 
 
 def load_registry() -> ModelRegistry:
+    from agent_app.execution.config_profile import load_profile, registry_for
+    profile = load_profile() if os.getenv('AGENT_EXECUTION_CONFIG_FILE') else None
+    if profile:
+        return registry_for(profile[1])
     catalog = _read_catalog(CATALOG_PATH)
     # Validate the source before replacement so duplicate/invalid built-ins cannot hide.
     ModelRegistry(catalog, {})

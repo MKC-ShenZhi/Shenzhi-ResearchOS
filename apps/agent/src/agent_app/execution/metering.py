@@ -80,6 +80,9 @@ def skill_identity(skill):
 
 def model_identity(resolved):
     route_revision = os.getenv('AGENT_MODEL_ROUTE_REVISION', '').strip()
+    if os.getenv('AGENT_EXECUTION_CONFIG_FILE'):
+        from agent_app.execution.config_profile import load_profile, route_identity
+        route_revision = route_identity(resolved, load_profile()[1])
     if not route_revision:
         raise BusinessError(20004, '模型非敏感路由修订未配置，拒绝计量执行', 503)
     return ModelIdentity(schema_version=1, kind='model', capability_id='model:' + resolved.spec.id,

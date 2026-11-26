@@ -13,6 +13,9 @@ from app.core.request_context import (
 from app.core.database import dispose_engine
 from app.api.agent_v2 import router as agent_v2_router
 from app.api.admin_console import router as admin_console_router
+from app.api.agent_management import router as agent_management_router
+from app.api.agent_management_phase2 import router as agent_management_phase2_router
+from app.api.agent_config_management import router as agent_config_management_router
 from app.services.agent_entitlements.service import EntitlementError
 from app.services.agent_sessions.repository import agent_session_repository
 
@@ -31,6 +34,9 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title='ShenZhi AI API', version='1.0.0', lifespan=lifespan)
 app.include_router(agent_v2_router)
 app.include_router(admin_console_router)
+app.include_router(agent_management_router)
+app.include_router(agent_management_phase2_router)
+app.include_router(agent_config_management_router)
 configure_logging()
 logger = logging.getLogger(__name__)
 for router in (
@@ -81,6 +87,9 @@ async def validation_error(_request: Request, _error: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def unexpected_error(request: Request, error: Exception):
+    from app.services.agent_config_barrier import handoff_conflict
+    if handoff_conflict(error):
+        return fail(10001, 'CONFIG_ENTITLEMENT_HANDOFF_PENDING', 409)
     request_id = getattr(request.state, 'request_id', None) or get_request_id() or '-'
     log_exception(
         logger,

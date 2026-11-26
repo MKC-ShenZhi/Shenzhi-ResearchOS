@@ -35,6 +35,10 @@ class AgentGatewayV2(AgentGateway):
                 MeteringProfileRow.client_key == request.idempotency_key))
             if original_profile:
                 mode = original_profile.context
+        if original_profile is None and os.getenv('AGENT_CONFIG_ADMISSION_PREFLIGHT', '').lower() == 'true':
+            gate = await self.request('GET', '/internal/v2/config-admission')
+            require(gate.get('schema_version') == 1 and gate.get('open') is True,
+                    'CONFIG_ADMISSION_PAUSED', 503)
         if original_profile is None and request.owner_id.startswith('user:'):
             require(mode == 'authorized', 'AUTHORIZED_ADMISSION_DISABLED', 503)
         if mode == 'observation_only':

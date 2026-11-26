@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from agent_app.infrastructure.models import Base
 from agent_app.infrastructure import metering_models as _metering_models
+from agent_app.infrastructure import management_models as _management_models  # noqa: F401
+from agent_app.infrastructure import config_management_models as _config_management_models  # noqa: F401
 
 config = context.config
 if config.config_file_name:

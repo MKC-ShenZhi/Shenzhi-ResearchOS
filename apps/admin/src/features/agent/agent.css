@@ -1,0 +1,16 @@
+.agent-management > nav { margin-bottom: 1.25rem; }
+.agent-management > nav a { padding: .5rem .7rem; border-radius: .5rem; color: #3b5862; }
+.agent-management > nav a:hover { background: #eaf5f5; color: #205f68; }
+.agent-management > nav a[aria-current="page"] { background: #28505a; color: #fff; }
+.agent-management h2 { margin-top: 1.15rem; }
+.agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: .8rem; }
+.agent-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .7rem 1rem; margin: .75rem 0; }
+.agent-fields dt { font-size: .83rem; opacity: .78; margin-bottom: .25rem; }
+.agent-fields dd { margin: 0; overflow-wrap: anywhere; }
+.agent-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem; margin: .75rem 0; }
+.agent-filters label { display: grid; gap: .3rem; }
+.agent-table { width: 100%; }
+.agent-table td { max-width: 24rem; overflow-wrap: anywhere; }
+.agent-resource { margin: .7rem 0 1rem; }
+.agent-pagination { margin-top: .75rem; }
+.agent-preview { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32rem; overflow: auto; }

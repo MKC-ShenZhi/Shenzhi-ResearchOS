@@ -535,7 +535,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual((await db.get(WindowCounterRow, target_id)).held, 30)
                     await db.rollback()
 
-    async def test_sync_settlement_requires_backend_ack_and_keeps_original_outbox(self):
+    async def test_sync_settlement_timeout_preserves_original_outbox_and_permit_budget(self):
         from agent_app.control.usage_delivery import settle_observation
         from agent_contracts.v2 import UsageBatch, UsageBatchAck
         await self.prepare()
@@ -547,10 +547,12 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         async with self.agent() as db:
             with self.assertRaises(TimeoutError):
                 await settle_observation(db, Unavailable(), completed)
-        with self.assertRaises(GateDenied):
-            await self.start_call('before-ack')
+        await self.start_call('before-ack')
         async with self.agent() as db:
             self.assertEqual((await db.get(UsageOutboxRow, completed.measurement_id)).state, 'pending')
+        async with self.backend() as db:
+            counter = await db.scalar(select(WindowCounterRow))
+            self.assertEqual((counter.used, counter.held), (0, 50))
         suite = self
         class Bridge:
             async def request(self, method, path, payload):
@@ -563,7 +565,10 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         async with self.backend() as db:
             counter = await db.scalar(select(WindowCounterRow))
             self.assertEqual((counter.used, counter.held), (10, 30))
-        await self.start_call('after-ack')
+        async with self.agent() as db:
+            self.assertEqual((await db.get(UsageOutboxRow, completed.measurement_id)).state, 'delivered')
+        with self.assertRaisesRegex(AssertionError, 'QUOTA_EXHAUSTED'):
+            await self.start_call('after-ack-cap')
 
     async def test_partial_retains_unmeasured_reservation(self):
         await self.prepare()

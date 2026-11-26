@@ -1,6 +1,7 @@
 """Build one Agent Runtime from Agent-owned model and skill configuration."""
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,10 @@ def default_runtime(*, skills: SkillStore | None = None, **overrides: Any) -> Ag
     overrides['model'] = load_registry().resolve_model(
         model, 'agent', require_configured=False).spec.id
     overrides.setdefault('provider', OpenAICompatProvider())
+    if os.getenv('AGENT_EXECUTION_CONFIG_FILE'):
+        from agent_app.execution.config_profile import load_profile
+        spec = load_profile()[1]
+        overrides['tool_versions'] = {entry.id: entry.digest for entry in spec.tools}
     return AgentRuntime(skills=skills if skills is not None else default_store(), **overrides)
 
 

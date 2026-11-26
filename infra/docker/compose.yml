@@ -47,6 +47,10 @@ services:
 
   auth-migrate:
     <<: *python
+    environment:
+      AGENT_MANAGEMENT_TOKEN: ''
+      ADMIN_AGENT_AUDIT_SECRET: ''
+      AGENT_CONFIG_MANAGEMENT_TOKEN: ''
     profiles: [app, full]
     image: ${IMAGE_PREFIX:-shenzhi}/backend:${IMAGE_TAG:-local}
     build:
@@ -62,6 +66,10 @@ services:
 
   backend-migrate:
     <<: *python
+    environment:
+      AGENT_MANAGEMENT_TOKEN: ''
+      ADMIN_AGENT_AUDIT_SECRET: ''
+      AGENT_CONFIG_MANAGEMENT_TOKEN: ''
     profiles: [app, full]
     image: ${IMAGE_PREFIX:-shenzhi}/backend:${IMAGE_TAG:-local}
     build:
@@ -126,6 +134,13 @@ services:
 
   agent-migrate:
     <<: *agent
+    environment:
+      AGENT_MANAGEMENT_TOKEN: ''
+      AGENT_WORKER_REPORT_TOKEN: ''
+      AGENT_WORKER_REPORT_IDENTITIES: ''
+      AGENT_HEALTHCHECK_PROVIDER_KEYS: ''
+      AGENT_CONFIG_MANAGEMENT_TOKEN: ''
+      AGENT_CONFIG_VALIDATOR_SECRET: ''
     profiles: [agent, full, usage]
     restart: 'no'
     command: [python, /opt/docker/migrate.py, agent]
@@ -134,6 +149,8 @@ services:
 
   agent-api:
     <<: *agent
+    environment:
+      AGENT_WORKER_REPORT_TOKEN: ''
     profiles: [agent, full, usage]
     depends_on:
       agent-migrate: {condition: service_completed_successfully}
@@ -145,6 +162,12 @@ services:
 
   agent-worker:
     <<: *agent
+    environment:
+      AGENT_MANAGEMENT_TOKEN: ''
+      AGENT_WORKER_REPORT_IDENTITIES: ''
+      AGENT_HEALTHCHECK_PROVIDER_KEYS: ''
+      AGENT_CONFIG_MANAGEMENT_TOKEN: ''
+      AGENT_CONFIG_VALIDATOR_SECRET: ''
     profiles: [agent, full]
     command: [python, -m, agent_app.worker_main]
     depends_on:
@@ -152,6 +175,13 @@ services:
 
   agent-usage-worker:
     <<: *agent
+    environment:
+      AGENT_MANAGEMENT_TOKEN: ''
+      AGENT_WORKER_REPORT_TOKEN: ''
+      AGENT_WORKER_REPORT_IDENTITIES: ''
+      AGENT_HEALTHCHECK_PROVIDER_KEYS: ''
+      AGENT_CONFIG_MANAGEMENT_TOKEN: ''
+      AGENT_CONFIG_VALIDATOR_SECRET: ''
     profiles: [usage, full]
     command: [python, -m, agent_app.usage_worker]
     depends_on:

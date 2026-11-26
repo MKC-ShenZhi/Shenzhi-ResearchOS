@@ -83,6 +83,8 @@ async def submit(session: AsyncSession, submission: TaskSubmission, *, metering=
             return _task_record(existing)
     now = _now()
     task_id, run_id = uuid.uuid4().hex, uuid.uuid4().hex
+    from agent_app.config_scheduling import admission
+    constraint = await admission(session, task_id, submission, metering)
     task = TaskRow(
         task_id=task_id, owner_id=submission.owner_id, status=TaskStatus.QUEUED.value,
         prompt=submission.prompt, session_id=submission.session_id, turn_id=submission.turn_id,
@@ -114,6 +116,8 @@ async def submit(session: AsyncSession, submission: TaskSubmission, *, metering=
             # validation as the normal replay path after rolling back our insert.
             return await submit(session, submission, metering=metering)
         raise
+    if constraint is not None:
+        session.add(constraint)
     session.add(RunRow(run_id=run_id, task_id=task_id, attempt=1,
                        status=RunStatus.PENDING.value, request_json=_request_dict(request),
                        created_at=now, lease_token=0))
@@ -161,7 +165,16 @@ async def list_task_runs(session: AsyncSession, task_id: str, owner_id: str) -> 
 
 
 async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = WORKER_LEASE_SECONDS,
-                    *, demo_mode: bool = False, v2=False):
+                    *, demo_mode: bool = False, v2=False, worker_instance=None, worker_report_token=None):
+    from agent_app import config_scheduling
+    from agent_app.config_deployment import mode
+    import os
+    if os.getenv('AGENT_CONFIG_WORKER_ROLE') == 'candidate':
+        return None
+    scheduling = mode()
+    evidence = await config_scheduling.worker_evidence(
+        session, worker_id, worker_instance, worker_report_token
+    ) if v2 and scheduling in ('shadow', 'enforce') else None
     now = _now()
     query = (select(RunRow, TaskRow, OutboxRow).join(TaskRow, TaskRow.task_id == RunRow.task_id)
              .join(OutboxRow, OutboxRow.run_id == RunRow.run_id)
@@ -178,13 +191,30 @@ async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 
                  TaskMeteringRow.binding_status == 'bound', TaskMeteringRow.revoked.is_(False))) if v2 else
                     ~TaskRow.task_id.in_(select(TaskMeteringRow.task_id)))
              .order_by(RunRow.created_at).with_for_update(of=TaskRow, skip_locked=True).limit(1))
+    if scheduling == 'enforce':
+        if not v2 or evidence is None:
+            return None
+        query = query.where(config_scheduling.predicate(evidence))
+    elif await config_scheduling.has_constraints(session):
+        from sqlalchemy import exists
+        from agent_app.infrastructure.config_management_models import TaskExecutionConstraintRow
+        # Disabling enforcement cannot hand a formerly constrained Task to the legacy path.
+        query = query.where(~exists(select(TaskExecutionConstraintRow.task_id).where(
+            TaskExecutionConstraintRow.task_id == TaskRow.task_id,
+        )))
     found = (await session.execute(query)).first()
     if found is None:
         return None
     run, task, outbox = found
+    if scheduling == 'shadow' and v2:
+        await config_scheduling.shadow(session, task.task_id, worker_id, evidence)
     # All operations needing both locks use Task -> Run (including cancel and
     # report). Locking the joined rows in planner order can deadlock PostgreSQL.
     run = await session.scalar(select(RunRow).where(RunRow.run_id == run.run_id).with_for_update().execution_options(populate_existing=True))
+    if scheduling == 'enforce' and run.status == RunStatus.RUNNING.value:
+        expiry = run.lease_expires_at
+        if expiry is None or (expiry.replace(tzinfo=timezone.utc) if expiry.tzinfo is None else expiry) > now:
+            return None
     run.status = RunStatus.RUNNING.value
     run.worker_id = worker_id
     run.lease_token += 1

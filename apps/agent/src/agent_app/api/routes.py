@@ -67,8 +67,22 @@ async def agent_config():
                      'provider': 'platform', 'enabled': True}], default_model='demo/m1',
             skills=[{'name': 'deep-research', 'description': 'Mock 演示报告，不执行真实研究'}],
         ).model_dump(mode='json')
-    registry = load_registry()
-    store = default_store()
+    active = None
+    if os.getenv('AGENT_CONFIG_SCHEDULING') == 'enforce':
+        from agent_app.config_deployment import pointer
+        from agent_app.execution.config_profile import artifact_skills, registry_for
+        from agent_app.infrastructure.config_management_models import ConfigRevisionRow
+        from agent_app.management_observations import reading
+        from agent_contracts.management_config import ConfigSpec
+        async with reading() as db:
+            control = await pointer(db)
+            if control and control.active_revision:
+                item = await db.get(ConfigRevisionRow, control.active_revision)
+                if not item:
+                    raise BusinessError(20004, '正式 Agent 配置不可用', 503)
+                active = ConfigSpec.model_validate(item.spec)
+    registry = registry_for(active) if active else load_registry()
+    store = artifact_skills(active) if active else default_store()
     skills = [{'name': skill.name, 'description': skill.description}
               for name in store.names()
               for skill in [store.get(name)]

@@ -35,12 +35,12 @@ class AgentControlClient:
         self.client = httpx.AsyncClient(base_url=base, timeout=20, transport=transport,
                                         headers={'Authorization': f'Bearer {token}'})
 
-    async def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+    async def post(self, path: str, body: dict[str, Any], *, headers=None) -> dict[str, Any]:
         if self.protocol == 2 and path.startswith('/internal/v2/'):
             body = dict(body, schema_version=1)
             if '/worker/claim' not in path and self.execution_id is not None:
                 body.setdefault('execution_id', self.execution_id)
-        response = await self.client.post(path, json=body)
+        response = await self.client.post(path, json=body, headers=headers)
         if response.is_error and self.protocol == 2:
             try:
                 error = response.json().get('error', {})
@@ -57,8 +57,12 @@ class AgentControlClient:
         response.raise_for_status()
         return response.json()
 
-    async def claim(self, worker_id: str):
+    async def claim(self, worker_id: str, instance_id=None):
         if self.protocol == 2:
+            if instance_id:
+                return await self.post('/internal/v2/worker/claim', {'schema_version': 1, 'worker_id': worker_id},
+                                       headers={'X-Worker-Instance': str(instance_id),
+                                                'X-Worker-Report-Token': os.getenv('AGENT_WORKER_REPORT_TOKEN', '')})
             return await self.post('/internal/v2/worker/claim', {'schema_version': 1, 'worker_id': worker_id})
         return await self.post('/internal/v1/worker/claim', {
             'worker_id': worker_id, 'demo_mode': os.getenv('AGENT_DEMO_MODE') == '1',
@@ -309,6 +313,8 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
             if budget.get('max_tool_calls') is not None
             else tool_call_budget(request.get('mode', 'fast')),
         )
+        from agent_app.worker.management_reporter import record_runtime
+        record_runtime(runtime)
         runtime.strict_tool_budget = True
         if meter is not None and not getattr(runtime.provider, 'supports_call_metering', False):
             stop.set()
@@ -345,29 +351,47 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
 
 
 async def run_worker_forever(*, runtime_factory=None) -> None:
+    if os.getenv('AGENT_CONFIG_WORKER_ROLE') == 'candidate':
+        raise RuntimeError('Candidate validation processes cannot run the Worker polling loop')
     if os.getenv('AGENT_DEMO_MODE') == '1' and runtime_factory is None:
         raise RuntimeError('Mock 环境必须使用 agent_app.demo_worker，禁止启动真实模型 Worker')
     worker_id = os.getenv('AGENT_WORKER_ID', '').strip() or f'{socket.gethostname()}-{os.getpid()}'
     control = AgentControlClient()
     logger.info('Agent Worker started worker_id=%s', worker_id)
+    from agent_app.worker.management_reporter import reports
     try:
-        while True:
+        async with reports(worker_id) as reporter:
+            await _poll_work(control, worker_id, runtime_factory, reporter)
+    finally:
+        await control.close()
+
+
+async def _poll_work(control, worker_id, runtime_factory, reporter):
+    while True:
+        try:
+            if control.protocol == 2:
+                from agent_app.execution.metering import replay_observation_spool
+                await replay_observation_spool(control)
+            claim = await control.claim(worker_id, reporter.instance_id) if reporter else await control.claim(worker_id)
+            if claim.get('run') is None:
+                await asyncio.sleep(1)
+                continue
+            if claim.get('execution_config'):
+                from agent_app.config_scheduling import verify_local
+                await asyncio.to_thread(verify_local, claim['execution_config'])
+            if reporter is not None:
+                reporter.run_id = claim['run'].get('run_id')
             try:
-                if control.protocol == 2:
-                    from agent_app.execution.metering import replay_observation_spool
-                    await replay_observation_spool(control)
-                claim = await control.claim(worker_id)
-                if claim.get('run') is None:
-                    await asyncio.sleep(1)
-                    continue
                 if runtime_factory is None:
                     await execute_claim(control, claim, worker_id)
                 else:
                     await execute_claim(control, claim, worker_id, runtime_factory=runtime_factory)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logger.exception('Agent Worker polling/execution loop failed')
-                await asyncio.sleep(2)
-    finally:
-        await control.close()
+            finally:
+                if reporter is not None:
+                    reporter.run_id = None
+                    reporter.registry = None
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception('Agent Worker polling/execution loop failed')
+            await asyncio.sleep(2)

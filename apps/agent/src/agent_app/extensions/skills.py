@@ -417,6 +417,9 @@ def default_store() -> SkillStore:
 
     外部根的单个技能坏掉只跳过它并告警——一个第三方目录不该让整座技能库不可用。
     """
+    if os.getenv('AGENT_EXECUTION_CONFIG_FILE'):
+        from agent_app.execution.config_profile import artifact_skills, load_profile
+        return artifact_skills(load_profile()[1])
     rooted: list[tuple[SkillRoot, tuple]] = [
         (SkillRoot(BUILTIN_SKILLS_DIR, executable=True), ())]
     whitelist, enabled = _vendor_config()

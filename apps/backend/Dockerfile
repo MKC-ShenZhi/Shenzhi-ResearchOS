@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1
-FROM python:3.12-slim-bookworm AS base
-COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /bin/
+ARG PYTHON_IMAGE=python:3.12-slim-bookworm
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.13.6
+FROM ${UV_IMAGE} AS uv-binaries
+FROM ${PYTHON_IMAGE} AS base
+COPY --from=uv-binaries /uv /uvx /bin/
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_LINK_MODE=copy PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PATH="/opt/venv/bin:$PATH"
 WORKDIR /repo/apps/backend
 COPY packages/agent-contracts /repo/packages/agent-contracts

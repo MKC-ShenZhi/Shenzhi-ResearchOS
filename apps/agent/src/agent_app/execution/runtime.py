@@ -200,7 +200,8 @@ class AgentRuntime:
                  latent_tools: Sequence[str] = (),
                  ask_user: bool = False,
                  before_tool_call: BeforeToolCall | None = None,
-                 after_tool_call: AfterToolCall | None = None):
+                 after_tool_call: AfterToolCall | None = None,
+                 tool_versions: dict[str, str] | None = None):
         if provider is None:
             raise ValueError('AgentRuntime requires a ModelProvider; construct it in the application layer')
         self.provider = provider
@@ -236,6 +237,21 @@ class AgentRuntime:
             # 放在 extension 而非内核同一取舍）。
             from agent_app.capabilities.ask_user import ask_user_tool
             all_tools.append(ask_user_tool())
+        if tool_versions is not None:
+            from agent_contracts.canonical import digest
+            from agent_app.execution.config_profile import config_error
+            from agent_app.execution.metering import tool_identity
+            available = []
+            for tool in all_tools:
+                expected = tool_versions.get('tool:' + tool.spec.name)
+                if expected is None:
+                    continue
+                if digest(tool_identity(tool).model_dump(mode='json')) != expected:
+                    raise config_error()
+                available.append(tool)
+            all_tools = available
+            names = {tool.spec.name for tool in all_tools}
+            latent_tools = tuple(name for name in latent_tools if name in names)
         self.registry = ToolRegistry(all_tools, latent=latent_tools)
         # system 可为工厂：拿最终注册的工具清单生成系统提示（工具列表与 registry 恒同步，
         # pi coding-agent buildSystemPrompt 的 visibleTools 同机制）
