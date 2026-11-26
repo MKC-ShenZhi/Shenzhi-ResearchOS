@@ -23,7 +23,13 @@ export const referenceSchema = z.object({
   doi: z.string().nullable().optional(),
 }).strict();
 
-const blockSchema = z.discriminatedUnion("type", [markdownBlockSchema]);
+// Preserve future blocks as opaque data so the dispatcher can show a fallback.
+// No other concrete block schema is defined at this stage. A malformed Markdown
+// block must still fail validation rather than entering the fallback branch.
+const unknownBlockSchema = z.object({
+  id: identifier, type: identifier.refine((value) => value !== "markdown"),
+}).catchall(z.unknown());
+const blockSchema = z.union([markdownBlockSchema, unknownBlockSchema]);
 export const agentMessageSchema = z.object({
   id: identifier,
   role: z.literal("assistant"),
@@ -42,7 +48,7 @@ export const agentMessageSchema = z.object({
   }
   const ids = new Set(message.references.map((reference) => reference.id));
   for (const block of message.blocks) {
-    if (block.type !== "markdown") continue;
+    if (block.type !== "markdown" || typeof block.content !== "string") continue;
     for (const match of block.content.matchAll(/\[\[cite:([^\[\]\r\n]*)\]\]/g)) {
       if (!ids.has(match[1])) context.addIssue({ code: "custom", path: ["blocks"], message: "Unresolved citation" });
     }
@@ -53,6 +59,10 @@ export type AgentMessage = z.infer<typeof agentMessageSchema>;
 export type MarkdownBlock = z.infer<typeof markdownBlockSchema>;
 export type ContentBlock = AgentMessage["blocks"][number];
 export type Reference = z.infer<typeof referenceSchema>;
+
+export function isMarkdownBlock(block: ContentBlock): block is MarkdownBlock {
+  return block.type === "markdown" && typeof block.content === "string";
+}
 
 // API v2 adds its own version at the event envelope, outside the AIMessage.
 const envelope = { schema_version: z.literal(1).optional() };

@@ -1,8 +1,8 @@
-import type { AgentMessage } from "../../clients/backend/agent-message";
+import type { AgentMessage, MarkdownBlock } from "../../clients/backend/agent-message";
 
 export interface MockMessageEvent { id: string; event: string; data: unknown }
 
-export function messageFixture(status: AgentMessage["status"] = "done", id = "msg_mock"): AgentMessage {
+export function messageFixture(status: AgentMessage["status"] = "done", id = "msg_mock"): Omit<AgentMessage, "blocks"> & { blocks: MarkdownBlock[] } {
   return {
     id, role: "assistant", status, created_at: 1795651200.125, schema_version: 1,
     metadata: { model: "mock/model", duration_ms: 9, nested: [null, false, 0, { label: "中文 🧪" }] },

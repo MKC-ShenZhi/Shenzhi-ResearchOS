@@ -1,5 +1,6 @@
 /** Pure Block assembly; separate from the legacy reasoning/tool timeline. */
 import type { AgentMessage, AgentMessageEvent } from "../../clients/backend/agent-message";
+import { isMarkdownBlock } from "../../clients/backend/agent-message";
 
 export interface AgentMessageState {
   runId: string | null;
@@ -56,7 +57,7 @@ export function applyMessageEvent(state: AgentMessageState, event: AgentMessageE
     case "block_delta": {
       if (state.activeBlockId !== event.data.block_id) return invalid("Delta does not target the open block");
       return { ...next, message: { ...message, blocks: message.blocks.map((block) =>
-        block.id === event.data.block_id && block.type === "markdown"
+        block.id === event.data.block_id && isMarkdownBlock(block)
           ? { ...block, content: block.content + event.data.delta } : block) } };
     }
     case "block_end":

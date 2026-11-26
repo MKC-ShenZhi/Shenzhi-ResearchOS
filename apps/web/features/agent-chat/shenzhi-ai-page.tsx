@@ -26,7 +26,8 @@ import { ComposerShell, type ComposerSkill } from "@/components/common/composer/
 import type { WorkspaceFile } from "@/components/common/composer/attachment-menu";
 import { AppShell } from "@/components/common/layout/app-shell";
 import { useAuth } from "@/components/auth/auth-provider";
-import { StreamdownRenderer } from "@/components/renderers/streamdown-renderer";
+import { StreamdownRenderer } from "./components/streamdown-renderer";
+import { MessageRenderer } from "./components/message-renderer";
 import type { ComposerAttachment, ComposerConfig } from "@/types/ai-search";
 import { takeAgentLaunch } from "./launch-store";
 import { notifyAgentSessionsChanged } from "./session-events";
@@ -742,11 +743,11 @@ export function ShenzhiAiPage() {
                   </div>
                 </div>
               : <div key={turn.id} className="mb-8">
-                  <p role="status" className="mb-2 text-xs text-muted">{turn.status === "running"
+                  {!turn.structured.message && <p role="status" className="mb-2 text-xs text-muted">{turn.status === "running"
                     ? running && index === turns.length - 1 ? "任务执行中…" : "执行状态待同步，请刷新结果"
-                    : ({ done: "已完成", failed: "执行失败", timeout: "执行超时", stopped: "已停止", awaiting_input: "等待你的回答" }[turn.status ?? "done"])}</p>
+                    : ({ done: "已完成", failed: "执行失败", timeout: "执行超时", stopped: "已停止", awaiting_input: "等待你的回答" }[turn.status ?? "done"])}</p>}
                   {/* 过程流：思考 / 正文 / 工具按到达顺序交错（pi 的结构）。空时不渲染任何盒子。 */}
-                  <Timeline state={turn.stream} live={running && index === turns.length - 1} />
+                  <Timeline state={turn.stream} live={running && index === turns.length - 1} includeText={!turn.structured.message} />
                   {visibleNotes(turn.steers).map((note, noteIndex) => (
                     <div key={noteIndex} className="mb-3 flex items-center justify-end gap-1.5">
                       <span className="rounded-full bg-agent-soft px-2 py-0.5 text-[10px] font-medium text-agent">
@@ -761,13 +762,17 @@ export function ShenzhiAiPage() {
                   {turn.warnings?.length ? (
                     <div className="mb-2 text-xs text-amber-600 dark:text-amber-400">⚠ {turn.warnings.join("；")}</div>
                   ) : null}
-                  {(isMeaningful(turn.reasoning) || isMeaningful(turn.content)
+                  {(turn.structured.message || isMeaningful(turn.reasoning) || isMeaningful(turn.content)
                     || turn.report || turn.question || turn.error || turn.stopped) && (
                   <div className="flex gap-3">
                     <AssistantAvatar />
                     <div className="min-w-0 flex-1" data-quote-source>
                       {/* 只有标点的正文不渲染：模型常在工具轮之间吐孤立的 "."。 */}
-                      {turn.content && isMeaningful(turn.content) && (
+                      {turn.structured.message ? (
+                        <MessageRenderer message={turn.structured.message}
+                          activeBlockId={turn.structured.activeBlockId}
+                          isStreaming={running && index === turns.length - 1} />
+                      ) : turn.content && isMeaningful(turn.content) && (
                         <StreamdownRenderer content={turn.content} isStreaming={running && index === turns.length - 1} />
                       )}
                       {turn.report && (
@@ -788,7 +793,7 @@ export function ShenzhiAiPage() {
                           onAnswer={(text) => answerQuestion(text)}
                         />
                       ) : null}
-                      {turn.sources && !turn.report && <Sources sources={turn.sources} />}
+                      {!turn.structured.message && turn.sources && !turn.report && <Sources sources={turn.sources} />}
                       {turn.error && <div className="mt-1 text-sm text-red-600 dark:text-red-400">{turn.error}</div>}
                       {turn.stopped && (
                         <div className="mt-1 text-xs text-muted">{stopLabel(turn.stopReason)}</div>

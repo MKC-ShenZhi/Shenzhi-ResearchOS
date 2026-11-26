@@ -21,15 +21,17 @@ test("message protocol preserves Markdown, metadata, nulls and omitted fields", 
   assert.equal(parseAgentMessageEvent({ event: "delta", data: "{}" }), null);
 });
 
-test("malformed snapshots, duplicate IDs and unknown block types are rejected", () => {
+test("malformed snapshots and duplicate IDs are rejected; unknown blocks stay opaque", () => {
   const message = messageFixture();
   for (const payload of [
     { ...message, schema_version: 2 }, { ...message, created_at: Infinity },
     { ...message, references: [] }, { ...message, blocks: [message.blocks[0], message.blocks[0]] },
     { ...message, references: [...message.references, message.references[0]] },
-    { ...message, blocks: [{ id: "unsupported", type: "unsupported" }] },
+    { ...message, blocks: [{ id: "broken", type: "markdown", content: 123 }] },
     { ...message, metadata: [] },
   ]) assert.throws(() => parseAgentMessage(payload), AgentMessageProtocolError);
+  const unknown = { id: "unsupported", type: "future-type", data: { value: 1 } };
+  assert.deepEqual(parseAgentMessage({ ...message, blocks: [unknown] }).blocks, [unknown]);
   assert.throws(() => parseAgentMessage(message, "failed"), AgentMessageProtocolError);
   assert.throws(() => parseAgentMessageEvent({ event: "block_delta", data: '{"delta":1}' }), AgentMessageProtocolError);
   assert.throws(() => parseAgentMessageEvent({ event: "message_end", data: JSON.stringify({ message: { ...message, status: "running" } }) }), AgentMessageProtocolError);
