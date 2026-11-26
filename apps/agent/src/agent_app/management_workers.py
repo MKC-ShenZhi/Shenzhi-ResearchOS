@@ -14,6 +14,7 @@ from agent_contracts.canonical import digest
 from agent_contracts.management_phase2 import CapabilityEvidence, ManifestEvidence, WorkerSnapshot
 from agent_app.control.metering import GateDenied, now_utc
 from agent_app.infrastructure.management_models import WorkerLifecycleRow, WorkerManifestRow, WorkerSnapshotRow
+from agent_app.infrastructure.management_models import WorkerRuntimeRow, WorkerAlertRow
 from agent_app.management_observations import reading, utc
 
 
@@ -115,6 +116,20 @@ async def save(worker_id, report):
                       run_tool_ids=report.run_tool_ids if report.active_run_id else [],
                       manifest_digest=saved.digest if saved else None)
         await record_lifecycle(db, worker_id, row, values, keep_after)
+        if report.active_run_id:
+            # Only the Worker holding this Run's live lease can attest runtime tools.
+            from agent_app.infrastructure.models import RunRow
+            run = await db.get(RunRow, report.active_run_id)
+            if run and run.worker_id == worker_id and run.lease_expires_at and utc(run.lease_expires_at) > now:
+                runtime = await db.get(WorkerRuntimeRow, (report.active_run_id, worker_id))
+                evidence = dict(instance_id=instance, observed_at=now, manifest_digest=values['manifest_digest'],
+                                enabled_tools=report.run_tool_ids, latent_tools=report.run_latent_tool_ids,
+                                complete=report.run_tools_complete)
+                if runtime:
+                    for field, value in evidence.items():
+                        setattr(runtime, field, value)
+                else:
+                    db.add(WorkerRuntimeRow(run_id=report.active_run_id, worker_id=worker_id, **evidence))
         if row:
             for key, value in values.items():
                 setattr(row, key, value)
@@ -134,9 +149,25 @@ async def record_lifecycle(db, worker_id, previous, current, keep_after):
     if previous:
         prior = snapshot(previous, None, current['observed_at'])
         if prior.state in ('stale', 'offline') and previous.lifecycle != 'offline':
-            events['heartbeat_timeout'] = previous.active_run_id
+            recorded = await db.get(WorkerLifecycleRow, (worker_id, previous.instance_id,
+                                    previous.sequence, 'heartbeat_timeout'))
+            if not recorded:
+                events['heartbeat_timeout'] = previous.active_run_id
             if current['lifecycle'] != 'offline':
                 events['heartbeat_recovered'] = current['active_run_id']
+            if prior.state == 'offline':
+                alert_id = digest([worker_id, previous.instance_id, previous.sequence])
+                incident = await db.get(WorkerAlertRow, alert_id)
+                recovered = current['observed_at'] if current['lifecycle'] != 'offline' else None
+                if incident:
+                    incident.recovered_at = recovered
+                    if recovered and incident.state == 'open':
+                        incident.state = 'recovered'
+                else:
+                    db.add(WorkerAlertRow(alert_id=alert_id, worker_id=worker_id,
+                        instance_id=previous.instance_id, sequence=previous.sequence,
+                        state='recovered' if recovered else 'open', opened_at=current['observed_at'],
+                        recovered_at=recovered))
         if previous.health != current['health']:
             events['healthy' if current['health'] == 'ok' else 'degraded'] = current['active_run_id']
     if current['manifest_digest'] and (not previous or previous.manifest_digest != current['manifest_digest']):
@@ -147,6 +178,9 @@ async def record_lifecycle(db, worker_id, previous, current, keep_after):
         if current['active_run_id']:
             events['run_linked'] = current['active_run_id']
     for kind, run in events.items():
+        key = (worker_id, current['instance_id'], current['sequence'], kind)
+        if await db.get(WorkerLifecycleRow, key):
+            continue
         db.add(WorkerLifecycleRow(worker_id=worker_id, instance_id=current['instance_id'],
                                   sequence=current['sequence'], kind=kind, run_id=run,
                                   observed_at=current['observed_at'], manifest_digest=current['manifest_digest']))

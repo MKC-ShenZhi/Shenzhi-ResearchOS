@@ -1,16 +1,15 @@
 import { useState, type FormEvent } from 'react';
-import { api } from '../../api';
+import { api, ApiError } from '../../api';
 import { useResource } from '../../useResource';
 import { AgentFleetHistory } from './AgentFleetHistory';
 import { AgentArtifactHistory } from './AgentArtifactHistory';
+import { AgentConfigForm, type ConfigSpec } from './AgentConfigForm';
 
-type ArtifactReference = { id: string };
-type Spec = { schema_version: number; build_revision: string; runtime_version: string; providers: object[]; models: object[];
-  defaults: object; tools: ArtifactReference[]; skills: ArtifactReference[] };
+type Spec = ConfigSpec;
 type Impact = { policies: string[]; affected_grants: number; impacted_owners: number; unknown: boolean };
 type Operation = { operation_id: string; action: string; revision_id: string | null; before_revision: string | null;
   status: string; blockers: string[]; worker_ids: string[]; confirmed_workers: string[]; queued_tasks: number | null;
-  active_runs: number | null; open_outbox: number | null; impact?: Impact; approval_ref?: string; reason: string;
+  active_runs: number | null; open_outbox: number | null; impact?: Impact; approval_ref?: string; reason: string; validation_digest?: string;
   queued_requiring_prior_worker?: number; runs_requiring_prior_worker?: number;
   compatible_workers?: number; unconfirmed_workers?: number };
 type Revision = { revision_id: string; revision_number: number; config_digest: string; base_revision: string | null;
@@ -47,7 +46,7 @@ function operationText(op: Operation) {
       <div><dt>需要保留旧版本或排空的排队任务 / Run</dt><dd>{op.queued_requiring_prior_worker} / {op.runs_requiring_prior_worker}</dd></div>
       <div><dt>匹配目标版本 / 证据未匹配的 Worker</dt><dd>{op.compatible_workers} / {op.unconfirmed_workers}</dd></div>
     </>}
-    <div><dt>审批引用</dt><dd>{op.approval_ref ?? '—'}</dd></div><div><dt>原因</dt><dd>{op.reason}</dd></div>
+    <div><dt>验证摘要</dt><dd>{op.validation_digest ?? "未知"}</dd></div><div><dt>审批引用</dt><dd>{op.approval_ref ?? '—'}</dd></div><div><dt>原因</dt><dd>{op.reason}</dd></div>
   </dl>
   {op.blockers.length > 0 && <ul>{op.blockers.map(value => <li key={value}>{reasons[value] ?? value}</li>)}</ul>}
   {op.worker_ids.length > 0 && <ul>{op.worker_ids.map(worker => <li key={worker}>
@@ -70,7 +69,7 @@ function useOperation(refresh: () => void) {
     try {
       const value = await api<Operation>(ROOT + path, { method: 'POST', body: JSON.stringify({ ...data, operation_id: id }) });
       setRecent(value); setPending(undefined); refresh();
-    } catch (err) { setError((err as Error).message); }
+    } catch (err) { setError((err as Error).message); if (err instanceof ApiError && err.status < 500) setPending(undefined); }
     finally { setBusy(false); }
   }
   const output = <>
@@ -79,23 +78,57 @@ function useOperation(refresh: () => void) {
       {' '}<a href={opLink(pending.id)}>查询状态</a></p>}
     {recent && <article><h2>最近操作</h2>{operationText(recent)} <a href={opLink(recent.operation_id)}>发布详情</a></article>}
   </>;
-  return { submit, busy, output };
+  return { submit, busy: busy || !!pending, output };
 }
 const value = (form: FormData, name: string) => String(form.get(name) ?? '').trim();
 
 function CandidateEditor({ base, submit, busy }: { base?: Revision; submit: (path: string, data: object) => Promise<void>; busy: boolean }) {
   const [spec, setSpec] = useState(JSON.stringify(base?.spec ?? emptySpec, null, 2));
   const [error, setError] = useState('');
+  const [mode, setMode] = useState('form');
+  const [preview, setPreview] = useState<object>();
+  const [prepared, setPrepared] = useState<object>();
+  const [checking, setChecking] = useState(false);
+  let parsed: Spec | undefined;
+  try {
+    const candidate = JSON.parse(spec);
+    if (Array.isArray(candidate.providers) && Array.isArray(candidate.models) && candidate.defaults &&
+        Array.isArray(candidate.tools) && Array.isArray(candidate.skills)) parsed = candidate;
+  } catch { /* The advanced editor displays its parse error on submission. */ }
   function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError('');
+    event.preventDefault(); setError(''); setChecking(true); setPrepared(undefined);
     const form = new FormData(event.currentTarget);
-    try { void submit('/revisions', { base_revision: base?.revision_id ?? null, reason: value(form, 'reason'), spec: JSON.parse(spec) }); }
-    catch { setError('配置必须是有效 JSON'); }
+    void (async () => {
+      try {
+        const body = { operation_id: crypto.randomUUID(), base_revision: base?.revision_id ?? null,
+          reason: value(form, 'reason'), spec: JSON.parse(spec) };
+        const result = await api<object>(ROOT + '/preview', { method: 'POST', body: JSON.stringify(body) });
+        setPreview(result);
+        setPrepared(body);
+      } catch (failure) { setError((failure as Error).message); }
+      finally { setChecking(false); }
+    })();
   }
   return <details><summary>{base ? '基于此版本创建新候选' : '创建初始候选'}</summary>
-    <form className="agent-filters" onSubmit={save}>
-      <label>候选配置（仅填写 Secret Reference）<textarea rows={18} cols={68} value={spec} required onChange={event => setSpec(event.target.value)} /></label>
-      <label>变更原因<input name="reason" required maxLength={256} /></label><button disabled={busy}>创建不可变修订</button>
+    <form className="agent-filters" onSubmit={save} onChange={() => { setPrepared(undefined); setPreview(undefined); }}>
+      <label>导入完整部署 Spec<input type="file" accept=".json" disabled={busy} onChange={async event => {
+        try {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          if (file.size > 524288) throw new Error('配置文件超过大小限制');
+          const imported = JSON.parse(await file.text());
+          setSpec(JSON.stringify(imported.spec ?? imported, null, 2)); setPreview(undefined); setError('');
+        } catch (failure) { setError((failure as Error).message); }
+      }} /></label>
+      <label>编辑方式<select value={mode} onChange={event => setMode(event.target.value)}><option value="form">表单</option><option value="json">JSON 高级配置</option></select></label>
+      {mode === 'form' && parsed ? <AgentConfigForm spec={parsed} disabled={busy} change={data => { setSpec(JSON.stringify(data, null, 2)); setPreview(undefined); }} /> :
+        <label>候选配置（仅填写 Secret Reference）<textarea rows={18} cols={68} value={spec} required onChange={event => { setSpec(event.target.value); setPreview(undefined); }} /></label>}
+      <details><summary>候选变更预览</summary><pre>{JSON.stringify({ before: base?.spec ?? null, after: parsed }, null, 2)}</pre></details>
+      {preview && <pre role="status">{JSON.stringify(preview, null, 2)}</pre>}
+      <label>变更原因<input name="reason" required maxLength={256} /></label><button disabled={busy || checking}>检查依赖并预览</button>
+      <button type="button" disabled={busy || checking || !prepared} onClick={() => {
+        if (prepared && window.confirm('确认按预览创建不可变修订？')) void submit('/revisions', prepared);
+      }}>创建不可变修订</button>
     </form>{error && <p role="alert">{error}</p>}
   </details>;
 }
@@ -115,9 +148,16 @@ function RevisionDetail({ revision, index, refresh }: { revision: Revision; inde
   const op = useOperation(refresh);
   function approve(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    let externalProof;
+    try { externalProof = value(form, 'external_proof') ? JSON.parse(value(form, 'external_proof')) : undefined; }
+    catch {
+      (event.currentTarget.elements.namedItem('external_proof') as HTMLTextAreaElement).setCustomValidity('证明必须是有效 JSON');
+      event.currentTarget.reportValidity(); return;
+    }
     void op.submit('/revisions/' + revision.revision_id + '/approve', {
       validation_id: revision.validation_id, expected_active_revision: index.active_revision,
-      reason: value(new FormData(event.currentTarget), 'reason'),
+      reason: value(form, 'reason'), external_proof: externalProof,
     });
   }
   const previous = useResource<Revision>(ROOT + '/revisions/' + encodeURIComponent(revision.base_revision ?? revision.revision_id));
@@ -163,6 +203,8 @@ function RevisionDetail({ revision, index, refresh }: { revision: Revision; inde
       <label>验证原因<input name="reason" required maxLength={256} /></label><button disabled={op.busy || !index.write_enabled}>验证候选</button>
     </form>
     <form className="agent-filters" onSubmit={approve}>
+      <label>独立审批签名证明（启用身份分离时填写）<textarea name="external_proof" rows={4}
+        onChange={event => event.currentTarget.setCustomValidity('')} /></label>
       <label>审批依据<input name="reason" required maxLength={256} /></label>
       <button disabled={op.busy || !index.write_enabled || revision.status !== 'validated' || !revision.validation_id}>记录审批</button>
     </form>

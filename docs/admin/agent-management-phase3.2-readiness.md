@@ -1,5 +1,7 @@
 # ShenZhi Agent Management Phase 3.2 验收记录
 
+后续证据见 [2026-11-26 跨容器闭环补验](../dev/records/agent/phase32-chain-acceptance-20261126.md#跨容器任务闭环补验)。该补验覆盖受控 Provider 替身下的多版本接管、Usage 重投去重及正常结算。下文保留当时的未完成事项，当前实现以 [管理控制台维护说明](agent-management-console.md) 为准。
+
 工作区基线 `chore/docker-compose-infra` / `f04e01ac11f95e75f5c29bdfa0e6d4025c94dbc3` 加现有未提交改动。测试项目 `shenzhi-phase32-accept` 使用独立网络、卷和测试环境。生产开关保持默认关闭。
 
 ## 镜像与 Compose

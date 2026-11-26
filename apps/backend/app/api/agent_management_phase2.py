@@ -1,7 +1,7 @@
 """Admin Phase 2 checks, Worker evidence, and independently audited diagnostics."""
 import os
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -14,6 +14,9 @@ from app.core.admin_auth import PATH, require_admin, require_admin_write
 from app.core.errors import BusinessError
 from app.integrations import agent_management as agent
 from app.services import agent_management_audit as audit
+from agent_contracts.management_operations import CheckSummaryRequest
+from agent_contracts.management_operations import ManagementAction
+from pydantic import RootModel
 from .agent_management import response
 
 router = APIRouter(prefix=PATH + '/agent', tags=['agent-management-phase2'], dependencies=[Depends(require_admin)])
@@ -58,6 +61,35 @@ def request_id(request):
         return str(UUID(getattr(request.state, 'request_id', '')))
     except (ValueError, AttributeError, TypeError):
         return str(uuid4())
+
+
+@router.post('/checks/summary')
+async def check_summary(body: CheckSummaryRequest, _principal=Depends(require_admin_write)):
+    from app.services.agent_health_summary import summary
+    return response(RootModel[dict](await summary(body)))
+
+
+@router.get('/alerts')
+async def alerts(offset: Annotated[int, Query(ge=0, le=10000)] = 0):
+    return response(await agent.read('/alerts', RootModel[dict], {'offset': offset}))
+
+
+@router.get('/worker-control/{worker_id}')
+async def worker_control(worker_id: Identifier):
+    return response(await agent.read(agent.management_path('/worker-control/{worker_id}',
+        {'worker_id': worker_id}), RootModel[dict], {}))
+
+
+@router.post('/actions')
+async def action(body: ManagementAction, request: Request, principal=Depends(require_admin_write)):
+    from app.services.agent_management_operations import perform
+    return response(RootModel[dict](await perform(body, principal, request_id(request))))
+
+
+@router.get('/control-status/{kind}/{target_id}')
+async def control_status(kind: Literal['task', 'run'], target_id: Identifier):
+    from app.services.agent_management_operations import cancellation_status
+    return response(RootModel[dict](await cancellation_status(kind, target_id)))
 
 
 @router.post('/checks')

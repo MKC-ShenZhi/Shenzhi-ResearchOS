@@ -339,10 +339,16 @@ async def events(run_id: str, owner_id: str, after_seq: int = 0, db=Depends(get_
 
 
 @router.post('/tasks/{task_id}/cancel', dependencies=[Depends(gateway)])
-async def cancel(task_id: str, owner_id: str, db=Depends(get_session)):
+async def cancel(task_id: str, owner_id: str, expected_run_id: str | None = None, db=Depends(get_session)):
     await repository.get_task(db, task_id, owner_id, v2=True)
-    await repository.request_cancel(db, task_id, owner_id)
+    await repository.request_cancel(db, task_id, owner_id, expected_run_id=expected_run_id)
     return await task_v2(db, task_id, owner_id)
+
+
+@router.post('/tasks/{task_id}/runs/{run_id}/cancel', dependencies=[Depends(gateway)])
+async def cancel_current_run(task_id: str, run_id: str, owner_id: str, db=Depends(get_session)):
+    # A distinct route fails closed against older APIs that cannot enforce this precondition.
+    return await cancel(task_id, owner_id, expected_run_id=run_id, db=db)
 
 
 @router.post('/runs/{run_id}/steer', dependencies=[Depends(gateway)])

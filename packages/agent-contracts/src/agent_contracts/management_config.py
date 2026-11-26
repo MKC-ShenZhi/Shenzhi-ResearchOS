@@ -145,6 +145,14 @@ class Approval(Strict):
     validation_id: UUID
     expected_active_revision: UUID | None
     reason: Note
+    external_proof: dict | None = None
+
+    @model_serializer(mode='wrap')
+    def serialize_proof(self, serializer):
+        fields = serializer(self)
+        if self.external_proof is None:
+            fields.pop('external_proof', None)
+        return fields
 
 
 class ActorApproval(Approval):

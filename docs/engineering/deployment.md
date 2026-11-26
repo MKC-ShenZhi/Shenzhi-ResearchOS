@@ -95,14 +95,14 @@ ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCo
 
 ### 当前实现与部署前必须完成的工作
 
-**目前仍只实现 `local_password`＋管理 Cookie；SSH 隧道免密码模式尚未实现。本节确定部署方向，不表示可以立即删除密码或关闭现有认证。**
+Backend 现支持显式 `ssh_tunnel` 模式及受限 `local_password` 开发模式。正式入口由 `compose.admin.yml` 中的独立静态 Nginx 提供，入口与 Backend 通过受限文件中的共享密钥校验，首次访问建立管理 Cookie。实现和配置见 [Admin 部署说明](../../infra/docker/ADMIN.md)。真实服务器的 SSH、公开代理和访问隔离仍需现场验收。
 
-部署 Agent 必须先完成以下适配，再按上述方式上线：
+部署前按以下项目核对实际环境。
 
-1. 在 Backend 现有 `core/admin_auth.py` 边界实现显式启用的隧道管理模式，并调整前端会话检查与登录入口。未配置或配置错误时仍拒绝访问；不能只删除登录页、将现有密码置空或关闭 local-only 校验。具体配置名以实现后同步更新的 `.env.example` 为准，当前没有可直接启用的免密码环境变量。
-2. 管理 API 需要明确的入口隔离。不能只根据请求来自 loopback 就放行，也不能信任浏览器传来的管理员身份 Header；公共代理必须阻断管理路径，专用管理入口与 Backend 之间的可信校验方式须在实现时落实并测试。
-3. 保留同源写请求校验、Origin/Host 校验及防跨站请求措施，避免其他网页借已开启的本地隧道触发管理操作；套餐发布和批量权益调整继续保留预览／确认与审计。
-4. 为该单管理员配置稳定的审计身份，并同步调整审计查询的身份过滤。SSH 转发本身不会向 HTTP 请求传递已认证的 SSH 用户名，不能从 Header 或来源 IP 伪造逐 SSH 用户归因。
+1. 配置 `ADMIN_AUTH_MODE=ssh_tunnel`、稳定的 `ADMIN_TUNNEL_PRINCIPAL`、独立 `ADMIN_SESSION_SECRET` 及只读 `ADMIN_ENTRY_SECRET_FILE`。配置无效或入口校验失败会拒绝访问。保留 local-only 限制，普通开发继续使用 local_password。
+2. 专用入口校验 Host、Origin 和跨站请求，并覆盖身份 Header。公开代理包含管理路径拒绝规则，Backend 入口密钥不发送浏览器。核对负载均衡、容器映射和 Web BFF 的所有管理路径。
+3. 保留同源写请求校验、Cookie 和预览确认审计，验证隧道首次免密码建会话、退出和密钥轮换失效。
+4. 审计身份由可信部署配置绑定。单管理员提交独立审批者的离线签名证明完成身份分离，审批私钥由独立设备保管。SSH 转发本身不提供 HTTP 用户归因。
 5. 测试覆盖：未开隧道不能访问；公开站点不能访问管理路径；错误入口及跨站写请求被拒绝；开启隧道后免密码访问、发布／分配及审计工作正常；关闭隧道后连接失效。实施认证切换和 SSH 配置变更时保留已有运维连接，验证新连接后再关闭旧连接，避免锁死管理入口。
 
 完成适配后同步维护本节、[Admin README](../../apps/admin/README.md)、环境变量示例及相关认证测试。若任务只涉及部署，也必须检查上述实现状态，不能跳过。

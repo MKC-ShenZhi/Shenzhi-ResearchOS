@@ -192,6 +192,46 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(await repository.claim_run(db,'legacy'))
             self.assertIsNone(await repository.claim_run(db,'v2-worker',v2=True))
 
+    async def test_cancel_preserves_inflight_usage_and_settles_late_completion_once(self):
+        from agent_contracts import ExecutionReport, RunStatus
+        import httpx
+        from unittest.mock import patch
+        from agent_app.main import app
+        from agent_app.infrastructure.database import get_session
+        await self.prepare()
+        await self.start_call()
+        await self.flush_usage()
+        async def session():
+            async with self.agent() as db:
+                yield db
+        token = 'phase4-cancel-gateway-isolated-test'
+        with patch.dict('os.environ', {'AGENT_GATEWAY_TOKEN': token}), patch.dict(app.dependency_overrides, {get_session: session}):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://agent.invalid',
+                    headers={'Authorization': 'Bearer ' + token}) as client:
+                path = f'/internal/v2/tasks/{self.task_id}/runs/'
+                rejected = await client.post(path + 'stale-run/cancel', params={'owner_id': self.grant.owner_id})
+                self.assertEqual(rejected.status_code, 409, rejected.text)
+                for _ in range(2):
+                    response = await client.post(path + self.run.run_id + '/cancel', params={'owner_id': self.grant.owner_id})
+                    self.assertEqual(response.status_code, 200, response.text)
+        async with self.agent() as db:
+            active, cancelled = await repository.heartbeat(db, self.run.run_id, self.worker.worker_id, self.worker.lease_token)
+            self.assertTrue(active and cancelled)
+            await repository.record_report(db, ExecutionReport(run_id=self.run.run_id, task_id=self.task_id,
+                status=RunStatus.CANCELLED, result=None), self.worker.worker_id, self.worker.lease_token)
+        async with self.backend() as db:
+            self.assertEqual((await db.scalar(select(WindowCounterRow))).held, 50)
+        await self.finish_call()
+        await self.flush_usage()
+        await self.flush_usage()
+        async with self.agent() as db:
+            manifest = await self.control.close_manifest(db, self.task_id)
+            self.assertEqual((await db.get(TaskRow, self.task_id)).status, 'cancelled')
+        async with self.backend() as db, db.begin():
+            self.assertEqual(await self.usage.close(db, manifest), 'settled')
+            counter = await db.scalar(select(WindowCounterRow))
+            self.assertEqual((counter.used, counter.held), (10, 0))
+
     async def test_submission_retries_share_original_reservation_and_conflict(self):
         await self.submit()
         original = self.grant

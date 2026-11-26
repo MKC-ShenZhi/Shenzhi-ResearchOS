@@ -22,6 +22,7 @@ from agent_contracts.wire import TaskSubmissionWire
 from app.models.agent_entitlements import WindowCounterRow
 from agent_contracts.v2 import PermitStart
 from app.services.agent_entitlements.service import EntitlementError
+from agent_app.infrastructure.management_models import WorkerControlRow
 
 
 @unittest.skipUnless(os.getenv('AGENT_A_LINE_TEST_DATABASE_URL') and os.getenv('BACKEND_A_LINE_TEST_DATABASE_URL'),
@@ -149,6 +150,7 @@ class PostgresALineTests(suite.ALinePersistenceTests):
                     if index==0:
                         legacy=['agent_tasks','agent_runs','agent_run_events','agent_run_controls','agent_outbox']
                         suite.AgentBase.metadata.create_all(sync,tables=[suite.AgentBase.metadata.tables[n] for n in legacy])
+                        WorkerControlRow.__table__.create(sync)
                     spec=importlib.util.spec_from_file_location('a_line_migration',paths[index])
                     module=importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)

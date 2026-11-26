@@ -1,5 +1,7 @@
 # ShenZhi Admin Console V1
 
+Agent 管理的当前实现见 [控制台维护说明](../../docs/admin/agent-management-console.md)，正式静态部署及 SSH 入口见 [Admin 部署说明](../../infra/docker/ADMIN.md)。`#/agent` 是统一能力与运行管理入口，旧 `#/capabilities` 保留兼容映射。
+
 独立 Vite / React 19 / TypeScript / Tailwind CSS 4 / lucide-react 前端，固定开发端口 3101。无 Web 内部依赖，无独立业务后端。
 
 ## 结构与 API
@@ -81,7 +83,7 @@ Cookie 为 HttpOnly、SameSite=Strict，Path 限制 `/api/v1/admin-console`，HT
 
 生产部署已确定采用 **SSH 密钥＋本地隧道，目标为 Admin 免账号密码**，完整拓扑、命令模板及上线条件见 [部署文档：Admin 管理入口](../../docs/engineering/deployment.md#四admin-管理入口ssh-密钥与隧道)。管理入口只监听服务器 loopback，提供 `dist/` 静态构建并同源代理管理 API；公网入口必须阻断管理路径。两端本机 HTTP 链路之间由 SSH 加密，不对公网提供 HTTP 管理入口，不开放 CORS。
 
-**当前代码仍为 `local_password`＋Cookie，免密码模式尚未实现。** 部署前必须在现有认证边界完成隧道模式、可信入口校验、同源写保护及审计身份适配。不能仅删登录页、关闭 local-only 或把公网代理转换成 loopback 来绕过认证。上文环境变量及启动命令描述的是当前本地开发方式。
+正式入口支持显式 `ssh_tunnel` 模式、可信代理密钥、同源写保护及稳定审计身份，详见 [部署说明](../../infra/docker/ADMIN.md)。上文环境变量及启动命令描述受限本地开发方式，正式服务器仍需验证 SSH 账号、转发约束及公开代理阻断。
 
 ## 数据与后续边界
 
@@ -89,7 +91,7 @@ Cookie 为 HttpOnly、SameSite=Strict，Path 限制 `/api/v1/admin-console`，HT
 
 Model/Skill 来自 Agent `/internal/v1/config`（10 秒超时，不继承环境 HTTP 代理），字段仅使用实际响应；Agent demo 配置会如实展示其 Mock 标签。Tool 目录尚未接入；配置不可用返回 503，不伪装为空。运行配置视图不是授权视图。
 
-正式套餐的 Policy 发布、权益分配、停用/恢复及审计已接入；能力目录本身仍只读，不提供任意能力编辑。请求期间不执行离线 export_capabilities 脚本。原 Web 用户管理页面及菜单入口已移除，管理界面统一使用本工程；旧 Backend `/api/v1/admin/*` API 与 `SHENZHI_ADMIN_USER_IDS` 配置已移除。
+正式套餐的 Policy 发布、权益分配、停用/恢复及审计已接入。Agent 目录提供查询和检查，配置中心通过表单或 JSON 创建不可变候选并完成验证、审批及发布。请求期间不执行离线 export_capabilities 脚本。原 Web 用户管理页面及菜单入口已移除，管理界面统一使用本工程；旧 Backend `/api/v1/admin/*` API 与 `SHENZHI_ADMIN_USER_IDS` 配置已移除。
 
 
 ## 正式套餐与 Admin 操作

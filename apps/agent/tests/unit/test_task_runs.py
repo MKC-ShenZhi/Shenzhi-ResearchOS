@@ -18,6 +18,27 @@ from tests.unit.test_worker_takeover import MemorySession
 
 
 class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancel_expected_run_rejects_retry_race(self):
+        from agent_app.errors import BusinessError
+        original = self.task.current_run_id
+        await self.retry(RunStatus.FAILED)
+        with self.assertRaises(BusinessError) as error:
+            await repository.request_cancel(self.db, self.task.task_id, 'owner', expected_run_id=original)
+        self.assertEqual(error.exception.status, 409)
+        task = await repository.get_task(self.db, self.task.task_id, 'owner')
+        self.assertFalse(task.cancel_requested)
+
+    async def test_cancel_awaiting_input_preserves_checkpoint_report(self):
+        request, token, _ = await repository.claim_run(self.db, 'worker')
+        await repository.record_report(self.db, ExecutionReport(run_id=request.run_id, task_id=request.task_id,
+            status=RunStatus.AWAITING_INPUT, result={'question': 'Continue?'}), 'worker', token)
+        run = self.sql.get(RunRow, request.run_id)
+        report = dict(run.report_json)
+        result = await repository.request_cancel(self.db, request.task_id, 'owner')
+        self.assertEqual(result.status.value, 'cancelled')
+        self.assertEqual(run.report_json, report)
+        self.assertEqual((await repository.request_cancel(self.db, request.task_id, 'owner')).status.value, 'cancelled')
+
     async def asyncSetUp(self):
         self.enterContext(patch.dict('os.environ', {'AGENT_SERVICE_TOKEN': 'test-token'}))
         self.now = datetime(2026, 11, 18, 12)
@@ -104,7 +125,7 @@ class TaskRunHistoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await repository.claim_run(self.db, 'real'))
         self.assertIsNone(await repository.claim_run(self.db, 'demo', demo_mode=True))
         await repository.request_cancel(self.db, real.task_id, 'owner')
-        self.now += timedelta(seconds=46)
+        self.now += timedelta(seconds=repository.WORKER_LEASE_SECONDS + 1)
         taken, _, _ = await repository.claim_run(self.db, 'demo-2', demo_mode=True)
         self.assertEqual(taken.task_id, demo.task_id)
         taken, _, _ = await repository.claim_run(self.db, 'real-2')

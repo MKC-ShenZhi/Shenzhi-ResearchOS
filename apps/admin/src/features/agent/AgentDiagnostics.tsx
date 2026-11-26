@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../api';
 import { useResource } from '../../useResource';
+import { AgentControl } from './AgentOperations';
 
-type Kind = 'provider' | 'model' | 'tool' | 'skill' | 'task' | 'run' | 'worker';
+type Kind = 'provider' | 'model' | 'tool' | 'skill' | 'task' | 'run' | 'worker' | 'alert';
 type Capability = { kind: string; id: string; version: string | null; scope: string; conditions: string[] };
 type Worker = {
   worker_id: string; instance_id: string; state: string; observed_at: string; started_at: string;
@@ -12,6 +13,7 @@ type Worker = {
     registry_digest: string | null; capabilities: Capability[] } | null;
 };
 type Check = {
+  coverage?: string;
   state: string; reason: string; profile: string; observed_at: string; expires_at: string;
   duration_ms: number; budget_tokens: number; source: string; instance_id: string; build_revision: string | null;
   config_revision: string | null; capability_version: string | null;
@@ -144,7 +146,7 @@ export function WorkerEvidence({ workerId }: { workerId?: string }) {
   return <article><h2>Worker 心跳与 Manifest</h2><button onClick={query.refresh}>刷新心跳</button>
     {query.loading && <p role="status">正在读取心跳…</p>}
     {query.error && <p role="alert">{query.error}。可参阅下方租约证据。</p>}
-    {worker && <><WorkerFields worker={worker} />
+    {worker && <><WorkerFields worker={worker} /><AgentControl kind="worker" id={workerId} />
       <p>Build {worker.manifest?.build_revision ?? '未知'} · Config {worker.manifest?.config_revision ?? '未知'} · Runtime {worker.manifest?.runtime_version ?? '未知'}</p>
       <p>Registry {worker.manifest?.registry_digest ?? '未知'}</p>
       <details><summary>能力证据</summary>
@@ -173,28 +175,10 @@ function CheckView({ check }: { check: Check }) {
   }, []);
   return <div>
     <p>{time >= Date.parse(check.expires_at) ? '已过期' : labels[check.state]} · {check.reason} · {check.duration_ms} ms · {stamp(check.observed_at)}</p>
+    {check.coverage !== 'complete' && <p>覆盖尚不完整。缺少声明、当前 Worker 或依赖证据的步骤需逐项核对。</p>}
     <p>来源 {check.source} / {check.instance_id} · Build {check.build_revision ?? '未知'} · Config {check.config_revision ?? '未知'} · 能力版本 {check.capability_version ?? '未知'} · 预算 {check.budget_tokens} Token</p>
     {check.steps.length > 0 && <ul>{check.steps.map(step => <li key={step.name}>{step.name} · {labels[step.state]} {step.reason}</li>)}</ul>}
   </div>;
-}
-
-export function LatestHealth({ kind, id }: { kind: 'provider' | 'model' | 'tool' | 'skill'; id: string }) {
-  const history = useResource<Page<Audit>>(root + '/audit?action=check&limit=1&target_kind=' + kind + '&target_id=' + idPath(id));
-  const [time, setTime] = useState(Date.now);
-  useEffect(() => {
-    const timer = window.setInterval(() => setTime(Date.now()), 5000);
-    return () => window.clearInterval(timer);
-  }, []);
-  if (history.loading) return <span>读取中…</span>;
-  if (history.error) return <span title={history.error}>检查记录不可用</span>;
-  const entry = history.data?.items[0];
-  if (!entry) return <span>暂无检查</span>;
-  const check = entry.check;
-  const expired = check && time >= Date.parse(check.expires_at);
-  return <span title={entry.reason ?? undefined}>
-    {expired ? '已过期' : labels[check?.state ?? entry.state] ?? '未知'}
-    {check && <> · {check.profile}</>}<br />{stamp(check?.observed_at ?? entry.created_at)}
-  </span>;
 }
 
 export function HealthChecks({ kind, id }: { kind: 'provider' | 'model' | 'tool' | 'skill'; id: string }) {

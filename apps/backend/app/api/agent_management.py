@@ -32,6 +32,7 @@ def response(data):
 
 class Context(BaseModel):
     policy_revision: Key | None = None
+    run_id: Key | None = None
 
 
 class SkillDocument(BaseModel):

@@ -1,8 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useResource } from '../../useResource';
 import './agent.css';
-import { AgentAudit, Diagnosis, HealthChecks, LatestHealth, WorkerEvidence } from './AgentDiagnostics';
+import { AgentAudit, Diagnosis, HealthChecks, WorkerEvidence } from './AgentDiagnostics';
+import { AgentAlerts, AgentControl } from './AgentOperations';
 import { AgentConfigCenter } from './AgentConfigCenter';
+import { AgentHealthSummary, CurrentHealth } from './AgentHealthSummary';
+import { AgentOperationsOverview } from './AgentOperationsOverview';
 
 type State = 'yes' | 'no' | 'unknown' | 'not_applicable';
 type Evidence = { state: State; source: string | null; observed_at: string | null; config_revision?: string; worker_id?: string };
@@ -25,6 +28,7 @@ type Task = {
   execution_config_revision?: string | null; execution_wait_reason?: string | null;
 };
 type Call = {
+  failure_reason?: string | null;
   call_id: string; execution_id: string; run_id: string; kind: string; capability_id: string | null;
   capability_version: string | null; status: string; started_at: string | null; duration_ms: number | null;
   usage_status: string; known_tokens: number | null;
@@ -39,6 +43,7 @@ type CatalogEntry = {
   description?: string; source?: string; states: States; latest_call?: Call | null;
   resource_digest?: string | null; integrity?: State; discovered?: State; activated?: State; executable?: State;
   dependencies?: string[] | null; dependency_healthy?: State; resources?: { name: string; size: number; kind: string }[];
+  metadata?: object; activation_contexts?: object[]; runtime_evidence?: object; configuration_source?: string;
 };
 type OverviewData = {
   api: Snapshot & { build_revision: string | null; response_ms: number | null };
@@ -160,6 +165,7 @@ function Overview() {
       <h2>最近持久化 Run</h2><SnapshotInfo value={data.runtime} /><RunTable runs={data.runtime.runs} />
       <h2>时间窗内最近失败</h2><RunTable runs={data.counts.recent_failures} />
     </>}</Resource>
+    <AgentOperationsOverview />
   </>;
 }
 
@@ -206,15 +212,17 @@ function CatalogList({ kind }: { kind: Catalog }) {
     }}><label>搜索 ID<input name="search" maxLength={100} /></label>
       <label>ID 排序<select name="order"><option value="asc">升序</option><option value="desc">降序</option></select></label>
       <button>搜索</button></form>
-    <Paginated<CatalogEntry> key={kind + query} path={kind + '?' + query}>{items => <Table
+    <Paginated<CatalogEntry> key={kind + query} path={kind + '?' + query}>{items => <AgentHealthSummary targets={items.map(item => ({
+      kind: kind === 'providers' ? 'provider' : kind === 'models' ? 'model' : kind === 'tools' ? 'tool' : 'skill', target_id: entryId(kind, item),
+    }))}><Table
       headers={['ID', '名称', 'Provider / 来源', '已注册', '已加载', '最近检查']}
       rows={items.map(item => {
         const id = entryId(kind, item);
         return { key: id, cells: [<a href={link(kind, id)}>{id}</a>, item.label ?? item.name ?? id,
           kind === 'models' && item.provider_id ? <a href={link('providers', item.provider_id)}>{item.provider_id}</a> : item.source ?? item.protocol,
           flag(item.states.registered?.state), flag(item.states.loaded?.state),
-          <LatestHealth kind={kind === 'providers' ? 'provider' : kind === 'models' ? 'model' : kind === 'tools' ? 'tool' : 'skill'} id={id} />] };
-      })} />}
+          <CurrentHealth kind={kind === 'providers' ? 'provider' : kind === 'models' ? 'model' : kind === 'tools' ? 'tool' : 'skill'} id={id} />] };
+      })} /></AgentHealthSummary>}
     </Paginated>
   </>;
 }
@@ -222,10 +230,11 @@ function CatalogList({ kind }: { kind: Catalog }) {
 function SkillResources({ entry }: { entry: CatalogEntry }) {
   const [open, setOpen] = useState(false);
   return <>
-    <Fields rows={[['来源', entry.source], ['资源摘要', entry.resource_digest], ['完整性', flag(entry.integrity)],
+    <Fields rows={[['来源', entry.configuration_source ?? entry.source], ['资源摘要', entry.resource_digest], ['完整性', flag(entry.integrity)],
       ['已发现', flag(entry.discovered)], ['已激活', flag(entry.activated)], ['允许执行第一方工厂', flag(entry.executable)],
       ['依赖', entry.dependencies?.join('、')], ['依赖健康', flag(entry.dependency_healthy)]]} />
     <h2>References 与 Scripts</h2>
+    <details><summary>Metadata 与激活上下文</summary><pre>{JSON.stringify({ metadata: entry.metadata, activations: entry.activation_contexts }, null, 2)}</pre></details>
     <Table headers={['文件', '类型', '字节']} rows={(entry.resources ?? []).map(row =>
       ({ key: row.name, cells: [row.name, row.kind, row.size] }))} />
     <button onClick={() => setOpen(!open)} disabled={!entry.resource_digest || entry.integrity !== 'yes'}>
@@ -240,12 +249,18 @@ function SkillResources({ entry }: { entry: CatalogEntry }) {
 
 function CatalogDetail({ kind, id }: { kind: Catalog; id: string }) {
   const [policy, setPolicy] = useState('');
+  const [run, setRun] = useState('');
+  const params = new URLSearchParams();
+  if (policy) params.set('policy_revision', policy);
+  if (run && kind === 'tools') params.set('run_id', run);
   return <><h1>{catalogNames[kind]} 详情</h1><p><a href={'#/agent/' + kind}>返回列表</a></p>
     <p><a href="#/agent/config">配置候选、版本差异与发布</a></p>
     {kind !== 'providers' && <form className="agent-filters" onSubmit={event => {
       event.preventDefault(); setPolicy(String(new FormData(event.currentTarget).get('policy_revision') ?? '').trim());
     }}><label>对照已发布的 Policy 版本<input name="policy_revision" maxLength={255} /></label><button>查询授权匹配</button></form>}
-    <Resource<CatalogEntry> path={kind + '/' + segment(id) + (policy ? '?policy_revision=' + segment(policy) : '')}
+    {kind === 'tools' && <form onSubmit={event => { event.preventDefault(); setRun(String(new FormData(event.currentTarget).get('run_id') ?? '').trim()); }}>
+      <label>Run 上下文<input name="run_id" maxLength={255} /></label><button>查询运行能力</button></form>}
+    <Resource<CatalogEntry> path={kind + '/' + segment(id) + '?' + params}
       observed={item => item.states.registered?.observed_at}>
       {item => <>
         <h2>{item.label ?? item.name ?? id}</h2>{item.description && <p>{item.description}</p>}
@@ -263,6 +278,7 @@ function CatalogDetail({ kind, id }: { kind: Catalog; id: string }) {
           ['组装条件', item.conditions?.join('、') || '—'], ['Latent', flag(item.latent)], ['当前 Run 可调用', flag(item.run_callable)],
           ['能力版本', item.capability_version], ['Schema Digest', item.schema_digest]]} />
           <h2>参数 Schema</h2>{item.parameters_schema ? <pre className="agent-preview">{JSON.stringify(item.parameters_schema, null, 2)}</pre> : <p>{UNKNOWN}</p>}
+          {item.runtime_evidence && <pre>{JSON.stringify(item.runtime_evidence, null, 2)}</pre>}
           <h2>最近一次已观测调用</h2>{item.latest_call ? <CallTable calls={[item.latest_call]} /> : <p>{UNKNOWN}</p>}</>}
         {kind === 'skills' && <SkillResources entry={item} />}
         {(kind === 'providers' || kind === 'models') && <>
@@ -281,13 +297,13 @@ function CatalogDetail({ kind, id }: { kind: Catalog; id: string }) {
 }
 
 function CallTable({ calls }: { calls: Call[] }) {
-  return <Table headers={['调用 ID', '能力', '版本', 'Execution', 'Run', '状态', '开始时间', '耗时 ms', '用量状态', '已知 Token']}
+  return <Table headers={['调用 ID', '能力', '版本', 'Execution', 'Run', '状态', '开始时间', '耗时 ms', '用量状态', '已知 Token', '失败原因']}
     rows={calls.map(call => ({ key: call.call_id, cells: [call.call_id,
       call.capability_id && call.kind !== 'unknown'
         ? <a href={link(call.kind === 'tool' ? 'tools' : call.kind === 'skill' ? 'skills' : 'models',
           call.kind === 'tool' ? call.capability_id : call.capability_id.replace(/^[^:]*:/, ''))}>{call.capability_id}</a>
         : call.capability_id, call.capability_version, call.execution_id, <a href={link('runs', call.run_id)}>{call.run_id}</a>,
-      call.status, date(call.started_at), call.duration_ms, call.usage_status, call.known_tokens] }))} />;
+        call.status, date(call.started_at), call.duration_ms, call.usage_status, call.known_tokens, call.failure_reason ?? '未知'] }))} />;
 }
 
 const taskFilters = [
@@ -328,6 +344,7 @@ function TaskDetail({ id }: { id: string }) {
       <div className="agent-grid"><article><h2>Agent 观测用量</h2><UsageSummary usage={task.observed_usage} /></article>
         <article><h2>Backend 核验与入账</h2><UsageSummary usage={task.backend_usage} /></article></div>
       <Diagnosis kind="task" id={id} />
+      <AgentControl kind="task" id={id} />
       <h2>Run 历史</h2><Paginated<Run> path={path + '/runs'}>{items => <RunTable runs={items} />}</Paginated>
     </>}</Resource>
   </>;
@@ -343,6 +360,7 @@ function RunDetail({ id }: { id: string }) {
         ['Execution 已封闭', run.execution ? (run.execution.sealed ? '是' : '否') : UNKNOWN]]} />
       <RunTable runs={[run]} />
       <Diagnosis kind="run" id={id} />
+      <AgentControl kind="run" id={id} />
       <h2>Execution 历史</h2>
       <Table headers={['Execution ID', 'Worker', '已封闭']} rows={run.executions.map(item => ({
         key: item.execution_id, cells: [item.execution_id, <a href={link('workers', item.worker_id)}>{item.worker_id}</a>,
@@ -369,7 +387,7 @@ export function AgentManagement({ route }: { route: string }) {
   return <div className="agent-management">
     <nav aria-label="Agent 管理" className="page-navigation">
       {([['', '运行总览'], ['providers', 'Provider'], ['models', 'Model'], ['tools', 'Tools'], ['skills', 'Skills'],
-        ['tasks', 'Task / Run'], ['audit', '管理审计'], ['config', '配置中心']] as const).map(([value, title]) => <a key={value} href={'#/agent' + (value ? '/' + value : '')}
+        ['tasks', 'Task / Run'], ['workers', 'Workers'], ['alerts', '告警'], ['audit', '管理审计'], ['config', '配置中心']] as const).map(([value, title]) => <a key={value} href={'#/agent' + (value ? '/' + value : '')}
         aria-current={(section ?? '') === value ? 'page' : undefined}>{title}</a>)}
     </nav>
     {catalog ? (id ? <CatalogDetail key={route} kind={catalog} id={id} /> : <CatalogList key={route} kind={catalog} />)
@@ -377,6 +395,7 @@ export function AgentManagement({ route }: { route: string }) {
       : section === 'runs' && id ? <RunDetail key={route} id={id} />
       : section === 'workers' ? <Workers key={route} id={id} />
       : section === 'audit' ? <AgentAudit key={route} id={id} />
+      : section === 'alerts' ? <AgentAlerts />
       : section === 'config' ? <AgentConfigCenter key={route} route={route} /> : <Overview />}
   </div>;
 }

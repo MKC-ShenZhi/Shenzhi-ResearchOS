@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query, Request
+import os
 from app.core import admin_auth
 from app.core.database import session_scope
 from app.core.responses import ok
@@ -27,8 +28,15 @@ def logout(_admin=Depends(admin_auth.require_admin)):
 
 
 @router.get('/auth/me')
-def me(username=Depends(admin_auth.require_admin)):
-    return ok({'username': username})
+def me(request: Request):
+    if os.getenv('ADMIN_AUTH_MODE') == 'ssh_tunnel':
+        username, token, ttl = admin_auth.tunnel_session(request)
+        response = ok({'username': username, 'mode': 'ssh_tunnel'})
+        response.set_cookie(admin_auth.COOKIE, token, max_age=ttl, httponly=True, samesite='strict',
+                            secure=request.url.scheme == 'https', path=admin_auth.PATH)
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    return ok({'username': admin_auth.require_admin(request), 'mode': 'local_password'})
 
 
 @router.get('/users')

@@ -15,6 +15,7 @@ from agent_app.control.metering import GateDenied, now_utc
 from agent_app.errors import BusinessError
 from agent_app.execution.metering import controlled_resource_digest, model_identity, tool_identity
 from agent_app.extensions.skills import default_store, read_skill_tool
+from agent_app.extensions.skills import _parse_frontmatter
 from agent_app.extensions.workspace import WORKSPACE_ROOT, Workspace, build_workspace_tools
 from agent_app.integrations.llm.registry import ResolvedModel
 from agent_app.integrations.llm.resolver import load_registry
@@ -110,10 +111,12 @@ def skill_catalog():
 
 def skill_summary(skill):
     resources = []
+    metadata = None
     integrity = 'unknown'
     try:
         integrity = 'yes' if controlled_resource_digest(skill.root) == skill.resource_content_digest else 'no'
         if integrity == 'yes':
+            metadata, _ = _parse_frontmatter(skill.path.read_text(encoding='utf-8'))
             for folder, kind in [('references', 'reference'), ('scripts', 'script')]:
                 for path in sorted((skill.root / folder).rglob('*')):
                     if path.is_file() and len(resources) < 100:
@@ -123,10 +126,16 @@ def skill_summary(skill):
         integrity = 'no'
     return Skill(
         name=skill.name, description=skill.description[:1024],
-        source='builtin' if skill.executable else 'vendor',
+        source='unknown' if os.getenv('AGENT_EXECUTION_CONFIG_FILE') else 'builtin' if skill.executable else 'vendor',
+        configuration_source='immutable_artifact' if os.getenv('AGENT_EXECUTION_CONFIG_FILE') else 'skill_store',
         resource_digest=skill.resource_content_digest, integrity=integrity,
         discovered='yes', activated='unknown', executable='yes' if skill.executable else 'no',
         dependency_healthy='unknown', resources=resources,
+        metadata={key: metadata[key] for key in ('name', 'description', 'references', 'scripts', 'dependencies')
+                  if key in metadata} if isinstance(metadata, dict) else None,
+        dependencies=metadata.get('dependencies') if isinstance(metadata, dict) and
+            isinstance(metadata.get('dependencies'), list) and
+            all(isinstance(item, str) for item in metadata['dependencies']) else None,
         states=States(registered=observed('yes', 'api_skill_store'), loaded=observed('yes', 'api_skill_store')),
     )
 

@@ -32,6 +32,11 @@ def write_permission(request: Request):
     return principal
 
 
+@router.post('/preview')
+async def preview(body: Candidate, _principal=Depends(require_admin_write)):
+    return response(ManagementEvidence(await config.preview(body)))
+
+
 @router.get('/fleet')
 async def fleet(worker_id: str | None = None, build: str | None = None, config_revision: str | None = None,
                 since: AwareDatetime | None = None, until: AwareDatetime | None = None,

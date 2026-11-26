@@ -1,0 +1,75 @@
+name: Agent management
+on:
+  pull_request:
+  push:
+    branches: [dev, main, feat/agent-management-console]
+permissions:
+  contents: read
+jobs:
+  management:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: phase4
+          POSTGRES_PASSWORD: phase4-ci-isolated-test-only
+          POSTGRES_DB: phase3accept
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U phase4" --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install uv==0.13.6
+      - run: npm install --global pnpm@11.0.0
+      - run: pnpm --dir apps/admin install --frozen-lockfile
+      - run: pnpm --dir apps/admin build
+      - run: uv sync --frozen
+        working-directory: apps/backend
+      - run: uv sync --frozen
+        working-directory: apps/agent
+      - name: Backend authentication and management regressions
+        run: uv run --no-sync python -m unittest tests.test_admin_console tests.test_admin_tunnel tests.test_agent_entitlements tests.test_agent_gateway_transport -q
+        working-directory: apps/backend
+      - name: Shared contracts
+        run: uv run --no-sync python -m unittest discover -s ../../packages/agent-contracts/tests -q
+        working-directory: apps/agent
+      - name: Isolated PostgreSQL migrations
+        env:
+          AGENT_DATABASE_URL: postgresql+asyncpg://phase4:phase4-ci-isolated-test-only@127.0.0.1:5432/phase3accept
+        run: |
+          uv run --no-sync alembic upgrade head
+          uv run --no-sync alembic downgrade 0007_worker_lifecycle
+          uv run --no-sync alembic upgrade head
+        working-directory: apps/agent
+      - name: PostgreSQL management operations
+        env:
+          PHASE4_TEST_DATABASE_URL: postgresql+asyncpg://phase4:phase4-ci-isolated-test-only@127.0.0.1:5432/phase3accept
+          SHENZHI_PHASE3_AGENT_TEST_DSN: postgresql+asyncpg://phase4:phase4-ci-isolated-test-only@127.0.0.1:5432/phase3accept?ssl=disable
+        run: uv run --no-sync python -m pytest -q --tb=short tests/test_management_config.py tests/integration/test_management_operations_postgres.py
+        working-directory: apps/agent
+      - name: Agent regressions
+        run: uv run --no-sync python -m pytest -q --tb=short
+        working-directory: apps/agent
+      - name: Browser management acceptance
+        run: |
+          export SHENZHI_TEST_CHROME="$(command -v google-chrome)"
+          test -n "$SHENZHI_TEST_CHROME"
+          uv run --no-sync python -m pytest -q --tb=short tests/test_management_bridge.py tests/test_management_phase2.py tests/test_management_operations.py -k admin_browser
+        working-directory: apps/agent
+      - name: Check whitespace
+        run: git diff --check
+      - name: Production Admin image
+        run: docker build --target production -f apps/admin/Dockerfile -t shenzhi-admin-ci .
+      - name: Production Compose schema
+        env:
+          POSTGRES_PASSWORD: phase4-ci-isolated-test-only
+          ADMIN_TUNNEL_PRINCIPAL: acceptance
+          ADMIN_ENTRY_SECRET_PATH: /tmp/phase4-ci-entry
+        run: docker compose --env-file /dev/null -f infra/docker/compose.yml -f infra/docker/compose.admin.yml --profile admin config --no-env-resolution --quiet

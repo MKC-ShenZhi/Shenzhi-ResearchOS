@@ -11,6 +11,7 @@ from agent_contracts.management_config import (
     ActorAdmissionChange, ActorApproval, ActorCandidate, ActorReconcile, ActorSwitch, ActorValidate, CapabilityVersion, Proof,
 )
 from agent_contracts.management_phase2 import ProbeRequest
+from agent_contracts.management_operations import ActorManagementAction
 from agent_app import config_deployment as config
 from agent_app.config_artifact_history import artifact_history
 from agent_app.control.metering import GateDenied, now_utc
@@ -31,6 +32,12 @@ def distinct_role():
 
 router = APIRouter(prefix='/internal/v2/management/config', route_class=NoStoreRoute,
                    dependencies=[Depends(role('AGENT_CONFIG_MANAGEMENT_TOKEN')), Depends(distinct_role)])
+
+
+@router.post('/actions')
+async def management_action(body: ActorManagementAction):
+    from agent_app.management_operations import act
+    return result(await act(body))
 
 
 @router.get('/fleet')

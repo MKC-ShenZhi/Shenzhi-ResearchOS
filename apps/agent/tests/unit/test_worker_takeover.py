@@ -30,15 +30,19 @@ class MemorySession:
 
     def __init__(self, session):
         self.session = session
+        self.bind = session.bind
 
     def add(self, row):
         self.session.add(row)
 
-    async def execute(self, statement):
-        return self.session.execute(statement)
+    async def execute(self, statement, params=None):
+        return self.session.execute(statement, params)
 
-    async def scalar(self, statement):
-        return self.session.scalar(statement)
+    async def scalar(self, statement, params=None):
+        return self.session.scalar(statement, params)
+
+    async def get(self, model, identity, **kwargs):
+        return self.session.get(model, identity, **kwargs)
 
     async def scalars(self, statement):
         return self.session.scalars(statement)
@@ -72,7 +76,7 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         self.task = await repository.submit(self.db, TaskSubmission(owner_id='owner', prompt='run'))
 
     def expire_lease(self):
-        self.now += timedelta(seconds=46)
+        self.now += timedelta(seconds=repository.WORKER_LEASE_SECONDS + 1)
 
     async def emit(self, claim, worker, seq, *, text='partial'):
         run = claim['run']

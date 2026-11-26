@@ -61,7 +61,7 @@ def entry(row):
                       created_at=aware(row.created_at), state=state, reason=reason,
                       check=row.outcome if row.action == 'check' else None,
                       diagnostic=row.outcome if row.action == 'diagnose' else None,
-                      config_event=row.outcome if row.action == 'config' else None)
+                      config_event=row.outcome if row.action in ('config', 'control') else None)
 
 
 async def lock(db):

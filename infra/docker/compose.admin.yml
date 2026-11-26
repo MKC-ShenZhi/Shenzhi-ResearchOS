@@ -1,0 +1,49 @@
+# Production management entry. Run with compose.yml and the admin profile.
+services:
+  agent-api:
+    environment:
+      AGENT_MANAGEMENT_INSPECTOR_ENABLED: 'true'
+  auth-migrate:
+    profiles: [admin]
+  backend-migrate:
+    profiles: [admin]
+  backend:
+    profiles: [admin]
+    ports:
+      - 127.0.0.1:3101:3101
+    environment:
+      ADMIN_AUTH_MODE: ssh_tunnel
+      ADMIN_AUTH_LOCAL_ONLY: 'true'
+      ADMIN_ENTRY_SECRET_FILE: /run/secrets/admin_entry
+      ADMIN_TUNNEL_PRINCIPAL: ${ADMIN_TUNNEL_PRINCIPAL:?Set a stable administrator identity}
+      ADMIN_TUNNEL_ALLOWED_HOSTS: 127.0.0.1:3101 localhost:3101
+    secrets:
+      - admin_entry
+  admin:
+    profiles: [admin]
+    image: ${IMAGE_PREFIX:-shenzhi}/admin:${IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/admin/Dockerfile
+      target: production
+    network_mode: service:backend
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:uid=101,gid=101,mode=0700
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      ADMIN_ENTRY_SECRET_FILE: /run/secrets/admin_entry
+    secrets:
+      - admin_entry
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:3101/health']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+secrets:
+  admin_entry:
+    file: ${ADMIN_ENTRY_SECRET_PATH:?Set an absolute path to a restricted entry secret file}

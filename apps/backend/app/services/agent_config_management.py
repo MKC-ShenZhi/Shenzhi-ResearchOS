@@ -21,6 +21,51 @@ from .agent_config_barrier import barrier
 MAX_EVIDENCE_ROWS = 5000
 
 
+async def preview(candidate):
+    """Inventory references without mutating the active configuration."""
+    from agent_contracts.management_config import RevisionView
+    before = await read('/revisions/' + str(candidate.base_revision), RevisionView) if candidate.base_revision else None
+    old = {model.model_id: model for model in before.spec.models} if before else {}
+    current = {model.model_id: model for model in candidate.spec.models}
+    old_providers = {provider.provider_id: provider for provider in before.spec.providers} if before else {}
+    providers = {provider.provider_id: provider for provider in candidate.spec.providers}
+    changed = {'model:' + key for key, model in old.items() if key not in current or current[key] != model
+               or old_providers.get(model.provider_id) != providers.get(model.provider_id)}
+    policies, owners = [], 0
+    try:
+        async with asyncio.timeout(3), get_session_factory()() as db:
+            rows = (await db.scalars(select(EntitlementPolicyRow).limit(MAX_EVIDENCE_ROWS + 1))).all()
+            if len(rows) > MAX_EVIDENCE_ROWS:
+                raise BusinessError(20001, 'DEPENDENCY_SCAN_LIMIT', 409)
+            for row in rows:
+                if changed and row.approved and not isinstance(row.payload.get('permission_snapshot', {}).get('capabilities'), list):
+                    raise BusinessError(10002, 'DEPENDENCY_EVIDENCE_UNAVAILABLE', 503)
+                capabilities = row.payload.get('permission_snapshot', {}).get('capabilities', [])
+                if any(item['capability_id'] in changed for item in capabilities):
+                    policies.append(row.policy_revision)
+            if policies:
+                owners = len((await db.scalars(select(OwnerEntitlementRow.owner_id).where(
+                    OwnerEntitlementRow.policy_revision.in_(policies)).limit(MAX_EVIDENCE_ROWS + 1))).all())
+            revisions = (await db.scalars(select(GrantRevisionRow.payload).join(GrantRootRow,
+                and_(GrantRootRow.grant_id == GrantRevisionRow.grant_id,
+                     GrantRootRow.current_revision == GrantRevisionRow.revision))
+                .where(GrantRootRow.status != 'closed').limit(MAX_EVIDENCE_ROWS + 1))).all()
+            if len(revisions) > MAX_EVIDENCE_ROWS or owners > MAX_EVIDENCE_ROWS:
+                raise BusinessError(20001, 'DEPENDENCY_SCAN_LIMIT', 409)
+            grants = sum(any(item['capability_id'] in changed for item in row['capabilities']) for row in revisions)
+    except (SQLAlchemyError, TimeoutError, RuntimeError, OSError, KeyError, TypeError):
+        raise BusinessError(10002, 'DEPENDENCY_EVIDENCE_UNAVAILABLE', 503) from None
+    from pydantic import RootModel
+    clients = await agent.request('POST', '/model-references', RootModel[dict],
+                                 payload={'model_ids': [key.removeprefix('model:') for key in changed]})
+    return {'changed_model_ids': sorted(changed), 'referencing_policies': policies,
+            'referencing_owners': owners, 'open_grants': grants,
+            'defaults_before': before.spec.defaults if before else {}, 'defaults_after': candidate.spec.defaults,
+            'client_references': clients.root,
+            'required_action': 'Validate candidate and review client references before publishing',
+            'secret_rotation': 'Deployment injection and real Worker verification required'}
+
+
 def incompatible(capabilities, expected):
     return any(expected.get(item['capability_id']) != item['capability_version'] for item in capabilities)
 

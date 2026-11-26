@@ -40,6 +40,24 @@ ACTOR = 'local-admin:fixture'
 
 
 class ConfigTests(unittest.IsolatedAsyncioTestCase):
+    async def test_secret_reference_rotation_keeps_old_registry_and_rejects_missing_injection(self):
+        original = self.candidate().spec
+        rotated = original.model_copy(update={'providers': [original.providers[0].model_copy(
+            update={'secret_ref': 'AGENT_PROVIDER_SECRET_ROTATED'})]})
+        env = {'AGENT_CONFIG_PROVIDER_ORIGINS': 'https://provider.example.invalid',
+               'AGENT_CONFIG_SECRET_REFS': 'AGENT_PROVIDER_SECRET_FIXTURE AGENT_PROVIDER_SECRET_ROTATED',
+               'AGENT_PROVIDER_SECRET_FIXTURE': 'isolated-old-running-key',
+               'AGENT_PROVIDER_SECRET_ROTATED': 'isolated-new-running-key'}
+        with patch.dict(os.environ, env):
+            old = registry_for(original)
+            new = registry_for(rotated)
+            self.assertNotEqual(old.resolve_model(MODEL).key, new.resolve_model(MODEL).key)
+            self.assertNotIn('isolated-new-running-key', json.dumps(new.public_models('agent')))
+            with patch.dict(os.environ, {'AGENT_PROVIDER_SECRET_ROTATED': ''}):
+                with self.assertRaises(BusinessError):
+                    registry_for(rotated)
+            self.assertEqual(old.resolve_model(MODEL).key, 'isolated-old-running-key')
+
     async def asyncSetUp(self):
         server = os.getenv('SHENZHI_PHASE3_AGENT_TEST_DSN', '')
         if server and ('@127.0.0.1:' not in server or '/phase3accept?' not in server):

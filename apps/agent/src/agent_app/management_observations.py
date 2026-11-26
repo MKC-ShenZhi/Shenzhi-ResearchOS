@@ -88,7 +88,7 @@ def task_item(row, run=None, usage=None):
     request = row.request_json
     requested = request.get('model')
     mode = request.get('mode')
-    return Task(task_id=row.task_id, owner_id=row.owner_id, created_at=utc(row.created_at),
+    return Task(task_id=row.task_id, owner_id=row.owner_id, created_at=utc(row.created_at), cancel_requested=row.cancel_requested,
                 status=row.status if row.status in TaskStatus._value2member_map_ else 'unknown',
                 mode=mode if mode in ('fast', 'deep') else None,
                 requested_model=requested[:255] if isinstance(requested, str) else None,
@@ -256,7 +256,61 @@ def call_item(row, run_id, payload):
                 capability_id=identity.get('capability_id'), capability_version=fact.get('capability_version'),
                 status=row.state, started_at=started, duration_ms=max(0, int((ended-started).total_seconds()*1000))
                 if started and ended else None, usage_status=usage,
-                known_tokens=tokens(payload) if payload and kind == 'model' else None)
+                known_tokens=tokens(payload) if payload and kind == 'model' else None,
+                failure_reason=payload.get('outcome') if payload and payload.get('outcome') in
+                    ('failed', 'timed_out', 'cancelled') else None)
+
+
+async def tool_runtime(tool_id, run_id):
+    from agent_app.infrastructure.management_models import WorkerRuntimeRow, WorkerSnapshotRow
+    async with reading() as db:
+        run = await db.get(RunRow, run_id)
+        if not run:
+            raise GateDenied('RUN_NOT_FOUND', 404)
+        evidence = await db.get(WorkerRuntimeRow, (run_id, run.worker_id)) if run.worker_id else None
+        worker = await db.get(WorkerSnapshotRow, run.worker_id) if run.worker_id else None
+        if not evidence:
+            return dict(reason='RUNTIME_NOT_REPORTED', latent='unknown', run_callable='unknown')
+        fresh = bool(worker and worker.instance_id == evidence.instance_id and worker.active_run_id == run_id
+                     and run.status == 'running' and run.lease_expires_at and utc(run.lease_expires_at) > now_utc()
+                     and (now_utc() - utc(evidence.observed_at)).total_seconds() < 45)
+        present = tool_id in evidence.enabled_tools
+        latent = tool_id in evidence.latent_tools if evidence.latent_tools is not None else None
+        call = await db.scalar(select(CallRow).join(ExecutionRow, ExecutionRow.execution_id == CallRow.execution_id)
+            .where(ExecutionRow.run_id == run_id, ExecutionRow.worker_id == run.worker_id,
+                   ExecutionRow.lease_token == run.lease_token,
+                   CallRow.start_fact['capability_id'].as_string() == tool_id)
+            .order_by(CallRow.call_id.desc()).limit(1))
+        callable_state = 'unknown'
+        if fresh and not present and (latent or evidence.complete):
+            callable_state = 'no'
+        elif fresh and call and call.start_fact:
+            callable_state = 'yes'
+        return dict(worker_id=evidence.worker_id, instance_id=evidence.instance_id,
+                    run_id=run_id, observed_at=utc(evidence.observed_at).isoformat(),
+                    manifest_digest=evidence.manifest_digest, source='authenticated_worker_runtime',
+                    latent=('yes' if latent else 'no') if fresh and latent is not None else 'unknown',
+                    loaded=('yes' if present or latent else 'no' if evidence.complete else 'unknown') if fresh else 'unknown',
+                    run_callable=callable_state,
+                    call_id=call.call_id if fresh and call else None,
+                    call_observed_at=call.start_fact.get('started_at') if fresh and call and call.start_fact else None,
+                    reason=('OBSERVED_CALL_START' if callable_state == 'yes' else 'PERMIT_REQUIRED_AT_CALL_START')
+                    if fresh else 'RUNTIME_EVIDENCE_STALE')
+
+
+async def skill_contexts(name, resource_digest):
+    identity = SkillIdentity(schema_version=1, kind='skill', capability_id='skill:' + name,
+                             resource_content_digest=resource_digest, dependency_digests=[])
+    version = digest(identity.model_dump(mode='json'))
+    async with reading() as db:
+        rows = (await db.execute(select(CallRow.call_id, CallRow.execution_id, RunRow.run_id,
+            RunRow.worker_id, CallRow.state).join(ExecutionRow, ExecutionRow.execution_id == CallRow.execution_id)
+            .join(RunRow, RunRow.run_id == ExecutionRow.run_id).where(
+                CallRow.start_fact['capability_id'].as_string() == 'skill:' + name,
+                CallRow.start_fact['capability_version'].as_string() == version)
+            .order_by(CallRow.call_id.desc()).limit(20))).all()
+        return [dict(call_id=row.call_id, execution_id=row.execution_id, run_id=row.run_id,
+                     worker_id=row.worker_id, state=row.state, capability_version=version) for row in rows]
 
 
 def call_query():

@@ -171,6 +171,9 @@ async def claim_run(session: AsyncSession, worker_id: str, lease_seconds: int = 
     import os
     if os.getenv('AGENT_CONFIG_WORKER_ROLE') == 'candidate':
         return None
+    from agent_app.management_operations import draining
+    if await draining(session, worker_id):
+        return None
     scheduling = mode()
     evidence = await config_scheduling.worker_evidence(
         session, worker_id, worker_instance, worker_report_token
@@ -381,13 +384,21 @@ async def record_report(session: AsyncSession, report: ExecutionReport,
     await session.commit()
 
 
-async def request_cancel(session: AsyncSession, task_id: str, owner_id: str) -> TaskRecord:
+async def request_cancel(session: AsyncSession, task_id: str, owner_id: str, *, expected_run_id: str | None = None) -> TaskRecord:
     task_row = await session.scalar(select(TaskRow).where(
         TaskRow.task_id == task_id, TaskRow.owner_id == owner_id).with_for_update().execution_options(populate_existing=True))
     if task_row is None:
         raise BusinessError(20004, '任务不存在', 404)
+    if expected_run_id is not None and task_row.current_run_id != expected_run_id:
+        raise BusinessError(20009, '目标 Run 已不是任务当前尝试', 409)
     if task_row.status in {TaskStatus.COMPLETED.value, TaskStatus.FAILED.value,
-                           TaskStatus.CANCELLED.value, TaskStatus.AWAITING_INPUT.value}:
+                           TaskStatus.CANCELLED.value}:
+        return _task_record(task_row)
+    if task_row.status == TaskStatus.AWAITING_INPUT.value:
+        # The checkpoint Run is already sealed. Preserve its immutable report.
+        task_row.status = TaskStatus.CANCELLED.value
+        task_row.cancel_requested = True
+        await session.commit()
         return _task_record(task_row)
     now = _now()
     if task_row.status == TaskStatus.QUEUED.value:

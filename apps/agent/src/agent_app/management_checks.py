@@ -159,7 +159,7 @@ async def provider_model(request, steps):
         except Exception:
             pass
     if request.profile == 'static':
-        return version
+        return version if model else digest(provider.spec.model_dump(mode='json'))
     if model is None and request.profile != 'network':
         raise ProbeFailure('CHECK_PROFILE_UNSUPPORTED', 'unsupported')
     if model and request.profile == 'streaming' and not model.capabilities.streaming:
@@ -170,7 +170,7 @@ async def provider_model(request, steps):
     steps.append(CheckStep(name='network_and_authentication', state='pass'))
     if request.profile != 'network':
         steps.append(CheckStep(name=request.profile, state='pass'))
-    return version
+    return version if model else digest(provider.spec.model_dump(mode='json'))
 
 
 async def check_backend_dependency(steps):
@@ -198,13 +198,24 @@ def tool_check(target, steps):
     if not item:
         raise ProbeFailure('TOOL_CHECK_UNSUPPORTED', 'unsupported')
     steps.append(CheckStep(name='tool_parameters', state='pass' if item.schema_digest else 'unknown'))
+    if target == 'tool:web_search':
+        configured = bool(os.getenv('TAVILY_API_KEY', '').strip() or os.getenv('SEARXNG_BASE_URL', '').strip())
+        steps.append(CheckStep(name='search_provider_configuration', state='pass' if configured else 'unknown',
+                               reason=None if configured else 'SEARCH_PROVIDER_NOT_CONFIGURED'))
+        if configured:
+            return item.capability_version
+    if target == 'tool:read_skill':
+        if not default_store().names():
+            raise ProbeFailure('SKILL_STORE_EMPTY')
+        steps.append(CheckStep(name='skill_store', state='pass'))
+        return item.capability_version
     if target in {'tool:read_file', 'tool:write_file', 'tool:edit_file', 'tool:draw_chart'}:
         result = workspace_health()
         steps.append(CheckStep(name='workspace_readability', state='pass' if result.readable == 'yes' else 'fail'))
         if result.readable != 'yes':
             raise ProbeFailure('WORKSPACE_DEPENDENCY_UNAVAILABLE')
-        if target == 'tool:read_file':
-            return
+        # Validate static dependencies without executing the business tool.
+        return item.capability_version
     raise ProbeFailure('SAFE_INDEPENDENT_CHECK_UNAVAILABLE', 'unsupported')
 
 
@@ -252,7 +263,7 @@ def skill_resources(name, steps):
             for label in ('references', 'scripts'):
                 declared = metadata.get(label)
                 if declared is None:
-                    steps.append(CheckStep(name=label, state='unknown'))
+                    steps.append(CheckStep(name=label, state='unknown', reason='DECLARATION_NOT_PROVIDED'))
                     continue
                 if (not isinstance(declared, list) or len(declared) > 100 or
                         any(not isinstance(name, str) or not name or '\\' in name or
@@ -266,7 +277,7 @@ def skill_resources(name, steps):
                 steps.append(CheckStep(name=label, state='pass'))
             dependencies = metadata.get('dependencies')
             if dependencies is None:
-                steps.append(CheckStep(name='declared_dependencies', state='unknown'))
+                steps.append(CheckStep(name='declared_dependencies', state='unknown', reason='DECLARATION_NOT_PROVIDED'))
             else:
                 if (not isinstance(dependencies, list) or len(dependencies) > 40 or
                         any(not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,79}', name)
@@ -296,7 +307,8 @@ async def skill_check(target, steps):
            for item_id, item_version in installed):
         steps.append(CheckStep(name='worker_version_agreement', state='fail', reason='WORKER_SKILL_VERSION_MISMATCH'))
         raise ProbeFailure('WORKER_SKILL_VERSION_MISMATCH')
-    steps.append(CheckStep(name='worker_version_agreement', state='pass' if installed else 'unknown'))
+    steps.append(CheckStep(name='worker_version_agreement', state='pass' if installed else 'unknown',
+                           reason=None if installed else 'NO_FRESH_WORKER_EVIDENCE'))
     return version
 
 
@@ -318,7 +330,7 @@ async def check(request):
                 if request.target_id in {'tool:paper_search', 'tool:paper_detail', 'tool:citation_graph', 'tool:read_paper'}:
                     await check_backend_dependency(steps)
                 else:
-                    await asyncio.to_thread(tool_check, request.target_id, steps)
+                    version = await asyncio.to_thread(tool_check, request.target_id, steps)
             else:
                 version = await skill_check(request.target_id, steps)
     except TimeoutError:
@@ -332,4 +344,6 @@ async def check(request):
                        duration_ms=int((perf_counter() - started) * 1000), build_revision=revision('AGENT_BUILD_REVISION'),
                        config_revision=revision('AGENT_CONFIG_REVISION') or revision(
                            'AGENT_TOOL_CONFIGURATION_RELEASE' if request.kind == 'tool' else 'AGENT_MODEL_ROUTE_REVISION'),
-                       capability_version=version, budget_tokens=budget, steps=steps)
+                        capability_version=version, budget_tokens=budget, steps=steps,
+                        coverage='partial' if any(step.state in ('unknown', 'unsupported') for step in steps)
+                        else 'complete' if state == 'pass' else 'unknown')

@@ -111,6 +111,10 @@ class Reporter:
             active_run_id=None if offline else self.run_id, manifest_digest=key,
             run_tool_ids=['tool:' + name for name in self.registry.enabled()[:200]]
             if not offline and self.run_id and self.registry else [],
+            run_latent_tool_ids=['tool:' + name for name in sorted(self.registry.latent)[:200]]
+            if not offline and self.run_id and self.registry else None,
+            run_tools_complete=(len(self.registry.enabled()) <= 200 and len(self.registry.latent) <= 200)
+            if not offline and self.run_id and self.registry else None,
             manifest=payload if key != self.acknowledged else None,
         )
         try:

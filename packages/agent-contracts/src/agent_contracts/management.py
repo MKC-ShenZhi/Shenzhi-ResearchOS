@@ -175,6 +175,7 @@ class Call(Wire):
     duration_ms: int | None
     usage_status: Literal['measured', 'partial', 'unknown', 'unsettled', 'estimated', 'not_applicable']
     known_tokens: int | None
+    failure_reason: str | None = None
 
 
 class Tool(Wire):
@@ -190,6 +191,7 @@ class Tool(Wire):
     latent: State = 'unknown'
     run_callable: State = 'unknown'
     latest_call: Call | None = None
+    runtime_evidence: dict | None = None
     states: States
 
 
@@ -203,6 +205,7 @@ class Skill(Wire):
     name: Key
     description: str
     source: Literal['builtin', 'vendor', 'unknown']
+    configuration_source: str | None = None
     resource_digest: str | None
     integrity: State
     discovered: State
@@ -210,6 +213,8 @@ class Skill(Wire):
     executable: State
     dependency_healthy: State
     dependencies: list[str] | None = None
+    metadata: dict | None = None
+    activation_contexts: list[dict] = Field(default_factory=list, max_length=20)
     resources: list[Resource] = Field(max_length=100)
     states: States
 
@@ -230,6 +235,7 @@ class Usage(Wire):
 
 
 class Task(Wire):
+    cancel_requested: bool | None = None
     task_id: Key
     owner_id: Key
     mode: str | None

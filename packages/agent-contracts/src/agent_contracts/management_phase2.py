@@ -1,7 +1,7 @@
 """Explicit wire contracts for Worker evidence, active checks, and audit."""
 from typing import Annotated, Literal
 from uuid import UUID
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_serializer
 from .management import Key, Wire
 
 Identifier = Annotated[str, StringConstraints(min_length=1, max_length=255, pattern=r'^[A-Za-z0-9][A-Za-z0-9_./:@+-]*$')]
@@ -39,8 +39,19 @@ class WorkerReport(Strict):
     health: Literal['ok', 'degraded', 'unknown']
     active_run_id: Identifier | None = None
     run_tool_ids: list[Identifier] = Field(default_factory=list, max_length=200)
+    run_latent_tool_ids: list[Identifier] | None = Field(default=None, max_length=200)
+    run_tools_complete: bool | None = None
     manifest_digest: Revision | None = None
     manifest: WorkerManifest | None = None
+
+    @model_serializer(mode='wrap')
+    def serialize_runtime(self, serializer):
+        fields = serializer(self)
+        if self.run_latent_tool_ids is None:
+            fields.pop('run_latent_tool_ids', None)
+        if self.run_tools_complete is None:
+            fields.pop('run_tools_complete', None)
+        return fields
 
 
 class WorkerSnapshot(Wire):
@@ -114,6 +125,7 @@ class ProbeResult(Wire):
     capability_version: Revision | None = None
     budget_tokens: int = 0
     steps: list[CheckStep] = Field(default_factory=list, max_length=30)
+    coverage: Literal['complete', 'partial', 'unknown'] = 'unknown'
 
 
 class DiagnosticResult(Wire):
@@ -134,8 +146,8 @@ class AuditEntry(Wire):
     audit_id: UUID
     request_id: UUID
     principal: Key
-    action: Literal['check', 'diagnose', 'diagnostic_view', 'config']
-    target_kind: DiagnosticTarget | Literal['config']
+    action: Literal['check', 'diagnose', 'diagnostic_view', 'config', 'control']
+    target_kind: DiagnosticTarget | Literal['config', 'alert']
     target_id: Identifier
     created_at: AwareDatetime
     state: Literal['pending', 'pass', 'fail', 'unknown', 'unsupported']

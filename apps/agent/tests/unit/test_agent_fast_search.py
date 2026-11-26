@@ -26,9 +26,9 @@ class FastSearchRuntimeTests(unittest.TestCase):
                           'draw_chart', 'image_search'} & names)
         self.assertNotIn('available_skills', runtime.system)
         self.assertIn('智能搜索」快速模式', runtime.system)
-        self.assertIn('本轮工具调用预算：12 次', runtime.system)
-        self.assertEqual(runtime.deadline_s, 180)
-        self.assertEqual(runtime.max_tool_calls, 12)
+        self.assertIn('本轮工具调用预算：20 次', runtime.system)
+        self.assertEqual(runtime.deadline_s, 300)
+        self.assertEqual(runtime.max_tool_calls, 20)
         default = service.build_run_runtime(owner='u1')
         self.assertEqual(set(default.registry.tools), names)
 
@@ -40,9 +40,9 @@ class FastSearchRuntimeTests(unittest.TestCase):
                                 <= set(runtime.registry.tools))
                 self.assertIn('available_skills', runtime.system)
                 self.assertNotIn('智能搜索」快速模式', runtime.system)
-                self.assertEqual(runtime.deadline_s, 900)
-                self.assertEqual(runtime.max_tool_calls, 120)
-                self.assertIn('本轮工具调用预算：120 次', runtime.system)
+                self.assertEqual(runtime.deadline_s, 1800)
+                self.assertEqual(runtime.max_tool_calls, 150)
+                self.assertIn('本轮工具调用预算：150 次', runtime.system)
 
     def test_fast_with_explicit_skill_keeps_full_tools(self):
         runtime = service.build_run_runtime(owner='u1', mode='fast',
@@ -67,9 +67,9 @@ class FastSearchRuntimeTests(unittest.TestCase):
                     self.assertIsNotNone(runtime.after_tool_call)
 
     def test_mode_budgets(self):
-        self.assertEqual(run_deadline_s('fast'), 180)
-        self.assertEqual(tool_call_budget('fast'), 12)
+        self.assertEqual(run_deadline_s('fast'), 300)
+        self.assertEqual(tool_call_budget('fast'), 20)
         for mode in ('deep', 'idea', 'doubt'):
             with self.subTest(mode=mode):
-                self.assertEqual(run_deadline_s(mode), 900)
-                self.assertEqual(tool_call_budget(mode), 120)
+                self.assertEqual(run_deadline_s(mode), 1800)
+                self.assertEqual(tool_call_budget(mode), 150)

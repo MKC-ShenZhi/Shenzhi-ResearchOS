@@ -18,6 +18,8 @@ from agent_contracts.management_phase2 import DiagnosticRequest, Identifier, Pro
 from agent_app import management_catalog as catalog, management_observations as observations
 from agent_app import management_checks, management_diagnostics, management_workers
 from agent_app.control.metering import GateDenied, now_utc
+from agent_contracts.management_operations import CheckSummaryRequest
+from agent_contracts.management_operations import ModelReferences
 from .v2 import V2Route, role
 
 MANAGEMENT_TOKEN = 'AGENT_MANAGEMENT_TOKEN'
@@ -68,6 +70,55 @@ def reject_management_report_reuse():
 
 router = APIRouter(prefix='/internal/v2/management', dependencies=[Depends(require_management), Depends(reject_management_report_reuse)],
                    route_class=NoStoreRoute)
+
+
+@router.post('/identities')
+async def identities(body: CheckSummaryRequest):
+    def load():
+        providers, models = catalog.llm_catalog()
+        tools, skills = catalog.tool_catalog(), catalog.skill_catalog()
+        values = {}
+        for target in body.targets:
+            key, version = target.target_id, None
+            if target.kind == 'provider' and key in providers:
+                registry = management_checks.load_registry()
+                version = digest(registry.providers[key].spec.model_dump(mode='json'))
+            elif target.kind == 'model' and key in models:
+                version = models[key].capability_version
+            elif target.kind == 'tool' and key in tools:
+                version = tools[key].capability_version
+            elif target.kind == 'skill' and key in skills:
+                version = skills[key].resource_digest
+            values[target.kind + '/' + key] = version
+        return values
+    return result(await asyncio.to_thread(load))
+
+
+@router.get('/alerts')
+async def alerts(offset: Annotated[int, Query(ge=0, le=10000)] = 0,
+                 limit: Annotated[int, Query(ge=1, le=100)] = 20):
+    from agent_app.management_operations import alerts as read_alerts
+    return result(await read_alerts(offset, limit))
+
+
+@router.post('/model-references')
+async def model_references(body: ModelReferences):
+    from sqlalchemy import select, func
+    from agent_app.infrastructure.models import TaskRow
+    async with observations.reading() as db:
+        model = TaskRow.request_json['model'].as_string()
+        rows = (await db.execute(select(model, TaskRow.status, func.count()).where(
+            model.in_(body.model_ids)).group_by(model, TaskRow.status))).all()
+    return result(dict(persisted_task_references=[dict(model_id=key, status=status, count=count)
+        for key, status, count in rows], external_clients='unknown'))
+
+
+@router.get('/worker-control/{worker_id}')
+async def worker_control(worker_id: Identifier):
+    from agent_app.management_operations import drain_state
+    return result(await drain_state(worker_id))
+
+
 report_router = APIRouter(prefix='/internal/v2/worker-reports', dependencies=[Depends(management_workers.require_reporter)],
                           route_class=NoStoreRoute)
 MAX_OFFSET = 10_000
@@ -250,7 +301,7 @@ async def tools(query: Annotated[CatalogQuery, Query()]):
 
 
 @router.get('/tools/{tool_id}')
-async def tool(tool_id: Key):
+async def tool(tool_id: Key, run_id: Key | None = None):
     try:
         recent = await observations.latest_tool_call(tool_id)
     except GateDenied as exc:
@@ -264,7 +315,13 @@ async def tool(tool_id: Key):
         entry = observed_tool(tool_id, recent)
     else:
         entry = entry.model_dump()
-    return result(dict(entry, latest_call=recent))
+    runtime = await observations.tool_runtime(tool_id, run_id) if run_id else None
+    if runtime:
+        entry.update(latent=runtime['latent'], run_callable=runtime['run_callable'])
+        if runtime.get('observed_at'):
+            entry['states']['loaded'] = dict(state=runtime['loaded'], source='authenticated_worker_runtime',
+                observed_at=runtime['observed_at'], worker_id=runtime['worker_id'])
+    return result(dict(entry, latest_call=recent, runtime_evidence=runtime))
 
 
 @router.get('/skills')
@@ -283,6 +340,7 @@ async def skill(skill_name: Key):
     try:
         if await observations.skill_activated(skill_name, entry.resource_digest):
             entry.activated = 'yes'
+        entry.activation_contexts = await observations.skill_contexts(skill_name, entry.resource_digest)
     except GateDenied as exc:
         if exc.status != 503:
             raise

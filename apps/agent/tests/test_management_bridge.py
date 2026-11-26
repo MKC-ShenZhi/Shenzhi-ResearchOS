@@ -156,6 +156,13 @@ class ManagementBridgeTests(ManagementFixture):
 
     @unittest.skipUnless(os.getenv('SHENZHI_TEST_CHROME'), 'requires local Chromium and Admin production build')
     async def test_admin_browser(self):
+        # Keep seeded runs live for the complete multi-page browser scenario.
+        from datetime import timedelta
+        from sqlalchemy import select
+        from agent_app.infrastructure.models import RunRow
+        async with self.db.begin() as db:
+            for run in (await db.scalars(select(RunRow))).all():
+                run.lease_expires_at = self.now + timedelta(minutes=10)
         # The Agent hop still uses the real ASGI router and query layer. Only the TCP hop is substituted.
         admin = Path(__file__).resolve().parents[2] / 'admin'
         self.backend_app.mount('/', StaticFiles(directory=admin / 'dist', html=True))

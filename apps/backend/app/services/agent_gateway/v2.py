@@ -137,8 +137,11 @@ class AgentGatewayV2(AgentGateway):
         return (await self.request('GET', f'/internal/v2/runs/{run_id}/events',
                                    params={'owner_id': owner, 'after_seq': after_seq}))['events']
 
-    async def cancel(self, task_id, owner):
-        return await self.request('POST', f'/internal/v2/tasks/{task_id}/cancel', params={'owner_id': owner})
+    async def cancel(self, task_id, owner, *, expected_run_id=None):
+        params = {'owner_id': owner}
+        if expected_run_id is not None:
+            return await self.request('POST', f'/internal/v2/tasks/{task_id}/runs/{expected_run_id}/cancel', params=params)
+        return await self.request('POST', f'/internal/v2/tasks/{task_id}/cancel', params=params)
 
     async def steer(self, run_id, owner, message):
         return await self.request('POST', f'/internal/v2/runs/{run_id}/steer',

@@ -246,10 +246,13 @@ async def status_for(db, body, action, revision, control, details):
     if action == 'approve':
         check = await approved_validation(db, row, str(body.validation_id), current)
         verified_proof(Proof.model_validate(check.details['proof']), row)
-        if require_separate_approval() and row.principal == body.actor:
-            raise GateDenied('CONFIG_APPROVER_MUST_BE_DISTINCT', 403)
         validation_digest = digest([row.config_digest, check.details['proof'], check.result])
-        details.update(validation_id=check.operation_id, validation_digest=validation_digest, actor=body.actor)
+        from agent_app.config_approval import approver
+        approval_actor = approver(body, row.revision_id, validation_digest)
+        if require_separate_approval() and row.principal == approval_actor:
+            raise GateDenied('CONFIG_APPROVER_MUST_BE_DISTINCT', 403)
+        details.update(validation_id=check.operation_id, validation_digest=validation_digest,
+                       actor=approval_actor, submitted_by=body.actor)
         fields['validation_digest'] = validation_digest
         return 'approved', fields
     if control.deployment_id:
