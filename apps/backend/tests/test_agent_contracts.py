@@ -48,7 +48,7 @@ class AgentGatewayContractTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(request.url.path, '/internal/v2/tasks/t1/runs')
             self.assertEqual(request.url.params['owner_id'], 'anon:1')
             self.assertEqual(request.headers['authorization'], 'Bearer gateway-secret')
-            return httpx.Response(200, json={'run_ids': ['r3', 'r1', 'r2']})
+            return httpx.Response(200, json={'schema_version': 1, 'run_ids': ['r3', 'r1', 'r2']})
 
         self.assertEqual(await self.gateway(handler).task_runs('t1', 'anon:1'), ['r3', 'r1', 'r2'])
 

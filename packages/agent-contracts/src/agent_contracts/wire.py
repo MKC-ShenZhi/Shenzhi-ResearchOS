@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -179,6 +179,7 @@ class TaskRecordWire(WireModel):
 class TaskRunsResponseWire(WireModel):
     """All Run IDs for one Task, ordered by its immutable, unique attempt."""
 
+    schema_version: Literal[1] = 1
     run_ids: list[str] = Field(min_length=1)
 
 

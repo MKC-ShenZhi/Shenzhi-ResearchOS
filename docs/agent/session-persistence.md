@@ -5,6 +5,7 @@
 Agent 正式会话以 FastAPI 中的 Agent Session Repository 为 source of truth。Web 不再向正式运行接口传入完整历史，也不再从 `shenzhi-agent-sessions` 读取 Sidebar 历史。Backend 产品路径为 `/api/v2/agent/*`；`/run` 为 Paper Agent 等无状态调用提供 SSE，独立 Task JSON 提交使用 `/submissions`；首页和 `/agents` 使用持久化 Session API。
 
 Agent 执行库另存 Task、Run、事件和控制记录。Backend 在 Turn 的 `settings` 中记录 `agent_task_id` 和 `agent_run_id`，用于轮询和恢复。
+V2 任务运行列表响应通过共享 `TaskRunsResponseWire` 校验，接受 `schema_version: 1`，保留完整且有序的 `run_ids`；其他版本仍拒绝。
 
 没有 `CHAT_DATABASE_URL` 时使用进程内 Memory Repository，API 会在列表响应中标记 `ephemeral: true`。该模式只用于开发和测试，不提供跨重启持久化；PostgreSQL 是生产数据源。
 
