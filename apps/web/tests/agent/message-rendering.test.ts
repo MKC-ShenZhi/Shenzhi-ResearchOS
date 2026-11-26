@@ -1,15 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { remarkCitations } from "../../features/agent-chat/components/citation-markers";
-import { citationTargets, doiUrl, messageTime, MESSAGE_STATUS, referenceDetails,
+import { citationTargets, citedReferenceIds, doiUrl, messageTime, MESSAGE_STATUS, referenceDetails,
   REFERENCE_TYPE, safeReferenceUrl } from "../../features/agent-chat/components/message-presentation";
 import { messageFixture } from "./message-fixtures";
 
 type Node = Parameters<ReturnType<typeof remarkCitations>>[0];
 
-test("citation numbering follows reference order and repeats share the same target", () => {
+test("citation numbering follows body order across blocks, independent of source arrival", () => {
   const message = messageFixture();
-  const citations = citationTargets(message.references, "test-message");
+  const sources = [...message.references].reverse();
+  sources.push({ id: "unused", type: "paper", title: "Not cited" });
+  const ids = citedReferenceIds(message.blocks);
+  assert.deepEqual(ids, ["r2", "r1"]);
+  const citations = citationTargets(sources, "test-message", ids);
+  assert.deepEqual(citations.map((citation) => citation.id), ["r2", "r1"]);
   const tree: Node = { type: "root", children: [{ type: "paragraph", children: [
     { type: "text", value: "结果 [[cite:r2]]、[[cite:r1]]，再次 [[cite:r2]]。" },
   ] }] };
@@ -18,6 +23,25 @@ test("citation numbering follows reference order and repeats share the same targ
   assert.deepEqual(links.map((node) => node.children![0].value), ["1", "2", "1"]);
   assert.deepEqual(links.map((node) => node.url), ["#test-message-reference-1", "#test-message-reference-2", "#test-message-reference-1"]);
   assert.equal(JSON.stringify(tree).includes("[[cite:"), false);
+});
+
+test("pending citations keep numbers while model references JSON arrives later", () => {
+  const message = messageFixture();
+  const ids = citedReferenceIds(message.blocks);
+  const pending = citationTargets([], "test", ids, true);
+  assert.deepEqual(pending.map((item) => [item.number, item.pending]), [[1, true], [2, true]]);
+  const partial = citationTargets([message.references[1]], "test", ids, true);
+  assert.deepEqual(partial.map((item) => [item.number, item.pending]), [[1, true], [2, false]]);
+});
+
+test("literal code, math and existing links do not reserve reference numbers", () => {
+  const content = '```text\n[[cite:code]]\n```\n\n`[[cite:inline]]` $[[cite:math]]$\n\n[label [[cite:link]]](https://example.test/)\n\n正文 [[cite:real]]';
+  assert.deepEqual(citedReferenceIds([{ id: "b", type: "markdown", content }]), ["real"]);
+});
+
+test("citations inside indented list continuations share the message numbering", () => {
+  const content = '1. 父级列表\n    - 子项 [[cite:nested]]\n\n正文 [[cite:body]]';
+  assert.deepEqual(citedReferenceIds([{ id: "b", type: "markdown", content }]), ["nested", "body"]);
 });
 
 test("citations work in tables and emphasis without changing code, math or existing links", () => {

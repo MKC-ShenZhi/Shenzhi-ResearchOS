@@ -11,9 +11,10 @@ Web Client、SSE 事件分发、会话状态及 Markdown Block 和引用渲染�
 | 位置 | 职责 |
 | --- | --- |
 | `packages/agent-contracts/src/agent_contracts/messages.py` | 消息及事件数据模型、Block 判别类型、字段与引用关联校验 |
-| `apps/agent/src/agent_app/execution/message_stream.py` | 消息生命周期、有序 Markdown 块、增量引用标记校验、最终消息组装 |
-| `apps/agent/src/agent_app/execution/references.py` | 程序生成来源 ID，按来源类型及 entity_id、DOI 或 URL 去重和补全 |
-| `ToolOutput.references` / `ToolResult.references` | 工具到 Runtime 的来源数据通道；不从模型文本或任意工具文本中猜测来源 |
+| `apps/agent/src/agent_app/execution/model_output.py` | 按约定边界拆分流式 Markdown 与模型提交的来源 JSON，并校验来源字段 |
+| `apps/agent/src/agent_app/execution/message_stream.py` | 输出格式 Prompt、消息生命周期、有序 Markdown 块、引用键映射、最终消息组装 |
+| `apps/agent/src/agent_app/execution/references.py` | 按来源类型及 entity_id、DOI 或 URL 去重、补全和保留来源 ID |
+| `ToolOutput.references` / `ToolResult.references` | 保留旧 transcript 的兼容字段，不自动生成当前消息的参考列表 |
 | Runtime / Worker | 驱动组装、沿用事件序号与持久化链路、在执行报告中保存最终 `message` |
 | `apps/web/clients/backend/agent-message.ts` | Web 消息类型、Zod 协议校验、六类消息事件解码 |
 | `apps/web/features/agent-chat/message-state.ts` | 无 React 依赖的 Block/Reference 组装、事件去重和最终快照校准 |
@@ -25,7 +26,7 @@ Web Client、SSE 事件分发、会话状态及 Markdown Block 和引用渲染�
 | `apps/web/features/agent-chat/components/references-renderer.tsx` | 独立来源列表和来源跳转 |
 | `apps/web/features/agent-chat/components/citation-markers.ts` / `message-presentation.ts` | 引用 AST 转换、编号、展示字段与安全链接规则 |
 
-Provider 的 `AssistantMessage` 是模型上下文与工具往返 transcript；`AIMessage` 是面向展示的完整消息。两者职责不同。系统不要求 LLM 生成 ID、状态、时间戳或 JSON 外壳，LLM 继续流式生成 Markdown，通过 `[[cite:ref_id]]` 使用工具提供的来源。
+Provider 的 `AssistantMessage` 是模型上下文与工具往返 transcript；`AIMessage` 是面向展示的完整消息。模型输出 Markdown 与独立的 references JSON，使用局部引用键绑定两部分。正式消息/Block/Reference ID、状态、时间戳、版本由程序生成，不要求 LLM 输出整个 AIMessage。
 
 `AIMessage` 的字段为 `id`、`role=assistant`、`status`、`created_at`（Unix 秒）、`schema_version`、可选 `metadata`、`blocks` 和 `references`。状态复用 Runtime 的 `running`、`done`、`failed`、`stopped`、`timeout`、`awaiting_input`，不使用 Control 的另一套 RunStatus。`metadata` 当前记录模型、耗时；遇到无效引用时另记录诊断 ID。
 
@@ -50,19 +51,34 @@ Provider 的 `AssistantMessage` 是模型上下文与工具往返 transcript；`
 
 ## 来源和异常
 
-当前 `web_search`、`paper_search`、`paper_detail` 从已返回的数据构造 `Reference`，Runtime 注册后把规范来源 ID 注入工具上下文的 `references`。搜索与详情匹配同一 entity_id 时复用 ID，详情补充 DOI、作者、年份等字段；重复引用不新增记录。其他工具尚未声明来源时不会自动生成来源。
+工具继续返回真实检索、详情或阅读结果，不自动把检索结果转换成消息来源。模型根据当前工具结果、用户提供的资料及历史上下文明确选择实际采用的来源，并按以下格式输出：
+
+```text
+先引用 B [[cite:r2]]，再引用 A [[cite:r1]]，重复 B [[cite:r2]]。
+<references_json>
+[{"id":"r1","type":"paper","title":"来源 A"},{"id":"r2","type":"webpage","title":"来源 B","url":"https://example.test/b"}]
+</references_json>
+```
+
+标签必须在代码围栏外顶格开始，JSON 为数组，结束标签之后不再输出正文。无引用时为 `[]`。id 是该次模型回复内的局部关联键；程序将它映射为正式 Reference ID。JSON 只允许 Reference 字段，不接受模型提供系统 metadata 或其他 Block。模型只提交有依据的字段，不编造作者、URL 等信息。此格式是结构约束，不承担论文真实性或论断支持度审查。
+
+解析器跨任意 TextDelta 边界识别标签，正文即时流出，JSON 和标签不进入 block_delta、旧正文 delta 或 result.final_text。代码围栏中的示例标签按普通代码保留。Provider transcript 保留模型原始输出，供下一轮上下文及诊断使用。
+
+来源 JSON 到齐后复用 Pydantic Reference 校验，按正文首次引用顺序注册、去重，只保留实际使用的条目。相同 entity_id、DOI 或 URL 复用来源 ID，跨模型回复也可补全已有来源；未被引用的 JSON 条目不产生 reference_upsert。不会回退为将全部工具结果当作引用。
 
 来源记录独立于 Markdown 块，允许在生成中 upsert。Pydantic 校验唯一 Block/Reference ID、字段类型、版本、Markdown 引用与来源的关联；共享事件与报告入口也校验新增载荷，未知的旧事件保持原有读取方式。
 
-引用标记跨增量边界时先缓存，完整后再校验。不存在的引用替换为 `[引用不可用]`，中断时未闭合的引用替换为 `[引用不完整]`；其余正文继续保留。结构化流与最终消息使用相同的校验后正文。旧 transcript 与旧文本事件保留原始内容供兼容和诊断使用。
+引用标记跨增量边界时先缓存，完整后流出程序生成的引用 ID；来源可晚于正文到达。JSON 缺失、截断、格式错误、重复键冲突或超限时保留有效正文与合法来源，无法解析的引用在最终快照替换为 `[引用不可用]`，未闭合引用替换为 `[引用不完整]`。诊断写入 metadata，原始 JSON 不作为用户错误内容展示。
+
+重复来源的别名合并、无效引用的降级可能需要改正已流出的引用标记；message_end 的完整快照负责最终校准，不能再次追加正文。程序保证最终消息引用可解析，Backend 存储和历史读取该最终快照。
 
 失败、停止、超时均闭合已开始的块，发送完整终态消息。外部任务取消也先发出终态快照，再继续传播 `CancelledError`。反问仍通过既有问题制品通道返回，消息状态为 `awaiting_input`。
 
 ## 历史与扩展
 
-执行报告的 `result.message` 保存同一个 `AIMessage`，可作为后续历史展示的数据源；原 `final_text`、`messages`、`output` 等字段保留。旧 transcript 没有 `references` 时仍可解码。新工具 transcript 会保存注册后的来源；Checkpoint 同时保存消息快照与事件序号，直接 Runtime resume 可沿用消息、来源及序号。
+执行报告的 `result.message` 保存同一个 `AIMessage`，可作为后续历史展示的数据源；`final_text` 为拆分后的正文，`messages` 保留原 transcript，`output` 沿用原制品通道。旧 transcript 没有 `references` 时仍可解码，模型可以根据其中真实资料在新回复中重新提交来源 JSON，无需迁移历史行。Checkpoint 保存已闭合消息快照与事件序号，直接 Runtime resume 可沿用消息、来源及序号。
 
-新增 Block 时，在共享协议增加具体模型并扩展 `ContentBlock` 的 `type` 判别集合，在消息组装层增加对应写入逻辑与校验，再接入消费者。不要在 Provider、Worker 或 SSE 传输中增加按具体 Block 类型分支的处理。来源适配继续通过 `ToolOutput.references`，不把工具名称或上游返回格式写入消息组装器。
+新增 Block 时，在共享协议增加具体模型并扩展 `ContentBlock` 的 `type` 判别集合，在消息组装层增加对应写入逻辑与校验，再接入消费者。不要在 Provider、Worker 或 SSE 传输中增加按具体 Block 类型分支的处理。模型输出拆分留在独立解析器，来源去重留在注册器，不把工具名称或上游返回格式写入消息组装器。
 
 Backend 在最终 SSE `result.message` 和历史详情 `turns[].message` 返回同一份结构化快照，存储于 `agent_turns.message`，不重新组织正文或来源。Web 使用同一个 MessageRenderer 展示实时与历史消息。报告文件与反问等原有制品继续使用原通道。
 
@@ -87,7 +103,7 @@ Feature 在每个助手 Turn 的 `structured` 中保存 `AgentMessageState`，�
 
 `MarkdownBlock` 将 content 交给局部 `StreamdownRenderer`；当前打开的块随 SSE 增量以 streaming 模式渲染，已闭合块和历史使用 static。原有 HTML 清理、KaTeX 安全配置、数学定界符转换和代码样式继续复用。思考和工具过程保留；有结构化快照时不重复展示旧正文和旧 sources，没有快照的历史仍走原展示路径。
 
-引用标记通过 remark AST 插件转换为数字角标并跳转到本消息来源条目，编号按 references 数组顺序稳定生成，同一来源重复引用使用同一编号。代码、公式及已有链接中的文本不参与转换；流式未闭合标记暂不显示，无法解析的正文引用显示“引用不可用”，不输出原始 ID。
+MessageRenderer 跨全部 Markdown Block 收集首次引用顺序，角标和来源列表共用编号；忽略来源数组的到达顺序，未引用条目不显示，同一来源重复引用使用同一编号。引用通过 remark AST 插件转换为角标，代码、公式及已有链接中的文本不参与转换。来源 JSON 尚未到达时显示不可跳转的待补全数字角标，不显示原始 ID；记录到达后启用跳转。流式未闭合标记暂不显示，最终快照校准后无效引用显示“引用不可用”。
 
 `ReferencesRenderer` 展示 title、中文 type、已有作者、年份、venue、DOI 与来源链接。超过两位作者显示第一作者加 et al.，悬停可查看完整列表；缺少作者时可显示来源域名，不补造作者。可选字段缺失时省略对应元素；无 URL/DOI 时标题仍可读，不显示跳转图标。来源链接只允许无凭证的 HTTP(S)，DOI 转为 doi.org 链接，外部跳转使用 noopener/noreferrer。
 
@@ -95,7 +111,7 @@ Feature 在每个助手 Turn 的 `structured` 中保存 `AgentMessageState`，�
 
 在 `apps/agent` 执行 `uv run --locked python -m pytest tests -q`；共享契约在 `packages/agent-contracts` 执行 `uv run --group dev python -m pytest tests -q`。
 
-`test_message_blocks.py` 使用脚本化 Provider 验证引用分片、来源去重、连续块、事件重建/去重、终态校准、异常保留、反问、Checkpoint 和 Worker 报告。`test_worker_takeover.py` 经过真实 Agent API、Control SQL 和 Worker，核对事件落库后的最终消息；SQLite 测试不代表生产 PostgreSQL 并发验收。
+`test_model_output.py` 验证逐字符边界、围栏示例、JSON 截断/错误/超限、无效字段、首次引用顺序、未引用来源过滤及跨回复去重。`test_message_blocks.py` 使用脚本化 Provider 验证模型 JSON 生成来源、工具不自动选来源、历史资料复用、正文 delta/最终文本不泄漏 JSON、事件重建/去重、异常保留、反问、Checkpoint 和 Worker 报告。`test_worker_takeover.py` 经过真实 Agent API、Control SQL 和 Worker，核对事件落库后的最终消息；SQLite 测试不代表生产 PostgreSQL 并发验收。
 
 Backend 的 `tests/test_agent_message_blocks.py` 验证 Gateway v1/v2、产品 SSE、断线游标、重试和历史接口的数据一致性；`tests/test_agent_message_postgres.py` 在显式配置 `TEST_AGENT_MESSAGE_DATABASE_URL` 的隔离测试库中验证真实 JSONB 往返、连接重建、旧数据迁移和无效载荷不落库。测试库须先应用 Backend 迁移，禁止将该测试变量指向业务数据库。
 

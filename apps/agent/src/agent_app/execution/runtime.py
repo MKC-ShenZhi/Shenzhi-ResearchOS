@@ -346,10 +346,6 @@ class AgentRuntime:
             snapshot=state.presentation_snapshot,
         )
         state.presentation.start()
-        # Legacy transcripts have no source collection; structured ones retain trusted sources.
-        for message in state.messages:
-            if isinstance(message, ToolResultMessage) and not message.is_error:
-                state.presentation.register(message.references)
         logger.info('agent.run.start run_id=%s model=%s resumed=%s tools=%s',
                     state.run_id, self.model, resumed, list(self.registry.enabled))
         started = time.monotonic()
@@ -458,6 +454,7 @@ class AgentRuntime:
         state.duration_ms = int((time.monotonic() - started) * 1000)
         result = state.build()
         result.message = state.presentation.finish(result.status, duration_ms=state.duration_ms)
+        result.final_text = state.presentation.last_text
         emit(state.turn, RUN_END, {
             'status': result.status, 'stop_reason': result.stop_reason.value,
             'turns': result.turns, 'duration_ms': result.duration_ms,
@@ -513,7 +510,7 @@ class AgentRuntime:
         None 表示继续下一轮。位点顺序照 pi：turn_end 在工具执行**之后**发，
         steering / 预算治理由 _drive 在 turn_end 之后依次处理。
         """
-        state.presentation.end_block()  # Also close a partial turn before the deadline grace turn.
+        state.presentation.begin_response()  # Close partial output before a deadline grace turn.
         state.turn += 1
         emit(state.turn, TURN_START, {'turn': state.turn})
         await self._maybe_compact(state, emit)  # pi transformContext 位点：下一请求前按需压缩
@@ -549,8 +546,9 @@ class AgentRuntime:
                     break
                 if isinstance(event, TextDelta):
                     assistant.content += event.text
-                    state.presentation.append(event.text)
-                    delta_buffer.append(event.text)
+                    visible = state.presentation.append(event.text)
+                    if visible:
+                        delta_buffer.append(visible)
                     if sum(len(piece) for piece in delta_buffer) >= 24:
                         emit(state.turn, DELTA, {'text': ''.join(delta_buffer)})
                         delta_buffer.clear()
@@ -579,7 +577,12 @@ class AgentRuntime:
                                                    + event.usage.completion_tokens)
                     else:
                         state.usage_measured = False
-        state.presentation.end_block()
+        tail = state.presentation.end_block()
+        if tail:
+            delta_buffer.append(tail)
+        if delta_buffer:
+            emit(state.turn, DELTA, {'text': ''.join(delta_buffer)})
+            delta_buffer.clear()
         calls = assistant.tool_calls
         # stop_reason 从不改写（pi agent-loop:222-233）：是否续跑只看"有没有工具调用"，
         # transcript 里保留模型给的原始语义（此前把 stop+calls 改成 tool_calls、
@@ -799,19 +802,9 @@ class AgentRuntime:
 
     def _record_tool_result(self, state: _RunState, emit: Callable, call: ToolCall,
                             result: ToolResult, duration_ms: int) -> None:
-        references = state.presentation.register(result.references) if not result.is_error else []
-        content = result.content
-        if references:
-            try:
-                payload = json.loads(content)
-            except ValueError:
-                payload = content
-            payload = dict(payload) if isinstance(payload, dict) else {'result': payload}
-            payload['references'] = [ref.model_dump(exclude_none=True) for ref in references]
-            content = json.dumps(payload, ensure_ascii=False)
         state.messages.append(ToolResultMessage(result.call_id, result.name,
-                                                content, result.is_error, result.pinned,
-                                                tuple(references)))
+                                                result.content, result.is_error, result.pinned,
+                                                result.references))
         emit(state.turn, TOOL_END, {'tool_call_id': result.call_id, 'name': result.name,
                                     'is_error': result.is_error, 'duration_ms': duration_ms,
                                     'summary': result.content[:200]})

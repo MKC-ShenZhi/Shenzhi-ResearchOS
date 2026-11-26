@@ -26,9 +26,10 @@ const message = {
     { id: "internal_block_2", type: "markdown", content: '## 格式验证\n\n| 项目 | 值 |\n|---|---|\n| 参数 | 42 |\n\n公式 $x^2 + y^2$。\n\n```python\nprint("ok")\n```\n\n网页说明 [[cite:web_ref]]。' },
   ],
   references: [
+    { id: "web_ref", type: "webpage", title: "Transformer 模型介绍", url: "https://huggingface.co/docs/transformers" },
+    { id: "unused_ref", type: "paper", title: "不应展示的未引用来源" },
     { id: "paper_ref", type: "paper", entity_id: "internal_paper_entity", title: "Attention Is All You Need",
       authors: ["Vaswani", "Shazeer", "Parmar"], year: 2017, venue: "NeurIPS", doi: "10.48550/arXiv.1706.03762", url: "https://arxiv.org/abs/1706.03762" },
-    { id: "web_ref", type: "webpage", title: "Transformer 模型介绍", url: "https://huggingface.co/docs/transformers" },
   ],
 };
 const summary = { id: sessionId, title: "消息协议浏览器验证", created_at: 1795651200, updated_at: 1795651200, settings: {} };
@@ -88,7 +89,6 @@ async function mock(request, response) {
     event("run_start", { run_id: "run_browser" });
     event("message_start", { message: { ...message, status: "running", blocks: [], references: [] } });
     event("delta", { text: "不应重复显示的旧正文", reasoning: "核对资料", turn: 1 });
-    for (const reference of message.references) event("reference_upsert", { message_id: message.id, reference });
     event("block_start", { message_id: message.id, block: { ...message.blocks[0], content: "" } });
     const citationSplit = message.blocks[0].content.indexOf("paper_ref") + 4;
     event("block_delta", { message_id: message.id, block_id: message.blocks[0].id, delta: message.blocks[0].content.slice(0, citationSplit) });
@@ -103,6 +103,8 @@ async function mock(request, response) {
       await new Promise((resolve) => { finishStream = resolve; });
       event("block_delta", { message_id: message.id, block_id: message.blocks[1].id, delta: message.blocks[1].content.slice(split) });
       event("block_end", { message_id: message.id, block_id: message.blocks[1].id });
+      // The model submits references after the body; arrival order differs from citation order.
+      for (const reference of message.references) event("reference_upsert", { message_id: message.id, reference });
       event("message_end", { message });
       completed = true;
       event("result", { status: "done", stop_reason: "stop", final_text: "不应重复显示的旧正文", message,
@@ -219,7 +221,9 @@ try {
   checks.push("split citation is withheld until complete, without exposing internal reference IDs");
   await waitFor("document.querySelector('article[aria-label=\"AI 回复\"] table') && document.querySelector('article .katex') && document.querySelector('article pre')", "streaming Markdown/table/math/code");
   assert.equal(await evaluate("document.querySelector('article [role=status]').textContent"), "生成中…");
-  assert.equal(await evaluate("document.querySelectorAll('article sup a').length"), 1);
+  assert.equal(await evaluate("document.querySelectorAll('article sup span').length"), 1);
+  assert.equal(await evaluate("document.querySelector('article sup span').textContent"), "1");
+  assert.equal(await evaluate("document.querySelector('article section[aria-label=参考来源]') === null"), true);
   assert.equal(await evaluate("document.querySelector('article').innerText.includes('[[cite:')"), false);
   checks.push("live SSE renders Markdown, table, math, incomplete code and citation before message_end");
   await screenshot("message-streaming.png");
@@ -228,6 +232,8 @@ try {
   const text = await evaluate("document.querySelector('article').innerText");
   for (const hidden of ["internal_message_id", "internal_block_1", "internal_paper_entity", "schema_version", "internal_model_name", "paper_ref", "web_ref", "[[cite:"]) assert.equal(text.includes(hidden), false, hidden);
   assert.match(text, /参考来源（2）/);
+  assert.equal(text.includes("不应展示的未引用来源"), false);
+  assert.equal(await evaluate("document.querySelector('article li').innerText.includes('Attention Is All You Need')"), true);
   assert.match(text, /Vaswani et al\. · NeurIPS 2017/);
   assert.match(text, /huggingface\.co/);
   assert.match(text, /2026\/11\/26 08:00/);

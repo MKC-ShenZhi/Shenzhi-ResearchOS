@@ -1,4 +1,4 @@
-import type { AgentMessage, Reference } from "../../../clients/backend/agent-message";
+import { isMarkdownBlock, type AgentMessage, type Reference } from "../../../clients/backend/agent-message";
 import type { CitationTarget } from "./citation-markers";
 
 export const MESSAGE_STATUS: Record<AgentMessage["status"], string> = {
@@ -44,8 +44,41 @@ export function referenceAnchor(prefix: string, number: number): string {
   return `${prefix}-reference-${number}`;
 }
 
-export function citationTargets(references: readonly Reference[], prefix: string): CitationTarget[] {
-  return references.map((reference, index) => ({
-    id: reference.id, number: index + 1, href: `#${referenceAnchor(prefix, index + 1)}`, title: reference.title,
-  }));
+/** Read citation positions without counting literal code/math/link examples. */
+export function citedReferenceIds(blocks: AgentMessage["blocks"]): string[] {
+  const ids = new Set<string>();
+  for (const block of blocks) {
+    if (!isMarkdownBlock(block)) continue;
+    let fence: string | null = null;
+    let inList = false;
+    const lines: string[] = [];
+    for (const line of block.content.split("\n")) {
+      const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+      if (match) {
+        if (!fence) fence = match[1];
+        else if (match[1][0] === fence[0] && match[1].length >= fence.length && !match[2].trim()) fence = null;
+        continue;
+      }
+      if (/^ {0,3}(?:[-+*]|\d+[.)])\s/.test(line)) inList = true;
+      else if (/^\S/.test(line)) inList = false;
+      if (!fence && (inList || !/^(?: {4}|\t)/.test(line))) lines.push(line);
+    }
+    const text = lines.join("\n")
+      .replace(/(`+)[\s\S]*?\1/g, "")
+      .replace(/\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]*\$/g, "")
+      .replace(/!?\[(?:[^\[\]]|\[\[cite:[^\]]*\]\])*\]\([^)]*\)/g, "");
+    for (const match of text.matchAll(/\[\[cite:([^\[\]\r\n]+)\]\]/g)) ids.add(match[1]);
+  }
+  return [...ids];
+}
+
+export function citationTargets(references: readonly Reference[], prefix: string,
+  ids: readonly string[] = references.map((reference) => reference.id), allowPending = false): CitationTarget[] {
+  const sources = new Map(references.map((reference) => [reference.id, reference]));
+  return ids.flatMap((id, index) => {
+    const source = sources.get(id);
+    if (!source && !allowPending) return [];
+    return [{ id, number: index + 1, href: `#${referenceAnchor(prefix, index + 1)}`,
+      title: source?.title ?? "正在整理参考来源", pending: !source }];
+  });
 }

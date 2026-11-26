@@ -47,11 +47,14 @@ export const StreamdownRenderer = memo(function StreamdownRenderer({
         || `#user-content-${target.href.slice(1)}` === href);
       return citation ? (
         <sup className="ml-0.5 inline-flex align-super text-[10px] leading-none">
-          <a href={citation.href} aria-label={`查看参考来源 ${citation.number}：${citation.title}`}
+          {citation.pending ? <span aria-label={`参考来源 ${citation.number} 正在整理`}
+            className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-chip px-1.5 text-muted">
+            {citation.number}
+          </span> : <a href={citation.href} aria-label={`查看参考来源 ${citation.number}：${citation.title}`}
             title={citation.title}
             className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-chip px-1.5 font-medium text-ink-2 no-underline transition-colors hover:bg-primary-soft hover:text-primary focus-visible:outline-2 focus-visible:outline-primary">
             {citation.number}
-          </a>
+          </a>}
         </sup>
       ) : markdownElements.a({ href, children });
     },

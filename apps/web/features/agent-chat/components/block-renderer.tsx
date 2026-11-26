@@ -1,15 +1,16 @@
-import type { ContentBlock, Reference } from "../../../clients/backend/agent-message";
+import type { ContentBlock } from "../../../clients/backend/agent-message";
+import type { CitationTarget } from "./citation-markers";
 import { MarkdownBlock } from "./blocks/markdown-block";
 
-export function BlockRenderer({ block, references, anchorPrefix, isStreaming = false }: {
+export function BlockRenderer({ block, citations, isStreaming = false }: {
   block: ContentBlock | { id: string; type: string };
-  references: readonly Reference[]; anchorPrefix: string; isStreaming?: boolean;
+  citations: readonly CitationTarget[]; isStreaming?: boolean;
 }) {
   switch (block.type) {
     case "markdown":
       if ("content" in block && typeof block.content === "string") {
         return <MarkdownBlock block={{ id: block.id, type: "markdown", content: block.content }}
-          references={references} anchorPrefix={anchorPrefix} isStreaming={isStreaming} />;
+          citations={citations} isStreaming={isStreaming} />;
       }
       break;
   }

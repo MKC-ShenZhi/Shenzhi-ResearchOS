@@ -27,7 +27,7 @@ class PaperSearchOutputTests(unittest.IsolatedAsyncioTestCase):
         search = next(item for item in knowledge_tools(service) if item.spec.name == 'paper_search')
         call = ToolCall('search-1', 'paper_search', {'query': 'graph learning', 'limit': limit})
         output = await search.execute(call, search.spec.params_model.model_validate(call.arguments))
-        return output.content
+        return output
 
     async def test_long_results_fit_limit_and_sparse_uses_actual_top_k(self):
         service = FakeKnowledgeService()
@@ -61,15 +61,15 @@ class PaperSearchOutputTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(body['sparse'])
                 self.assertEqual(service.requests[0]['topK'], expected_top_k)
 
-    async def test_references_follow_retained_results_and_detail_reuses_id(self):
+    async def test_search_and_detail_return_evidence_without_reference_selection(self):
         service = FakeKnowledgeService(count=20, authors=['Ada'])
         tools = {item.spec.name: item for item in knowledge_tools(service)}
         search = tools['paper_search']
         output = await search.execute(ToolCall('s1', 'paper_search', {}),
                                       search.spec.params_model(query='q', limit=20))
-        retained = json.loads(output.content)['results']
-        self.assertEqual([ref.entity_id for ref in output.references],
-                         [item['paper_id'] for item in retained])
+        retained = json.loads(output)['results']
+        self.assertTrue(retained)
+        self.assertNotIn('references', json.loads(output))
 
         async def get_paper(_paper_id):
             return SimpleNamespace(**service.results[0], doi='10.1/test',
@@ -79,6 +79,8 @@ class PaperSearchOutputTests(unittest.IsolatedAsyncioTestCase):
         detail = tools['paper_detail']
         detailed = await detail.execute(ToolCall('d1', 'paper_detail', {}),
                                         detail.spec.params_model(paper_id='paper:0'))
-        self.assertEqual(output.references[0].id, detailed.references[0].id)
-        self.assertEqual(detailed.references[0].doi, '10.1/test')
-        self.assertEqual(detailed.references[0].authors, ['Ada'])
+        payload = json.loads(detailed)
+        self.assertEqual(payload['paper_id'], retained[0]['paper_id'])
+        self.assertEqual(payload['doi'], '10.1/test')
+        self.assertEqual(payload['authors'], ['Ada'])
+        self.assertNotIn('references', payload)

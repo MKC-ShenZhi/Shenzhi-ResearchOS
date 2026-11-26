@@ -1,13 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
-import type { MarkdownBlock as MarkdownBlockData, Reference } from "../../../../clients/backend/agent-message";
+import type { MarkdownBlock as MarkdownBlockData } from "../../../../clients/backend/agent-message";
+import type { CitationTarget } from "../citation-markers";
 import { StreamdownRenderer } from "../streamdown-renderer";
-import { citationTargets } from "../message-presentation";
 
-export function MarkdownBlock({ block, references, anchorPrefix, isStreaming = false }: {
-  block: MarkdownBlockData; references: readonly Reference[]; anchorPrefix: string; isStreaming?: boolean;
+export function MarkdownBlock({ block, citations, isStreaming = false }: {
+  block: MarkdownBlockData; citations: readonly CitationTarget[]; isStreaming?: boolean;
 }) {
-  const citations = useMemo(() => citationTargets(references, anchorPrefix), [references, anchorPrefix]);
   return <StreamdownRenderer content={block.content} citations={citations} isStreaming={isStreaming} />;
 }

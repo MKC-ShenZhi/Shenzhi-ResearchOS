@@ -4,6 +4,7 @@ export interface CitationTarget {
   number: number;
   href: string;
   title: string;
+  pending?: boolean;
 }
 
 interface MarkdownNode {

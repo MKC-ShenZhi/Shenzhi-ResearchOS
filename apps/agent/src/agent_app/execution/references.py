@@ -1,4 +1,4 @@
-"""Reference identity and deduplication shared by tool adapters and message assembly."""
+"""Reference identity and deduplication for message assembly and legacy sources."""
 from __future__ import annotations
 
 import hashlib
@@ -29,7 +29,7 @@ def reference_keys(reference: Reference) -> set[tuple[str, str, str]]:
 
 
 def source_reference(**fields: Any) -> Reference:
-    """Tool adapter helper: program-generated identity, never supplied by the LLM."""
+    """Program-generated identity for legacy source records."""
     reference = Reference(id='source', **fields)
     priority = {'entity': 0, 'doi': 1, 'url': 2, 'title': 3}
     key = min(reference_keys(reference), key=lambda key: (priority[key[1]], key))
@@ -38,7 +38,7 @@ def source_reference(**fields: Any) -> Reference:
 
 
 class ReferenceRegistry:
-    """Deduplicate trusted sources and preserve stable IDs when details arrive."""
+    """Deduplicate validated records and preserve stable IDs when details arrive."""
 
     def __init__(self, sources: Iterable[Reference] = ()) -> None:
         self.references = {ref.id: ref for ref in sources}

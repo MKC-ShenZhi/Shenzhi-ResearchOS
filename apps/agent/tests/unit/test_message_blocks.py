@@ -17,6 +17,11 @@ from agent_app.worker.host import report_payload
 from tests.unit.test_agent import FakeProvider, HANG
 
 
+def model_output(body, *references):
+    records = [ref.model_dump(exclude_none=True) if hasattr(ref, 'model_dump') else ref for ref in references]
+    return body + '\n<references_json>\n' + json.dumps(records, ensure_ascii=False) + '\n</references_json>'
+
+
 def replay(events):
     """A consumer reconstructs state from events; message_end must only calibrate."""
     message = None
@@ -48,8 +53,8 @@ def replay(events):
             message['references'] = list(refs.values())
         elif name == 'message_end':
             assert opened is None
-            assert message['blocks'] == data['message']['blocks']
-            assert message['references'] == data['message']['references']
+            # Late JSON resolves aliases/deduplication; terminal snapshot calibrates.
+            assert [block['id'] for block in message['blocks']] == [block['id'] for block in data['message']['blocks']]
             message = data['message']
     return AIMessage.model_validate(message)
 
@@ -57,19 +62,21 @@ def replay(events):
 class MessageAssemblyTests(unittest.TestCase):
     def test_citation_can_split_at_every_character_and_round_trip(self):
         ref = source_reference(type='paper', title='Paper', entity_id='p1')
-        content = f'# 回答\n\n结果 [[cite:{ref.id}]]，再次引用 [[cite:{ref.id}]]。\n```py\nx = 1\n```'
-        for boundary in range(len(content) + 1):
+        content = '# 回答\n\n结果 [[cite:r1]]，再次引用 [[cite:r1]]。\n```py\nx = 1\n```'
+        output = model_output(content, {**ref.model_dump(), 'id': 'r1'})
+        for boundary in range(len(output) + 1):
             events = []
             stream = MessageStream(lambda name, data: events.append((name, data)), model='fake')
             stream.start()
-            stream.register([ref, ref])
-            stream.append(content[:boundary])
-            stream.append(content[boundary:])
+            stream.append(output[:boundary])
+            stream.append(output[boundary:])
             message = stream.finish('done', duration_ms=1)
-            self.assertEqual(message.blocks[0].content, content)
+            expected = content.replace('[[cite:r1]]', f'[[cite:{message.references[0].id}]]') + '\n'
+            self.assertEqual(message.blocks[0].content, expected)
             self.assertEqual(len(message.references), 1)
             self.assertEqual(sum(name == 'reference_upsert' for name, _ in events), 1)
-            self.assertEqual(''.join(data['delta'] for name, data in events if name == 'block_delta'), content)
+            self.assertEqual(''.join(data['delta'] for name, data in events if name == 'block_delta'), expected)
+            self.assertNotIn('references_json', expected)
 
     def test_unresolved_and_incomplete_citations_degrade_before_streaming(self):
         events = []
@@ -79,7 +86,7 @@ class MessageAssemblyTests(unittest.TestCase):
         message = stream.finish('failed', duration_ms=1)
         self.assertEqual(message.blocks[0].content, '证据 [引用不可用] / [引用不可用] / [引用不完整]')
         self.assertTrue(message.metadata['invalid_citations'])
-        self.assertNotIn('[[cite:', ''.join(data['delta'] for name, data in events if name == 'block_delta'))
+        self.assertNotIn('made_up', ''.join(data['delta'] for name, data in events if name == 'block_delta'))
 
     def test_reference_detail_upserts_without_replacing_identity(self):
         stream = MessageStream(lambda *_: None, model='fake')
@@ -87,10 +94,13 @@ class MessageAssemblyTests(unittest.TestCase):
         detailed = source_reference(type='paper', title='Paper', entity_id='p1', doi='10.1/example',
                                     authors=['Ada'], year=2026, url='https://example.test/paper')
         same_doi = source_reference(type='paper', title='Paper', doi='https://doi.org/10.1/EXAMPLE')
-        stream.register([first, detailed, same_doi])
+        stream.append(model_output('结果 [[cite:a]] [[cite:b]] [[cite:c]]',
+                                   {**first.model_dump(), 'id': 'a'},
+                                   {**detailed.model_dump(), 'id': 'b'},
+                                   {**same_doi.model_dump(), 'id': 'c'}))
         message = stream.finish('done', duration_ms=1)
         self.assertEqual(len(message.references), 1)
-        self.assertEqual(message.references[0].id, first.id)
+        self.assertEqual(message.blocks[0].content.count(f'[[cite:{message.references[0].id}]]'), 3)
         self.assertEqual(message.references[0].authors, ['Ada'])
 
 
@@ -105,19 +115,21 @@ class RuntimeMessageTests(unittest.IsolatedAsyncioTestCase):
         provider = FakeProvider([
             [ReasoningDelta('思考'), TextDelta('先检索。'), ToolCallEvent(ToolCall('c1', 'search', {})),
              Finish(StopReason.TOOL_CALLS)],
-            [TextDelta(f'## 结果\n结论 [[cite:{ref.id}]]'), Finish(StopReason.STOP)],
+            [TextDelta(model_output('## 结果\n结论 [[cite:r1]]', {**ref.model_dump(), 'id': 'r1'})), Finish(StopReason.STOP)],
         ])
         events = []
         result = await AgentRuntime(provider=provider, tools=[search], model='fake').run('q', on_event=events.append)
         self.assertEqual(result.message.status, 'done')
         self.assertEqual([block.content for block in result.message.blocks],
-                         ['先检索。', f'## 结果\n结论 [[cite:{ref.id}]]'])
+                         ['先检索。', f'## 结果\n结论 [[cite:{result.message.references[0].id}]]\n'])
         self.assertEqual(len(result.message.references), 1)
         self.assertEqual([event.seq for event in events], list(range(1, len(events) + 1)))
         self.assertEqual(replay(events), result.message)
         self.assertEqual(replay(events + events), result.message)
         tool_content = next(item['content'] for item in provider.requests[1].messages if item['role'] == 'tool')
-        self.assertEqual(json.loads(tool_content)['references'][0]['id'], ref.id)
+        self.assertNotIn('references', json.loads(tool_content))
+        self.assertNotIn('references_json', result.final_text)
+        self.assertNotIn('references_json', ''.join(event.data.get('text', '') for event in events if event.name == 'delta'))
         self.assertTrue(any(event.name == 'delta' and 'reasoning' in event.data for event in events))
         payload = report_payload({'task_id': 't1', 'run_id': 'r1'}, result)
         self.assertEqual(AIMessage.model_validate(payload['result']['message']), result.message)
@@ -209,7 +221,8 @@ class RuntimeMessageTests(unittest.IsolatedAsyncioTestCase):
 
         store = RecordingStore()
         runtime = AgentRuntime(provider=FakeProvider([
-            [TextDelta('检索'), ToolCallEvent(ToolCall('c1', 'lookup', {})), Finish(StopReason.TOOL_CALLS)],
+            [TextDelta(model_output('检索 [[cite:r1]]', {**ref.model_dump(), 'id': 'r1'})),
+             ToolCallEvent(ToolCall('c1', 'lookup', {})), Finish(StopReason.TOOL_CALLS)],
             [TextDelta('完成'), Finish(StopReason.STOP)],
         ]), tools=[lookup], checkpoint_store=store)
         await runtime.run('q')
@@ -219,22 +232,44 @@ class RuntimeMessageTests(unittest.IsolatedAsyncioTestCase):
         checkpoint = Checkpoint.from_json(checkpoint.to_json())
         events = []
         resumed = await AgentRuntime(provider=FakeProvider([
-            [TextDelta(f'续答 [[cite:{ref.id}]]'), Finish(StopReason.STOP)],
+            [TextDelta(model_output('续答 [[cite:again]]', {**ref.model_dump(), 'id': 'again'})), Finish(StopReason.STOP)],
         ])).resume(checkpoint, on_event=events.append)
         self.assertEqual(resumed.message.id, checkpoint.presentation['id'])
-        self.assertEqual(resumed.message.references[0].id, ref.id)
+        self.assertEqual(resumed.message.references[0].id, checkpoint.presentation['references'][0]['id'])
         self.assertEqual(events[0].seq, checkpoint.event_seq + 1)
         self.assertEqual(replay(events), resumed.message)
 
-    async def test_web_search_registers_only_provider_sources(self):
+    async def test_web_search_returns_evidence_without_selecting_message_references(self):
         search = web_search_tool()
         call = ToolCall('c1', 'web_search', {'query': 'q'})
         with patch('agent_app.capabilities.web_search.web_search', return_value=(
             [{'title': 'Real result', 'url': 'https://example.test/real', 'snippet': 'evidence'}], [],
         )):
             output = await search.execute(call, search.spec.params_model(query='q'))
-        self.assertEqual(output.references[0].title, 'Real result')
-        self.assertEqual(output.references[0].url, 'https://example.test/real')
+        self.assertEqual(json.loads(output)[0]['title'], 'Real result')
+        self.assertEqual(json.loads(output)[0]['url'], 'https://example.test/real')
+
+    async def test_tool_results_do_not_automatically_become_references(self):
+        ref = source_reference(type='paper', title='Unused tool result', entity_id='unused')
+
+        @tool(name='search', description='test')
+        async def search():
+            return ToolOutput(content='candidate', references=(ref,))
+
+        result = await AgentRuntime(provider=FakeProvider([
+            [ToolCallEvent(ToolCall('c1', 'search', {})), Finish(StopReason.TOOL_CALLS)],
+            [TextDelta(model_output('一般性回答。')), Finish(StopReason.STOP)],
+        ]), tools=[search]).run('q')
+        self.assertEqual(result.message.references, [])
+
+    async def test_model_can_select_a_source_from_legacy_history(self):
+        historical = ToolResultMessage('old', 'read_paper', '{"title":"Historical PDF","url":"https://example.test/paper"}')
+        result = await AgentRuntime(provider=FakeProvider([
+            [TextDelta(model_output('历史证据 [[cite:r1]]',
+                                   {'id': 'r1', 'type': 'paper', 'title': 'Historical PDF', 'url': 'https://example.test/paper'})),
+             Finish(StopReason.STOP)],
+        ])).run('q', history=[historical])
+        self.assertEqual(result.message.references[0].title, 'Historical PDF')
 
     async def test_invalid_tool_source_is_an_error_result_not_a_fabricated_reference(self):
         @tool(name='broken_source', description='test')

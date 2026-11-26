@@ -543,6 +543,9 @@ Agent 专用的 `StreamdownRenderer` 位于 `features/agent-chat/components/`，
 `isStreaming` 控制是否补全未闭合的 Markdown。`MessageRenderer` 组织时间、状态、内容块和参考来源，
 `BlockRenderer` 按类型分发，`blocks/markdown-block.tsx` 适配协议后调用 `StreamdownRenderer`。
 引用通过 Markdown AST 转为角标，底层通用 Markdown、数学与 LaTeX 工具仍留在全局层。
+Agent 输出的 Markdown 与 references JSON 由 Agent Service 拆分，系统字段由程序生成。
+Web 在整条消息范围内统一按正文首次引用编号，来源晚到时保留待补全角标；
+工具检索结果不直接决定参考列表，具体约定见 [结构化消息](../agent/message-blocks.md)。
 
 搜索导航恢复、搜索草稿与 AppShell 响应式布局属于 Web 框架级能力，分别位于
 `lib/navigation/` 与 `components/common/layout/`，维护说明见
