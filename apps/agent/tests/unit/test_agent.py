@@ -290,6 +290,105 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(asyncio.CancelledError):
             await task
 
+    async def test_stop_interrupts_silent_model_and_keeps_partial_text(self):
+        closed = asyncio.Event()
+
+        class Provider(FakeProvider):
+            async def stream(self, request):
+                try:
+                    async for event in super().stream(request):
+                        yield event
+                finally:
+                    closed.set()
+
+        provider = Provider([[TextDelta('已有内容'), HANG]])
+        stop, events = asyncio.Event(), []
+        task = asyncio.create_task(AgentRuntime(provider=provider).run('q', stop=stop, on_event=events.append))
+        await provider.started.wait()
+        stop.set()
+        result = await asyncio.wait_for(task, 1)
+        self.assertEqual((result.status, result.final_text), ('stopped', '已有内容'))
+        self.assertTrue(closed.is_set())
+        self.assertEqual(events[-1].data['stop_reason'], 'cancelled')
+        self.assertEqual(len(provider.requests), 1)
+
+    async def test_stop_interrupts_tools_and_awaits_cleanup(self):
+        for mode in ('sequential', 'parallel'):
+            with self.subTest(mode=mode):
+                started, cleaned = set(), set()
+                ready, stop = asyncio.Event(), asyncio.Event()
+
+                @tool(name='blocking', description='test', params=EchoParams)
+                async def blocking(args):
+                    started.add(args.value)
+                    if len(started) == (2 if mode == 'parallel' else 1):
+                        ready.set()
+                    try:
+                        await asyncio.Event().wait()
+                    finally:
+                        await asyncio.sleep(0)
+                        cleaned.add(args.value)
+
+                provider = FakeProvider([[
+                    ToolCallEvent(ToolCall('c1', 'blocking', {'value': 'a'})),
+                    ToolCallEvent(ToolCall('c2', 'blocking', {'value': 'b'})),
+                    Finish(StopReason.TOOL_CALLS),
+                ]])
+                events = []
+                runtime = AgentRuntime(provider=provider, tools=[blocking], tool_execution=mode)
+                task = asyncio.create_task(runtime.run('q', stop=stop, on_event=events.append))
+                await asyncio.wait_for(ready.wait(), 1)
+                stop.set()
+                result = await asyncio.wait_for(task, 1)
+                self.assertEqual(result.status, 'stopped')
+                self.assertEqual(started, cleaned)
+                self.assertEqual(len(provider.requests), 1)
+                ends = [e for e in events if e.name == 'tool_end']
+                self.assertEqual({e.data['tool_call_id'] for e in ends}, {'c1', 'c2'})
+                self.assertEqual(len(ends), 2)
+                self.assertTrue(all(e.data['cancelled'] for e in ends))
+                assemble('s', result.messages, max_chars=30_000)
+
+    async def test_stop_keeps_completed_parallel_tool_result(self):
+        stop, ready = asyncio.Event(), asyncio.Event()
+
+        @tool(name='mixed', description='test', params=EchoParams)
+        async def mixed(args):
+            if args.value == 'done':
+                return '已完成的结果'
+            ready.set()
+            await asyncio.Event().wait()
+
+        provider = FakeProvider([[
+            ToolCallEvent(ToolCall('c1', 'mixed', {'value': 'done'})),
+            ToolCallEvent(ToolCall('c2', 'mixed', {'value': 'pending'})),
+            Finish(StopReason.TOOL_CALLS),
+        ]])
+        events = []
+        task = asyncio.create_task(AgentRuntime(provider=provider, tools=[mixed]).run(
+            'q', stop=stop, on_event=events.append))
+        await asyncio.wait_for(ready.wait(), 1)
+        stop.set()
+        result = await asyncio.wait_for(task, 1)
+        ends = {e.data['tool_call_id']: e.data for e in events if e.name == 'tool_end'}
+        self.assertFalse(ends['c1']['is_error'])
+        self.assertEqual(ends['c1']['summary'], '已完成的结果')
+        self.assertTrue(ends['c2']['cancelled'])
+        self.assertEqual(result.status, 'stopped')
+
+    async def test_stop_at_run_end_does_not_override_completion(self):
+        stop, events = asyncio.Event(), []
+
+        def on_event(event):
+            events.append(event)
+            if event.name == 'run_end':
+                stop.set()
+
+        provider = FakeProvider([[TextDelta('完整答案'), Finish(StopReason.STOP)]])
+        result = await AgentRuntime(provider=provider).run('q', stop=stop, on_event=on_event)
+        self.assertEqual((result.status, result.final_text), ('done', '完整答案'))
+        self.assertEqual(len([e for e in events if e.name == 'run_end']), 1)
+
     async def test_external_cancel_closes_batch(self):
         provider = FakeProvider([
             [ToolCallEvent(ToolCall('c1', 'echo', {'value': 'a'})),

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { applyToolCall, applyToolEnd, initialStreamState, restoreEntries, type Activity } from "../../features/agent-chat/timeline";
+
 import { streamAgentRun } from "../../clients/backend/agent";
 
 test("Agent run POSTs its payload and dispatches the complete SSE loop", async () => {
@@ -49,4 +51,38 @@ test("Agent run POSTs its payload and dispatches the complete SSE loop", async (
     "start:run-1", "delta:1::思考", "call:paper_search", "end:false:找到论文",
     "message:steer", "compaction", "meta", "delta:2:完成:", "result:完成",
   ]);
+});
+
+
+test("cancelled tools close through SSE and retain their state when restored", async () => {
+  const originalFetch = globalThis.fetch;
+  let state = initialStreamState();
+  let terminal = "";
+  const events = [
+    ["tool_call", { tool_call_id: "c1", name: "paper_search", arguments: "{}" }],
+    ["tool_end", { tool_call_id: "c1", is_error: true, cancelled: true, summary: "已取消" }],
+    ["result", { status: "stopped", stop_reason: "cancelled", final_text: "已有内容" }],
+  ];
+  globalThis.fetch = async () => new Response(events.map(([name, data]) =>
+    `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`).join(""), {
+      headers: { "content-type": "text/event-stream" },
+    });
+  try {
+    await streamAgentRun({ prompt: "q" }, {
+      onDelta: () => {}, onMeta: () => {},
+      onToolCall: (activity) => { state = applyToolCall(state, activity); },
+      onToolEnd: (id, isError, durationMs, summary, cancelled) => {
+        state = applyToolEnd(state, id, { done: true, isError, durationMs, summary, cancelled });
+      },
+      onResult: (result) => { terminal = `${result.status}:${result.stop_reason}:${result.final_text}`; },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  const activity = state.entries.flatMap((e) => e.kind === "tool" ? [e.tool] : []);
+  const restored = restoreEntries(undefined, JSON.parse(JSON.stringify(activity)) as Activity[]);
+  assert.deepEqual(restored, state.entries);
+  assert.equal(activity[0].done, true);
+  assert.equal(activity[0].cancelled, true);
+  assert.equal(terminal, "stopped:cancelled:已有内容");
 });

@@ -50,6 +50,7 @@ class TimelineCapture:
                     item['tool'].update({
                         'done': True,
                         'isError': bool(data.get('is_error')),
+                        'cancelled': bool(data.get('cancelled')),
                         'durationMs': int(data.get('duration_ms') or 0),
                         'summary': str(data.get('summary') or ''),
                     })

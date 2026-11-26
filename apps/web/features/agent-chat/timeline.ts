@@ -15,6 +15,7 @@
 export interface Activity {
   toolCallId: string; name: string; arguments: string;
   done: boolean; isError: boolean; durationMs: number; summary?: string;
+  cancelled?: boolean;
 }
 
 /** 思考条目：一段思考（不含正文）。 */

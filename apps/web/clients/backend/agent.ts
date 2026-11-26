@@ -43,6 +43,7 @@ export interface AgentRunResult {
 }
 
 export interface AgentActivity {
+  cancelled?: boolean;
   toolCallId: string;
   name: string;
   arguments: string;
@@ -216,7 +217,7 @@ export async function streamAgentRun(
     onDelta: (text: string, reasoning: string, turn: number) => void;
     onMeta: (data: { warnings?: string[] }) => void;
     onToolCall: (activity: AgentActivity, turn: number) => void;
-    onToolEnd: (toolCallId: string, isError: boolean, durationMs: number, summary: string) => void;
+    onToolEnd: (toolCallId: string, isError: boolean, durationMs: number, summary: string, cancelled?: boolean) => void;
     onRunStart?: (runId: string) => void;
     onMessage?: (text: string, kind: "steer" | "follow_up" | "system") => void;
     onCompaction?: (data: { before_chars: number; after_chars: number }) => void;
@@ -300,7 +301,7 @@ function dispatchAgentEvent(event: SseEvent, handlers: Parameters<typeof streamA
       }, data.turn ?? 0);
       break;
     case "tool_end":
-      handlers.onToolEnd(data.tool_call_id, Boolean(data.is_error), data.duration_ms ?? 0, data.summary ?? "");
+      handlers.onToolEnd(data.tool_call_id, Boolean(data.is_error), data.duration_ms ?? 0, data.summary ?? "", Boolean(data.cancelled));
       break;
     case "result":
       handlers.onResult(data as AgentRunResult);

@@ -81,11 +81,12 @@ class MeteringControl:
         check(task_id is None or task.task_id == task_id, 'TASK_CONFLICT')
         check((execution.worker_id, execution.lease_token) == (identity.worker_id, identity.lease_token), 'EXECUTION_CONFLICT')
         task_active = task.status == 'running' or (
-            allow_cancel_requested and task.status == 'cancelling' and task.cancel_requested)
+            task.status == 'cancelling' and task.cancel_requested)
         check(not execution.sealed and run.status == 'running' and task_active
-              and (allow_cancel_requested or not task.cancel_requested) and run.worker_id == identity.worker_id
+              and run.worker_id == identity.worker_id
               and run.lease_token == identity.lease_token and run.lease_expires_at is not None
               and run.lease_expires_at.replace(tzinfo=timezone.utc) > now_utc(), 'LEASE_INACTIVE')
+        check(allow_cancel_requested or not task.cancel_requested, 'TASK_CANCELLED')
         check(profile.binding_status == 'bound' and not profile.revoked, 'TASK_BINDING_PENDING')
         return execution, task, run, profile
 

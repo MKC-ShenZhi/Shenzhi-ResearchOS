@@ -6,6 +6,7 @@ repository's predicates, persistence and fencing, with an explicit lease clock.
 from __future__ import annotations
 
 import unittest
+import asyncio
 import tempfile
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
@@ -17,15 +18,16 @@ from sqlalchemy.orm import Session
 
 from agent_app.control import repository
 from agent_app.execution.runtime import AgentRuntime
-from agent_app.execution.types import StopReason
+from agent_app.execution.types import StopReason, ToolCall
+from agent_app.control.metering import GateDenied, MeteringControl
 from agent_app.errors import BusinessError
 from agent_app.infrastructure.database import get_session
 from agent_app.infrastructure.models import Base, RunEventRow, RunRow, TaskRow
 from agent_app.infrastructure.metering_models import TaskMeteringRow
-from agent_app.integrations.llm.agent_stream import Finish, TextDelta
+from agent_app.integrations.llm.agent_stream import Finish, TextDelta, ToolCallEvent
 from agent_app.main import app
 from agent_app.worker import host
-from tests.unit.test_agent import FakeProvider
+from tests.unit.test_agent import FakeProvider, HANG, make_echo
 
 
 class MemorySession:
@@ -141,10 +143,80 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((claim['lease_token'], claim['event_seq']), (1, 0))
         await self.execute(claim, 'worker-a')
         rows = self.events(claim['run']['run_id'])
+        self.assertEqual(rows[0].name, 'run_start')
+        self.assertEqual(rows[0].data['run_id'], claim['run']['run_id'])
         self.assertEqual([row.seq for row in rows], list(range(1, len(rows) + 1)))
         run = self.session.get(RunRow, claim['run']['run_id'])
         self.assertEqual(run.report_json['status'], 'completed')
         self.assertEqual(run.report_json['result']['final_text'], 'complete')
+
+    async def test_controls_cancel_worker_and_persist_clean_terminal_events(self):
+        claim = await self.control.claim('worker-a')
+        provider = FakeProvider([[TextDelta('partial'), HANG]])
+        runtime = AgentRuntime(provider=provider)
+        with patch.object(host, 'build_runtime', return_value=runtime):
+            worker = asyncio.create_task(host.execute_claim(self.control, claim, 'worker-a'))
+            try:
+                await asyncio.wait_for(provider.started.wait(), 1)
+                await repository.request_cancel(self.db, self.task.task_id, 'owner')
+                await asyncio.wait_for(worker, 2)
+            finally:
+                if not worker.done():
+                    worker.cancel()
+                await asyncio.gather(worker, return_exceptions=True)
+        run = self.session.get(RunRow, claim['run']['run_id'])
+        self.assertEqual(run.status, 'cancelled')
+        self.assertIsNone(run.report_json['error_code'])
+        self.assertIsNone(run.report_json['error_message'])
+        self.assertEqual(run.report_json['result']['final_text'], 'partial')
+        self.assertEqual(self.events(run.run_id)[-1].name, 'run_end')
+        self.assertEqual(self.events(run.run_id)[-1].data['stop_reason'], 'cancelled')
+        pending = [t for t in asyncio.all_tasks() if not t.done()
+                   and 'execute_claim.<locals>' in t.get_coro().__qualname__]
+        self.assertEqual(pending, [])
+
+    async def test_cancel_allows_current_worker_events_but_not_stale_worker(self):
+        claim = await self.control.claim('worker-a')
+        await repository.request_cancel(self.db, self.task.task_id, 'owner')
+        await self.emit(claim, 'worker-a', 1)
+        await self.rejected(self.emit(claim, 'worker-old', 2))
+        await self.report(claim, 'worker-a', status='cancelled')
+        await self.rejected(self.emit(claim, 'worker-a', 2))
+
+    async def test_cancel_rejects_new_authorization_with_explicit_reason(self):
+        from agent_contracts.execution_v2 import WorkerIdentity
+        claim = await self.control.claim('worker-a')
+        await repository.request_cancel(self.db, self.task.task_id, 'owner')
+        identity = WorkerIdentity(schema_version=1, worker_id='worker-a',
+                                  lease_token=claim['lease_token'], execution_id=claim['execution_id'])
+        with self.assertRaises(GateDenied) as error:
+            control = MeteringControl(issuer='backend-test', audience='agent-test',
+                                      public_keys={}, outbox_capacity=100)
+            await control.lock_execution(self.db, identity, run_id=claim['run']['run_id'])
+        self.assertEqual(error.exception.reason, 'TASK_CANCELLED')
+
+    async def test_real_authorization_denial_stays_failed(self):
+        claim = await self.control.claim('worker-a')
+        provider = FakeProvider([[
+            ToolCallEvent(ToolCall('c1', 'echo', {'value': 'a'})), Finish(StopReason.TOOL_CALLS),
+        ]])
+        runtime = AgentRuntime(provider=provider, tools=[make_echo()])
+        with patch.object(host, 'build_runtime', return_value=runtime), patch.object(
+                MeteringControl, 'intent', side_effect=GateDenied('CAPABILITY_NOT_AUTHORIZED')):
+            await asyncio.wait_for(host.execute_claim(self.control, claim, 'worker-a'), 2)
+        run = self.session.get(RunRow, claim['run']['run_id'])
+        self.assertEqual(run.status, 'failed')
+        self.assertEqual(run.report_json['error_code'], 'authorization_denied')
+
+    async def test_cancel_completion_race_keeps_first_report(self):
+        claim = await self.control.claim('worker-a')
+        await repository.request_cancel(self.db, self.task.task_id, 'owner')
+        await self.report(claim, 'worker-a', status='completed')
+        await repository.request_cancel(self.db, self.task.task_id, 'owner')
+        await self.rejected(self.report(claim, 'worker-a', status='cancelled'))
+        run = self.session.get(RunRow, claim['run']['run_id'])
+        self.assertEqual(run.status, 'completed')
+        self.assertEqual(self.session.get(TaskRow, self.task.task_id).status, 'completed')
 
     async def test_takeover_worker_continues_sequence_and_completes(self):
         first = await self.control.claim('worker-a')
@@ -158,6 +230,7 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([row.seq for row in rows], list(range(1, len(rows) + 1)))
         self.assertEqual(rows[0].data, {'text': 'partial'})
         self.assertEqual(rows[1].name, 'run_start')
+        self.assertEqual(rows[1].data['run_id'], second['run']['run_id'])
         self.assertEqual(self.session.get(RunRow, first['run']['run_id']).status, 'completed')
 
     async def test_stale_token_cannot_publish_renew_or_finish_new_lease(self):

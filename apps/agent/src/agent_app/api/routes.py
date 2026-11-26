@@ -382,19 +382,19 @@ async def heartbeat(run_id: str, body: WorkerIdentity, db=Depends(get_session), 
 async def controls(run_id: str, worker_id: str, lease_token: int, execution_id: str,
                    after_seq: int = 0, db=Depends(get_session), control=Depends(metering_control)):
     body = WorkerIdentity(schema_version=1, worker_id=worker_id, lease_token=lease_token, execution_id=execution_id)
-    execution, _, _, _ = await control.lock_execution(
+    execution, task, _, _ = await control.lock_execution(
         db, body, run_id=run_id, allow_cancel_requested=True,
     )
     from agent_app.infrastructure.models import RunControlRow
     rows = (await db.scalars(select(RunControlRow).where(RunControlRow.run_id == run_id,
                     RunControlRow.seq > after_seq).order_by(RunControlRow.seq))).all()
-    return dict(schema_version=1, controls=[dict(run_id=e.run_id, seq=e.seq, name=e.name,
+    return dict(schema_version=1, cancel_requested=task.cancel_requested, controls=[dict(run_id=e.run_id, seq=e.seq, name=e.name,
                                                text=e.text, created_at=e.created_at.isoformat()) for e in rows])
 
 
 @router.post('/runs/{run_id}/events', dependencies=[Depends(worker)])
 async def append_event(run_id: str, body: EventIngestV2, db=Depends(get_session), control=Depends(metering_control)):
-    await control.lock_execution(db, WorkerIdentity.model_validate(body.model_dump(include={'schema_version','worker_id','lease_token','execution_id'})), run_id=run_id)
+    await control.lock_execution(db, WorkerIdentity.model_validate(body.model_dump(include={'schema_version','worker_id','lease_token','execution_id'})), run_id=run_id, allow_cancel_requested=True)
     check(run_id == body.run_id, 'RUN_CONFLICT')
     await repository.append_event(db, PlatformEvent(body.task_id, body.run_id, body.seq,
         body.turn, body.name, body.data, body.occurred_at), body.worker_id, body.lease_token)

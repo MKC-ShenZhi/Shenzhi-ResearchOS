@@ -234,6 +234,7 @@ export function ShenzhiAiPage() {
   const [loadingSession, setLoadingSession] = useState(true);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [needsRefresh, setNeedsRefresh] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
@@ -311,6 +312,7 @@ export function ShenzhiAiPage() {
   const finishRun = useCallback((context: RunContext, controller: AbortController) => {
     if (!isCurrentRun(context, controller)) return;
     setRunning(false);
+    setStopping(false);
     abortRef.current = null;
     runIdRef.current = null;
     runContextRef.current = null;
@@ -348,13 +350,14 @@ export function ShenzhiAiPage() {
         ...turn,
         stream: applyToolCall(turn.stream, activity),
       })),
-      onToolEnd: (toolCallId, isError, durationMs, summary) => patchAssistant(context, (turn) => ({
+      onToolEnd: (toolCallId, isError, durationMs, summary, cancelled) => patchAssistant(context, (turn) => ({
         ...turn,
         // 回填到同一个工具对象：工具行据此从"转圈"变"完成"
-        stream: applyToolEnd(turn.stream, toolCallId, { done: true, isError, durationMs, summary }),
+        stream: applyToolEnd(turn.stream, toolCallId, { done: true, isError, durationMs, summary, cancelled }),
       })),
       onResult: (result: AgentRunResult) => {
         if (!isCurrent()) return;
+        setStopping(false);
         onCompleted?.();
         patchAssistant(context, (turn) => {
           const sources = result.output?.sources;
@@ -402,6 +405,7 @@ export function ShenzhiAiPage() {
       setLoadingSession(true);
       setHydratedSessionId(null);
       setRunError(null);
+      setStopping(false);
       setNeedsRefresh(false);
       setOpenReport(null);
       setQuote(null);
@@ -651,6 +655,7 @@ export function ShenzhiAiPage() {
   }, [input, running]);
 
   const stop = useCallback(async () => {
+    if (stopping) return;
     const runId = runIdRef.current;
     if (!runId) {
       setNeedsRefresh(true);
@@ -658,12 +663,15 @@ export function ShenzhiAiPage() {
       abortRef.current?.abort();
       return;
     }
+    setStopping(true);
     try {
       await stopAgentRun(runId);
     } catch (error) {
+      if (runIdRef.current !== runId) return;
+      setStopping(false);
       setRunError(error instanceof Error ? error.message : "停止失败，请重试");
     }
-  }, []);
+  }, [stopping]);
 
   /** 引用回复：mouseup 后若在回答区（data-quote-source）内有选区，展示引用条。 */
   const captureQuote = useCallback(() => {
@@ -866,11 +874,12 @@ export function ShenzhiAiPage() {
             {running && (
               <div className="mb-1.5 flex items-center gap-2 rounded-xl border border-agent/25 bg-agent-soft/60 px-3 py-1.5">
                 <Zap className="size-3.5 shrink-0 text-agent" strokeWidth={2.2} aria-hidden />
-                <span className="text-[11px] leading-4 text-agent">运行中 · 现在发送的内容将作为插话注入，不打断当前任务</span>
+                <span className="text-[11px] leading-4 text-agent">{stopping ? "正在停止…" : "运行中 · 现在发送的内容将作为插话注入，不打断当前任务"}</span>
                 <button type="button"
+                  disabled={stopping}
                   onClick={() => void stop()}
                   className="ml-auto shrink-0 cursor-pointer rounded-full border border-agent/40 px-2.5 py-0.5 text-[11px] font-medium text-agent transition-colors hover:bg-agent hover:text-white">
-                  停止
+                  {stopping ? "正在停止…" : "停止"}
                 </button>
               </div>
             )}

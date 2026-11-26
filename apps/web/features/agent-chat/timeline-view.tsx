@@ -16,8 +16,8 @@ function ToolLine({ tool }: { tool: Activity }) {
   return (
     <div className="font-mono text-xs text-muted">
       <div className="flex items-center gap-2">
-      <span className={`shrink-0 ${tool.isError ? "text-red-500" : tool.done ? "text-agent" : "text-ink-2"}`}>
-        {!tool.done ? "→" : tool.isError ? "✗" : "✓"}
+      <span className={`shrink-0 ${tool.cancelled ? "text-faint" : tool.isError ? "text-red-500" : tool.done ? "text-agent" : "text-ink-2"}`}>
+        {!tool.done ? "→" : tool.cancelled ? "−" : tool.isError ? "✗" : "✓"}
       </span>
       {!tool.done && <Loader2 className="size-3 shrink-0 animate-spin text-agent" strokeWidth={2.2} aria-hidden />}
       <span className="min-w-0 truncate text-ink-2">{tool.name}</span>
@@ -26,10 +26,10 @@ function ToolLine({ tool }: { tool: Activity }) {
           {previewLine(tool.arguments)}
         </span>
       )}
-      {tool.done && <span className="shrink-0 text-faint">{tool.durationMs}ms</span>}
+      {tool.done && <span className="shrink-0 text-faint">{tool.cancelled ? "已取消" : `${tool.durationMs}ms`}</span>}
       </div>
-      {tool.done && tool.summary && (
-        <div className={tool.isError ? "ml-5 truncate text-red-500" : "ml-5 truncate text-faint"} title={tool.summary}>
+      {tool.done && !tool.cancelled && tool.summary && (
+        <div className={tool.isError && !tool.cancelled ? "ml-5 truncate text-red-500" : "ml-5 truncate text-faint"} title={tool.summary}>
           {previewLine(tool.summary, 160)}
         </div>
       )}

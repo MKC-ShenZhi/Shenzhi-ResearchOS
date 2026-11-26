@@ -23,9 +23,21 @@ class TimelineRunToolTests(unittest.TestCase):
             self.assertEqual(capture.process[-1], {'kind': 'tool', 'tool': {
                 'toolCallId': 'shared', 'name': 'paper_search', 'arguments': '{}',
                 'done': True, 'isError': run == 1, 'durationMs': run + 1,
+                'cancelled': False,
                 'summary': f'Run {run}',
             }})
             historical = copy.deepcopy(capture.process)
+
+    def test_cancelled_tool_survives_persisted_timeline_round_trip(self):
+        import json
+        capture = TimelineCapture([])
+        capture.event('tool_call', {'tool_call_id': 'c1', 'name': 'paper_search'})
+        capture.event('tool_end', {'tool_call_id': 'c1', 'is_error': True,
+                                   'cancelled': True, 'summary': '已取消'})
+        tool = json.loads(json.dumps(capture.process))[-1]['tool']
+        self.assertTrue(tool['done'])
+        self.assertTrue(tool['cancelled'])
+        self.assertEqual(tool['summary'], '已取消')
 
     def test_unmatched_tool_end_in_new_run_leaves_history_untouched(self):
         capture = TimelineCapture([])

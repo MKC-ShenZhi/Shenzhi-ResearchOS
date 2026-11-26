@@ -151,6 +151,7 @@ class WorkerMeter:
         self.risk_profile = risk_profile
         self.dynamic_budget = dynamic_budget
         self.receipts = {}
+        self.failure: Exception | None = None
         self.model_budgets = {}
         self.payload_bindings = {}
         spool_root = os.getenv('AGENT_USAGE_SPOOL_ROOT', '').strip()
@@ -190,6 +191,9 @@ class WorkerMeter:
                 raise BusinessError(20004, 'MODEL_BUDGET_CONFLICT', 403)
         except Exception as exc:
             self.stop.set()
+            if isinstance(exc, BusinessError) and exc.message == 'TASK_CANCELLED':
+                raise asyncio.CancelledError() from exc
+            self.failure = exc
             # A Control timeout is not a provider failure and must never enter
             # the provider's HTTP retry loop or create a second sending right.
             if isinstance(exc, BusinessError):
@@ -197,26 +201,34 @@ class WorkerMeter:
             raise BusinessError(20004, '调用授权或启动未获可信回执', 503) from exc
         if not start.get('may_send'):
             self.stop.set()
-            raise BusinessError(20004, '调用已经启动，禁止重复发送', 409)
+            self.failure = BusinessError(20004, '调用已经启动，禁止重复发送', 409)
+            raise self.failure
         cutoff = start.get('start_before')
-        if self.stop.is_set() or (cutoff and datetime.now(timezone.utc) >= datetime.fromisoformat(cutoff)):
+        if self.stop.is_set():
+            raise asyncio.CancelledError()
+        if cutoff and datetime.now(timezone.utc) >= datetime.fromisoformat(cutoff):
             self.stop.set()
-            raise BusinessError(20004, '调用启动截止或执行权失效', 403)
+            self.failure = BusinessError(20004, '调用启动截止或执行权失效', 403)
+            raise self.failure
         self.receipts[call_id] = [cutoff, False]
         return call_id
 
     def consume_send(self, call_id, payload=None):
+        if self.stop.is_set():
+            raise asyncio.CancelledError()
         if call_id in self.model_budgets:
             approved = self.model_budgets[call_id]
             if (payload is None or type(payload.get("max_tokens")) is not int
                     or payload["max_tokens"] != approved.output_tokens
                     or model_payload_digest(payload) != self.payload_bindings[call_id]):
                 self.stop.set()
-                raise BusinessError(20004, "MODEL_PAYLOAD_BUDGET_CONFLICT", 403)
+                self.failure = BusinessError(20004, "MODEL_PAYLOAD_BUDGET_CONFLICT", 403)
+                raise self.failure
         cutoff, used = self.receipts[call_id]
-        if used or self.stop.is_set() or (cutoff and datetime.now(timezone.utc) >= datetime.fromisoformat(cutoff)):
+        if used or (cutoff and datetime.now(timezone.utc) >= datetime.fromisoformat(cutoff)):
             self.stop.set()
-            raise BusinessError(20004, '调用发送许可已使用或截止', 403)
+            self.failure = BusinessError(20004, '调用发送许可已使用或截止', 403)
+            raise self.failure
         self.receipts[call_id][1] = True
 
     async def complete(self, call_id, measurement):
@@ -250,6 +262,7 @@ class WorkerMeter:
                      or isinstance(error, httpx.HTTPStatusError) and error.response.status_code >= 500)
         if not transient:
             self.stop.set()
+            self.failure = error
             raise error
         logging.getLogger('agent.metering').warning(
             'Usage completion queued for spool recovery call_id=%s reason=%s', call_id, type(error).__name__)

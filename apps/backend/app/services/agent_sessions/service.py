@@ -341,6 +341,7 @@ def _replay_terminal_turn(turn: AgentTurn, owner: str) -> LiveRun:
                 append(live, 'tool_end', {
                     'tool_call_id': tool.get('toolCallId', ''),
                     'is_error': tool.get('isError', False),
+                    'cancelled': tool.get('cancelled', False),
                     'duration_ms': tool.get('durationMs', 0),
                     'summary': tool.get('summary', ''),
                 })
