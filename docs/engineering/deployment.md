@@ -18,9 +18,9 @@
 | Agent Worker | 在 `apps/agent` 执行 `uv run --env-file .env python -m agent_app.worker_main` | 领取任务、续租、执行并上报事件与结果 |
 | Agent Usage Worker | 在 `apps/agent` 执行 `uv run --locked --env-file .env python -m agent_app.usage_worker` | V2 用量 Outbox 投递、恢复、对账与关闭清单处理 |
 
-本地 VS Code / Cursor 可使用 `.vscode/tasks.example.json` 作为 `.vscode/tasks.json` 的项目任务模板；本地任务文件不入库。`ShenZhi: 全栈开发` 并行启动 Web、Backend、Agent API、Agent Worker、Agent Usage Worker 五个进程，各用独立终端。已有前后端在运行时，先终止旧任务再启动全栈，避免重复占用端口；`ShenZhi: Agent 开发` 可只启动三个 Agent 进程。Python 启动任务使用各应用目录下的 `.env` 和现有锁文件；Agent API 不启用热重载，Worker 代码或配置变化后须重启三个 Agent 进程，并核对已安装 Policy 的能力 digest。
+本地 VS Code / Cursor 可使用 `.vscode/tasks.example.json` 作为 `.vscode/tasks.json` 的项目任务模板；本地任务文件不入库。模板提供五个 Docker 任务：初始化环境、启动 Full、Web + Admin 热更新、重启 Agent、重建指定服务。初始化环境在仓库根目录手动执行 `python infra/docker/prepare-env.py --from-local`，不启动容器，也不加入 Full 的依赖链。其余 Docker 任务统一在 `infra/docker` 使用 `compose.yml` + `compose.dev.yml` 和 `full` profile；环境初始化独立执行，不随任务自动运行。
 
-`ShenZhi: 数据库迁移` 对应 Backend，`ShenZhi: Agent 数据库迁移` 对应独立 Agent 库。启动任务不会自动建库、迁移、安装 Policy 或改变授权模式。V2 验收配置与权限门禁见 [用户权益](../agent/entitlements.md)。
+Full 使用 `up -d --wait` 复用镜像；先启动 Full，再运行持续的 `watch --no-up web admin`，可通过编辑器终止或重启 Watch。Agent 重启统一覆盖 API、Worker、Usage Worker，但不重新读取 env_file。交互式重建使用 Windows PowerShell 展开服务组，执行 `up -d --build --force-recreate --wait`，保留 Compose 依赖检查。Backend 组包含共享镜像的 auth/backend 迁移服务及共享网络命名空间的 Admin；Agent 组包含迁移及三个运行服务。Web、Admin、Payment 可单独选择。Payment 属于 Compose app/full 内部服务，不发布宿主端口。重建可能重新执行对应迁移服务；任务不删除持久卷。V2 配置与权限门禁见 [用户权益](../agent/entitlements.md)。
 
 浏览器通过同源 `/api/v1` 访问 Web BFF。BFF 使用 `BUSINESS_BACKEND_URL` 和 `BACKEND_BFF_SECRET` 调用 FastAPI。本地启动和提交前检查见 [ONBOARDING](../../ONBOARDING.md)。
 
