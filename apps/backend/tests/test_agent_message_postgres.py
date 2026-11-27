@@ -45,7 +45,7 @@ class AgentMessagePostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_projection_jsonb_reconnect_history_and_replay_are_identical(self):
         original = make_message()
         gateway = MessageGateway(original)
-        self.enterContext(patch.object(service, 'agent_gateway', gateway))
+        self.enterContext(patch('app.services.agent_gateway.gateway.AgentGateway', return_value=gateway))
         session = await self.repo.create(self.owner, 'JSONB', {})
         live = await service.start_session_run(owner=self.owner, session_id=session.id,
             prompt='q', model=None, mode='fast', attachments=[], workspace_id=None, skills=[], gateway=gateway)
@@ -61,7 +61,7 @@ class AgentMessagePostgresTests(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch.object(service, 'agent_session_repository', fresh))
         self.enterContext(patch.object(api, 'agent_session_repository', fresh))
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-            response = await client.get(f'/api/v1/agent/sessions/{session.id}', headers={
+            response = await client.get(f'/api/v2/agent/sessions/{session.id}', headers={
                 'x-shenzhi-anonymous-id': self.owner[5:],
             })
         self.assertEqual(response.status_code, 200)

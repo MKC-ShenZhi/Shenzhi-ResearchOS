@@ -6,6 +6,7 @@ import {
 } from "../../clients/backend/agent";
 import { AgentMessageProtocolError } from "../../clients/backend/agent-message";
 import { applyMessageEvent, initialMessageState, reconcileMessage, startMessageRun } from "../../features/agent-chat/message-state";
+import { sessionExportMessages } from "../../features/agent-chat/session-export";
 import { storedTurns } from "../../features/agent-chat/session-state";
 import { applyDelta, initialStreamState } from "../../features/agent-chat/timeline";
 import { messageEvents, messageFixture, mockSse, type MockMessageEvent } from "./message-fixtures";
@@ -82,9 +83,9 @@ test("mock fragmented SSE assembles all blocks before message_end across POST, G
     }
     assert.equal(requests[0].init?.method, "POST");
     assert.equal(new Headers(requests[0].init?.headers).get("Idempotency-Key"), "same-operation-key");
-    assert.equal(requests[1].url, "/api/v1/agent/sessions/s%2F1/run/stream?after=0");
+    assert.equal(requests[1].url, "/api/v2/agent/sessions/s%2F1/run/stream?after=0");
     assert.equal(requests[1].init?.method, "GET");
-    assert.equal(requests[2].url, "/api/v1/agent/run");
+    assert.equal(requests[2].url, "/api/v2/agent/run");
   } finally { globalThis.fetch = originalFetch; }
 });
 
@@ -95,7 +96,7 @@ test("mock history restores the exact same message as streaming, keeping legacy 
   delete turns[2].message;
   const session: AgentSessionDetail = { id: "s1", title: "mock", created_at: 1, updated_at: 2, settings: {}, turns };
   globalThis.fetch = async (url) => {
-    assert.equal(String(url), "/api/v1/agent/sessions/s1");
+    assert.equal(String(url), "/api/v2/agent/sessions/s1");
     return Response.json({ code: 0, data: session });
   };
   try {
@@ -173,4 +174,23 @@ test("mock v2 versioned events and result keep the nested message unchanged", as
     });
     assert.deepEqual(state.message, messageFixture());
   } finally { globalThis.fetch = originalFetch; }
+});
+
+
+test("explicit rejected final snapshot clears streamed presentation for text fallback", () => {
+  const state = reconcileMessage(initialMessageState(), messageFixture());
+  assert.equal(reconcileMessage(state, null, true).message, null);
+  assert.deepEqual(reconcileMessage(state, undefined).message, state.message);
+});
+
+
+test("export projection keeps every block/reference and includes structured-only turns", () => {
+  const message = messageFixture();
+  const turns = storedTurns([{ ...storedTurn(message), assistant_content: "" }, storedTurn(null)]);
+  const exported = sessionExportMessages(turns);
+  assert.equal(exported.length, 4);
+  assert.deepEqual(exported[1].message, message);
+  const jsonl = exported.map((entry) => JSON.stringify(entry)).join("\n");
+  assert.deepEqual(JSON.parse(jsonl.split("\n")[1]).message, message);
+  assert.equal(exported[3].content, "旧正文");
 });

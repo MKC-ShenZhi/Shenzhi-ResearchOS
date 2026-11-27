@@ -107,7 +107,7 @@ class DeepResearchServiceTests(unittest.IsolatedAsyncioTestCase):
                 base_url='http://test',
                 headers={'Authorization': 'Bearer test-token'},
             ) as client:
-                response = await client.get('/internal/v1/config')
+                response = await client.get('/internal/v2/config')
         self.assertEqual(response.status_code, 200)
         skill = next(item for item in response.json()['skills'] if item['name'] == 'deep-research')
         self.assertTrue(skill['description'])
@@ -115,10 +115,19 @@ class DeepResearchServiceTests(unittest.IsolatedAsyncioTestCase):
     async def execute_with_provider(self, provider, *, runtime_type=AgentRuntime, **session_options):
         control = AsyncMock(spec=host.AgentControlClient)
         control.get.return_value = {'controls': []}
-        claim = {'lease_token': 1, 'event_seq': 0, 'run': {
+        claim = {'schema_version': 1, 'execution_id': 'execution-1', 'lease_token': 1,
+                 'event_seq': 0, 'metering_context': 'observation_only',
+                 'dynamic_model_budget': False, 'run': {
             'run_id': 'run-1', 'task_id': 'task-1', 'owner_id': f'anon:{OWNER_ID}',
             'prompt': '研究这个领域', 'skills': ['deep-research'], **session_options,
         }}
+
+        async def post(path, payload):
+            if path.endswith('/start'):
+                return {'may_send': True, 'start_before': '2999-01-01T00:00:00+00:00'}
+            return {}
+
+        control.post.side_effect = post
 
         def build_with_fake_provider(**kwargs):
             return build_runtime(
@@ -126,7 +135,12 @@ class DeepResearchServiceTests(unittest.IsolatedAsyncioTestCase):
                 **kwargs,
             )
 
-        with patch.dict('os.environ', {'SKILLS_VENDOR': ''}, clear=True), \
+        with tempfile.TemporaryDirectory() as spool, \
+                patch.dict('os.environ', {
+                    'SKILLS_VENDOR': '', 'AGENT_MODEL_ROUTE_REVISION': 'test-route',
+                    'AGENT_TOOL_CONFIGURATION_RELEASE': 'test-tools',
+                    'AGENT_USAGE_SPOOL_ROOT': spool,
+                }, clear=True), \
                 patch.object(host, 'build_runtime', side_effect=build_with_fake_provider):
             await host.execute_claim(control, claim, 'worker-1')
         return control
@@ -151,7 +165,7 @@ class DeepResearchServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('tool_call', events)
         self.assertIn('tool_end', events)
         path, payload = posted[-1].args
-        self.assertEqual(path, '/internal/v1/runs/run-1/report')
+        self.assertEqual(path, '/internal/v2/runs/run-1/report')
         report = ReportIngestWire.model_validate(payload)
         self.assertEqual(report.status.value, 'completed')
         output = report.result['output']
@@ -170,7 +184,7 @@ class DeepResearchServiceTests(unittest.IsolatedAsyncioTestCase):
         ]])
         control = await self.execute_with_provider(provider)
         path, report = control.post.await_args.args
-        self.assertEqual(path, '/internal/v1/runs/run-1/report')
+        self.assertEqual(path, '/internal/v2/runs/run-1/report')
         self.assertEqual(report['status'], 'awaiting_input')
         self.assertEqual(report['result']['output']['kind'], 'question')
         self.assertEqual(report['result']['output']['question'], '研究哪个时间段？')

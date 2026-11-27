@@ -27,21 +27,20 @@ logger = logging.getLogger('agent.worker')
 class AgentControlClient:
     def __init__(self, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
         base = os.getenv('AGENT_INTERNAL_URL', 'http://127.0.0.1:8101').rstrip('/')
-        self.protocol = 2 if os.getenv('AGENT_WORKER_PROTOCOL') == '2' else 1
         self.execution_id = None
-        token = os.getenv('AGENT_WORKER_TOKEN' if self.protocol == 2 else 'AGENT_SERVICE_TOKEN', '').strip()
+        token = os.getenv('AGENT_WORKER_TOKEN', '').strip()
         if not token:
-            raise RuntimeError('AGENT_SERVICE_TOKEN is required by Agent Worker')
+            raise RuntimeError('AGENT_WORKER_TOKEN is required by Agent Worker protocol v2')
         self.client = httpx.AsyncClient(base_url=base, timeout=20, transport=transport,
                                         headers={'Authorization': f'Bearer {token}'})
 
     async def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        if self.protocol == 2 and path.startswith('/internal/v2/'):
+        if path.startswith('/internal/v2/'):
             body = dict(body, schema_version=1)
             if '/worker/claim' not in path and self.execution_id is not None:
                 body.setdefault('execution_id', self.execution_id)
         response = await self.client.post(path, json=body)
-        if response.is_error and self.protocol == 2:
+        if response.is_error:
             try:
                 error = response.json().get('error', {})
                 reason = error.get('reason_code')
@@ -58,20 +57,21 @@ class AgentControlClient:
         return response.json()
 
     async def claim(self, worker_id: str):
-        if self.protocol == 2:
-            return await self.post('/internal/v2/worker/claim', {'schema_version': 1, 'worker_id': worker_id})
-        return await self.post('/internal/v1/worker/claim', {
-            'worker_id': worker_id, 'demo_mode': os.getenv('AGENT_DEMO_MODE') == '1',
+        claim = await self.post('/internal/v2/worker/claim', {
+            'schema_version': 1, 'worker_id': worker_id,
+            'demo_mode': os.getenv('AGENT_DEMO_MODE') == '1',
         })
+        if claim.get('run') is not None:
+            self.execution_id = claim['execution_id']
+        return claim
 
     async def heartbeat(self, run_id: str, worker_id: str,
                         lease_token: int) -> WorkerHeartbeatResponseWire:
         request = WorkerHeartbeatRequestWire(worker_id=worker_id, lease_token=lease_token)
         response = await self.post(
-            f'/internal/v{self.protocol}/runs/{run_id}/heartbeat', request.model_dump(mode='json'),
+            f'/internal/v2/runs/{run_id}/heartbeat', request.model_dump(mode='json'),
         )
-        if self.protocol == 2:
-            response.pop('schema_version', None)
+        response.pop('schema_version', None)
         return WorkerHeartbeatResponseWire.model_validate(response)
 
     async def close(self) -> None:
@@ -188,10 +188,10 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
     token = int(claim['lease_token'])
     event_seq = int(claim['event_seq'])
     run_id = request['run_id']
-    protocol = 2 if claim.get('schema_version') == 1 else 1
-    prefix = f'/internal/v{protocol}'
-    if protocol == 2:
-        control.execution_id = claim['execution_id']
+    if claim.get('schema_version') != 1 or not claim.get('execution_id'):
+        raise BusinessError(20004, 'Agent Worker 只接受 V2 执行任务', 502)
+    prefix = '/internal/v2'
+    control.execution_id = claim['execution_id']
     stop = asyncio.Event()
     channel = RunChannel()
     queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
@@ -258,8 +258,8 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
             try:
                 payload = await control.get(
                     f'{prefix}/runs/{run_id}/controls',
-                    params=({'owner_id': request['owner_id'], 'after_seq': after_seq} if protocol == 1 else
-                            {'worker_id': worker_id, 'lease_token': token, 'execution_id': claim['execution_id'], 'after_seq': after_seq}),
+                    params={'worker_id': worker_id, 'lease_token': token,
+                            'execution_id': claim['execution_id'], 'after_seq': after_seq},
                 )
                 for item in payload.get('controls') or []:
                     after_seq = max(after_seq, int(item['seq']))
@@ -272,9 +272,9 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
     result: RunResult | None = None
     execution_error: Exception | None = None
     from agent_app.execution.metering import WorkerMeter, current_meter
-    meter = (WorkerMeter(control, run_id=run_id, execution_id=claim['execution_id'],
+    meter = WorkerMeter(control, run_id=run_id, execution_id=claim['execution_id'],
              worker_id=worker_id, lease_token=token, context=claim['metering_context'], stop=stop,
-             risk_profile=claim.get('risk_profile'), dynamic_budget=claim.get('dynamic_model_budget', False)) if protocol == 2 else None)
+             risk_profile=claim.get('risk_profile'), dynamic_budget=claim.get('dynamic_model_budget', False))
     meter_token = current_meter.set(meter)
     publisher = asyncio.create_task(publish_events())
     heartbeat = asyncio.create_task(maintain_lease())
@@ -311,7 +311,7 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
             else tool_call_budget(request.get('mode', 'fast')),
         )
         runtime.strict_tool_budget = True
-        if meter is not None and not getattr(runtime.provider, 'supports_call_metering', False):
+        if meter is not None and not getattr(getattr(runtime, 'provider', runtime), 'supports_call_metering', False):
             stop.set()
             raise BusinessError(20004, 'Provider 未声明调用级门禁能力', 403)
         history = [message_from_dict(item) for item in request.get('history') or []]
@@ -354,9 +354,8 @@ async def run_worker_forever(*, runtime_factory=None) -> None:
     try:
         while True:
             try:
-                if control.protocol == 2:
-                    from agent_app.execution.metering import replay_observation_spool
-                    await replay_observation_spool(control)
+                from agent_app.execution.metering import replay_observation_spool
+                await replay_observation_spool(control)
                 claim = await control.claim(worker_id)
                 if claim.get('run') is None:
                     await asyncio.sleep(1)

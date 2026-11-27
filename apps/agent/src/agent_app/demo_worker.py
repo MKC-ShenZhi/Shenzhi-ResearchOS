@@ -18,6 +18,9 @@ DEMO_WARNING = 'Mock 演示：受控模拟执行，未调用真实模型或检�
 
 class DemoRuntime:
     strict_tool_budget = True
+    # V2's observation-only execution requires an explicit metering capability;
+    # this mock runtime emits no Provider requests and therefore records no model calls.
+    supports_call_metering = True
 
     def __init__(self, *, owner, session_id, mode, model, forced_skills=(), **_):
         if model != 'demo/m1' or not session_id:

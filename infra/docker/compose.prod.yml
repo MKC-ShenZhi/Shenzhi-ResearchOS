@@ -22,8 +22,6 @@ services:
   agent-api:
     environment:
       AGENT_DEMO_MODE: '0'
-      AGENT_V1_ADMISSION: drain_only
   agent-worker:
     environment:
       AGENT_DEMO_MODE: '0'
-      AGENT_WORKER_PROTOCOL: '2'

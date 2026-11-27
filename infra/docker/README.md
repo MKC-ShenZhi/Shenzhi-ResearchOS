@@ -124,8 +124,9 @@ docker compose exec backend python /opt/docker/smoke.py --full
 最小 UI/API 开发用 `app`，模型对话需要 Agent；V2 必须同时启用 Usage Worker，不能只启 `agent`。
 `agent` 单独启用用于宿主 Backend 混合调试时，需将 `BACKEND_INTERNAL_URL` 和
 `BACKEND_ENTITLEMENTS_URL` 配成宿主可达地址。V1 无 V2 存量用量时可以不启 Usage Worker。
-全新模板默认 V1 legacy/V2 disabled；导入本机 V2 时保留 authorized/drain_only/protocol=2 和签名身份，
-不降级授权、不自动安装 Policy 或授予用户权益。模型授权验收还需按 Admin/entitlements 文档完成批准和分配。
+全新模板默认 V1 drain_only、Worker protocol=2、Backend V2 disabled；新 Worker 使用独立 Worker Token。
+导入本机 V2 时保留 authorized/drain_only/protocol=2 和签名身份，不降级授权、不自动安装 Policy 或授予用户权益。
+仅处理历史 V1 Task 的 drain Worker 显式使用 protocol=1 与旧 Service Token。模型授权验收还需按 Admin/entitlements 文档完成批准和分配。
 容器新数据库没有原生数据库的用户、Policy 和历史任务；启动成功不代表这些数据已迁移。
 
 ### D：生产配置基础（本次不部署）

@@ -326,7 +326,7 @@ class FormalPlanTests(unittest.IsolatedAsyncioTestCase):
         await self.formal_setup();await self.prepare()
         self.model_budget=self.model_budget.model_copy(update={'input_bytes':300000})
         with self.assertRaises(AssertionError) as exc:await self.start_call('no-input-room')
-        self.assertIn('MODEL_INPUT_BUDGET_EXHAUSTED',str(exc.exception))
+        self.assertIn('QUOTA_EXHAUSTED',str(exc.exception))
         async with self.backend() as db,db.begin():
             row=await db.get(EntitlementPolicyRow,self.policy.policy_revision)
             row.payload={**row.payload,'model_budget_profiles':{}}

@@ -122,3 +122,24 @@ Backend 的 `tests/test_agent_message_blocks.py` 验证 Gateway v1/v2、产品 S
 Web 在 `apps/web` 执行 `pnpm test`、`pnpm typecheck`，并对改动文件执行 ESLint。`tests/agent/message-blocks.test.ts` 验证纯协议及组装器；`message-stream.test.ts` 使用 mock fetch 和分片 ReadableStream 验证真实 Client/SSE 解析到状态及历史恢复的完整数据链路，不调用真实 Agent 或模型。
 
 `tests/agent/message-rendering.test.ts` 验证引用转换、展示字段及链接规则。浏览器联调脚本位于仓库根目录 `tests/visual/agent-message-blocks.mjs`，使用独立 Next 开发服务和 mock Backend 的真实 HTTP/SSE，验证 Client → 状态 → React DOM、流式内容、来源跳转、刷新恢复、手机布局与兼容降级。先在 `apps/web` 启动 `pnpm exec next dev --hostname 127.0.0.1 --port 3311`，再从仓库根运行 `node tests/visual/agent-message-blocks.mjs --next http://127.0.0.1:3311 --out <artifact-directory>`。脚本使用本机 Edge，可用 `EDGE_PATH` 指定路径，保留截图和隔离浏览器目录，不清理现有文件。此联调不调用真实模型，也不代表生产环境验收。
+
+## V2 集成与故障降级
+
+产品接口仅使用 `/api/v2/agent/*`，Agent 通信仅使用 `/internal/v2/*`；
+`submission_gateway()` 选择唯一的 `agent_gateway/gateway.py`。消息 `schema_version=1`
+独立于执行 API 版本。Gateway 校验消息并记录无效载荷诊断，保持原始数据和事件顺序；
+MessageCapture 负责拒绝无效或不一致的快照，不阻塞明确执行终态落库。
+
+最终报告与事件快照一致时保存原快照；报告未带消息时仅使用状态匹配的完整 message_end。
+报告与事件不一致、状态不匹配、结构无效或缺少完整快照时，记录诊断、返回 message=null，
+保留普通文本、Timeline、transcript 和 Usage。失败报告无需完整消息即可关闭 Turn。
+Web 最终 result 的显式 null 清除流式结构化状态，历史缺失字段和传输中断保留原有兼容行为。
+
+论文助手将上轮全部 Markdown Blocks 和实际 References 编码为原有 assistant transcript 的文本，
+保留 DOI、URL、实体 ID 及来源信息，不将 AIMessage 作为 Provider 消息。
+重试继续使用冻结的 operation.request 与原 idempotencyKey。
+
+会话导出通过 Feature 的 sessionExportMessages 投影。JSONL 保留完整 message（含 metadata、
+Blocks 和 References），HTML 按顺序输出全部 Markdown Blocks 并展示参考来源；
+所有正文、标题和来源均经 HTML 转义，URL 以文本呈现。旧格式仍读取原 content。
+HTML 沿用既有超大会话导出预算和截断提示。

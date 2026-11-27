@@ -35,24 +35,85 @@ test("BFF forwards and returns the same request ID", async (t) => {
   assert.equal(response.headers.get("X-Request-ID"), "request-forward-1");
 });
 
-test("BFF forwards the idempotency key without treating it as a request ID", async (t) => {
-  t.mock.method(identity, "resolveBackendIdentity", async () => ({ kind: "anonymous" }));
-
-  let outgoingHeaders: Headers | undefined;
-  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
-    outgoingHeaders = new Headers(init.headers);
-    return new Response(null, { status: 204 });
-  });
-
+test("V1 BFF rejects retired Agent submissions", async () => {
   const response = await forwardToBusinessBackend(
     request("trace-request-1", undefined, "agent-operation-1"),
     "http://backend.test",
     ["agent", "sessions"],
   );
 
-  assert.equal(outgoingHeaders?.get("Idempotency-Key"), "agent-operation-1");
-  assert.equal(outgoingHeaders?.get("X-Request-ID"), "trace-request-1");
-  assert.equal(response.headers.get("X-Request-ID"), "trace-request-1");
+  assert.equal(response.status, 404);
+});
+
+test("BFF forwards Agent requests to the V2 Backend path", async (t) => {
+  t.mock.method(identity, "resolveBackendIdentity", async () => ({ kind: "anonymous" }));
+  let target = "";
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    target = String(url);
+    return new Response(null, { status: 204 });
+  });
+
+  const response = await forwardToBusinessBackend(
+    request("agent-v2-1"), "http://backend.test", ["agent", "sessions"], "v2",
+  );
+
+  assert.equal(target, "http://backend.test/api/v2/agent/sessions");
+  assert.equal(response.status, 204);
+});
+
+test("V2 BFF rejects internal and non-Agent paths before identity resolution", async () => {
+  for (const path of [
+    ["agent", "internal", "protocol-capabilities"],
+    ["agent", "%69nternal", "task-metering-bindings"],
+    ["agent", "%2569nternal", "task-metering-bindings"],
+    ["admin-console", "users"],
+    ["knowledge", "papers"],
+  ]) {
+    const response = await forwardToBusinessBackend(
+      {} as NextRequest, "invalid-origin", path, "v2",
+    );
+    assert.equal(response.status, 404);
+  }
+});
+
+test("V1 BFF rejects retired Agent product paths before identity resolution", async () => {
+  const response = await forwardToBusinessBackend(
+    {} as NextRequest, "invalid-origin", ["agent", "sessions"], "v1",
+  );
+  assert.equal(response.status, 404);
+});
+
+test("V1 BFF serves historical Agent assets through the V2 read routes", async (t) => {
+  t.mock.method(identity, "resolveBackendIdentity", async () => ({ kind: "anonymous" }));
+  const targets: string[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    targets.push(url);
+    return new Response("chart", { headers: { "content-type": "image/png" } });
+  });
+
+  const asset = await forwardToBusinessBackend(
+    request(), "http://backend.test", ["agent", "assets", "ses_1", "figures", "旧 图.png"],
+  );
+  const file = await forwardToBusinessBackend(
+    new NextRequest("http://web.test/api/v1/agent/session/_/file?path=figures%2Fchart.png"),
+    "http://backend.test",
+    ["agent", "session", "_", "file"],
+  );
+  const post = await forwardToBusinessBackend(
+    new NextRequest("http://web.test", { method: "POST" }),
+    "http://backend.test",
+    ["agent", "assets", "ses_1", "figures", "chart.png"],
+  );
+
+  assert.deepEqual(targets, [
+    "http://backend.test/api/v2/agent/assets/ses_1/figures/%E6%97%A7%20%E5%9B%BE.png",
+    "http://backend.test/api/v2/agent/session/_/file?path=figures%2Fchart.png",
+  ]);
+  assert.equal(asset.status, 200);
+  assert.equal(asset.headers.get("content-type"), "image/png");
+  assert.equal(await asset.text(), "chart");
+  assert.equal(file.status, 200);
+  assert.equal(post.status, 404);
 });
 
 test("BFF generates a request ID for a missing incoming ID", async (t) => {

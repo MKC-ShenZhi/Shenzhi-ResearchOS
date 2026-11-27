@@ -6,13 +6,15 @@ import json
 import os
 import unittest
 from collections import deque
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
+from app.core.idempotency import request_fingerprint
 
 from app.core.errors import BusinessError
 from app.main import app
 from app.services.agent_sessions import live as live_runs
+from app.services.agent_sessions import service
 from app.services.agent_sessions.repository import MemoryAgentSessionRepository
 from app.services.agent_sessions.service import TimelineCapture, get_session_detail
 from app.services.agent_uploads import agent_upload_store
@@ -43,6 +45,8 @@ class FakeAgentGateway:
         self.cancelled = []
         self.submit_error = None
         self._next_id = 0
+        self.protocol_version = 1
+        self.updated_settings = None
 
     def enqueue(self, *, final_text='已完成', status='completed', events=None,
                 output=None, error_message=None, gate=None, event_error=None):
@@ -51,6 +55,7 @@ class FakeAgentGateway:
             'events': list(events or []), 'output': output,
             'error_message': error_message, 'gate': gate,
             'event_error': event_error,
+            'event_error_raised': False,
         })
 
     async def submit(self, payload):
@@ -78,6 +83,14 @@ class FakeAgentGateway:
         self.runs[run_id] = plan
         self.submissions.append(payload)
         return {'task_id': task_id, 'current_run_id': run_id}
+
+    async def recover_submission(self, owner, client_key, *, allow_missing=False):
+        plan = next((item for item in self.runs.values()
+                     if item['payload']['owner_id'] == owner
+                     and item['payload']['idempotency_key'] == client_key), None)
+        if plan is None:
+            return None
+        return {'task_id': plan['task_id'], 'current_run_id': plan['run_id']}
 
     async def events(self, run_id, owner, after_seq):
         plan = self.runs[run_id]
@@ -118,6 +131,7 @@ class FakeAgentGateway:
         return {'current_run_id': plan['run_id'], 'cancel_requested': plan['status'] == 'cancelled'}
 
     async def task_runs(self, task_id, owner):
+        self.task_runs_calls = getattr(self, 'task_runs_calls', 0) + 1
         return [item['run_id'] for item in self.runs.values() if item['task_id'] == task_id]
 
     async def steer(self, run_id, owner, message):
@@ -137,6 +151,9 @@ class FakeAgentGateway:
     async def config(self):
         return {'models': [], 'default_model': None, 'skills': []}
 
+    async def usage(self, task_id, owner):
+        return {}
+
 
 class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
     OWNER_A = {'x-shenzhi-anonymous-id': '00000000-0000-4000-8000-000000000011'}
@@ -150,63 +167,69 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.env.start()
         self.repo = MemoryAgentSessionRepository()
         self.gateway = FakeAgentGateway()
+        self._request_number = 0
         self.live_registry = patch.object(live_runs, '_live', {})
         self.live_registry.start()
         self.api_repo = patch('app.api.agent.agent_session_repository', self.repo)
         self.service_repo = patch('app.services.agent_sessions.service.agent_session_repository', self.repo)
-        self.api_gateway = patch('app.api.agent.agent_gateway', self.gateway)
-        self.service_gateway = patch('app.services.agent_sessions.service.agent_gateway', self.gateway)
-        for patcher in (self.api_repo, self.service_repo, self.api_gateway, self.service_gateway):
+        # New Session Turns submit through the unified V2 boundary; substitute the
+        # same deterministic fake so the projection assertions stay unchanged.
+        self.v2_gateway = patch('app.services.agent_gateway.gateway.AgentGateway',
+                                return_value=self.gateway)
+        for patcher in (self.api_repo, self.service_repo, self.v2_gateway):
             patcher.start()
 
     def tearDown(self):
-        for patcher in (self.service_gateway, self.api_gateway, self.service_repo, self.api_repo):
+        for patcher in (self.v2_gateway, self.service_repo, self.api_repo):
             patcher.stop()
         self.live_registry.stop()
         self.env.stop()
 
     async def request(self, method: str, path: str, *, owner=None, json_body=None, headers=None):
         request_headers = {**(owner or self.OWNER_A), **(headers or {})}
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+        if method.upper() == 'POST' and path.endswith('/run') and 'Idempotency-Key' not in request_headers:
+            self._request_number += 1
+            request_headers['Idempotency-Key'] = f'session-test-{self._request_number}'
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
                                      base_url='http://test') as client:
             return await client.request(method, path, headers=request_headers, json=json_body)
 
     async def create(self, prompt='第一条问题', owner=None):
-        response = await self.request('POST', '/api/v1/agent/sessions', owner=owner,
+        response = await self.request('POST', '/api/v2/agent/sessions', owner=owner,
                                       json_body={'prompt': prompt, 'mode': 'fast'})
         self.assertEqual(response.status_code, 200)
         return response.json()['data']['id']
 
     async def test_crud_and_owner_isolation(self):
         session_id = await self.create('这是自动标题')
-        detail = await self.request('GET', f'/api/v1/agent/sessions/{session_id}')
+        detail = await self.request('GET', f'/api/v2/agent/sessions/{session_id}')
         self.assertEqual(detail.json()['data']['title'], '这是自动标题')
-        forbidden = await self.request('GET', f'/api/v1/agent/sessions/{session_id}', owner=self.OWNER_B)
+        forbidden = await self.request('GET', f'/api/v2/agent/sessions/{session_id}', owner=self.OWNER_B)
         self.assertEqual(forbidden.status_code, 404)
-        renamed = await self.request('PATCH', f'/api/v1/agent/sessions/{session_id}',
+        renamed = await self.request('PATCH', f'/api/v2/agent/sessions/{session_id}',
                                     json_body={'title': '重命名'})
         self.assertEqual(renamed.json()['data']['title'], '重命名')
-        self.assertEqual((await self.request('DELETE', f'/api/v1/agent/sessions/{session_id}')).status_code, 200)
-        self.assertEqual((await self.request('GET', f'/api/v1/agent/sessions/{session_id}')).status_code, 404)
+        self.assertEqual((await self.request('DELETE', f'/api/v2/agent/sessions/{session_id}')).status_code, 200)
+        self.assertEqual((await self.request('GET', f'/api/v2/agent/sessions/{session_id}')).status_code, 404)
 
     async def test_cached_stream_is_revoked_after_delete_or_claim(self):
         for revoke in ('delete', 'claim'):
             session_id = await self.create()
-            await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+            await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
                                json_body={'prompt': 'private'})
             self.assertIn(session_id, live_runs._live)
             if revoke == 'delete':
-                await self.request('DELETE', f'/api/v1/agent/sessions/{session_id}')
+                await self.request('DELETE', f'/api/v2/agent/sessions/{session_id}')
             else:
                 # Same persisted owner change performed by anonymous claim.
                 self.repo.sessions[session_id].owner = 'user:claimed'
-            denied = await self.request('GET', f'/api/v1/agent/sessions/{session_id}/run/stream')
+            denied = await self.request('GET', f'/api/v2/agent/sessions/{session_id}/run/stream')
             self.assertEqual(denied.status_code, 404)
             self.assertNotIn('private', denied.text)
 
     async def test_old_idempotency_key_replays_its_own_turn_and_preserves_latest_stream(self):
         session_id = await self.create()
-        path = f'/api/v1/agent/sessions/{session_id}/run'
+        path = f'/api/v2/agent/sessions/{session_id}/run'
         streams = []
         for index in (1, 2):
             self.gateway.enqueue(final_text=f'answer-{index}')
@@ -225,35 +248,35 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_claimed_session_replays_with_trusted_execution_owner(self):
         session_id = await self.create()
-        response = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+        response = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
                                       json_body={'prompt': 'private'})
         original = parse_sse(response.text)
         source = self.repo.sessions[session_id].owner
         self.repo.sessions[session_id].owner = 'user:claimed'
         live_runs._live.clear()
         with patch.object(self.gateway, 'task_runs', wraps=self.gateway.task_runs) as task_runs:
-            replay = await self.request('GET', f'/api/v1/agent/sessions/{session_id}/run/stream',
+            replay = await self.request('GET', f'/api/v2/agent/sessions/{session_id}/run/stream',
                                         owner={'x-shenzhi-user-id': 'claimed'})
             self.assertEqual(parse_sse(replay.text), original)
             self.assertEqual(task_runs.call_args.args[1], source)
-        detail = await self.request('GET', f'/api/v1/agent/sessions/{session_id}',
+        detail = await self.request('GET', f'/api/v2/agent/sessions/{session_id}',
                                      owner={'x-shenzhi-user-id': 'claimed'})
         self.assertNotIn('_agent_owner_id', detail.text)
 
     async def test_cursor_pagination_and_legacy_import_are_product_owned(self):
         for index in range(12):
             await self.create(f'问题 {index}')
-        first = (await self.request('GET', '/api/v1/agent/sessions?limit=10')).json()['data']
+        first = (await self.request('GET', '/api/v2/agent/sessions?limit=10')).json()['data']
         self.assertEqual(len(first['sessions']), 10)
         second = (await self.request('GET',
-            f"/api/v1/agent/sessions?limit=10&cursor={first['next_cursor']}")).json()['data']
+            f"/api/v2/agent/sessions?limit=10&cursor={first['next_cursor']}")).json()['data']
         self.assertEqual(len(second['sessions']), 2)
         payload = {'import_key': 'legacy-1', 'title': '本地会话', 'turns': [
             {'role': 'user', 'content': '旧问题'},
             {'role': 'assistant', 'content': '旧答案', 'process': [{'kind': 'text', 'text': '旧答案'}]},
         ]}
-        imported = await self.request('POST', '/api/v1/agent/sessions/import', json_body=payload)
-        repeated = await self.request('POST', '/api/v1/agent/sessions/import', json_body=payload)
+        imported = await self.request('POST', '/api/v2/agent/sessions/import', json_body=payload)
+        repeated = await self.request('POST', '/api/v2/agent/sessions/import', json_body=payload)
         self.assertEqual(imported.json()['data']['id'], repeated.json()['data']['id'])
 
     async def test_session_run_projects_agent_events_report_and_task_link(self):
@@ -265,7 +288,7 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
             {'name': 'tool_end', 'data': {'turn': 1, 'tool_call_id': 'c1',
                                           'summary': 'x', 'duration_ms': 1}},
         ])
-        response = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+        response = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
                                       json_body={'prompt': '打个招呼', 'mode': 'fast'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(parse_sse(response.text)[-1][1]['final_text'], '完成回答')
@@ -283,17 +306,17 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.gateway.enqueue(final_text='第一次回答', events=[
             {'name': 'delta', 'data': {'turn': 0, 'text': '第一次回答'}},
         ])
-        first = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+        first = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
                                    json_body=body, headers=headers)
         live_runs._live.pop(session_id, None)
-        replay = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+        replay = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
                                     json_body=body, headers=headers)
         self.assertEqual(parse_sse(replay.text)[-1][1]['final_text'], '第一次回答')
         self.assertEqual(len(self.gateway.submissions), 1)
-        conflict = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+        conflict = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
                                       json_body={'prompt': '别的请求'}, headers=headers)
         self.assertEqual(conflict.status_code, 409)
-        endpoint = f'/api/v1/agent/sessions/{session_id}/run/stream'
+        endpoint = f'/api/v2/agent/sessions/{session_id}/run/stream'
         replayed = await self.request('GET', endpoint)
         self.assertEqual(parse_sse(replayed.text)[-1][1]['final_text'], '第一次回答')
         self.assertEqual(parse_sse(first.text)[-1][1]['final_text'], '第一次回答')
@@ -305,7 +328,7 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
             'truncated': False, 'warning': None,
         })
         session_id = await self.create('请分析附件')
-        response = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+        response = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
             json_body={'prompt': '请分析附件', 'attachments': [
                 {'kind': 'file', 'file_id': upload['file_id'], 'title': 'notes.md'},
             ]})
@@ -318,22 +341,30 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(BusinessError):
             await agent_upload_store.get(owner, upload['file_id'])
 
-    async def test_gateway_submit_failure_is_projected_as_failed_turn(self):
+    async def test_indeterminate_v2_submit_failure_stays_running_for_safe_recovery(self):
         session_id = await self.create('提交失败')
         self.gateway.submit_error = BusinessError(20004, 'Agent 服务不可用', 503)
-        response = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+        response = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
                                       json_body={'prompt': '提交失败'})
         self.assertEqual(response.status_code, 503)
         turn = self.repo.sessions[session_id].turns[0]
-        self.assertEqual(turn.status, 'failed')
-        self.assertIn('Agent 服务提交失败', turn.error)
+        self.assertEqual(turn.status, 'running')
+        self.assertNotIn('Agent 服务提交失败', turn.error or '')
 
     async def test_failed_event_replay_keeps_partial_product_timeline(self):
         session_id = await self.create('投影失败')
         self.gateway.enqueue(final_text='部分答案', events=[
             {'name': 'delta', 'data': {'turn': 0, 'text': '部分答案'}},
         ], event_error=RuntimeError('Agent events unavailable'))
-        response = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+        original_run = self.gateway.run
+
+        async def unavailable_report(run_id, owner):
+            if self.gateway.runs[run_id]['event_error']:
+                return {'report': None}
+            return await original_run(run_id, owner)
+
+        self.gateway.run = unavailable_report
+        response = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
                                       json_body={'prompt': '投影失败'})
         self.assertEqual(response.status_code, 200)
         # Losing Agent connectivity must not invent a terminal execution result.
@@ -341,19 +372,59 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(turn.status, 'running')
         self.assertNotIn('result', [name for name, _ in parse_sse(response.text)])
         self.assertNotIn(session_id, live_runs._live)
-        detail = await self.request('GET', f'/api/v1/agent/sessions/{session_id}')
+        detail = await self.request('GET', f'/api/v2/agent/sessions/{session_id}')
         self.assertEqual(detail.json()['data']['turns'][0]['status'], 'running')
-        conflict = await self.request('POST', f'/api/v1/agent/sessions/{session_id}/run',
+        conflict = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
                                       json_body={'prompt': '不能重复执行'})
         self.assertEqual(conflict.status_code, 409)
         # A failed recovery attempt must also leave the authoritative Turn open.
-        broken = await self.request('GET', f'/api/v1/agent/sessions/{session_id}/run/stream')
+        broken = await self.request('GET', f'/api/v2/agent/sessions/{session_id}/run/stream')
         self.assertNotIn('result', [name for name, _ in parse_sse(broken.text)])
         self.gateway.runs['run-1']['event_error'] = None
-        recovered = await self.request('GET', f'/api/v1/agent/sessions/{session_id}/run/stream')
+        recovered = await self.request('GET', f'/api/v2/agent/sessions/{session_id}/run/stream')
         self.assertEqual(parse_sse(recovered.text)[-1][1]['final_text'], '部分答案')
         self.assertEqual(turn.status, 'done')
         self.assertEqual(len(self.gateway.submissions), 1)
+
+    async def test_running_v1_turn_is_retired_without_remote_call(self):
+        session_id = await self.create('旧协议运行')
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        await self.repo.start_turn(session_id, owner, '旧问题', {
+            '_agent_owner_id': owner, '_agent_protocol': 1,
+            'agent_task_id': 'old-task', 'agent_run_id': 'old-run',
+        }, [])
+        with patch('app.services.agent_gateway.gateway.AgentGateway', side_effect=AssertionError('must not call Agent')):
+            with self.assertRaises(BusinessError) as error:
+                await service.resume_session_run(session_id, owner)
+        self.assertEqual(error.exception.status, 410)
+
+    async def test_memory_session_detail_closes_running_v1_turn_with_task_link(self):
+        session_id = await self.create('旧协议内存态')
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        await self.repo.start_turn(session_id, owner, '旧问题', {
+            '_agent_owner_id': owner, '_agent_protocol': 1,
+            'agent_task_id': 'old-task', 'agent_run_id': 'old-run',
+        }, [])
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].status, 'stopped')
+        self.assertIn('已中断', detail.turns[-1].error)
+
+    async def test_terminal_v1_turn_replays_backend_projection_without_remote_call(self):
+        session_id = await self.create('旧协议历史')
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        turn, _ = await self.repo.start_turn(session_id, owner, '旧问题', {
+            '_agent_owner_id': owner, '_agent_protocol': 1,
+            'agent_task_id': 'old-task', 'agent_run_id': 'old-run',
+        }, [])
+        await self.repo.finish_turn(session_id, owner, turn.id, {
+            'status': 'done', 'assistant_content': '保留的旧结果',
+            'transcript': [{'kind': 'user', 'text': '旧问题'},
+                           {'kind': 'assistant', 'content': '保留的旧结果'}],
+        })
+        with patch('app.services.agent_gateway.gateway.AgentGateway', side_effect=AssertionError('must not call Agent')):
+            live = await service.resume_session_run(session_id, owner, turn_id=turn.id)
+        self.assertEqual(live.events[-1][0], 'result')
+        self.assertEqual(live.events[-1][1]['final_text'], '保留的旧结果')
 
     async def test_orphan_reconciliation_preserves_previous_transcript(self):
         owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
@@ -367,7 +438,7 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         orphan, _ = await self.repo.start_turn(session_id, owner, '中断前原文', {}, [])
         orphan.assistant_content = '部分结果'
         orphan.transcript = [{'kind': 'assistant', 'tool_calls': [{'id': 'unfinished'}]}]
-        detail = (await self.request('GET', f'/api/v1/agent/sessions/{session_id}')).json()['data']
+        detail = (await self.request('GET', f'/api/v2/agent/sessions/{session_id}')).json()['data']
         self.assertEqual(detail['turns'][-1]['stop_reason'], 'interrupted')
         transcript = self.repo.sessions[session_id].runtime_history
         self.assertEqual(transcript[:2], history)
@@ -389,21 +460,189 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.gateway.enqueue(final_text='已停止', status='completed', gate=gate,
                              events=[{'name': 'delta', 'data': {'turn': 0, 'text': '片段'}}])
         request = asyncio.create_task(self.request(
-            'POST', f'/api/v1/agent/sessions/{session_id}/run',
+            'POST', f'/api/v2/agent/sessions/{session_id}/run',
             json_body={'prompt': '可控制任务'},
         ))
         while not self.gateway.submissions:
             await asyncio.sleep(0)
         run_id = next(iter(self.gateway.runs))
-        steer = await self.request('POST', f'/api/v1/agent/run/{run_id}/steer',
+        steer = await self.request('POST', f'/api/v2/agent/run/{run_id}/steer',
                                    json_body={'text': '聚焦结论'})
         self.assertEqual(steer.status_code, 200)
-        stopped = await self.request('POST', f'/api/v1/agent/run/{run_id}/stop')
+        stopped = await self.request('POST', f'/api/v2/agent/run/{run_id}/stop')
         self.assertEqual(stopped.status_code, 200)
         response = await asyncio.wait_for(request, 3)
         self.assertEqual(parse_sse(response.text)[-1][1]['status'], 'stopped')
         self.assertEqual(self.gateway.steers[0][2], '聚焦结论')
         self.assertTrue(self.gateway.cancelled)
+
+    async def test_new_session_turn_submits_through_unified_v2_boundary(self):
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('统一路径')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        v2.enqueue(final_text='v2 回答')
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
+            response = await self.request(
+                'POST', f'/api/v2/agent/sessions/{session_id}/run',
+                json_body={'prompt': '统一路径问题'},
+                headers={'Idempotency-Key': 'unified-turn-key'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(parse_sse(response.text)[-1][1]['final_text'], 'v2 回答')
+        self.assertEqual(len(v2.submissions), 1)
+        # The legacy V1 boundary receives no new Session submission.
+        self.assertEqual(self.gateway.submissions, [])
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].settings.get('_agent_protocol'), 2)
+        self.assertGreater(v2.task_runs_calls, 0)
+
+    async def test_v2_turn_recovers_after_crash_before_remote_submission(self):
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('Backend 提交前重启')
+        from app.services.agent_sessions.entities import AgentTurn
+        turn = AgentTurn(
+            id='turn-v2-before-submit', session_id=session_id, user_content='恢复任务',
+            settings={'_agent_owner_id': owner, '_agent_protocol': 2,
+                      '_agent_recovery_request': {'prompt': '恢复任务 附件文本', 'history': [{'kind': 'user', 'text': '之前'}]},
+                      'mode': 'fast', 'model': None, 'workspace_id': None, 'skills': []}, status='running',
+            idempotency_key='crash-before-submit-key',
+            idempotency_fingerprint=request_fingerprint({
+                'prompt': '恢复任务', 'mode': 'fast', 'model': None,
+                'attachments': [], 'workspace_id': None, 'skills': [],
+            }),
+            worker_id='previous-worker',
+        )
+        self.repo.sessions[session_id].turns.append(turn)
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        v2.recovery_prompt = '恢复任务 附件文本'
+        v2.recovery_history = [{'kind': 'user', 'text': '之前'}]
+        self.v2_gateway.stop()
+        self.v2_gateway = patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2)
+        self.v2_gateway.start()
+        v2.enqueue(final_text='恢复后提交')
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
+            response = await self.request(
+                'POST', f'/api/v2/agent/sessions/{session_id}/run',
+                json_body={'prompt': '恢复任务'},
+                headers={'Idempotency-Key': 'crash-before-submit-key'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(v2.runs), 1)
+        recovered_payload = next(iter(v2.runs.values()))['payload']
+        self.assertEqual(recovered_payload['prompt'], '恢复任务 附件文本')
+        self.assertEqual(recovered_payload['history'], [{'kind': 'user', 'text': '之前'}])
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].settings.get('agent_task_id'), 'task-1')
+        self.assertEqual(detail.turns[-1].status, 'done')
+        self.assertNotIn('_agent_recovery_request', self.repo.sessions[session_id].turns[-1].settings)
+
+    async def test_v2_projection_uses_v2_gateway_for_retry_run_lookup(self):
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('V2 重试查询')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        v2.enqueue(final_text='首次失败', status='failed')
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
+            response = await self.request(
+                'POST', f'/api/v2/agent/sessions/{session_id}/run',
+                json_body={'prompt': '验证重试'},
+                headers={'Idempotency-Key': 'retry-run-key'})
+        self.assertEqual(response.status_code, 200, response.text)
+        await get_session_detail(session_id, owner)
+        self.assertGreater(v2.task_runs_calls, 0)
+        self.assertEqual(self.gateway.submissions, [])
+
+    async def test_definite_v2_submission_rejection_closes_product_turn(self):
+        from app.services.agent_entitlements.service import EntitlementError
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('明确拒绝')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        v2.submit = AsyncMock(side_effect=EntitlementError('ENTITLEMENT_UNAVAILABLE', 403))
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
+            response = await self.request(
+                'POST', f'/api/v2/agent/sessions/{session_id}/run',
+                json_body={'prompt': '匿名任务'},
+                headers={'Idempotency-Key': 'rejected-key'})
+        self.assertEqual(response.status_code, 403, response.text)
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].status, 'failed')
+        self.assertIn('ENTITLEMENT_UNAVAILABLE', detail.turns[-1].error or '')
+
+    async def test_local_v2_wire_validation_rejection_closes_product_turn(self):
+        from agent_contracts.wire import TaskSubmissionWire
+        from pydantic import ValidationError
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('本地协议校验拒绝')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        try:
+            TaskSubmissionWire.model_validate({})
+        except ValidationError as exc:
+            validation_error = exc
+        else:
+            self.fail('Expected invalid TaskSubmissionWire to fail validation')
+        v2.submit = AsyncMock(side_effect=validation_error)
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
+            response = await self.request(
+                'POST', f'/api/v2/agent/sessions/{session_id}/run',
+                json_body={'prompt': '应结束本轮'},
+                headers={'Idempotency-Key': 'wire-validation-rejected-key'})
+        self.assertEqual(response.status_code, 500, response.text)
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].status, 'failed')
+        self.assertIn('Field required', detail.turns[-1].error or '')
+
+    async def test_indeterminate_v2_submit_recovers_same_task_on_idempotent_retry(self):
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('不确定提交恢复')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        async def submit_then_lose_response(payload):
+            await FakeAgentGateway.submit(v2, payload)
+            raise TimeoutError('response lost after remote task creation')
+        submit_mock = AsyncMock(side_effect=submit_then_lose_response)
+        v2.submit = submit_mock
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
+            first = await self.request(
+                'POST', f'/api/v2/agent/sessions/{session_id}/run',
+                json_body={'prompt': '同一个请求'},
+                headers={'Idempotency-Key': 'stable-recovery-key'})
+            self.assertEqual(first.status_code, 500, first.text)
+            second = await self.request(
+                'POST', f'/api/v2/agent/sessions/{session_id}/run',
+                json_body={'prompt': '同一个请求'},
+                headers={'Idempotency-Key': 'stable-recovery-key'})
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertEqual(submit_mock.await_count, 1)
+        self.assertEqual(len(v2.runs), 1)
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].status, 'done')
+        self.assertEqual(detail.turns[-1].settings.get('agent_task_id'), 'task-1')
+
+    async def test_session_detail_preserves_v2_turn_after_lost_submit_response(self):
+        owner = f"anon:{self.OWNER_A['x-shenzhi-anonymous-id']}"
+        session_id = await self.create('详情查询恢复')
+        v2 = FakeAgentGateway()
+        v2.protocol_version = 2
+        original_submit = v2.submit
+        async def persist_then_lose(payload):
+            await original_submit(payload)
+            raise TimeoutError('response lost after Agent persisted task')
+        v2.submit = AsyncMock(side_effect=persist_then_lose)
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
+            first = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
+                json_body={'prompt': '详情后恢复'}, headers={'Idempotency-Key': 'detail-recovery-key'})
+        self.assertEqual(first.status_code, 500, first.text)
+        detail = await get_session_detail(session_id, owner)
+        self.assertEqual(detail.turns[-1].status, 'running')
+        self.assertNotIn('agent_task_id', detail.turns[-1].settings)
+        with patch('app.services.agent_gateway.gateway.AgentGateway', return_value=v2):
+            recovered = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
+                json_body={'prompt': '详情后恢复'}, headers={'Idempotency-Key': 'detail-recovery-key'})
+        self.assertEqual(recovered.status_code, 200, recovered.text)
+        self.assertEqual(len(v2.runs), 1)
+        self.assertEqual(detail.turns[-1].idempotency_key, 'detail-recovery-key')
 
 
 class TimelineCaptureTests(unittest.TestCase):

@@ -23,6 +23,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "aiosqlite>=0.22.1",
+    "python-multipart>=0.0.12",
     "pytest>=8.0",
 ]
 

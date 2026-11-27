@@ -5,12 +5,16 @@ legacy text events. The shared contract owns block types and reference rules.
 """
 from __future__ import annotations
 
+import logging
+from pydantic import ValidationError
 from copy import deepcopy
 from typing import Any
 
 from agent_contracts.messages import AIMessage, MESSAGE_EVENT_MODELS
 
 from app.core.errors import BusinessError
+
+logger = logging.getLogger(__name__)
 
 
 def copy_message(value: dict[str, Any] | None, *, status: str | None = None) -> dict[str, Any] | None:
@@ -39,16 +43,23 @@ class MessageCapture:
     def __init__(self) -> None:
         self.message: dict | None = None
         self.seen = False
+        self.invalid = False
 
     def event(self, name: str, data: dict) -> bool:
         if name == 'run_start':
             self.message = None
             self.seen = False
+            self.invalid = False
         model = MESSAGE_EVENT_MODELS.get(name)
         if model is None:
             return False
-        model.model_validate(data)
         self.seen = True
+        try:
+            model.model_validate(data)
+        except (ValidationError, ValueError, TypeError):
+            self.invalid = True
+            logger.warning('Agent message event rejected: %s', name, exc_info=True)
+            return True
         if name == 'message_start':
             self.message = None
         elif name == 'message_end':
@@ -56,7 +67,14 @@ class MessageCapture:
         return True
 
     def result(self, result: dict, *, status: str) -> dict | None:
-        message = result_message(result, status=status, event_message=self.message)
-        if message is None and self.seen:
-            raise BusinessError(20004, 'Agent 结构化消息缺少最终快照', 502)
-        return message
+        try:
+            if self.invalid:
+                raise BusinessError(20004, 'Agent 消息事件无效', 502)
+            message = result_message(result, status=status, event_message=self.message)
+            if message is None and self.seen:
+                raise BusinessError(20004, 'Agent 结构化消息缺少最终快照', 502)
+            return message
+        except (BusinessError, ValidationError, ValueError, TypeError):
+            # Presentation must not prevent a sealed report from closing a Turn.
+            logger.warning('Agent structured snapshot discarded; status=%s', status, exc_info=True)
+            return None

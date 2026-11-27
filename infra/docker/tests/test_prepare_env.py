@@ -57,7 +57,6 @@ class PrepareEnvTests(unittest.TestCase):
             'AGENT_AUDIENCE': 'fixture-audience', 'AGENT_GRANT_ISSUER': 'fixture-issuer',
         })
         self.native('agent', {
-            'AGENT_V1_ADMISSION': 'drain_only', 'AGENT_WORKER_PROTOCOL': '2',
             'AGENT_GRANT_PUBLIC_KEYS_FILE': 'fixture-public.json',
             'AGENT_AUDIENCE': 'fixture-audience', 'AGENT_GRANT_ISSUER': 'fixture-issuer',
         })
@@ -229,7 +228,7 @@ class PrepareEnvTests(unittest.TestCase):
             path.parent.mkdir(parents=True)
             path.write_text('fixture-existing-signing-file')
         self.docker('backend', {'AGENT_V2_ADMISSION': 'authorized', 'AGENT_GRANT_PRIVATE_KEY_FILE': ''})
-        self.docker('agent', {'AGENT_V1_ADMISSION': 'drain_only', 'AGENT_WORKER_PROTOCOL': '2', 'AGENT_GRANT_PUBLIC_KEYS_FILE': ''})
+        self.docker('agent', {'AGENT_GRANT_PUBLIC_KEYS_FILE': ''})
         self.run_setup()
         self.assertEqual(self.read('backend')['AGENT_GRANT_PRIVATE_KEY_FILE'], '/run/secrets/backend/grant-private.pem')
         before = self.snapshot()
@@ -278,19 +277,19 @@ class PrepareEnvTests(unittest.TestCase):
         self.run_setup()
         self.assertEqual(self.read('backend')['AGENT_GRANT_PRIVATE_KEY_FILE'], '')
         self.docker('backend', {'AGENT_V2_ADMISSION': 'authorized'})
-        self.docker('agent', {'AGENT_V1_ADMISSION': 'drain_only', 'AGENT_WORKER_PROTOCOL': '2'})
+        self.docker('agent', {})
         before = self.snapshot()
         with self.assertRaisesRegex(ValueError, 'V2 signing keys required'):
             self.run_setup()
         self.assertEqual(before, self.snapshot())
 
-    def test_late_protocol_validation_failure_does_not_publish_signing_files(self):
+    def test_retired_protocol_settings_are_dropped_from_generated_environment(self):
         self.v2_native()
-        self.docker('agent', {'AGENT_WORKER_PROTOCOL': '1'})
-        before = self.snapshot()
-        with self.assertRaisesRegex(ValueError, 'V2 requires'):
-            self.run_setup()
-        self.assertEqual(before, self.snapshot())
+        self.docker('agent', {'AGENT_V1_ADMISSION': 'legacy', 'AGENT_WORKER_PROTOCOL': '1'})
+        self.run_setup()
+        generated = self.read('agent')
+        self.assertNotIn('AGENT_V1_ADMISSION', generated)
+        self.assertNotIn('AGENT_WORKER_PROTOCOL', generated)
 
     def test_publication_io_failure_restores_existing_files(self):
         self.run_setup()

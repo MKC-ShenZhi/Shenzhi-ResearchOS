@@ -52,6 +52,9 @@ class TailGateway:
     async def task_runs(self, task_id, owner):
         return ['run-1', 'run-2'] if self.retry and self.terminal else ['run-1']
 
+    async def usage(self, task_id, owner):
+        return {}
+
 
 def decode(chunk):
     if isinstance(chunk, bytes):
@@ -74,8 +77,8 @@ class AgentSseTailTests(unittest.IsolatedAsyncioTestCase):
 
     def gateway(self, **options):
         gateway = TailGateway(**options)
-        self.enterContext(patch.object(service, 'agent_gateway', gateway))
-        self.enterContext(patch.object(api, 'agent_gateway', gateway))
+        self._gateway = gateway
+        self.enterContext(patch('app.services.agent_gateway.gateway.AgentGateway', return_value=gateway))
         return gateway
 
     async def stream(self, mode):
@@ -89,10 +92,11 @@ class AgentSseTailTests(unittest.IsolatedAsyncioTestCase):
             live = await service.start_session_run(
                 owner=self.owner, session_id=session.id, prompt='tail', model=None,
                 mode='fast', attachments=[], workspace_id=None, skills=[],
+                gateway=self._gateway,
             )
         else:
             await self.repo.start_turn(session.id, self.owner, 'tail', {
-                'agent_task_id': 'task-1', 'agent_run_id': 'run-1',
+                '_agent_protocol': 2, 'agent_task_id': 'task-1', 'agent_run_id': 'run-1',
             }, [])
             live = await service.resume_session_run(session.id, self.owner)
         self.live = live

@@ -44,8 +44,8 @@ def _asset_url(session_id: str | None, relative: str) -> str:
     """图床地址：会话工作区文件端点（image_search/draw_chart 的产物都在工作区里）。"""
     path = f'{IMAGE_DIR}/{relative}'
     if session_id:
-        return f'/api/v1/agent/assets/{session_id}/{path}'
-    return f'/api/v1/agent/session/_/file?path={path}'
+        return f'/api/v2/agent/assets/{session_id}/{path}'
+    return f'/api/v2/agent/session/_/file?path={path}'
 
 
 class ChartArgs(BaseModel):

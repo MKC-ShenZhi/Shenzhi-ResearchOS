@@ -56,11 +56,11 @@ async function mock(request, response) {
   const url = new URL(request.url, "http://mock.test");
   const path = url.pathname;
   if (path === "/api/auth/get-session") return json(response, null);
-  if (path === "/api/v1/agent/config") return json(response, { code: 0, data: {
+  if (path === "/api/v2/agent/config") return json(response, { code: 0, data: {
     models: [{ value: "mock/model", label: "Mock", provider: "mock", enabled: true }], default_model: "mock/model", skills: [],
     upload: { max_size_mb: 10, max_files: 3, accept: [] },
   } });
-  if (path === "/api/v1/agent/sessions") return json(response, { code: 0, data: {
+  if (path === "/api/v2/agent/sessions") return json(response, { code: 0, data: {
     sessions: [summary], next_cursor: null, has_more: false, ephemeral: true,
   } });
   if (path.endsWith(`/sessions/${sessionId}`)) return json(response, { code: 0, data: { ...summary, turns: completed ? [turn()] : [] } });

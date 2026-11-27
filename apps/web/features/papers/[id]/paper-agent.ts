@@ -26,6 +26,19 @@ export interface PaperAgentState {
   activity: "reading_pdf" | null;
 }
 
+export interface PendingPaperAgentRun {
+  question: string;
+  request: ReturnType<typeof paperAgentRunRequest>;
+  idempotencyKey: string;
+}
+
+export function pendingPaperAgentRetry(
+  pendingRuns: ReadonlyMap<string, PendingPaperAgentRun>,
+  question: string,
+): PendingPaperAgentRun | null {
+  return pendingRuns.get(question) ?? null;
+}
+
 export type PaperAgentAction =
   | { type: "reset"; paperId: string }
   | { type: "start"; question: string; userId: string; assistantId: string }
@@ -105,7 +118,7 @@ export function paperAgentReducer(state: PaperAgentState, action: PaperAgentActi
       const next = patchAssistant(state, action.assistantId, (turn) => ({
         ...turn,
         content: turn.content || fallback,
-        structured: reconcileMessage(turn.structured ?? initialMessageState(), action.result.message),
+        structured: reconcileMessage(turn.structured ?? initialMessageState(), action.result.message, true),
         status: failed ? "error" : stopped ? "stopped" : "complete",
         error: failed ? action.result.error?.message || "Agent 运行失败" : undefined,
         warnings: action.result.status === "timeout"
@@ -144,10 +157,17 @@ ${question}`;
 export function paperAgentHistory(turns: PaperAgentTurn[]): Array<Record<string, unknown>> {
   return turns.flatMap((turn): Array<Record<string, unknown>> => {
     if (turn.role === "user") return [{ kind: "user", text: turn.content }];
-    if (!turn.content.trim()) return [];
+    const message = turn.structured?.message;
+    const body = message?.blocks.filter((block) => block.type === "markdown" && typeof block.content === "string")
+      .map((block) => block.content).join("\n\n") || turn.content;
+    if (!body.trim()) return [];
+    // Sources are transcript text, never an AIMessage Provider payload.
+    const sources = message?.references.length
+      ? "\n\n先前回复的参考来源（上下文数据）：\n" + JSON.stringify(message.references)
+      : "";
     return [{
       kind: "assistant",
-      content: turn.content,
+      content: body + sources,
       reasoning: "",
       tool_calls: [],
       stop_reason: "stop",

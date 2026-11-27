@@ -27,9 +27,11 @@ function isReplayed(previous: string | null, next: string | undefined): boolean 
   return /^\d+$/.test(previous) && /^\d+$/.test(next) && BigInt(next) <= BigInt(previous);
 }
 
-export function reconcileMessage(state: AgentMessageState, message: AgentMessage | null | undefined): AgentMessageState {
-  // A legacy result or a transport interruption cannot invalidate generated blocks.
-  if (message == null) return state;
+export function reconcileMessage(state: AgentMessageState, message: AgentMessage | null | undefined, terminal = false): AgentMessageState {
+  // Explicit null is Backend's final rejection of presentation. An omitted
+  // legacy field or a transport interruption leaves partial content intact.
+  if (message === undefined || (message === null && !terminal)) return state;
+  if (message === null) return { ...initialMessageState(), runId: state.runId };
   return { ...state, message: structuredClone(message), activeBlockId: null,
     ended: message.status !== "running", protocolError: null };
 }

@@ -6,7 +6,7 @@ import os
 
 from sqlalchemy import select, or_
 
-from agent_app.api.v2 import metering_control
+from agent_app.api.routes import metering_control
 from agent_app.infrastructure.database import get_session
 from agent_app.infrastructure.metering_models import CallRow, CloseManifestRow, ExecutionRow, TaskMeteringRow, UsageOutboxRow
 from agent_app.integrations.backend.entitlements import EntitlementClient

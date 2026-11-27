@@ -143,7 +143,7 @@ class OpenLuxWireTests(unittest.IsolatedAsyncioTestCase):
                 async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                              base_url='http://127.0.0.1',
                                              headers={'Authorization': 'Bearer test-service-token'}) as client:
-                    response = await client.get('/internal/v1/config')
+                    response = await client.get('/internal/v2/config')
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual([m['value'] for m in response.json()['models'] if m['value'] in ('openlux/Chat-ID', 'openlux/Tool-ID')], expected)
                 for secret in ('openlux-test-secret', 'base_url', 'api_key'):

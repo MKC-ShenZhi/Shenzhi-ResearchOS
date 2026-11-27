@@ -12,7 +12,7 @@ import { Download, FileText, MessageCircleQuestion, Quote, Sparkles, Zap } from 
 import {
   attachAgentSessionRun, createWorkspace, exportAgentSession, fetchAgentConfig, getAgentSession, steerAgentRun,
   stopAgentRun, streamAgentSessionRun, uploadWorkspaceFile,
-  type AgentConfig, type AgentQuestion, type AgentQuestionOption, type AgentRunInput,
+  type AgentConfig, type AgentQuestionOption, type AgentRunInput,
   type AgentRunResult,
 } from "@/clients/backend/agent";
 import { ApiError } from "@/clients/backend/http";
@@ -20,7 +20,6 @@ import { ReportDialog } from "./report-dialog";
 import { Timeline } from "./timeline-view";
 import {
   applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, visibleNotes, startRunStream,
-  type Entry,
 } from "./timeline";
 import { ComposerShell, type ComposerSkill } from "@/components/common/composer/composer";
 import type { WorkspaceFile } from "@/components/common/composer/attachment-menu";
@@ -31,17 +30,13 @@ import { MessageRenderer } from "./components/message-renderer";
 import type { ComposerAttachment, ComposerConfig } from "@/types/ai-search";
 import { takeAgentLaunch } from "./launch-store";
 import { notifyAgentSessionsChanged } from "./session-events";
+import { sessionExportMessages } from "./session-export";
 import { storedTurns, type AgentChatTurn as Turn } from "./session-state";
 import { applyMessageEvent, initialMessageState, reconcileMessage, startMessageRun } from "./message-state";
 
 // 类型别名而非 interface：报告渲染器（ReportView）要的是带索引签名的 AgentSource，
 // interface 不满足索引签名（TS2322），别名可以直接赋给它。
 type Source = { title?: string; url?: string };
-
-/** 问题轮次回传历史时的文本形态：模型需要在下一轮看到"自己问过什么"。 */
-function askedText(question?: AgentQuestion): string {
-  return question?.question ?? "";
-}
 
 // 过程流（思考 → 工具 → 思考）的全部状态机在 ./timeline.ts，渲染在 ./timeline-view.tsx。
 // 这两块曾经内联在本文件里，无法被测试，导致同一个显示 bug 反复出现——所以彻底搬了出去。
@@ -326,7 +321,7 @@ export function ShenzhiAiPage() {
             stopped: result.status === "stopped" || result.status === "timeout",
             stopReason: result.stop_reason,
             status: result.status,
-            structured: reconcileMessage(turn.structured, result.message),
+            structured: reconcileMessage(turn.structured, result.message, true),
             // The persisted final_text is authoritative, including failure/timeout partials.
             content: result.question ? "" : result.final_text || "",
           };
@@ -643,17 +638,7 @@ export function ShenzhiAiPage() {
     if (turns.length === 0 || exporting) return;
     setExporting(true);
     try {
-      const messages = turns
-        .filter((turn) => turn.role === "user"
-          || (turn.role === "assistant" && (turn.content || turn.report || turn.question)))
-        .map((turn) => turn.role === "user"
-          ? { kind: "user", text: turn.content }
-          : { kind: "assistant", content: turn.report ?? turn.content ?? askedText(turn.question),
-              reasoning: turn.reasoning || "",
-              tool_calls: turn.stream.entries
-                .filter((entry): entry is Extract<Entry, { kind: "tool" }> => entry.kind === "tool")
-                .map((entry) => ({ id: entry.tool.toolCallId, name: entry.tool.name, arguments: entry.tool.arguments })),
-              stop_reason: "stop" });
+      const messages = sessionExportMessages(turns);
       const { blob, filename } = await exportAgentSession({ title: sessionTitle, messages, format });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");

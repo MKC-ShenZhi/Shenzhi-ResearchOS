@@ -87,7 +87,7 @@ Cookie 为 HttpOnly、SameSite=Strict，Path 限制 `/api/v1/admin-console`，HT
 
 用户查询复用 `admin_users.list_users` 与 `AdminUsersResponse`，多规则 Token 单列显示，不相加；缺失权益为未知，Partial 为已知下界，预留不等同于实际消耗。
 
-Model/Skill 来自 Agent `/internal/v1/config`（10 秒超时，不继承环境 HTTP 代理），字段仅使用实际响应；Agent demo 配置会如实展示其 Mock 标签。Tool 目录尚未接入；配置不可用返回 503，不伪装为空。运行配置视图不是授权视图。
+Model/Skill 来自 Agent `/internal/v2/config`（10 秒超时，不继承环境 HTTP 代理），字段仅使用实际响应；Agent demo 配置会如实展示其 Mock 标签。Tool 目录尚未接入；配置不可用返回 503，不伪装为空。运行配置视图不是授权视图。
 
 正式套餐的 Policy 发布、权益分配、停用/恢复及审计已接入；能力目录本身仍只读，不提供任意能力编辑。请求期间不执行离线 export_capabilities 脚本。原 Web 用户管理页面及菜单入口已移除，管理界面统一使用本工程；旧 Backend `/api/v1/admin/*` API 与 `SHENZHI_ADMIN_USER_IDS` 配置已移除。
 
