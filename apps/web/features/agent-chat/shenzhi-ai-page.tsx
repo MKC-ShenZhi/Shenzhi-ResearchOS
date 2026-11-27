@@ -769,7 +769,7 @@ export function ShenzhiAiPage() {
                     <div className="min-w-0 flex-1" data-quote-source>
                       {/* 只有标点的正文不渲染：模型常在工具轮之间吐孤立的 "."。 */}
                       {turn.structured.message ? (
-                        <MessageRenderer message={turn.structured.message}
+                        <MessageRenderer message={turn.structured.message} appearance="document"
                           activeBlockId={turn.structured.activeBlockId}
                           isStreaming={running && index === turns.length - 1} />
                       ) : turn.content && isMeaningful(turn.content) && (
