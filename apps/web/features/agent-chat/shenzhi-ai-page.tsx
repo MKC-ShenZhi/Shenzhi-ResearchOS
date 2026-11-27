@@ -27,6 +27,7 @@ import { AppShell } from "@/components/common/layout/app-shell";
 import { useAuth } from "@/components/auth/auth-provider";
 import { StreamdownRenderer } from "./components/streamdown-renderer";
 import { MessageRenderer } from "./components/message-renderer";
+import { MessageActions } from "./components/message-actions";
 import type { ComposerAttachment, ComposerConfig } from "@/types/ai-search";
 import { takeAgentLaunch } from "./launch-store";
 import { notifyAgentSessionsChanged } from "./session-events";
@@ -791,6 +792,8 @@ export function ShenzhiAiPage() {
                       {turn.stopped && (
                         <div className="mt-1 text-xs text-muted">{stopLabel(turn.stopReason)}</div>
                       )}
+                      <MessageActions message={turn.structured.message} content={turn.content}
+                        status={turn.status} isStreaming={running && index === turns.length - 1} />
                     </div>
                   </div>)}
                 </div>)}
