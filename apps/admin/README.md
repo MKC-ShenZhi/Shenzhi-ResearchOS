@@ -1,6 +1,6 @@
 # ShenZhi Admin Console V1
 
-Agent 管理的当前实现见 [控制台维护说明](../../docs/admin/agent-management-console.md)，正式静态部署及 SSH 入口见 [Admin 部署说明](../../infra/docker/ADMIN.md)。`#/agent` 是统一能力与运行管理入口，旧 `#/capabilities` 保留兼容映射。
+Agent 管理的当前实现见 [控制台维护说明](../../docs/admin/agent-management-console.md)，正式静态部署及 SSH 入口见 [Admin 部署说明](../../infra/docker/ADMIN.md)。`#/agent` 提供模型与供应商、Tools、Skills 三个入口，模型目录按供应商分组，旧 `#/capabilities` 保留兼容映射。
 
 独立 Vite / React 19 / TypeScript / Tailwind CSS 4 / lucide-react 前端，固定开发端口 3101。无 Web 内部依赖，无独立业务后端。
 
@@ -89,9 +89,7 @@ Cookie 为 HttpOnly、SameSite=Strict，Path 限制 `/api/v1/admin-console`，HT
 
 用户查询复用 `admin_users.list_users` 与 `AdminUsersResponse`，多规则 Token 单列显示，不相加；缺失权益为未知，Partial 为已知下界，预留不等同于实际消耗。
 
-Model/Skill 来自 Agent `/internal/v1/config`（10 秒超时，不继承环境 HTTP 代理），字段仅使用实际响应；Agent demo 配置会如实展示其 Mock 标签。Tool 目录尚未接入；配置不可用返回 503，不伪装为空。运行配置视图不是授权视图。
-
-正式套餐的 Policy 发布、权益分配、停用/恢复及审计已接入。Agent 目录提供查询和检查，配置中心通过表单或 JSON 创建不可变候选并完成验证、审批及发布。请求期间不执行离线 export_capabilities 脚本。原 Web 用户管理页面及菜单入口已移除，管理界面统一使用本工程；旧 Backend `/api/v1/admin/*` API 与 `SHENZHI_ADMIN_USER_IDS` 配置已移除。
+Agent 管理通过同源 Backend 读取真实 Provider、Model、Tool 和 Skill 目录。Provider / Model 可通过现有配置修订流程编辑、预览、验证和发布。Tools 和 Skills 提供只读目录与详情。正式套餐的 Policy 发布、权益分配、停用、恢复及审计使用独立的套餐和用户页面。
 
 
 ## 正式套餐与 Admin 操作

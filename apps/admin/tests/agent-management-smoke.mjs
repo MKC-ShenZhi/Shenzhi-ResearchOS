@@ -46,15 +46,9 @@ async function see(text) {
     throw new Error(error.message + '\n' + await evaluate('document.body?.innerText.slice(-4000)'));
   }
 }
-async function navigate(hash, expected) {
+async function navigate(hash, heading, expected) {
   await evaluate('location.hash = ' + JSON.stringify(hash));
-  const [, , section, id] = hash.split('/');
-  const catalogs = { providers: 'Provider', models: 'Model', tools: 'Tools', skills: 'Skills' };
-  const heading = hash === '#/capabilities' ? 'Provider' : catalogs[section]
-    ? catalogs[section] + (id ? ' 详情' : '')
-    : { tasks: id ? 'Task 详情' : 'Task / Run 监控', runs: 'Run 详情', workers: id ? 'Worker 详情' : 'Worker 执行记录',
-      audit: 'Agent 管理审计', config: 'Agent 配置管理' }[section];
-  await waitFor(() => evaluate('document.querySelector("main h1")?.textContent === ' + JSON.stringify(heading)),
+  await waitFor(() => evaluate('document.querySelector("main h2")?.textContent === ' + JSON.stringify(heading)),
     'Route heading missing: ' + hash);
   await see(expected);
 }
@@ -83,75 +77,89 @@ try {
   await evaluate(`document.querySelector('[name=username]').value = 'test-admin';
     document.querySelector('[name=password]').value = 'test-password';
     document.querySelector('form').requestSubmit();`);
-  await see('Backend 权益 PostgreSQL');
-  await navigate('#/agent/providers', 'deepseek');
-  await navigate('#/agent/providers/deepseek', '关联模型');
-  await navigate('#/agent/models/deepseek%2Fdeepseek-chat', '状态与证据');
-  await see('上游 Model ID');
-  await navigate('#/agent/tools', 'tool:web_search');
-  await navigate('#/agent/tools/tool%3Aweb_search', '参数 Schema');
-  await see('call0');
-  await navigate('#/agent/skills', 'deep-research');
-  await navigate('#/agent/skills/deep-research', 'References 与 Scripts');
+  await see('深知 · Agent 管理');
+  await see('供应商与模型目录');
+  await waitFor(() => evaluate(`(() => {
+    const model = [...document.querySelectorAll('.agent-model-title small')].find(node => node.textContent === 'deepseek/deepseek-chat');
+    const group = model?.closest('.agent-provider-group');
+    return !!group?.querySelector('a[href="#/agent/providers/deepseek"]') &&
+      ['API 地址', '凭据状态', 'deepseek/deepseek-chat'].every(label => group.textContent.includes(label));
+  })()`), 'DeepSeek model must appear inside its provider group');
+  await evaluate(`(() => {
+    const search = document.querySelector('input[type=search]');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(search, 'deepseek/deepseek-chat');
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await waitFor(() => evaluate(`document.querySelectorAll('.agent-provider-group').length === 1 &&
+    document.querySelectorAll('.agent-provider-group li').length === 1 &&
+    document.querySelector('.agent-provider-group').innerText.includes('deepseek/deepseek-chat')`),
+  'Model search must keep its provider group');
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('nav[aria-label="Agent 管理"] a')]
+    .map(link => [link.getAttribute('href'), link.querySelector('strong').textContent])`), [
+    ['#/agent/providers', '模型与供应商'], ['#/agent/tools', 'Tools'], ['#/agent/skills', 'Skills'],
+  ]);
+  assert.equal(await evaluate("document.querySelector('.agent-provider-group').open"), true);
+  const address = await evaluate(`(() => {
+    const group = document.querySelector('.agent-provider-group');
+    const row = [...group.querySelectorAll('.agent-fields > div')].find(row => row.querySelector('dt button')?.textContent === 'API 地址');
+    const link = row.querySelector('dd a');
+    const help = [...group.querySelectorAll('.agent-field-label')].find(button => button.textContent === '凭据状态');
+    help.focus();
+    return { href: link?.getAttribute('href'), target: link?.target,
+      tooltip: getComputedStyle(help.parentElement.querySelector('[role=tooltip]')).display,
+      description: help.parentElement.querySelector('[role=tooltip]').textContent };
+  })()`);
+  assert.match(address.href, /^https?:/);
+  assert.equal(address.target, '_blank');
+  assert.equal(address.tooltip, 'block');
+  assert(address.description.includes('非空 API Key'));
+  await evaluate("document.querySelector('.agent-model-trigger').click()");
+  await see('最大输出 Token');
+  await see('停止使用');
+  assert.equal(await evaluate("document.querySelector('.agent-model-drawer').open"), true);
+  await evaluate("document.querySelector('.agent-drawer-heading button').click()");
+  assert.equal(await evaluate("document.querySelector('.agent-model-drawer').open"), false);
+  await evaluate("document.querySelector('.agent-provider-group summary').click()");
+  assert.equal(await evaluate("document.querySelector('.agent-provider-group').open"), false);
+  await navigate('#/agent/providers/deepseek', 'Provider 详情', '关联模型');
+  await navigate('#/agent/models/deepseek%2Fdeepseek-chat', 'Model 详情', '上游 Model ID');
+  await see('上下文长度');
+  await see('最大输出 Token');
+  await see('停止使用');
+  assert.equal(await evaluate('document.querySelector(".agent-modules [aria-current]").hash'), '#/agent/providers');
+  await navigate('#/agent/tools', 'Tools', 'tool:web_search');
+  await navigate('#/agent/tools/tool%3Aweb_search', 'Tools 详情', '参数 Schema');
+  await navigate('#/agent/skills', 'Skills', 'deep-research');
+  await navigate('#/agent/skills/deep-research', 'Skills 详情', '资源文件');
   await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent.includes('预览 SKILL.md')).click()");
   await waitFor(() => evaluate('document.querySelector("pre.agent-preview")?.textContent.length > 20'), 'Skill preview missing');
-  await navigate('#/agent/tasks', 'task0');
-  await navigate('#/agent/tasks/task0', 'Backend 核验与入账');
-  await see('run0');
-  await navigate('#/agent/runs/run0', 'Execution 历史');
-  await see('call0');
-  await see('tool_started');
-  await navigate('#/agent/workers/worker-a', '最近已记录活动');
+  for (const removed of ['overview', 'tasks/task0', 'runs/run0', 'workers/worker-a', 'alerts', 'audit', 'config/fleet']) {
+    await navigate('#/agent/' + removed, '供应商与模型目录', 'deepseek');
+  }
+  await navigate('#/capabilities', '供应商与模型目录', 'deepseek');
+  await navigate('#/agent/models', '供应商与模型目录', 'deepseek');
   if (phase === '--phase2') {
-    await see('phase2-browser-config');
-    await navigate('#/agent/providers/deepseek', '发起检查');
-    await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '发起检查').click()");
-    await see('CHECK_PASSED');
-    await navigate('#/agent/providers', '最近检查');
-    await see('通过 · static');
-    await navigate('#/agent/runs/run0', '查看诊断');
-    await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '查看诊断').click()");
-    await see('NO_FAILURE_EVIDENCE');
-    await navigate('#/agent/audit', 'Agent 管理审计');
-    await see('diagnostic_view');
-    await navigate('#/agent/config', 'Agent 配置管理');
-    await see('配置修订');
-    await see('创建初始候选');
-    await evaluate(`document.querySelector('summary').click()`);
-    await see('导入完整部署 Spec');
-    await evaluate(`(() => {
-      const spec = {schema_version:1,build_revision:'browser-build',runtime_version:'0.1.0',
-        providers:[{provider_id:'fixture',base_url:'https://provider.example.invalid/v1',secret_ref:'AGENT_PROVIDER_SECRET_FIXTURE',enabled:true}],
-        models:[{model_id:'fixture/model',provider_id:'fixture',upstream_model_id:'upstream',label:'Fixture',brand:'platform',enabled:true,capabilities:{chat:true,streaming:true,tool_calling:true}}],
-        defaults:{agent:'fixture/model'},tools:[{id:'tool:web_search',digest:'sha256:'+'0'.repeat(64),metadata_digest:'sha256:'+'1'.repeat(64)}],skills:[]};
-      const input = document.querySelector('input[type=file]');
-      const files = new DataTransfer();files.items.add(new File([JSON.stringify({spec})], 'config.json', {type:'application/json'}));
-      input.files=files.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+    await navigate('#/agent/config', 'Provider / Model 配置', '创建初始候选');
+    await see('配置写入关闭');
+    await evaluate("document.querySelector('.agent-management summary').click()");
+    const editor = await evaluate(`(() => {
+      const form = document.querySelector('.agent-candidate');
+      return { addProvider: [...form.querySelectorAll('button')].find(b => b.textContent === '新增 Provider')?.matches(':disabled'),
+        addModel: [...form.querySelectorAll('button')].find(b => b.textContent === '新增 Model')?.matches(':disabled'),
+        importDisabled: form.querySelector('input[type=file]').disabled,
+        previewDisabled: [...form.querySelectorAll('button')].find(b => b.textContent === '检查依赖并预览')?.disabled };
     })()`);
-    await see('上游 Model ID');
-    await evaluate(`(() => {
-      const input = [...document.querySelectorAll('label')].find(label=>label.textContent==='上游 Model ID').querySelector('input');
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'changed-upstream');
-      input.dispatchEvent(new Event('input',{bubbles:true}));
-      const select=[...document.querySelectorAll('label')].find(label=>label.textContent.includes('编辑方式')).querySelector('select');
-      select.value='json';select.dispatchEvent(new Event('change',{bubbles:true}));
-    })()`);
-    await waitFor(() => evaluate(`(() => {const spec=JSON.parse(document.querySelector('textarea').value);
-      return spec.models[0].upstream_model_id==='changed-upstream' && spec.tools[0].metadata_digest==='sha256:'+'1'.repeat(64);})()`), 'Form lost configuration fields');
-    await navigate('#/capabilities', 'Provider');
-    assert.equal(await evaluate(`document.body.innerText.includes('目录尚未接入')`), false);
+    assert.deepEqual(editor, { addProvider: true, addModel: true, importDisabled: true, previewDisabled: true });
   }
   assert.deepEqual(exceptions, []);
   const api = requests.filter(request => request.url.includes('/api/'));
-  assert(api.some(request => request.url.includes('/agent/runs/run0/calls')));
   assert(api.every(request => request.url.startsWith(origin + '/api/v1/admin-console/')));
   assert(api.every(request => !Object.keys(request.headers).some(key => key.toLowerCase() === 'authorization')));
-  const managedWrites = api.filter(request => request.url.includes('/admin-console/agent/') &&
-    request.method !== 'GET' && !request.url.endsWith('/checks/summary'));
-  assert.equal(managedWrites.length, phase === '--phase2' ? 3 : 0);
-  assert(managedWrites.every(request => request.method === 'POST' &&
-    Object.entries(request.headers).some(([key, value]) => key.toLowerCase() === 'x-admin-request' && value === '1')));
-  console.log('Admin Phase 1 browser smoke passed');
+  const managed = api.filter(request => request.url.includes('/admin-console/agent/'));
+  assert(managed.some(request => new URL(request.url).pathname.endsWith('/skills/deep-research/document')));
+  assert(managed.every(request => request.method === 'GET' &&
+    /\/agent\/(providers|models|tools|skills|model-metadata)(\/|$)|\/agent\/config\/revisions$/.test(new URL(request.url).pathname)));
+  console.log('Admin Agent management browser smoke passed');
 } finally {
   socket?.close();
   browser.kill();

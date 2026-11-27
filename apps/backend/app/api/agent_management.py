@@ -8,13 +8,25 @@ from agent_contracts.management import (
     Call, CallQuery, CatalogQuery, Document, Event, EventQuery, Key, Model, Page,
     Pagination, Provider, Run, Skill, Task, TaskQuery, Tool, Worker,
 )
-from app.core.admin_auth import PATH, require_admin
+from app.core.admin_auth import PATH, require_admin, require_admin_write
 from app.core.errors import BusinessError
 from app.core.responses import ok
 from app.integrations import agent_management as agent
 from app.services import agent_management as management
 
 router = APIRouter(prefix=PATH + '/agent', tags=['agent-management'], dependencies=[Depends(require_admin)])
+
+
+@router.get('/model-metadata/{model_id:path}')
+async def model_metadata(model_id: Key):
+    from app.services.model_metadata import get_model_metadata
+    return response(get_model_metadata(model_id))
+
+
+@router.post('/model-metadata/{model_id:path}', dependencies=[Depends(require_admin_write)])
+async def refresh_model_metadata(model_id: Key):
+    from app.services.model_metadata import refresh_model_metadata
+    return response(await refresh_model_metadata(model_id))
 
 
 @router.get('/overview')

@@ -10,8 +10,8 @@ export type ConfigSpec = {
 const booleanCapabilities = ['chat', 'streaming', 'tool_calling', 'reasoning', 'temperature', 'stream_options'];
 const numericCapabilities = ['chat_max_tokens', 'agent_max_tokens', 'max_output_tokens', 'context_window_tokens'];
 
-export function AgentConfigForm({ spec, change, disabled }: {
-  spec: ConfigSpec; change: (value: ConfigSpec) => void; disabled: boolean;
+export function AgentConfigForm({ spec, change, disabled, initializing }: {
+  spec: ConfigSpec; change: (value: ConfigSpec) => void; disabled: boolean; initializing: boolean;
 }) {
   function update(group: 'providers' | 'models', index: number, key: string, value: unknown) {
     change({ ...spec, [group]: spec[group].map((item, position) => position === index ? { ...item, [key]: value } : item) });
@@ -22,9 +22,8 @@ export function AgentConfigForm({ spec, change, disabled }: {
   }
   return <fieldset disabled={disabled}>
     <legend>Provider / Model 配置候选</legend>
-    <p>来源为当前完整配置 Spec。提交后创建新修订，发布结果由目标 Worker 确认。</p>
-    <label>Build<input required value={spec.build_revision} onChange={event => change({ ...spec, build_revision: event.target.value })} /></label>
-    <label>Runtime<input required value={spec.runtime_version} onChange={event => change({ ...spec, runtime_version: event.target.value })} /></label>
+    {initializing && <><label>Build<input required value={spec.build_revision} onChange={event => change({ ...spec, build_revision: event.target.value })} /></label>
+    <label>Runtime<input required value={spec.runtime_version} onChange={event => change({ ...spec, runtime_version: event.target.value })} /></label></>}
     <h3>Providers</h3>
     {spec.providers.map((item, index) => <article key={index}>
       {field('providers', item, index, 'provider_id', 'Provider ID')}
@@ -37,7 +36,7 @@ export function AgentConfigForm({ spec, change, disabled }: {
     </article>)}
     <button type="button" onClick={() => change({ ...spec, providers: [...spec.providers,
       { provider_id: '', protocol: 'openai_chat_completions', base_url: '', secret_ref: '', enabled: true }] })}>新增 Provider</button>
-    <p>Secret Reference 需由部署环境安全注入。轮换完成情况通过实际 Worker 调用和独立验收核实。</p>
+    <p>Secret Reference 使用部署环境中的凭据引用名。</p>
     <h3>Models</h3>
     {spec.models.map((item, index) => {
       const capabilities = (item.capabilities ?? {}) as Entry;

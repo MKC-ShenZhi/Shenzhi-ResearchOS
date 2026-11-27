@@ -1,74 +1,86 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { BookOpen, ExternalLink as ExternalLinkIcon, CircleHelp, X, Layers, ShieldCheck, Wrench } from 'lucide-react';
+import { api } from '../../api';
 import { useResource } from '../../useResource';
-import './agent.css';
-import { AgentAudit, Diagnosis, HealthChecks, WorkerEvidence } from './AgentDiagnostics';
-import { AgentAlerts, AgentControl } from './AgentOperations';
 import { AgentConfigCenter } from './AgentConfigCenter';
-import { AgentHealthSummary, CurrentHealth } from './AgentHealthSummary';
-import { AgentOperationsOverview } from './AgentOperationsOverview';
+import './agent.css';
 
 type State = 'yes' | 'no' | 'unknown' | 'not_applicable';
-type Evidence = { state: State; source: string | null; observed_at: string | null; config_revision?: string; worker_id?: string };
-type States = Record<string, Evidence>;
-type Snapshot = { status: string; observed_at: string; source: string; reason_code: string | null };
-type Page<T> = { items: T[]; next_cursor: string | null; observed_at: string };
-type Run = {
-  run_id: string; task_id: string; attempt: number; status: string; worker_id: string | null;
-  created_at: string; started_at: string | null; completed_at: string | null; duration_ms: number | null;
-  lease_status: string; error_code: string | null;
-  execution: { execution_id: string; worker_id: string; sealed: boolean } | null;
-  executions: { execution_id: string; worker_id: string; sealed: boolean }[];
-  executions_truncated: boolean;
-};
-type Worker = { worker_id: string; latest_run: Run; last_activity: string; active_executions: number; expired_leases: number; state: string };
-type Usage = { status: string; measured_tokens: number | null; known_tokens: number | null; accounted_tokens: number | null; held_tokens: number | null; settlement_status: string | null };
-type Task = {
-  task_id: string; owner_id: string; mode: string | null; requested_model: string | null; status: string;
-  created_at: string; latest_run: Run | null; error_code: string | null; observed_usage: Usage | null; backend_usage: Usage | null;
-  execution_config_revision?: string | null; execution_wait_reason?: string | null;
-};
-type Call = {
-  failure_reason?: string | null;
-  call_id: string; execution_id: string; run_id: string; kind: string; capability_id: string | null;
-  capability_version: string | null; status: string; started_at: string | null; duration_ms: number | null;
-  usage_status: string; known_tokens: number | null;
-};
+type Page<T> = { items: T[]; next_cursor: string | null };
 type CatalogEntry = {
   provider_id?: string; model_id?: string; tool_id?: string; name?: string; label?: string; brand?: string;
   protocol?: string; base_url?: string; credential_present?: boolean; enabled?: boolean; model_ids?: string[];
   upstream_model_id?: string; capabilities?: Record<string, boolean | number | string | null>; default_purposes?: string[];
-  config_revision?: string | null; capability_version?: string | null; schema_digest?: string | null;
-  latest_observation?: { model_id: string; capability_version: string; observed_at: string; outcome: string; source: string } | null;
-  parameters_schema?: object | null; conditions?: string[]; registration?: string; latent?: State; run_callable?: State;
-  description?: string; source?: string; states: States; latest_call?: Call | null;
-  resource_digest?: string | null; integrity?: State; discovered?: State; activated?: State; executable?: State;
-  dependencies?: string[] | null; dependency_healthy?: State; resources?: { name: string; size: number; kind: string }[];
-  metadata?: object; activation_contexts?: object[]; runtime_evidence?: object; configuration_source?: string;
+  parameters_schema?: object | null; conditions?: string[]; registration?: string;
+  description?: string; source?: string;
+  resource_digest?: string | null; integrity?: State; dependencies?: string[] | null;
+  resources?: { name: string; size: number; kind: string }[]; configuration_source?: string;
 };
-type OverviewData = {
-  api: Snapshot & { build_revision: string | null; response_ms: number | null };
-  agent_db: Snapshot; backend_db: Snapshot | null; workspace: Snapshot & { readable: State; writable: State };
-  workers: Snapshot; runtime: Snapshot & { runs: Run[] };
-  counts: Snapshot & {
-    window_start: string; window_end: string; queued_tasks: number | null; running_runs: number | null;
-    failed_tasks: number | null; expired_leases: number | null; recent_failures: Run[];
-  };
-};
-type Event = { seq: number; turn: number; name: string; occurred_at: string };
 
 const UNKNOWN = '未知';
 const display = (value: ReactNode) => value === null || value === undefined || value === '' ? UNKNOWN : value;
 const flag = (state: State | undefined) => ({ yes: '是', no: '否', unknown: UNKNOWN, not_applicable: '不适用' }[state ?? 'unknown']);
-const date = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : UNKNOWN;
 const segment = (value: string) => encodeURIComponent(value);
 const link = (section: string, id: string) => '#/agent/' + section + '/' + segment(id);
 const apiPath = (path: string) => '/agent/' + path;
 const catalogNames = { providers: 'Provider', models: 'Model', tools: 'Tools', skills: 'Skills' } as const;
 type Catalog = keyof typeof catalogNames;
+type Provider = { provider_id: string; base_url: string | null; credential_present: boolean; enabled: boolean };
+type Model = CatalogEntry & {
+  model_id: string; provider_id: string; upstream_model_id: string; label: string; enabled: boolean;
+  capabilities: Record<'chat' | 'streaming' | 'tool_calling' | 'reasoning', boolean>;
+};
+
+const fieldHelp: Record<string, string> = {
+  'Provider ID': '系统内用于识别供应商的唯一标识，模型通过它关联调用渠道。',
+  'Provider': '提供该模型调用服务的供应商。同一模型在不同渠道可能使用不同的地址和价格。',
+  'API 地址': '服务端向供应商发送模型请求时使用的基础地址。点击在新标签页打开。',
+  'Base URL': '服务端向供应商发送模型请求时使用的基础地址。点击在新标签页打开。',
+  '凭据状态': '表示服务端是否读取到非空 API Key。已配置仅说明凭据存在，有效性、余额和模型权限需通过实际请求验证。',
+  '凭据存在': '表示服务端是否读取到非空 API Key。有效性、余额和模型权限需通过实际请求验证。',
+  '启用状态': '当前配置是否启用此供应商或模型。实际调用还受凭据、模型能力和用户权益限制。',
+  '配置启用': '当前配置是否启用此供应商或模型。实际调用还受凭据、模型能力和用户权益限制。',
+  '协议': '与供应商通信时使用的 API 协议。',
+  '关联模型': '当前 Registry 中归属于该供应商的模型。',
+  '模型名称': '用于展示的模型名称。',
+  '内部 Model ID': '深知内部识别、选择和路由模型使用的唯一标识。',
+  '上游 Model ID': '发送给供应商 API 的实际模型名称，可能与内部 Model ID 不同。',
+  '上下文长度': '优先显示供应商官网公布的上下文规格，K 表示千 Token，M 表示百万 Token。实际调用仍受运行配置与预算限制。',
+  '最大输出 Token': '当前运行配置允许的输出上限。实际输出还受调用预算和供应商限制。',
+  'Tool Calling': '模型是否声明支持结构化工具调用，由 Agent 执行工具并返回结果。',
+  'Reasoning': '当前模型配置是否声明支持推理能力。',
+  '流式输出': '是否支持在生成过程中逐步返回内容。',
+  '默认用途': '该模型被显式指定为默认模型的用途。未指定时按 Registry 规则自动选择。',
+  '数据来源': '参考价格资料的来源页面，点击可核对供应商公布的信息。',
+  '核验时间': '最近一次核对价格资料的时间。尚未核验表示没有已核验资料。',
+  '生效时间': '这份价格资料开始适用的时间。',
+  '来源': '工具或技能目录记录的来源。',
+  '完整性通过': '技能资源是否通过内容摘要等完整性校验。',
+  '依赖': '技能声明需要的其他资源或能力。',
+  'Tool ID': '系统内识别工具的唯一标识。',
+  '注册类型': '工具在目录中的登记方式，例如静态注册或从调用记录中观测。',
+  '可用条件': '组装或使用该工具所需的条件。',
+};
+
+function FieldLabel({ label }: { label: string }) {
+  const id = useId();
+  const [dismissed, setDismissed] = useState(false);
+  const help = fieldHelp[label];
+  if (!help) return <>{label}</>;
+  return <span className="agent-field-help" onMouseEnter={() => setDismissed(false)}>
+    <button type="button" className="agent-field-label" aria-describedby={dismissed ? undefined : id}
+      onFocus={() => setDismissed(false)} onKeyDown={event => {
+        if (event.key === 'Escape') setDismissed(true);
+      }}>
+      {label}<CircleHelp size={12} aria-hidden="true" />
+    </button>
+    {!dismissed && <span id={id} role="tooltip" className="agent-field-tooltip">{help}</span>}
+  </span>;
+}
 
 function Fields({ rows }: { rows: [string, ReactNode][] }) {
   return <dl className="agent-fields">{rows.map(([label, value]) =>
-    <div key={label}><dt>{label}</dt><dd>{display(value)}</dd></div>)}</dl>;
+    <div key={label}><dt><FieldLabel label={label} /></dt><dd>{display(value)}</dd></div>)}</dl>;
 }
 
 function Table({ headers, rows }: { headers: string[]; rows: { key: string; cells: ReactNode[] }[] }) {
@@ -78,32 +90,20 @@ function Table({ headers, rows }: { headers: string[]; rows: { key: string; cell
   </table></div> : <p className="empty">暂无匹配记录</p>;
 }
 
-function Freshness({ observed }: { observed?: string | null }) {
-  const [time, setTime] = useState(Date.now);
-  useEffect(() => {
-    const timer = window.setInterval(() => setTime(Date.now()), 15_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  return observed ? <p className="note">{time - Date.parse(observed) > 120_000 ? '数据已过期 · ' : ''}观测于 {date(observed)}</p> : null;
-}
-
-function Resource<T>({ path, children, observed }: { path: string; children: (data: T) => ReactNode; observed?: (data: T) => string | null }) {
+function Resource<T>({ path, children }: { path: string; children: (data: T) => ReactNode }) {
   const query = useResource<T>(apiPath(path));
-  const [received, setReceived] = useState<string>();
-  useEffect(() => { if (query.data) setReceived(new Date().toISOString()); }, [query.data]);
-  return <section className="agent-resource">
+  return <div className="agent-resource">
     <div className="actions"><button type="button" onClick={query.refresh} disabled={query.loading}>刷新</button></div>
     {query.loading && <p role="status">正在读取…</p>}
     {query.error && <p className="error" role="alert">{query.error}</p>}
-    {query.data && <><Freshness observed={observed?.(query.data) ?? received} />{children(query.data)}</>}
-  </section>;
+    {query.data && children(query.data)}
+  </div>;
 }
 
 function Paginated<T>({ path, children }: { path: string; children: (items: T[]) => ReactNode }) {
   const [history, setHistory] = useState<string[]>([]);
   const cursor = history.at(-1);
-  return <Resource<Page<T>> path={path + (cursor ? (path.includes('?') ? '&' : '?') + 'cursor=' + segment(cursor) : '')}
-    observed={page => page.observed_at}>
+  return <Resource<Page<T>> path={path + (cursor ? (path.includes('?') ? '&' : '?') + 'cursor=' + segment(cursor) : '')}>
     {page => <>{children(page.items)}<div className="actions agent-pagination">
       <button onClick={() => setHistory(items => items.slice(0, -1))} disabled={!history.length}>上一页</button>
       <span>第 {history.length + 1} 页</span>
@@ -112,117 +112,111 @@ function Paginated<T>({ path, children }: { path: string; children: (items: T[])
   </Resource>;
 }
 
-function SnapshotInfo({ value }: { value: Snapshot | null }) {
-  return <Fields rows={[['状态', value ? ({ ok: '可观测', unavailable: '不可用', degraded: '部分可用', unknown: UNKNOWN }[value.status] ?? value.status) : UNKNOWN],
-    ['来源', value?.source], ['观测时间', date(value?.observed_at)], ['异常原因', value?.reason_code ?? '—']]} />;
-}
-
-function RunTable({ runs }: { runs: Run[] }) {
-  return <Table headers={['Run', '状态', 'Attempt', 'Worker', 'Execution', '租约', '开始', '结束', '错误分类']}
-    rows={runs.map(run => ({ key: run.run_id, cells: [
-      <a href={link('runs', run.run_id)}>{run.run_id}</a>, run.status, run.attempt,
-      run.worker_id && <a href={link('workers', run.worker_id)}>{run.worker_id}</a>,
-      run.execution?.execution_id, run.lease_status, date(run.started_at), date(run.completed_at), run.error_code ?? '—',
-    ]}))} />;
-}
-
-function localRange(values: FormData) {
-  const query: Record<string, string> = {};
-  for (const [key, value] of values.entries()) {
-    if (typeof value === 'string' && value.trim()) {
-      query[key] = key === 'from_at' || key === 'to_at' ? new Date(value).toISOString() : value.trim();
-    }
+async function readCatalog<T>(kind: 'providers' | 'models', signal: AbortSignal) {
+  const items: T[] = [];
+  const params = new URLSearchParams({ limit: '100' });
+  for (;;) {
+    const page = await api<Page<T>>(apiPath(kind) + '?' + params, { signal });
+    items.push(...page.items);
+    if (!page.next_cursor) return items;
+    if (params.get('cursor') === page.next_cursor) throw new Error('目录分页异常，请刷新重试');
+    params.set('cursor', page.next_cursor);
   }
-  return new URLSearchParams(query).toString();
 }
 
-function Range() {
-  return <><label>起始时间<input type="datetime-local" name="from_at" /></label>
-    <label>结束时间<input type="datetime-local" name="to_at" /></label></>;
-}
+function ProviderCatalog() {
+  const [revision, setRevision] = useState(0);
+  const [results, setResults] = useState<[Provider[], Model[]]>();
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [order, setOrder] = useState('asc');
 
-function Overview() {
-  const [query, setQuery] = useState('');
-  return <><h1>Agent 运行总览</h1>
-    <form className="agent-filters" onSubmit={event => { event.preventDefault(); setQuery(localRange(new FormData(event.currentTarget))); }}>
-      <Range /><button>应用时间范围</button>
-    </form>
-    <Resource<OverviewData> path={'overview?' + query} observed={data => data.api.observed_at}>{data => <>
-      <div className="agent-grid">
-        <article><h2>Agent API</h2><SnapshotInfo value={data.api} />
-          <Fields rows={[['声明的 Build Revision', data.api.build_revision], ['Backend 往返耗时', data.api.response_ms == null ? UNKNOWN : data.api.response_ms + ' ms']]} /></article>
-        <article><h2>Agent PostgreSQL</h2><SnapshotInfo value={data.agent_db} /></article>
-        <article><h2>Backend 权益 PostgreSQL</h2><SnapshotInfo value={data.backend_db} /></article>
-        <article><h2>Workspace</h2><SnapshotInfo value={data.workspace} />
-          <Fields rows={[['根目录可读取', flag(data.workspace.readable)], ['写入能力', flag(data.workspace.writable)]]} /></article>
-        <article><h2>Worker</h2><SnapshotInfo value={data.workers} /><a href="#/agent/workers">查看 Worker 心跳和租约</a></article>
-        <article><h2>任务与租约</h2><SnapshotInfo value={data.counts} />
-          <Fields rows={[['统计时间窗', date(data.counts.window_start) + ' 至 ' + date(data.counts.window_end)],
-            ['当前排队任务', data.counts.queued_tasks], ['当前执行中 Run', data.counts.running_runs],
-            ['窗口内失败任务', data.counts.failed_tasks], ['当前超时租约', data.counts.expired_leases]]} /></article>
-      </div>
-      <WorkerEvidence />
-      <h2>最近持久化 Run</h2><SnapshotInfo value={data.runtime} /><RunTable runs={data.runtime.runs} />
-      <h2>时间窗内最近失败</h2><RunTable runs={data.counts.recent_failures} />
-    </>}</Resource>
-    <AgentOperationsOverview />
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      readCatalog<Provider>('providers', controller.signal),
+      readCatalog<Model>('models', controller.signal),
+    ]).then(data => {
+      if (!controller.signal.aborted) setResults(data);
+    }).catch(failure => {
+      if (!controller.signal.aborted) setError((failure as Error).message);
+      controller.abort();
+    });
+    return () => controller.abort();
+  }, [revision]);
+
+  const loading = !results && !error;
+  const term = search.trim().toLowerCase();
+  const [providers, models] = results ?? [[], []];
+  const groups = new Map<string, { provider?: Provider; models: Model[] }>(
+    providers.map(provider => [provider.provider_id, { provider, models: [] }]),
+  );
+  for (const model of models) {
+    const group = groups.get(model.provider_id) ?? { models: [] };
+    group.models.push(model);
+    groups.set(model.provider_id, group);
+  }
+  const compare = (left: string, right: string) => order === 'asc' ? left.localeCompare(right) : right.localeCompare(left);
+  const visible = Array.from(groups, ([id, group]) => ({
+    id, provider: group.provider, models: id.toLowerCase().includes(term) ? group.models :
+      group.models.filter(model => [model.model_id, model.upstream_model_id, model.label]
+        .some(value => value.toLowerCase().includes(term))),
+  })).filter(group => group.id.toLowerCase().includes(term) || group.models.length)
+    .sort((left, right) => compare(left.id, right.id));
+
+  return <>
+    <h2>供应商与模型目录</h2>
+    <div className="agent-filters">
+      <label>搜索供应商或模型<input type="search" value={search} maxLength={100} onChange={event => setSearch(event.target.value)} /></label>
+      <label>ID 排序<select value={order} onChange={event => setOrder(event.target.value)}>
+        <option value="asc">升序</option><option value="desc">降序</option>
+      </select></label>
+      <button type="button" disabled={loading} onClick={() => {
+        setResults(undefined);
+        setError('');
+        setRevision(value => value + 1);
+      }}>刷新</button>
+    </div>
+    {loading && <p role="status">正在读取…</p>}
+    {error && <p className="error" role="alert">{error}</p>}
+    {results && (visible.length ? <div className="agent-provider-groups">{visible.map(({ id, provider, models: entries }) =>
+      <details className="agent-provider-group" key={id + term} open={!!term}>
+        <summary><strong>{id}</strong><span>{entries.length} 个模型</span></summary>
+        {provider && <p><a href={link('providers', id)}>供应商详情</a></p>}
+        <Fields rows={[['Provider ID', id], ['API 地址', provider?.base_url && <ExternalLink url={provider.base_url}>{provider.base_url}</ExternalLink>],
+          ['凭据状态', provider && (provider.credential_present ? '已配置' : '未配置')],
+          ['启用状态', provider && (provider.enabled ? '启用' : '停用')]]} />
+        {entries.length ? <ul>{entries.slice().sort((left, right) => compare(left.model_id, right.model_id)).map(model =>
+          <li key={model.model_id}>
+            <InlineModelDetails model={model} />
+          </li>)}</ul> : <p>{term && models.some(model => model.provider_id === id) ? '暂无匹配模型' : '暂无模型'}</p>}
+      </details>)}</div> : <p className="empty">暂无匹配记录</p>)}
   </>;
 }
 
-function Workers({ id }: { id?: string }) {
-  return <><h1>{id ? 'Worker 详情' : 'Worker 执行记录'}</h1><WorkerEvidence workerId={id} />
-    <p className="note">状态根据持久化租约推导。空闲 Worker 和实例在线状态未知。</p>
-    {id ? <Resource<Worker> path={'workers/' + segment(id)}>{worker => <>
-      <Fields rows={[['Worker ID', worker.worker_id], ['最近已记录活动', date(worker.last_activity)],
-        ['状态', worker.state === 'lease_observed' ? '存在有效租约' : UNKNOWN], ['活跃 Execution', worker.active_executions],
-        ['超时租约', worker.expired_leases]]} />
-      <RunTable runs={[worker.latest_run]} />
-    </>}</Resource> : <Paginated<Worker> path="workers">{items => <Table
-      headers={['Worker', '最近活动', '最近关联 Run', '状态', '活跃 Execution', '超时租约']}
-      rows={items.map(w => ({ key: w.worker_id, cells: [<a href={link('workers', w.worker_id)}>{w.worker_id}</a>,
-        date(w.last_activity), <a href={link('runs', w.latest_run.run_id)}>{w.latest_run.run_id}</a>,
-        w.state === 'lease_observed' ? '存在有效租约' : UNKNOWN, w.active_executions, w.expired_leases] }))} />}
-    </Paginated>}
-  </>;
-}
-
-const entryId = (kind: Catalog, item: CatalogEntry) => ({
-  providers: item.provider_id, models: item.model_id, tools: item.tool_id, skills: item.name,
-}[kind]) ?? '';
-
-const stateLabels: Record<string, string> = {
-  registered: '已注册', configured: '已配置', loaded: '已加载（见来源）', deployed: '已部署',
-  reachable: '可访问', healthy: '健康', authorized: '指定 Policy 授权',
-};
-
-function EvidenceTable({ states }: { states: States }) {
-  return <Table headers={['状态维度', '状态', '来源', '观测时间', '配置修订', 'Worker']}
-    rows={Object.entries(stateLabels).map(([name, label]) => ({
-      key: name, cells: [label, flag(states[name]?.state), states[name]?.source, date(states[name]?.observed_at),
-        states[name]?.config_revision, states[name]?.worker_id],
-    }))} />;
-}
-
-function CatalogList({ kind }: { kind: Catalog }) {
+function CatalogList({ kind }: { kind: 'tools' | 'skills' }) {
   const [query, setQuery] = useState('');
-  return <><h1>{catalogNames[kind]}</h1>
+  return <>
+    <h2>{catalogNames[kind]}</h2>
     <form className="agent-filters" onSubmit={event => {
       event.preventDefault();
-      setQuery(localRange(new FormData(event.currentTarget)));
+      const form = new FormData(event.currentTarget);
+      const params = new URLSearchParams({ order: String(form.get('order')) });
+      const search = String(form.get('search') ?? '').trim();
+      if (search) params.set('search', search);
+      setQuery(params.toString());
     }}><label>搜索 ID<input name="search" maxLength={100} /></label>
       <label>ID 排序<select name="order"><option value="asc">升序</option><option value="desc">降序</option></select></label>
-      <button>搜索</button></form>
-    <Paginated<CatalogEntry> key={kind + query} path={kind + '?' + query}>{items => <AgentHealthSummary targets={items.map(item => ({
-      kind: kind === 'providers' ? 'provider' : kind === 'models' ? 'model' : kind === 'tools' ? 'tool' : 'skill', target_id: entryId(kind, item),
-    }))}><Table
-      headers={['ID', '名称', 'Provider / 来源', '已注册', '已加载', '最近检查']}
+      <button>搜索</button>
+    </form>
+    <Paginated<CatalogEntry> key={kind + query} path={kind + (query ? '?' + query : '')}>{items => <Table
+      headers={['ID', '名称', '来源']}
       rows={items.map(item => {
-        const id = entryId(kind, item);
-        return { key: id, cells: [<a href={link(kind, id)}>{id}</a>, item.label ?? item.name ?? id,
-          kind === 'models' && item.provider_id ? <a href={link('providers', item.provider_id)}>{item.provider_id}</a> : item.source ?? item.protocol,
-          flag(item.states.registered?.state), flag(item.states.loaded?.state),
-          <CurrentHealth kind={kind === 'providers' ? 'provider' : kind === 'models' ? 'model' : kind === 'tools' ? 'tool' : 'skill'} id={id} />] };
-      })} /></AgentHealthSummary>}
+        const id = (kind === 'tools' ? item.tool_id : item.name) ?? '';
+        return { key: id, cells: [
+          <a href={link(kind, id)}>{id}</a>, item.label ?? item.name ?? id, item.source,
+        ] };
+      })} />}
     </Paginated>
   </>;
 }
@@ -230,16 +224,14 @@ function CatalogList({ kind }: { kind: Catalog }) {
 function SkillResources({ entry }: { entry: CatalogEntry }) {
   const [open, setOpen] = useState(false);
   return <>
-    <Fields rows={[['来源', entry.configuration_source ?? entry.source], ['资源摘要', entry.resource_digest], ['完整性', flag(entry.integrity)],
-      ['已发现', flag(entry.discovered)], ['已激活', flag(entry.activated)], ['允许执行第一方工厂', flag(entry.executable)],
-      ['依赖', entry.dependencies?.join('、')], ['依赖健康', flag(entry.dependency_healthy)]]} />
-    <h2>References 与 Scripts</h2>
-    <details><summary>Metadata 与激活上下文</summary><pre>{JSON.stringify({ metadata: entry.metadata, activations: entry.activation_contexts }, null, 2)}</pre></details>
+    <Fields rows={[['来源', entry.configuration_source ?? entry.source], ['完整性通过', flag(entry.integrity)],
+      ['依赖', entry.dependencies?.join('、') || '—']]} />
+    <h3>资源文件</h3>
     <Table headers={['文件', '类型', '字节']} rows={(entry.resources ?? []).map(row =>
       ({ key: row.name, cells: [row.name, row.kind, row.size] }))} />
-    <button onClick={() => setOpen(!open)} disabled={!entry.resource_digest || entry.integrity !== 'yes'}>
+    <div className="actions"><button onClick={() => setOpen(!open)} disabled={!entry.resource_digest || entry.integrity !== 'yes'}>
       {open ? '收起' : '预览'} SKILL.md
-    </button>
+    </button></div>
     {open && entry.resource_digest && <Resource<{ render_safe_markdown: string }>
       path={'skills/' + segment(entry.name ?? '') + '/document?resource_digest=' + segment(entry.resource_digest)}>
       {doc => <pre className="agent-preview">{doc.render_safe_markdown}</pre>}
@@ -247,155 +239,217 @@ function SkillResources({ entry }: { entry: CatalogEntry }) {
   </>;
 }
 
+function InlineModelDetails({ model }: { model: Model }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const [opened, setOpened] = useState(false);
+  useEffect(() => {
+    if (!opened) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, [opened]);
+  return <div className="agent-model-panel">
+    <button className="agent-model-trigger" type="button" aria-haspopup="dialog" onClick={() => {
+      setOpened(true);
+      dialog.current?.showModal();
+    }}>
+      <span className="agent-model-title"><strong>{model.label || model.model_id}</strong><small>{model.model_id}</small></span>
+      <span className="agent-model-status">{model.enabled ? '启用' : '停用'}</span>
+      <span className="agent-expand-label">查看详情 →</span>
+    </button>
+    <dialog ref={dialog} className="agent-model-drawer" aria-labelledby={titleId} onClose={() => setOpened(false)}
+      onClick={event => {
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (event.target === event.currentTarget && (event.clientX < bounds.left || event.clientX > bounds.right ||
+          event.clientY < bounds.top || event.clientY > bounds.bottom)) event.currentTarget.close();
+      }}>
+      <div className="agent-drawer-heading">
+        <div><h2 id={titleId}>{model.label || model.model_id}</h2><p>{model.provider_id} · {model.upstream_model_id}</p></div>
+        <button type="button" aria-label="关闭模型详情" onClick={() => dialog.current?.close()}><X size={20} /></button>
+      </div>
+      <div className="agent-drawer-content">{opened && <ModelDetails item={model} id={model.model_id} />}</div>
+    </dialog>
+  </div>;
+}
+
+type ModelMetadata = {
+  endpoints: { name: string; url: string }[];
+  context_length_display?: string; notes: string[];
+  description?: string; documentation_url?: string; source_url?: string;
+  verified_at?: string; effective_from?: string; valid_until?: string;
+  pricing: {
+    label: string; currency: string; input_min_tokens?: number; input_max_tokens?: number;
+    schedule?: string; input?: number; cache_read?: number; cache_write?: number; output?: number;
+  }[];
+};
+
+function ModelPrices({ prices }: { prices: ModelMetadata['pricing'] }) {
+  const memberLabels = new Set(prices.filter(price => price.label.endsWith(' · 会员价')).map(price => price.label.replace(' · 会员价', '')));
+  return <div className="agent-price-list">{prices.filter(price =>
+    !price.label.endsWith(' · 标准价') || !memberLabels.has(price.label.replace(' · 标准价', '')),
+  ).map((price, index) => {
+    const original = prices.find(row => row.label === price.label.replace(' · 会员价', ' · 标准价') &&
+      row.input_min_tokens === price.input_min_tokens && row.input_max_tokens === price.input_max_tokens);
+    const symbol = ({ CNY: '¥', USD: '$', EUR: '€', GBP: '£' } as Record<string, string>)[price.currency] ?? price.currency;
+    const amount = (value: number) => symbol + value.toLocaleString('zh-CN', { maximumFractionDigits: 8 });
+    return <div className="agent-price-card" key={index}>
+      <h4>{price.label}</h4>
+      {price.schedule && <p className="note">{price.schedule}</p>}
+      {!!(price.input_min_tokens || price.input_max_tokens) && <p className="note">
+        {price.input_min_tokens ?? 0} &lt; 输入 Token{price.input_max_tokens ? ' ≤ ' + price.input_max_tokens : ''}
+      </p>}
+      <dl>{([['input', '输入'], ['cache_read', '输入（缓存命中）'], ['cache_write', '缓存写入'], ['output', '输出']] as const)
+        .filter(([key]) => price[key] != null).map(([key, label]) => <div key={key}>
+          <dt>{label}</dt><dd><strong>{amount(price[key]!)} / M Token</strong>
+            {original && original !== price && original[key] != null && <del>{amount(original[key]!)}</del>}
+          </dd>
+        </div>)}</dl>
+    </div>;
+  })}</div>;
+}
+
+function ExternalLink({ url, children }: { url?: string; children: ReactNode }) {
+  if (!url || !/^https?:\/\//i.test(url)) return <span>—</span>;
+  return <a href={url} target="_blank" rel="noopener noreferrer" className="agent-external-link">{children}<ExternalLinkIcon size={13} aria-hidden="true" /><span className="agent-sr-only">（在新标签页打开）</span></a>;
+}
+
+function ModelDetails({ item, id }: { item: CatalogEntry; id: string }) {
+  const metadata = useResource<ModelMetadata>('/agent/model-metadata/' + segment(id));
+  const [fresh, setFresh] = useState<ModelMetadata>();
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState('');
+  const [refreshed, setRefreshed] = useState(false);
+  const controller = useRef<AbortController | null>(null);
+  useEffect(() => () => controller.current?.abort(), []);
+  async function refreshOfficial() {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshError('');
+    setRefreshed(false);
+    controller.current = new AbortController();
+    try {
+      const result = await api<ModelMetadata>('/agent/model-metadata/' + segment(id), {
+        method: 'POST', signal: controller.current.signal,
+      });
+      setFresh(result);
+      setRefreshed(true);
+    } catch (failure) {
+      if (!controller.current.signal.aborted) setRefreshError((failure as Error).message);
+    } finally { setRefreshing(false); }
+  }
+  const caps = item.capabilities ?? {};
+  const support = (value: unknown) => typeof value === 'boolean' ? value ? '支持' : '不支持' : UNKNOWN;
+  const info = fresh ?? metadata.data;
+  const stale = info?.valid_until && Date.parse(info.valid_until) < Date.now();
+  return <>
+    {['autodl', 'openlux'].includes(item.provider_id ?? '') && <div className="agent-metadata-refresh">
+      <button type="button" disabled={refreshing || metadata.loading || !info?.source_url}
+        onClick={() => void refreshOfficial()}>{refreshing ? '正在获取官网数据…' : '刷新官网数据'}</button>
+      {refreshed && <span role="status">已更新为官网最新数据</span>}
+      {refreshError && <p role="alert" className="error">{refreshError}</p>}
+    </div>}
+    <Fields rows={[
+      ['模型名称', item.label], ['内部 Model ID', item.model_id],
+      ['Provider', item.provider_id && <a href={link('providers', item.provider_id)}>{item.provider_id}</a>],
+      ['上游 Model ID', item.upstream_model_id], ['上下文长度', info?.context_length_display ?? caps.context_window_tokens],
+      ['最大输出 Token', caps.max_output_tokens], ['Tool Calling', support(caps.tool_calling)],
+      ['Reasoning', support(caps.reasoning)], ['流式输出', support(caps.streaming)],
+      ['默认用途', item.default_purposes?.join('、') || '自动选择'], ['启用状态', item.enabled ? '启用' : '停用'],
+    ]} />
+    {!!info?.endpoints.length && <><h3>API 端点</h3>
+      <Fields rows={info.endpoints.map(endpoint => [
+        endpoint.name, <ExternalLink url={endpoint.url}>{endpoint.url}</ExternalLink>,
+      ])} />
+    </>}
+    <h3>模型介绍与文档</h3>
+    {metadata.loading && <p role="status">正在读取模型资料…</p>}
+    {metadata.error && <p className="error" role="alert">{metadata.error}</p>}
+    {info?.description && <p>{info.description}</p>}
+    {info?.documentation_url && <ExternalLink url={info.documentation_url}>查看官方文档</ExternalLink>}
+    {info?.notes.map(note => <p className="note" key={note}>{note}</p>)}
+    <h3>参考价格</h3>
+    <p className="note">M = 10⁶ Token，价格仅供参考，实际费用以供应商账单为准。</p>
+    <Fields rows={[
+      ['数据来源', <ExternalLink url={info?.source_url}>查看价格来源</ExternalLink>],
+      ['核验时间', info?.verified_at ? new Date(info.verified_at).toLocaleString('zh-CN') : '尚未核验'],
+      ...(info?.effective_from ? [['生效时间', new Date(info.effective_from).toLocaleString('zh-CN')] as [string, ReactNode]] : []),
+    ]} />
+    {stale && <p role="status" className="error">价格资料已过有效期，请重新核验。</p>}
+    {info?.pricing.length ? <ModelPrices prices={info.pricing} /> :
+      <p>{info?.notes.length ? '请查看上述官网报价说明。' : '暂无已核验价格资料'}</p>}
+    <details><summary>调用参数与预算</summary><Fields rows={Object.entries(caps)
+      .filter(([key, value]) => ['temperature', 'thinking', 'stream_options', 'chat_max_tokens', 'agent_max_tokens'].includes(key) && value !== null && value !== undefined)
+      .map(([key, value]) => [
+        ({ chat: '对话', streaming: '流式输出', tool_calling: '工具调用', reasoning: '推理',
+          temperature: '温度参数', thinking: '思考参数策略', stream_options: '流式用量参数',
+          chat_max_tokens: '对话输出预算', agent_max_tokens: 'Agent 输出预算',
+          max_output_tokens: '配置输出上限', context_window_tokens: '配置上下文上限',
+        } as Record<string, string>)[key] ?? key,
+        typeof value === 'boolean' ? support(value) : value === 'none' ? '默认' : value,
+      ])} /></details>
+  </>;
+}
+
 function CatalogDetail({ kind, id }: { kind: Catalog; id: string }) {
-  const [policy, setPolicy] = useState('');
-  const [run, setRun] = useState('');
-  const params = new URLSearchParams();
-  if (policy) params.set('policy_revision', policy);
-  if (run && kind === 'tools') params.set('run_id', run);
-  return <><h1>{catalogNames[kind]} 详情</h1><p><a href={'#/agent/' + kind}>返回列表</a></p>
-    <p><a href="#/agent/config">配置候选、版本差异与发布</a></p>
-    {kind !== 'providers' && <form className="agent-filters" onSubmit={event => {
-      event.preventDefault(); setPolicy(String(new FormData(event.currentTarget).get('policy_revision') ?? '').trim());
-    }}><label>对照已发布的 Policy 版本<input name="policy_revision" maxLength={255} /></label><button>查询授权匹配</button></form>}
-    {kind === 'tools' && <form onSubmit={event => { event.preventDefault(); setRun(String(new FormData(event.currentTarget).get('run_id') ?? '').trim()); }}>
-      <label>Run 上下文<input name="run_id" maxLength={255} /></label><button>查询运行能力</button></form>}
-    <Resource<CatalogEntry> path={kind + '/' + segment(id) + '?' + params}
-      observed={item => item.states.registered?.observed_at}>
-      {item => <>
-        <h2>{item.label ?? item.name ?? id}</h2>{item.description && <p>{item.description}</p>}
-        {kind === 'providers' && <Fields rows={[['Provider ID', item.provider_id], ['协议', item.protocol], ['Base URL', item.base_url],
+  return <><h2>{catalogNames[kind]} 详情</h2><a href={'#/agent/' + kind}>返回列表</a>
+    <Resource<CatalogEntry> path={kind + '/' + segment(id)}>{item => <>
+      <h3>{item.label ?? item.name ?? id}</h3>{item.description && <p>{item.description}</p>}
+        {kind === 'providers' && <Fields rows={[['Provider ID', item.provider_id], ['协议', item.protocol], ['Base URL', item.base_url && <ExternalLink url={item.base_url}>{item.base_url}</ExternalLink>],
           ['凭据存在', item.credential_present ? '是' : '否'], ['配置启用', item.enabled ? '是' : '否'],
           ['关联模型', item.model_ids?.length ? <ul>{item.model_ids.map(model =>
             <li key={model}><a href={link('models', model)}>{model}</a></li>)}</ul> : '无']]} />}
-        {kind === 'models' && <><Fields rows={[['Model ID', item.model_id],
-          ['Provider ID', item.provider_id && <a href={link('providers', item.provider_id)}>{item.provider_id}</a>],
-          ['上游 Model ID', item.upstream_model_id], ['Brand', item.brand], ['默认用途', item.default_purposes?.join('、') || '无'],
-          ['配置启用', item.enabled ? '是' : '否'], ['路由配置修订', item.config_revision], ['能力版本', item.capability_version]]} />
-          <h2>能力规格</h2><Fields rows={Object.entries(item.capabilities ?? {}).map(([key, value]) =>
-            [key, typeof value === 'boolean' ? (value ? '是' : '否') : value])} /></>}
-        {kind === 'tools' && <><Fields rows={[['Tool ID', item.tool_id], ['来源', item.source], ['注册类型', item.registration],
-          ['组装条件', item.conditions?.join('、') || '—'], ['Latent', flag(item.latent)], ['当前 Run 可调用', flag(item.run_callable)],
-          ['能力版本', item.capability_version], ['Schema Digest', item.schema_digest]]} />
-          <h2>参数 Schema</h2>{item.parameters_schema ? <pre className="agent-preview">{JSON.stringify(item.parameters_schema, null, 2)}</pre> : <p>{UNKNOWN}</p>}
-          {item.runtime_evidence && <pre>{JSON.stringify(item.runtime_evidence, null, 2)}</pre>}
-          <h2>最近一次已观测调用</h2>{item.latest_call ? <CallTable calls={[item.latest_call]} /> : <p>{UNKNOWN}</p>}</>}
-        {kind === 'skills' && <SkillResources entry={item} />}
-        {(kind === 'providers' || kind === 'models') && <>
-          <h2>最近已观测的模型调用</h2>
-          {item.latest_observation ? <Fields rows={[
-            ['模型', <a href={link('models', item.latest_observation.model_id)}>{item.latest_observation.model_id}</a>],
-            ['能力版本', item.latest_observation.capability_version], ['观测结果', item.latest_observation.outcome],
-            ['观测时间', date(item.latest_observation.observed_at)], ['来源', item.latest_observation.source],
-          ]} /> : <p>{UNKNOWN}</p>}
-        </>}
-        <h2>状态与证据</h2><EvidenceTable states={item.states} />
-        <HealthChecks kind={kind === 'providers' ? 'provider' : kind === 'models' ? 'model' : kind === 'tools' ? 'tool' : 'skill'} id={id} />
+        {kind === 'models' && <ModelDetails item={item} id={id} />}
+      {kind === 'tools' && <>
+        <Fields rows={[['Tool ID', item.tool_id], ['来源', item.source], ['注册类型', item.registration],
+          ['可用条件', item.conditions?.join('、') || '—']]} />
+        <h3>参数 Schema</h3>
+        {item.parameters_schema ? <pre className="agent-preview">{JSON.stringify(item.parameters_schema, null, 2)}</pre> : <p>{UNKNOWN}</p>}
       </>}
-    </Resource>
+      {kind === 'skills' && <SkillResources entry={item} />}
+    </>}</Resource>
   </>;
 }
 
-function CallTable({ calls }: { calls: Call[] }) {
-  return <Table headers={['调用 ID', '能力', '版本', 'Execution', 'Run', '状态', '开始时间', '耗时 ms', '用量状态', '已知 Token', '失败原因']}
-    rows={calls.map(call => ({ key: call.call_id, cells: [call.call_id,
-      call.capability_id && call.kind !== 'unknown'
-        ? <a href={link(call.kind === 'tool' ? 'tools' : call.kind === 'skill' ? 'skills' : 'models',
-          call.kind === 'tool' ? call.capability_id : call.capability_id.replace(/^[^:]*:/, ''))}>{call.capability_id}</a>
-        : call.capability_id, call.capability_version, call.execution_id, <a href={link('runs', call.run_id)}>{call.run_id}</a>,
-        call.status, date(call.started_at), call.duration_ms, call.usage_status, call.known_tokens, call.failure_reason ?? '未知'] }))} />;
-}
-
-const taskFilters = [
-  ['task_id', 'Task ID'], ['run_id', 'Run ID'], ['user_id', '用户 ID'], ['worker_id', 'Worker ID'],
-  ['status', '执行状态'], ['model_id', '实际调用 Model ID'], ['tool_id', '实际调用 Tool ID'],
+const modules = [
+  { id: 'providers', title: '模型与供应商', description: 'Provider / Model', icon: Layers },
+  { id: 'tools', title: 'Tools', description: '工具管理', icon: Wrench },
+  { id: 'skills', title: 'Skills', description: '技能管理', icon: BookOpen },
 ] as const;
 
-function Tasks() {
-  const [query, setQuery] = useState('');
-  return <><h1>Task / Run 监控</h1>
-    <form className="agent-filters" onSubmit={event => { event.preventDefault(); setQuery(localRange(new FormData(event.currentTarget))); }}>
-      {taskFilters.map(([name, label]) => <label key={name}>{label}<input name={name} maxLength={255} /></label>)}
-      <Range /><label>创建时间排序<select name="order"><option value="desc">从新到旧</option>
-        <option value="asc">从旧到新</option></select></label><button>筛选</button>
-    </form>
-    <p className="note">默认近 24 小时。Model 和 Tool 筛选使用已开始调用的事实。</p>
-    <Paginated<Task> key={query} path={'tasks?' + query}>{items => <Table
-      headers={['Task', '用户', '模式', '请求模型', '状态', '创建时间', '最近 Run', '失败分类']}
-      rows={items.map(task => ({ key: task.task_id, cells: [<a href={link('tasks', task.task_id)}>{task.task_id}</a>,
-        task.owner_id, task.mode, task.requested_model, task.status, date(task.created_at),
-        task.latest_run && <a href={link('runs', task.latest_run.run_id)}>{task.latest_run.run_id}</a>, task.error_code ?? '—'] }))} />}
-    </Paginated>
-  </>;
-}
-
-function UsageSummary({ usage }: { usage: Usage | null }) {
-  return <Fields rows={[['用量状态', usage?.status], ['实测 Token', usage?.measured_tokens], ['已知 Token', usage?.known_tokens],
-    ['入账 Token', usage?.accounted_tokens], ['预留 Token', usage?.held_tokens], ['结算状态', usage?.settlement_status]]} />;
-}
-
-function TaskDetail({ id }: { id: string }) {
-  const path = 'tasks/' + segment(id);
-  return <><h1>Task 详情</h1>
-    <Resource<Task> path={path}>{task => <>
-      <Fields rows={[['Task ID', task.task_id], ['用户', task.owner_id], ['状态', task.status], ['创建时间', date(task.created_at)],
-        ['模式', task.mode], ['请求模型', task.requested_model], ['失败分类', task.error_code ?? '—'],
-        ['执行配置修订', task.execution_config_revision ?? '—'], ['等待原因', task.execution_wait_reason ?? '—']]} />
-      <div className="agent-grid"><article><h2>Agent 观测用量</h2><UsageSummary usage={task.observed_usage} /></article>
-        <article><h2>Backend 核验与入账</h2><UsageSummary usage={task.backend_usage} /></article></div>
-      <Diagnosis kind="task" id={id} />
-      <AgentControl kind="task" id={id} />
-      <h2>Run 历史</h2><Paginated<Run> path={path + '/runs'}>{items => <RunTable runs={items} />}</Paginated>
-    </>}</Resource>
-  </>;
-}
-
-function RunDetail({ id }: { id: string }) {
-  const path = 'runs/' + segment(id);
-  const [kind, setKind] = useState('');
-  return <><h1>Run 详情</h1>
-    <Resource<Run> path={path}>{run => <>
-      <Fields rows={[['Task', <a href={link('tasks', run.task_id)}>{run.task_id}</a>], ['Run ID', run.run_id],
-        ['当前 Execution', run.execution?.execution_id], ['执行耗时 ms', run.duration_ms],
-        ['Execution 已封闭', run.execution ? (run.execution.sealed ? '是' : '否') : UNKNOWN]]} />
-      <RunTable runs={[run]} />
-      <Diagnosis kind="run" id={id} />
-      <AgentControl kind="run" id={id} />
-      <h2>Execution 历史</h2>
-      <Table headers={['Execution ID', 'Worker', '已封闭']} rows={run.executions.map(item => ({
-        key: item.execution_id, cells: [item.execution_id, <a href={link('workers', item.worker_id)}>{item.worker_id}</a>,
-          item.sealed ? '是' : '否'],
-      }))} />
-      {run.executions_truncated && <p className="note">显示最近 100 次 Execution。</p>}
-      <h2>模型、Tool 与 Skill 调用</h2>
-      <label>调用类型<select value={kind} onChange={event => setKind(event.target.value)}>
-        <option value="">全部</option><option value="model">Model</option><option value="tool">Tool</option><option value="skill">Skill</option>
-      </select></label>
-      <Paginated<Call> key={kind} path={path + '/calls' + (kind ? '?kind=' + kind : '')}>{items => <CallTable calls={items} />}</Paginated>
-      <h2>Run Events</h2>
-      <Paginated<Event> path={path + '/events'}>{items => <Table headers={['序列', '轮次', '事件类型', '发生时间']}
-        rows={items.map(event => ({key: String(event.seq), cells: [event.seq, event.turn, event.name, date(event.occurred_at)]}))} />}</Paginated>
-    </>}</Resource>
-  </>;
-}
-
 export function AgentManagement({ route }: { route: string }) {
-  const [, , section, encodedId] = route.split('/');
-  let id: string | undefined;
-  try { id = encodedId ? decodeURIComponent(encodedId) : undefined; } catch { return <p role="alert">无效的资源 ID</p>; }
+  const [, , section, encodedId, operationId, ...extra] = route.split('/');
   const catalog = Object.hasOwn(catalogNames, section) ? section as Catalog : undefined;
+  const config = section === 'config' && extra.length === 0 && (
+    !encodedId || (encodedId === 'operations' ? !!operationId : !operationId && /^[0-9a-f-]{36}$/i.test(encodedId))
+  );
+  const kind = catalog ?? 'providers';
+  const activeModule = kind === 'models' ? 'providers' : kind;
+  let id: string | undefined;
+  let invalidId = false;
+  if (catalog && encodedId) {
+    try { id = decodeURIComponent(encodedId); }
+    catch { invalidId = true; }
+  }
   return <div className="agent-management">
-    <nav aria-label="Agent 管理" className="page-navigation">
-      {([['', '运行总览'], ['providers', 'Provider'], ['models', 'Model'], ['tools', 'Tools'], ['skills', 'Skills'],
-        ['tasks', 'Task / Run'], ['workers', 'Workers'], ['alerts', '告警'], ['audit', '管理审计'], ['config', '配置中心']] as const).map(([value, title]) => <a key={value} href={'#/agent' + (value ? '/' + value : '')}
-        aria-current={(section ?? '') === value ? 'page' : undefined}>{title}</a>)}
+    <div className="agent-heading">
+      <h1><ShieldCheck aria-hidden="true" />深知 · Agent 管理</h1>
+      <span>精简版</span>
+    </div>
+    <nav className="agent-modules" aria-label="Agent 管理">
+      {modules.map(({ id: module, title, description, icon: Icon }) =>
+        <a key={module} href={'#/agent/' + module} aria-current={activeModule === module ? 'true' : undefined}>
+          <Icon aria-hidden="true" size={24} />
+          <strong>{title}</strong>
+          <span>{description}</span>
+        </a>)}
     </nav>
-    {catalog ? (id ? <CatalogDetail key={route} kind={catalog} id={id} /> : <CatalogList key={route} kind={catalog} />)
-      : section === 'tasks' ? (id ? <TaskDetail key={route} id={id} /> : <Tasks />)
-      : section === 'runs' && id ? <RunDetail key={route} id={id} />
-      : section === 'workers' ? <Workers key={route} id={id} />
-      : section === 'audit' ? <AgentAudit key={route} id={id} />
-      : section === 'alerts' ? <AgentAlerts />
-      : section === 'config' ? <AgentConfigCenter key={route} route={route} /> : <Overview />}
+    {activeModule === 'providers' && <nav className="agent-provider-nav" aria-label="模型与供应商">
+      <a href="#/agent/providers" aria-current={!config ? 'page' : undefined}>目录</a>
+      <a href="#/agent/config" aria-current={config ? 'page' : undefined}>配置管理</a>
+    </nav>}
+    {invalidId ? <p role="alert">无效的资源 ID</p> : config ? <AgentConfigCenter key={route} route={route} /> :
+      id ? <CatalogDetail key={route} kind={kind} id={id} /> :
+        kind === 'tools' || kind === 'skills' ? <CatalogList key={kind} kind={kind} /> : <ProviderCatalog />}
   </div>;
 }

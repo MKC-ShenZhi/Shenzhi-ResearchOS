@@ -1,0 +1,378 @@
+{
+  "autodl/DeepSeek-V4.1-Flash-1017": {
+    "description": "通过 AutoDL 提供的 DeepSeek-V4.1-Flash-1017，支持 OpenAI 兼容调用。",
+    "documentation_url": "https://www.autodl.art/docs/DeepSeek-R1-0528/",
+    "source_url": "https://www.autodl.art/large-model/market/91",
+    "verified_at": "2026-11-27T02:45:16.288977+00:00",
+    "context_length_display": "1000K",
+    "pricing": [
+      {
+        "label": "高峰 · 标准价",
+        "currency": "CNY",
+        "input_min_tokens": 0,
+        "input_max_tokens": null,
+        "schedule": "Asia/Shanghai 周一至周五 09:00–12:00、14:00–18:00",
+        "input": 2.0,
+        "output": 8.0,
+        "cache_read": 0.04
+      },
+      {
+        "label": "高峰 · 会员价",
+        "currency": "CNY",
+        "input_min_tokens": 0,
+        "input_max_tokens": null,
+        "schedule": "Asia/Shanghai 周一至周五 09:00–12:00、14:00–18:00",
+        "input": 1.0,
+        "output": 4.0,
+        "cache_read": 0.02
+      },
+      {
+        "label": "空闲 · 标准价",
+        "currency": "CNY",
+        "input_min_tokens": 0,
+        "input_max_tokens": null,
+        "schedule": "其余时段",
+        "input": 1.0,
+        "output": 4.0,
+        "cache_read": 0.02
+      },
+      {
+        "label": "空闲 · 会员价",
+        "currency": "CNY",
+        "input_min_tokens": 0,
+        "input_max_tokens": null,
+        "schedule": "其余时段",
+        "input": 0.5,
+        "output": 2.0,
+        "cache_read": 0.01
+      }
+    ],
+    "notes": [
+      "价格按官网公开数据及页面换算规则整理，会员价适用条件以供应商账户为准。"
+    ],
+    "endpoints": [
+      {
+        "name": "OpenAI",
+        "url": "https://www.autodl.art/api/v1"
+      },
+      {
+        "name": "Anthropic",
+        "url": "https://www.autodl.art/api/v1/anthropic"
+      },
+      {
+        "name": "OpenAI Responses",
+        "url": "https://www.autodl.art/api/v1/responses"
+      }
+    ]
+  },
+  "autodl/Kimi-K2.5": {
+    "description": "通过 AutoDL 提供的 Kimi-K2.5，支持 OpenAI 兼容调用。",
+    "documentation_url": "https://www.autodl.art/docs/Kimi-K2.5/",
+    "source_url": "https://www.autodl.art/large-model/market/6",
+    "verified_at": "2026-11-27T02:45:16.288977+00:00",
+    "context_length_display": "262K",
+    "pricing": [
+      {
+        "label": "全天 · 标准价",
+        "currency": "CNY",
+        "input_min_tokens": 0,
+        "input_max_tokens": null,
+        "schedule": null,
+        "input": 4.0,
+        "output": 21.0,
+        "cache_read": 0.8
+      },
+      {
+        "label": "全天 · 会员价",
+        "currency": "CNY",
+        "input_min_tokens": 0,
+        "input_max_tokens": null,
+        "schedule": null,
+        "input": 2.4,
+        "output": 12.6,
+        "cache_read": 0.48
+      }
+    ],
+    "notes": [
+      "价格按官网公开数据及页面换算规则整理，会员价适用条件以供应商账户为准。"
+    ],
+    "endpoints": [
+      {
+        "name": "OpenAI",
+        "url": "https://www.autodl.art/api/v1"
+      },
+      {
+        "name": "Anthropic",
+        "url": "https://www.autodl.art/api/v1/anthropic"
+      }
+    ]
+  },
+  "autodl/Qwen3.5-397B-A17B": {
+    "description": "通过 AutoDL 提供的 Qwen3.5-397B-A17B，支持 OpenAI 兼容调用。",
+    "documentation_url": "https://www.autodl.art/docs/Qwen3.5-397B-A17B/",
+    "source_url": "https://www.autodl.art/large-model/market/4",
+    "verified_at": "2026-11-27T02:45:16.288977+00:00",
+    "context_length_display": "262K",
+    "pricing": [
+      {
+        "label": "输入长度阶梯 · 标准价",
+        "currency": "CNY",
+        "input_min_tokens": 0,
+        "input_max_tokens": 128000,
+        "schedule": null,
+        "input": 1.2,
+        "output": 7.2,
+        "cache_read": 0.24
+      },
+      {
+        "label": "输入长度阶梯 · 会员价",
+        "currency": "CNY",
+        "input_min_tokens": 0,
+        "input_max_tokens": 128000,
+        "schedule": null,
+        "input": 0.72,
+        "output": 4.32,
+        "cache_read": 0.144
+      },
+      {
+        "label": "输入长度阶梯 · 标准价",
+        "currency": "CNY",
+        "input_min_tokens": 128000,
+        "input_max_tokens": null,
+        "schedule": null,
+        "input": 3.0,
+        "output": 18.0,
+        "cache_read": 0.6
+      },
+      {
+        "label": "输入长度阶梯 · 会员价",
+        "currency": "CNY",
+        "input_min_tokens": 128000,
+        "input_max_tokens": null,
+        "schedule": null,
+        "input": 1.8,
+        "output": 10.8,
+        "cache_read": 0.36
+      }
+    ],
+    "notes": [
+      "价格按官网公开数据及页面换算规则整理，会员价适用条件以供应商账户为准。"
+    ],
+    "endpoints": [
+      {
+        "name": "OpenAI",
+        "url": "https://www.autodl.art/api/v1"
+      }
+    ]
+  },
+  "openlux/deepseek-v4.1-flash": {
+    "description": "支持文本对话、工具调用、思考与图像输入的 Flash 模型。",
+    "documentation_url": "https://www.openlux.ai/console/models?view=table",
+    "source_url": "https://www.openlux.ai/console/models?view=table",
+    "verified_at": "2026-11-27T02:45:16.288977+00:00",
+    "pricing": [
+      {
+        "label": "Alibaba-2",
+        "currency": "USD",
+        "input": 0.225,
+        "output": 0.9,
+        "cache_read": 0.0045
+      },
+      {
+        "label": "Alibaba-3",
+        "currency": "USD",
+        "input": 0.33,
+        "output": 1.32,
+        "cache_read": 0.0066
+      },
+      {
+        "label": "Self-Deployed-2",
+        "currency": "USD",
+        "input": 0.15,
+        "output": 0.6,
+        "cache_read": 0.003
+      },
+      {
+        "label": "Self-Deployed-3",
+        "currency": "USD",
+        "input": 0.225,
+        "output": 0.9,
+        "cache_read": 0.0045
+      },
+      {
+        "label": "deepseek-1",
+        "currency": "USD",
+        "input": 0.33,
+        "output": 1.32,
+        "cache_read": 0.0066
+      }
+    ],
+    "notes": [
+      "USD / 百万 Token，按官网各渠道分组倍率计算。输入价 = 2 × model_ratio × group_ratio，输出与缓存读取分别乘对应倍率。账户折扣及充值换算以供应商实际账单为准。"
+    ]
+  },
+  "openlux/gemini-3.8-flash": {
+    "description": "多模态 Flash 模型，支持文本、图像、音频与视频输入，官网说明具有百万级上下文。",
+    "documentation_url": "https://www.openlux.ai/console/models?view=table",
+    "source_url": "https://www.openlux.ai/console/models?view=table",
+    "verified_at": "2026-11-27T02:45:16.288977+00:00",
+    "pricing": [
+      {
+        "label": "Aistudio-Gemini-3",
+        "currency": "USD",
+        "input": 0.330885,
+        "output": 1.654425,
+        "cache_read": 0.0330885
+      },
+      {
+        "label": "Aistudio-Gemini-4",
+        "currency": "USD",
+        "input": 0.7169175,
+        "output": 3.5845875,
+        "cache_read": 0.07169175
+      },
+      {
+        "label": "Anti-Gemini-2",
+        "currency": "USD",
+        "input": 0.1125,
+        "output": 0.5625,
+        "cache_read": 0.01125
+      },
+      {
+        "label": "Vertex-Gemini-3",
+        "currency": "USD",
+        "input": 0.675,
+        "output": 3.375,
+        "cache_read": 0.0675
+      }
+    ],
+    "notes": [
+      "USD / 百万 Token，按官网各渠道分组倍率计算。输入价 = 2 × model_ratio × group_ratio，输出与缓存读取分别乘对应倍率。账户折扣及充值换算以供应商实际账单为准。"
+    ],
+    "context_length_display": "1M"
+  },
+  "openlux/glm-5.3-flash": {
+    "description": "GLM Flash 模型，面向对话、工具调用和图像理解。",
+    "documentation_url": "https://www.openlux.ai/console/models?view=table",
+    "source_url": "https://www.openlux.ai/console/models?view=table",
+    "verified_at": "2026-11-27T02:45:16.288977+00:00",
+    "pricing": [
+      {
+        "label": "Self-Deployed-1",
+        "currency": "USD",
+        "input": 0.045,
+        "output": 0.15,
+        "cache_read": 0.009
+      },
+      {
+        "label": "Self-Deployed-2",
+        "currency": "USD",
+        "input": 0.075,
+        "output": 0.25,
+        "cache_read": 0.015
+      },
+      {
+        "label": "Self-Deployed-3",
+        "currency": "USD",
+        "input": 0.1125,
+        "output": 0.375,
+        "cache_read": 0.0225
+      },
+      {
+        "label": "glm-1",
+        "currency": "USD",
+        "input": 0.165,
+        "output": 0.55,
+        "cache_read": 0.033
+      }
+    ],
+    "notes": [
+      "USD / 百万 Token，按官网各渠道分组倍率计算。输入价 = 2 × model_ratio × group_ratio，输出与缓存读取分别乘对应倍率。账户折扣及充值换算以供应商实际账单为准。"
+    ]
+  },
+  "openlux/qwen3.8-flash": {
+    "description": "千问多模态 Flash 模型，官网说明支持百万级上下文。",
+    "documentation_url": "https://www.openlux.ai/console/models?view=table",
+    "source_url": "https://www.openlux.ai/console/models?view=table",
+    "verified_at": "2026-11-27T02:45:16.288977+00:00",
+    "pricing": [
+      {
+        "label": "Alibaba-2",
+        "currency": "USD",
+        "input": 0.1125,
+        "output": 0.3525,
+        "cache_read": 0.01200375
+      },
+      {
+        "label": "Alibaba-3",
+        "currency": "USD",
+        "input": 0.165,
+        "output": 0.517,
+        "cache_read": 0.0176055
+      }
+    ],
+    "notes": [
+      "USD / 百万 Token，按官网各渠道分组倍率计算。输入价 = 2 × model_ratio × group_ratio，输出与缓存读取分别乘对应倍率。账户折扣及充值换算以供应商实际账单为准。"
+    ],
+    "context_length_display": "1M"
+  },
+  "openlux/kimi-k2.6": {
+    "description": "支持文本、图像与视频输入，面向代码、对话和 Agent 任务。",
+    "documentation_url": "https://www.openlux.ai/console/models?view=table",
+    "source_url": "https://www.openlux.ai/console/models?view=table",
+    "verified_at": "2026-11-27T02:45:16.288977+00:00",
+    "pricing": [
+      {
+        "label": "Kimi-2",
+        "currency": "USD",
+        "input": 1.045,
+        "output": 4.4,
+        "cache_read": 0.176
+      },
+      {
+        "label": "Self-Deployed-1",
+        "currency": "USD",
+        "input": 0.285,
+        "output": 1.2,
+        "cache_read": 0.048
+      },
+      {
+        "label": "Self-Deployed-2",
+        "currency": "USD",
+        "input": 0.475,
+        "output": 2.0,
+        "cache_read": 0.08
+      },
+      {
+        "label": "Self-Deployed-3",
+        "currency": "USD",
+        "input": 0.7125,
+        "output": 3.0,
+        "cache_read": 0.12
+      }
+    ],
+    "notes": [
+      "USD / 百万 Token，按官网各渠道分组倍率计算。输入价 = 2 × model_ratio × group_ratio，输出与缓存读取分别乘对应倍率。账户折扣及充值换算以供应商实际账单为准。"
+    ]
+  },
+  "deepseek/deepseek-chat": {
+    "description": "DeepSeek 旧 API 模型名称。官方公告列明自 2026-07-24 起停止使用。",
+    "documentation_url": "https://api-docs.deepseek.com/zh-cn/news/news260424/",
+    "source_url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+    "verified_at": "2026-11-27T02:45:16.288977+00:00",
+    "pricing": [],
+    "notes": [
+      "当前官网报价对象为 deepseek-flash（DeepSeek-V4.1-Flash-1017）及 deepseek-v4-pro。此旧 ID 不匹配当前报价，需先经配置管理迁移并验证。"
+    ]
+  },
+  "deepseek/deepseek-reasoner": {
+    "description": "DeepSeek 旧 API 模型名称。官方公告列明自 2026-07-24 起停止使用。",
+    "documentation_url": "https://api-docs.deepseek.com/zh-cn/news/news260424/",
+    "source_url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+    "verified_at": "2026-11-27T02:45:16.288977+00:00",
+    "pricing": [],
+    "notes": [
+      "当前官网报价对象为 deepseek-flash（DeepSeek-V4.1-Flash-1017）及 deepseek-v4-pro。此旧 ID 不匹配当前报价，需先经配置管理迁移并验证。"
+    ]
+  }
+}
