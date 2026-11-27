@@ -7,8 +7,9 @@ Payment 无数据库，不识别用户，不分配权益，Compose 不发布其�
 ## 订单、订阅与权益
 
 `app/services/billing/catalog.py` 集中定义 Basic / Pro / Research 商业配置，与 Agent Policy 分离。
-当前全部是测试价格：1 / 2 / 3 分，CNY，每次购买增加 30×24 小时，页面明确标注。
-正式收款前必须审定并修改该配置；没有商品后台、折扣或差价计算。
+Basic 为 0 元、永久免费，不创建订单；Pro 为 19.90 元（1990 分）/ 自然月，Research 为 49.90 元（4990 分）/ 自然月，CNY。当前为支付宝沙盒演示价格，不代表未来正式售价；前端只展示 Backend Catalog 返回的价格。
+购买与续费增加一个上海自然月，目标月份没有对应日期取月末；历史订单快照中的 `duration_days=30` 仍按固定 30 天履约。
+正式收款前必须审定并修改该配置；本次不启用正式商业收款，没有商品后台或折扣系统。
 只允许购买 Admin 已发布、approved 且非 test_only 的正式 Policy。
 
 `billing_orders` 保存用户、套餐/价格/周期快照、Policy Revision、金额（整数分）、币种、渠道、
@@ -21,31 +22,45 @@ Mock/live 模式、商户/App 身份、第三方交易号、支付信息与创�
 订单行锁及与 Admin 共用的初始分配/发布锁防止重复通知、并发续费重复发放。
 创建订单在同一事务锁内检查本人全部待支付及已支付待履约订单：不同套餐返回
 `UNFINISHED_ORDER_PLAN_CONFLICT`，同套餐重复 checkout 复用已有待支付订单及原支付渠道。
-已支付订单始终保留；没有待支付订单时，同套餐仍可创建续费订单。
+已支付待履约订单始终保留，并阻止再次下单；应先查询／重试履约，避免重复付款。
 履约失败会回滚权益事务，保留 paid/pending；业务拒绝原因保存在订单中。
 意外异常同样保留已提交支付，通知返回非成功使渠道重试；用户也可以安全重试履约。
 
 订阅直接使用 `agent_owner_entitlements`，不增加平行的订阅授权系统：
 
 - `expires_at` 可空；NULL 表示现有长期权益。迁移不使历史权益过期。
-- `source` 为 `admin` 或 `billing`，历史记录默认 admin。
-- 所有仍有效的 Admin 权益（包括长期 Basic/Pro/Research）均禁止被 Billing 覆盖，以免长期权益被缩短为限时权益。
-  无现有权益或已到期且未停用的人工权益可以购买；人工停用必须由 Admin 处理。
-- Billing 有效期内仅允许同套餐续费，延长至 `max(当前时间, 原到期时间) + 30 天`。
+- `source` 仅用于审计（admin / billing / registration / expiry），不作为购买限制。
+- 邮箱及 OAuth 首次注册幂等初始化永久 Basic，未发布或 Backend 暂不可用不阻止注册；历史缺失通过 Admin `initialize_only` 补齐。已有权益、停用及异常记录不被初始化覆盖。
+- Basic／无权益可购买 Pro 或 Research；有限期 Pro／Research 可同档续费，从 `max(履约时间, 原到期时间)` 加一个自然月。首次购买从实际履约生效时间加一个自然月。
+- 有效高级权益支持同套餐续费；有限期 Pro 可差价升级至 Research，管理员赠予的 Pro 同样适用。Research 不支持主动降级。
+- 历史永久 Pro／Research 不自动改动，购买返回 `LEGACY_PERMANENT_ENTITLEMENT_REQUIRES_ADMIN`，由管理员明确设置有限期。
 - 有效期内续费固定当前 Policy Revision；新的发布不会在续费时悄悄切换已有任务的 Policy。
-- 到期后允许重新购买任一套餐，但跨 Revision 分配仍保留 `ACTIVE_GRANTS_REQUIRE_DRAIN`。
-- Admin 显式 assign 使用原来的发布校验/预览/审计，分配结果为长期人工权益（清除到期时间）。
-  disable/restore 保留原有效期并将来源转为 admin；恢复操作不会自动延长已过期订阅。
-- 下单后 Admin 修改权益也会在履约时重新检查；不会以购买为由解除停用或覆盖长期付费权益。
+- 已到期高级权益在订阅查询／关键授权入口按需回落正式 Basic。未关闭 Grant 时保留到期状态及待排空原因，拒绝新高级授权，后续可重试；不新建调度器。Basic 未发布、原权益异常、管理员停用时不静默覆盖。
+- Admin 显式 assign 使用原来的发布校验/预览/审计：Basic 永久，Pro／Research 赠予 1～12 个自然月，从操作生效时间直接覆盖。预览提示可能缩短已有权益。disable/restore 保留原有效期；恢复不会延长已过期订阅。
+- 下单与履约均核验 Policy 和切换保护；新订单保存原权益快照，付款期间 Admin 改动或其他权益变化会使订单保留 paid/pending 及 `ENTITLEMENT_CHANGED`，不静默覆盖。停用不能通过购买／初始化解除。
 
 Admin 和 Billing 共用 `agent_entitlements/assignment.py`，无需模拟管理员或请求 Admin API。
-日额度计数保留原 used/held；继续使用原有跨 Revision `daily_balance`，购买/续费不能刷新当天额度。
+日额度计数保留原 used/held；继续使用原有跨 Revision `daily_balance`，购买、续费和升级不能刷新当天额度。
 owner（新任务）、permit、start 实时判断有效期，Permit/Start 截止时间也不超过订阅有效期。
 结算/历史锁路径不检查订阅活跃性，已启动调用到期后仍能上报和结算。
 
 `ACTIVE_GRANTS_REQUIRE_DRAIN` 表示旧 Grant 尚未安全关闭，可能仍在等待用量结算。
 用户可等待任务及结算结束，再点击“查询支付 / 重试履约”；不能强制释放预留。
 没有自动补偿调度器，其他人工权益冲突需管理员根据已支付订单处理，不提供退款实现。
+
+### Pro → Research 差价升级
+
+V1 支持有效期内的有限期 Pro 升级。`POST /billing/quote` 接收 `{plan_id: "research"}`，Backend 校验原权益、目标发布及切换保护，返回 `amount`（整数分）、`currency`、`quoted_at`、`quote_expires_at`、`quote_token`、目标 Policy Revision 和保留的 `subscription_expires_at`。报价有效期为 5 分钟，且不晚于原权益到期时间。
+
+差价采用 Catalog 月价差乘以剩余自然月价值：以原到期时刻为锚点，按上海时区向前划分自然月，完整月份计 1，当前未满月份按剩余微秒 / 该月段总微秒折算。月底按既有 `add_calendar_months` 截断，多月赠予／续费按全部剩余月份计算。使用有理数计算后一次四舍五入至整数分，正剩余期限最低 1 分；例如剩余半个月段差价 1500 分。原权益没有起始日字段，因此月段统一按保留的到期日反推，不从支付金额或来源推断赠予价值。
+
+升级创建订单必须传 `expected_quote: {quoted_at, quote_token}`。Backend 在锁内以该时间重新计算全部金额及条件，校验时间范围和绑定用户、原权益、目标 Revision 的摘要，不接受前端价格。订单 JSON 快照保留报价、原权益、原到期时间与目标 Policy；同一个未过期待支付订单继续复用，不重写金额／渠道。目标发布或原权益变化后必须重新报价。
+
+**普通购买、同套餐续费不请求或依赖报价，也不读取历史报价有效期。** 这两类请求不传 `expected_quote`；显式携带升级报价而当前已不符合升级条件时返回 `UPGRADE_NOT_AVAILABLE`，避免用户确认的差价升级静默变成全价购买／续费。过期后可再次调用 quote；创建新订单时将已过期的待支付升级订单本地标记 closed 并保留原记录，再创建新升级或购买／续费订单。已支付待履约订单始终保留并阻止重复下单。此本地关闭不等于渠道撤销或退款；晚到的验签支付通知仍能确认 closed 订单的付款，之后重新核验权益快照，绝不覆盖已经变化的权益。
+
+支付入口只对未过期报价开放。报价 TTL 限制报价确认／获取支付入口，不作为延迟回调和履约重试的拒绝条件。支付成功后立即尝试分配订单固定的 Research Policy、保持原到期时间；当日 Token used/held 通过既有跨 Revision daily_balance 保留。原期限届满、权益变更、管理员停用、旧 Grant 未排空或 Policy 无效时，保留 paid/pending 及原因；排空后可通过 refresh 安全重试。永久高级权益仍须管理员先明确设置期限。
+
+历史升级订单仅在快照完整且通过原权益／期限校验时恢复支付与履约；缺少必要快照的保留记录和付款事实，返回 `QUOTE_SNAPSHOT_INVALID` 并交由管理员处理，不猜测原权益或金额、不自动退款。
 
 ## 用户及回调 API
 
@@ -59,7 +74,7 @@ owner（新任务）、permit、start 实时判断有效期，Permit/Start 截�
 请求中禁用重复确认与关闭；获取入口失败保留弹窗并刷新订单恢复列表。
 Mock 订单不跳外部支付，订单状态变化与支付入口缺失时提供查看订单入口，不将前端跳转视为支付成功。
 已完成／已关闭订单默认折叠，未完成订单保留支付入口及查询／重试操作。
-测试价格依据套餐 `test_price` 标记显示；支付关闭、未发布、管理员维护、停用及有效期内跨套餐购买均禁用，并展示原因。
+测试价格依据套餐 `test_price` 标记显示；Basic 免费且无需支付，支付关闭、未发布、停用、Research 降级、永久高级权益及待安全回落状态禁用，并展示原因。管理员来源不限制购买。
 同套餐待支付订单仍按 Backend 规则复用原订单及支付渠道，弹窗明确提示该行为。
 
 `/settings?tab=usage` 与订阅页用量概览共用 `UsagePanel`，通过同源 BFF 读取
@@ -73,7 +88,8 @@ Mock 订单不跳外部支付，订单状态变化与支付入口缺失时提供
 |---|---|---|
 | GET | `/api/v1/billing/plans` | 可购套餐、发布状态、支付模式 |
 | GET | `/api/v1/billing/subscription` | 当前实际权益、来源、有效期及生效状态 |
-| POST | `/api/v1/billing/orders` | `{plan_id, channel}` 创建订单；金额等额外字段拒绝 |
+| POST | `/api/v1/billing/quote` | 仅 Pro → Research 升级报价 |
+| POST | `/api/v1/billing/orders` | `{plan_id, channel, expected_quote?}`；仅升级要求报价，金额等额外字段拒绝 |
 | GET | `/api/v1/billing/orders` | 本人近期 20 个订单，刷新页面可恢复支付入口 |
 | GET | `/api/v1/billing/orders/{id}` | 已持久化的订单状态，不主动查询支付渠道 |
 | POST | `/api/v1/billing/orders/{id}/payment` | 获取/重试同一个未支付订单的支付入口 |
@@ -131,7 +147,7 @@ Backend 的 `PAYMENT_SERVICE_URL=http://payment:8090`；宿主原生开发需要
 修改锁定依赖需要重建 Backend/Web；新增数据库迁移需要执行 backend-migrate。
 
 登录 Web，打开 `/settings?tab=subscription`，选择套餐及任意支付方式，创建订单后点击“模拟支付成功”。
-应显示已支付且权益到账，以及新有效期；重复查询不延长有效期，同套餐新订单续费延长 30 天。
+应显示已支付且权益到账，以及新有效期；重复查询不延长有效期，同套餐新订单续费延长一个自然月。
 实际 Agent 使用仍要求已有签名密钥、授权模式、正式 Policy、Worker 能力及模型预算审批都正确配置，
 Billing 不会合成或放宽这些条件。没有正式发布时，页面会显示暂不可购买。
 
@@ -188,7 +204,7 @@ uv run --locked python -m unittest tests.test_billing_postgres
 ```
 
 Billing 集成测试每例创建随机 schema，执行 027/028/029 迁移并清理自己的 schema；
-覆盖 HTTP Mock、订单归属、金额/身份匹配、并发幂等、续费、跨套餐限制、Admin 保留、支付持久化与履约回滚。
+覆盖 HTTP Mock、订单归属、金额/身份匹配、并发幂等、购买／续费／差价升级、报价过期与重取、Research 禁止降级、Admin 保留、支付持久化与履约回滚。升级及会员补充用例见 `tests.test_billing_membership`。
 Agent 双库用例见 `apps/agent/tests/integration/test_billing_execution_postgres.py`，
 沿用 `AGENT_A_LINE_TEST_DATABASE_URL` / `BACKEND_A_LINE_TEST_DATABASE_URL` 隔离库约定。
 Web 执行 `pnpm test`、`pnpm typecheck`、`pnpm build`；Go 在 `apps/payment` 执行 `go test ./...`、`go build ./cmd/server`。

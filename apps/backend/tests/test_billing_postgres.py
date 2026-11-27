@@ -27,6 +27,7 @@ from app.schemas.admin_plans import PublishPlans, AssignPlans
 from app.schemas.billing import CreateOrder
 from app.services.agent_entitlements import admin
 from app.services.agent_entitlements.plans import build
+from app.services.agent_entitlements.dates import add_calendar_months
 from app.services.agent_entitlements.service import Entitlements, EntitlementError, now_utc
 from app.services.billing import service
 from app.integrations.payment.base import provider
@@ -147,7 +148,7 @@ class BillingPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.paid()
         from datetime import datetime
         extended = datetime.fromisoformat((await service.subscription('test'))['expires_at'])
-        self.assertEqual(extended - datetime.fromisoformat(subscription['expires_at']), timedelta(days=30))
+        self.assertEqual(extended, add_calendar_months(datetime.fromisoformat(subscription['expires_at']), 1))
         async with self.scope() as db:
             self.assertEqual((await db.scalar(select(WindowCounterRow).where(WindowCounterRow.rule_id == 'daily-tokens'))).used, 123)
 
@@ -158,13 +159,12 @@ class BillingPostgresTests(unittest.IsolatedAsyncioTestCase):
             (await db.get(OwnerEntitlementRow, 'user:test')).expires_at = now_utc() - timedelta(seconds=1)
             counter = await db.scalar(select(WindowCounterRow).where(WindowCounterRow.rule_id == 'daily-tokens'))
             counter.used = 77
-        order = await self.paid()
-        self.assertEqual((order['payment_status'], order['fulfillment_status'], order['fulfillment_error']),
-                         ('paid', 'pending', 'ACTIVE_GRANTS_REQUIRE_DRAIN'))
+        with self.assertRaisesRegex(EntitlementError, 'ACTIVE_GRANTS_REQUIRE_DRAIN'):
+            await self.create()
         async with self.scope() as db:
             self.assertEqual((await db.get(OwnerEntitlementRow, 'user:test')).plan_id, 'basic')
             (await db.get(GrantRootRow, grant.grant_id)).status = 'closed'  # Test fixture models a completed drain.
-        self.assertEqual((await service.refresh('test', order['order_id']))['fulfillment_status'], 'completed')
+        self.assertEqual((await self.paid())['fulfillment_status'], 'completed')
         async with self.scope() as db:
             self.assertEqual((await db.scalar(select(WindowCounterRow).where(WindowCounterRow.rule_id == 'daily-tokens'))).used, 77)
 
@@ -176,7 +176,7 @@ class BillingPostgresTests(unittest.IsolatedAsyncioTestCase):
             await self.paid()
         from datetime import datetime
         after = (await service.subscription('test'))['expires_at']
-        self.assertEqual(datetime.fromisoformat(after) - datetime.fromisoformat(before), timedelta(days=60))
+        self.assertEqual(datetime.fromisoformat(after), add_calendar_months(add_calendar_months(datetime.fromisoformat(before), 1), 1))
         async with self.scope() as db:
             count = await db.scalar(select(func.count()).select_from(EntitlementAuditRow).where(EntitlementAuditRow.principal == 'billing'))
             self.assertEqual(count, 3)
@@ -200,8 +200,9 @@ class BillingPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_mock_paid_pending_cannot_fulfill_after_production_switch(self):
         with patch.dict(os.environ, {'ENVIRONMENT': 'development'}):
+            created = await self.create()
             with patch.object(service, 'assign_policy', side_effect=EntitlementError('TEST_PENDING')):
-                order = await self.paid()
+                order = await service.mock_pay('test', created['order_id'])
         for env in ({'ENVIRONMENT': 'production'}, {'BILLING_MOCK_ENABLED': 'false'}, {'BILLING_PAYMENT_MODE': 'live'}):
             with patch.dict(os.environ, env):
                 result = await service.refresh('test', order['order_id'])
@@ -238,19 +239,15 @@ class BillingPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_manual_assignment_and_plan_change_restrictions(self):
         await self.assign('pro')
-        with self.assertRaisesRegex(EntitlementError, 'ADMIN_ENTITLEMENT_PRESERVED'):
-            await self.create()
-        await self.assign('basic')
-        with self.assertRaisesRegex(EntitlementError, 'ADMIN_ENTITLEMENT_PRESERVED'):
-            await self.create()
-        async with self.scope() as db:
-            (await db.get(OwnerEntitlementRow, 'user:test')).expires_at = now_utc() - timedelta(seconds=1)
-        await self.paid()
-        with self.assertRaisesRegex(EntitlementError, 'PLAN_CHANGE_NOT_SUPPORTED'):
+        self.assertEqual((await self.paid())['action'], 'renew')
+        with self.assertRaisesRegex(EntitlementError, 'QUOTE_REQUIRED'):
             await self.create('research')
+        await self.assign('research')
+        with self.assertRaisesRegex(EntitlementError, 'PLAN_CHANGE_NOT_SUPPORTED'):
+            await self.create('pro')
         await self.assign(action='disable')
         with self.assertRaisesRegex(EntitlementError, 'ENTITLEMENT_DISABLED'):
-            await self.create()
+            await self.create('research')
 
     async def test_amount_currency_merchant_and_channel_mismatch_never_pay(self):
         created = await self.create()
@@ -286,7 +283,8 @@ class BillingPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await service.refresh('test', order['order_id']))['fulfillment_status'], 'completed')
 
     async def test_migration_keeps_permanent_admin_grants(self):
-        await self.assign('research')
+        async with self.scope() as db:
+            await service.assign_policy(db, None, 'user:test', 'research', 'research-v1-test')
         async with self.engine.begin() as connection:
             await connection.run_sync(lambda c: self.migrate(c, ('029_billing',), 'downgrade'))
             await connection.run_sync(lambda c: self.migrate(c, ('029_billing',)))
@@ -316,6 +314,9 @@ class BillingPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertLessEqual(datetime.fromisoformat(start['start_before']), expires)
 
     async def test_live_alipay_signed_callback_uses_same_fulfillment(self):
+        await self.assert_live_alipay_signed_callback()
+
+    async def assert_live_alipay_signed_callback(self, plan='pro'):
         # Ephemeral official-SDK fixtures only: page signing and callback verification require no network.
         from tests.test_payment_providers import AlipayTests
         keys = AlipayTests()
@@ -324,9 +325,12 @@ class BillingPostgresTests(unittest.IsolatedAsyncioTestCase):
         from urllib.parse import parse_qsl, urlencode
         from alipay.aop.api.util.SignatureUtils import get_sign_content, sign_with_rsa2
         with patch.dict(os.environ, {'ENVIRONMENT': 'production', 'BILLING_PAYMENT_MODE': 'live', 'BILLING_MOCK_ENABLED': 'false'}):
-            order = await service.create_order('test', CreateOrder(plan_id='pro', channel='alipay'))
+            quoted = await service.quote('test', plan) if plan == 'research' else None
+            order = await service.create_order('test', CreateOrder(plan_id=plan, channel='alipay',
+                expected_quote={key: quoted[key] for key in ('quoted_at', 'quote_token')} if quoted else None))
             payload = dict(parse_qsl(keys.body().decode()))
-            payload.update(out_trade_no=order['order_id'], total_amount='0.02')
+            amount = f"{order['amount'] // 100}.{order['amount'] % 100:02d}"
+            payload.update(out_trade_no=order['order_id'], total_amount=amount)
             payload.pop('sign'); payload.pop('sign_type')
             signature = sign_with_rsa2(keys.private, get_sign_content(payload), 'utf-8')
             raw = urlencode({**payload, 'sign': signature, 'sign_type': 'RSA2'})
@@ -335,7 +339,7 @@ class BillingPostgresTests(unittest.IsolatedAsyncioTestCase):
                     response = await callback.post('/api/v1/payment-webhooks/alipay', content=raw,
                         headers={'content-type': 'application/x-www-form-urlencoded'})
                     self.assertEqual((response.status_code, response.text), (200, 'success'))
-                forged = await callback.post('/api/v1/payment-webhooks/alipay', content=raw.replace('0.02', '0.03'))
+                forged = await callback.post('/api/v1/payment-webhooks/alipay', content=raw.replace('total_amount=' + amount, 'total_amount=0.03'))
                 self.assertEqual(forged.status_code, 400)
             result = await service.get_order('test', order['order_id'])
             self.assertEqual((result['mode'], result['payment_status'], result['fulfillment_status']), ('live', 'paid', 'completed'))

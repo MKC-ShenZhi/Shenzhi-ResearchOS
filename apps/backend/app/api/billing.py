@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from app.core.identity import require_user
 from app.core.responses import ok
-from app.schemas.billing import CreateOrder
+from app.schemas.billing import CreateOrder, QuoteRequest
 from app.services.billing import service
 
 router = APIRouter(prefix='/api/v1/billing', tags=['billing'])
@@ -20,6 +20,11 @@ async def subscription(identity=Depends(require_user)):
 @router.post('/orders')
 async def create_order(body: CreateOrder, identity=Depends(require_user)):
     return ok(await service.create_order(identity.subject_id, body))
+
+
+@router.post('/quote')
+async def quote(body: QuoteRequest, identity=Depends(require_user)):
+    return ok(await service.quote(identity.subject_id, body.plan_id))
 
 
 @router.get('/orders')

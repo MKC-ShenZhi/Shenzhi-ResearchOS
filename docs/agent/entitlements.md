@@ -83,7 +83,7 @@ Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 
 
 ## V1 正式套餐与 Admin
 
-正式套餐为 basic/pro/research，上海自然日 Token 额度分别 200000/1000000/3000000，暂时免费，prompt_plus_completion。新用户待分配，initialize_free 与注册通知兼容入口不再写入权益；唯一业务分配入口是独立 Admin。历史 Free Policy、Grant 与用量记录保留，但不再作为注册默认值。历史初始化须在 Admin 按截止时间预览并确认，仅补缺失，不覆盖显式分配。
+正式套餐为 basic/pro/research，上海自然日 Token 额度分别 200000/1000000/3000000，prompt_plus_completion。Basic 永久免费，Pro/Research 使用 Billing 集中配置的测试价格。邮箱及 OAuth 首次注册通过已有通知入口调用 `initialize_free`，仅在没有权益记录、正式 Basic 已发布时初始化永久 Basic；已有权益（包括停用及异常记录）不覆盖。Backend 或发布暂不可用时记录问题，不阻止注册。历史用户通过 Admin 按截止时间预览、确认 `initialize_only` 批量补齐 Basic。历史 Free Policy、Grant 与用量记录保留，不作为新注册默认值。
 
 Admin 发布三档不可变 Policy，固定 daily quota_pool 跨 plan/revision，共享同日使用和预留。旧的上海日 daily-tokens 余额也纳入统一检查，不把多规则限额相加。发布指针位于迁移028新增的 agent_plan_releases；改变指针不改变既有 Assignment。
 
@@ -139,6 +139,7 @@ Agent 目录：`uv run --no-sync python -m pytest tests/test_a_line_persistence.
 
 ## Billing 订阅有效期
 
-用户购买与续费通过 Backend Billing 复用现有权益行和公共分配函数，说明见 [Billing](../billing/README.md)。
-`expires_at=NULL` 保留历史长期权益；Billing 赋予有限有效期，owner/permit/start 实时检查，结算仍接受历史已启动调用。
+用户购买、续费及 Pro → Research 差价升级通过 Backend Billing 复用现有权益行和公共分配函数，说明见 [Billing](../billing/README.md)。
+Basic 的 `expires_at=NULL` 表示永久免费；历史永久 Pro/Research 保留并由 Admin 显式调整。购买、续费及 Admin 赠予共用上海自然月函数，目标月份无对应日期取月末；历史订单的固定 30 天快照继续按原约定履约。有限期 Pro（含 Admin 赠予）可按后端报价差价升级至 Research，固定订单 Policy Revision、保留原到期时间与当日 used/held；Research 不支持主动降级。付款期间权益变化时保留 paid/pending，不覆盖新权益。
+`lifecycle.reconcile_owner` 在用户行锁内按需将已到期 Pro/Research 切回已批准的正式 Basic，并追加审计。未关闭 Grant 时返回真实到期状态及 `ACTIVE_GRANTS_REQUIRE_DRAIN`，后续查询／授权重试；Basic 未发布或原权益异常时保持原记录并返回原因。停用状态不触发回落。owner/permit/start 仍实时拒绝已过期高级权限，结算接受历史已启动调用。切换不删除 Grant、订单或账本，也不重置同日 used/held。
 Admin 的发布、预览、分配与审计入口保留，跨 Revision 切换继续要求 `ACTIVE_GRANTS_REQUIRE_DRAIN`，购买不重置日额度。
