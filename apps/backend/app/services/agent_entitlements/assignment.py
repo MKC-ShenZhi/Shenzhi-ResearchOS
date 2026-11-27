@@ -1,4 +1,7 @@
-"""Shared policy assignment. Caller holds publication lock and owner lock.
+"""Shared policy assignment. Caller holds owner lock.
+
+Missing-row creation also requires publication lock before owner lookup.
+Existing-owner expiry reads a published release under the owner lock only.
 
 No commits and no identity impersonation: Admin and Billing own their audits.
 """
@@ -11,6 +14,7 @@ from .service import require, now_utc
 
 async def assign_policy(db, owner, owner_id, plan_id, policy_revision, *, preview=False,
                         expires_at=None, source='admin'):
+    require(owner is None or owner.enabled, 'ENTITLEMENT_DISABLED',403)
     row=await db.get(EntitlementPolicyRow,policy_revision)
     require(row and row.approved and not row.test_only, 'POLICY_NOT_APPROVED',403)
     policy=EntitlementPolicy.model_validate(row.payload)

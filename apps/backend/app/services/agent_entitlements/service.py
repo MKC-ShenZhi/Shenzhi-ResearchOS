@@ -60,8 +60,8 @@ class Entitlements:
         self.allow_test_policy = allow_test_policy
 
     async def owner(self, db, owner_id, *, active=True):
-        owner = await db.scalar(select(OwnerEntitlementRow).where(
-            OwnerEntitlementRow.owner_id == owner_id).with_for_update().execution_options(populate_existing=True))
+        from .lifecycle import reconcile_owner
+        owner, _ = await reconcile_owner(db, owner_id)
         require(owner is not None and (entitlement_active(owner) or not active), 'ENTITLEMENT_UNAVAILABLE', 403)
         return owner
 
