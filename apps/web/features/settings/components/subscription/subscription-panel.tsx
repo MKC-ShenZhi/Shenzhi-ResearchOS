@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { billing, type BillingOrder, type BillingPlan } from "@/clients/backend/billing";
 import type { SettingsLocale } from "@/clients/settings";
 import Link from "next/link";
-import { ArrowRight, Check, ChevronDown, CreditCard, ShieldCheck } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarClock, ChevronDown, CreditCard, Files, Gauge, Layers, MessagesSquare, Search, Telescope, Users, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UsagePanel } from "./usage-panel";
 import { purchaseBlock, billingMessage } from "./billing-state";
@@ -29,12 +29,11 @@ const text = {
   "zh-CN": {
     login: "请登录后查看和购买订阅。", title: "当前订阅", none: "未分配套餐", permanent: "长期权益",
     expires: "有效期至", active: "生效中", expired: "已到期", disabled: "已停用", unassigned: "未分配",
-    test: "测试价格 · 不代表正式售价", mock: "当前为 Mock 支付（开发测试），不会真实扣款。",
     unavailable: "支付尚未启用", buy: "购买 / 续费", unpublished: "暂不可购买", days: "天", tokens: "Token / 天",
     method: "支付方式", wechat: "微信支付", alipay: "支付宝", recent: "近期订单", pay: "前往支付宝支付",
     scan: "请使用微信扫描二维码支付", confirm: "模拟支付成功", refresh: "查询支付 / 重试履约",
     pending: "等待支付", paid: "已支付，等待权益到账", completed: "支付完成，权益已到账", closed: "订单已关闭",
-    prepare: "获取支付入口", loading: "加载中…", renew: "支持购买、同套餐续费和 Pro → Research 差价升级。长期高级权益需管理员设置期限后再购买。",
+    prepare: "获取支付入口", loading: "加载中…",
     drain: "请等待当前 Agent 任务及用量结算结束，再重试权益发放。", blocked: "当前权益已变更，暂时无法发放；请联系管理员处理此已支付订单。",
     managed: "当前权益由管理员维护，不能通过购买覆盖。", change: "有效期内不可切换套餐",
     conflict: "已有其他套餐的未完成订单，请先完成支付及权益到账，再购买其他套餐。",
@@ -43,12 +42,11 @@ const text = {
   en: {
     login: "Sign in to view and purchase subscriptions.", title: "Current subscription", none: "No plan assigned", permanent: "Permanent entitlement",
     expires: "Valid until", active: "Active", expired: "Expired", disabled: "Disabled", unassigned: "Unassigned",
-    test: "Test prices · final pricing pending", mock: "Mock payment mode (development). No real charge.",
     unavailable: "Payments are disabled", buy: "Purchase / renew", unpublished: "Unavailable", days: "days", tokens: "tokens / day",
     method: "Payment method", wechat: "WeChat Pay", alipay: "Alipay", recent: "Recent orders", pay: "Continue to Alipay",
     scan: "Scan with WeChat to pay", confirm: "Simulate successful payment", refresh: "Check payment / retry fulfillment",
     pending: "Awaiting payment", paid: "Paid, awaiting fulfillment", completed: "Payment complete, entitlement delivered", closed: "Order closed",
-    prepare: "Get payment link", loading: "Loading…", renew: "Purchase, renew, or upgrade Pro to Research for the remaining term. Permanent paid grants require an administrator to set an expiry.",
+    prepare: "Get payment link", loading: "Loading…",
     drain: "Wait for current Agent tasks and usage settlement to finish, then retry fulfillment.", blocked: "Your entitlement has changed. Contact an administrator about this paid order.",
     managed: "Your current entitlement is managed by an administrator and cannot be replaced by a purchase.", change: "Plan change unavailable",
     conflict: "An unfinished order exists for another plan. Complete payment and fulfillment before buying another plan.",
@@ -93,6 +91,35 @@ function SubscriptionForUser({ locale, userId }: { locale: SettingsLocale; userI
   const descriptions: Record<string, string> = zh
     ? { basic: "为日常阅读与轻量探索准备", pro: "让持续研究拥有更充足的空间", research: "为高频、深入的研究工作而设" }
     : { basic: "For everyday reading and exploration", pro: "More room for your ongoing research", research: "For intensive research workflows" };
+  const benefits: Record<string, { heading: string; items: { icon: LucideIcon; label: string }[] }> = {
+    basic: {
+      heading: zh ? "从一个问题开始" : "Start with a question",
+      items: [
+        { icon: Search, label: zh ? "论文检索，发现相关研究" : "Search papers and discover related work" },
+        { icon: Users, label: zh ? "浏览学者，了解研究方向" : "Explore scholars and research interests" },
+        { icon: CalendarClock, label: zh ? "关注会议，掌握截稿时间" : "Follow conferences and track deadlines" },
+        { icon: Files, label: zh ? "收藏文献，积累研究素材" : "Save papers and build your reading collection" },
+        { icon: MessagesSquare, label: zh ? "AI 问答，梳理日常研究思路" : "Think through research questions with AI" },
+      ],
+    },
+    pro: {
+      heading: zh ? "让研究持续推进" : "Keep your research moving",
+      items: [
+        { icon: Layers, label: zh ? "包含基础版全部功能" : "Everything in Basic" },
+        { icon: Gauge, label: zh ? "更充足的 AI 用量，探索更从容" : "More AI usage and room to explore" },
+        { icon: BookOpen, label: zh ? "借助 AI 研读文献，梳理关键线索" : "Read papers with AI and connect key ideas" },
+        { icon: MessagesSquare, label: zh ? "围绕课题持续追问，反复推敲" : "Work through your topic in ongoing conversations" },
+      ],
+    },
+    research: {
+      heading: zh ? "向更深处探索" : "Explore in greater depth",
+      items: [
+        { icon: Layers, label: zh ? "包含专业版全部功能" : "Everything in Pro" },
+        { icon: Telescope, label: zh ? "解锁 Deep Research，深入研究课题" : "Explore your topic with Deep Research" },
+        { icon: Gauge, label: zh ? "更高 AI 额度，支持高频研究工作" : "Higher AI allowance for intensive research" },
+      ],
+    },
+  };
   return <div className="space-y-6 text-ink">
     <header className="py-2"><p className="mb-2 text-[10px] font-semibold tracking-[0.22em] text-primary">SHENZHI / MEMBERSHIP</p><h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{zh ? "让好奇，走得更远。" : "Take your curiosity further."}</h2><p className="mt-3 text-sm leading-6 text-muted">{zh ? "选择适合你的研究节奏，把时间留给发现。" : "Find the allowance that fits your research. Make more time for discovery."}</p></header>
     {error && !selected && <div role="alert" className="rounded-xl border border-danger/20 bg-danger-soft p-4 text-sm text-danger">{error.message === "UNFINISHED_ORDER_PLAN_CONFLICT" ? t.conflict : error.message === "PAYMENT_QUERY_IDENTITY_UNVERIFIED" ? t.identity : error.message}{query.isError && <Button variant="ghost" size="sm" onClick={() => void query.refetch()}>{zh ? "重试" : "Retry"}</Button>}</div>}
@@ -105,6 +132,8 @@ function SubscriptionForUser({ locale, userId }: { locale: SettingsLocale; userI
       <section aria-labelledby="plans-heading">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-2"><h2 id="plans-heading" className="text-base font-semibold">{zh ? "为你的下一步研究" : "For your next discovery"}</h2><span className="text-xs text-muted">{zh ? "按次购买 · 手动续费" : "One-time purchase · Manual renewal"}</span></div>
         <div className="grid gap-4 md:grid-cols-3">{data.plans.items.map((plan) => {
+          const free = plan.plan_id === "basic";
+          const details = benefits[plan.plan_id];
           const upgrade = data.subscription.status === "active" && data.subscription.plan_id === "pro" && plan.plan_id === "research";
           const current = data.subscription.status === "active" && data.subscription.plan_id === plan.plan_id;
           const blockReason = purchaseBlock(data.subscription, plan);
@@ -113,13 +142,15 @@ function SubscriptionForUser({ locale, userId }: { locale: SettingsLocale; userI
           return <article key={plan.plan_id} className={cn("relative flex flex-col rounded-2xl border bg-card p-5 transition-shadow hover:shadow-card sm:p-6", current ? "border-primary ring-1 ring-primary/10" : "border-line")}>
             <div className="mb-5 flex min-h-6 items-center justify-between gap-2"><span className="text-sm font-semibold">{locale === "en" ? plan.plan_id : plan.name}</span>{current && <span className="rounded-full bg-primary-soft px-2 py-1 text-[10px] font-medium text-primary">{zh ? "当前套餐" : "Your plan"}</span>}</div>
             <p className="min-h-10 text-xs leading-5 text-muted">{descriptions[plan.plan_id] ?? (zh ? "探索适合你的科研额度" : "Explore your research allowance")}</p>
-            <p className="mt-4 flex flex-wrap items-baseline gap-1"><span className="text-3xl font-semibold tracking-tight">{money(plan.amount, plan.currency)}</span><span className="text-xs text-muted">/ {plan.plan_id === "basic" ? (zh ? "永久免费" : "free forever") : (zh ? `${plan.duration_months} 个自然月` : `${plan.duration_months} calendar month`)}</span></p>
-            <p className="mt-2 min-h-4 text-[10px] text-muted">{plan.test_price ? t.test : (zh ? "单次购买价格" : "Per purchase")}</p>
-            <Button className="mt-6 w-full" variant={current ? "default" : "outline"} disabled={blocked || mutation.isPending} aria-describedby={blocked ? `plan-reason-${plan.plan_id}` : undefined} onClick={() => { mutation.reset(); setSelected(plan); }}>{blocked ? (zh ? "暂不可选" : "Unavailable") : upgrade ? (zh ? "差价升级" : "Upgrade") : current ? (zh ? "续费套餐" : "Renew plan") : (zh ? "选择套餐" : "Select plan")}{!blocked && <ArrowRight aria-hidden="true" />}</Button>
-            <div className="mt-6 border-t border-line pt-5"><p className="text-[10px] tracking-wide text-muted">{zh ? "每日研究额度" : "DAILY ALLOWANCE"}</p><p className="mt-2 text-xl font-semibold tabular-nums">{plan.daily_tokens.toLocaleString(locale)}<span className="ml-1.5 text-xs font-normal text-muted">Token</span></p><p className="mt-3 flex items-center gap-2 text-xs text-ink-2"><Check className="size-3.5 text-agent" aria-hidden="true" />{zh ? "每日额度，按实际用量结算" : "Daily allowance, settled by actual usage"}</p><p className="mt-3 min-h-8 text-[11px] leading-4 text-muted" id={`plan-reason-${plan.plan_id}`}>{blocked ? reason : (zh ? "购买前可确认金额与支付方式" : "Review price and payment method before purchase")}</p></div>
+            <p className="mt-4 flex min-h-10 flex-wrap items-baseline gap-1"><span className="text-3xl font-semibold tracking-tight">{free ? (zh ? "免费版" : "Free") : money(plan.amount, plan.currency)}</span>{!free && <span className="text-xs text-muted">/ {zh ? `${plan.duration_months} 个自然月` : `${plan.duration_months} calendar month`}</span>}</p>
+            <Button className="mt-6 w-full" variant={current ? "default" : "outline"} disabled={blocked || mutation.isPending} aria-describedby={blocked && !free ? `plan-reason-${plan.plan_id}` : undefined} onClick={() => { mutation.reset(); setSelected(plan); }}>{free ? (zh ? "永久免费" : "Free forever") : blocked ? (zh ? "暂不可选" : "Unavailable") : upgrade ? (zh ? "差价升级" : "Upgrade") : current ? (zh ? "续费套餐" : "Renew plan") : (zh ? "选择套餐" : "Select plan")}{!blocked && <ArrowRight aria-hidden="true" />}</Button>
+            <div className="mt-6 flex flex-1 flex-col border-t border-line pt-5">
+              {details && <><p className="text-xs font-medium text-ink">{details.heading}</p><ul className="mt-4 space-y-3">{details.items.map(({ icon: Icon, label }) => <li key={label} className="flex items-start gap-2.5 text-xs leading-5 text-ink-2"><Icon className="mt-0.5 size-4 shrink-0 text-primary/70" strokeWidth={1.6} aria-hidden="true" /><span>{label}</span></li>)}</ul></>}
+              <p className="mt-auto pt-5 text-[11px] leading-5 text-muted">{zh ? "每日包含 " : "Includes "}<span className="font-medium text-ink-2">{new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(plan.daily_tokens)} Token</span>{zh ? " 研究额度" : " daily"}</p>
+              {blocked && !free && <p className="mt-3 text-[11px] leading-5 text-muted" id={`plan-reason-${plan.plan_id}`}>{reason}</p>}
+            </div>
           </article>;
         })}</div>
-        <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-muted"><ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{zh ? "有效期内可同套餐续费，或按后端报价从 Pro 差价升级至 Research。升级保留原到期时间，不重置当日 Token 用量；Research 不支持主动降级。" : "Renew your current plan or upgrade Pro to Research at the backend-quoted price. Upgrades keep your expiry and today's token usage. Research cannot be downgraded."}</p>
       </section>
       {selected && <CheckoutDialog plan={selected} locale={locale} userId={userId} paymentMode={data.plans.payment_mode} now={now}
         upgrade={data.subscription.status === "active" && data.subscription.plan_id === "pro" && selected.plan_id === "research"}
@@ -148,7 +179,6 @@ function SubscriptionForUser({ locale, userId }: { locale: SettingsLocale; userI
           </div>
         </details>)}</div>}
       </section>
-      <details className="rounded-xl px-1 text-xs text-muted"><summary className="cursor-pointer py-1">{zh ? "订阅与续费说明" : "About subscriptions and renewals"}</summary><p className="py-3 leading-6">{t.renew}</p></details>
     </>}
   </div>;
 }

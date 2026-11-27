@@ -115,8 +115,8 @@ export function CheckoutDialog({ plan, pendingOrder, upgrade = false, now = 0, p
         </fieldset>
 
         <div className="mt-4 space-y-2 text-[11px] leading-5 text-muted">
-          <p>{paymentMode === "mock" ? (zh ? "开发测试模式，不会真实扣款。" : "Development mode. No real charge.") : plan.test_price ? (zh ? "当前为测试价格，不代表正式售价。" : "Test price, not final pricing.") : (zh ? "单次购买，不会自动续费。" : "One-time purchase. No automatic renewal.")}</p>
-          <p>{legacyWechat ? (zh ? "已有微信待支付订单，需在近期订单中继续处理，无法改为支付宝。" : "An existing WeChat order must be continued in your order history; its channel cannot be changed.") : order ? (zh ? "将继续已有待支付订单，无需重复下单。" : "Continue your pending order without creating another.") : isUpgrade ? (zh ? "本次支付后使用 Research Policy 和额度。" : "Use Research policy and allowance after payment.") : (zh ? "同套餐续费延长当前有效期；新购从权益实际到账时起按自然月计算。" : "Same-plan renewals extend your term. New purchases start at fulfillment, measured in calendar months.")}</p>
+          <p>{paymentMode === "mock" ? (zh ? "开发测试模式，不会真实扣款。" : "Development mode. No real charge.") : (zh ? "单次购买，不会自动续费。" : "One-time purchase. No automatic renewal.")}</p>
+          <p>{legacyWechat ? (zh ? "已有微信待支付订单，需在近期订单中继续处理，无法改为支付宝。" : "An existing WeChat order must be continued in your order history; its channel cannot be changed.") : order ? (zh ? "将继续已有待支付订单，无需重复下单。" : "Continue your pending order without creating another.") : isUpgrade ? (zh ? "本次支付后即可使用 Research 研究版。" : "Access Research features after payment.") : (zh ? "同套餐续费延长当前有效期；新购从权益实际到账时起按自然月计算。" : "Same-plan renewals extend your term. New purchases start at fulfillment, measured in calendar months.")}</p>
         </div>
 
         {expiresAt && <p className="mt-2 text-xs text-muted">{zh ? "预计有效期至：" : "Expected expiry: "}{new Date(expiresAt).toLocaleString(locale)}</p>}
