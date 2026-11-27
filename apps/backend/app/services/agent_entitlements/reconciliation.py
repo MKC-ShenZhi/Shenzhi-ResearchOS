@@ -113,7 +113,7 @@ async def reconcile(grant_id, body, principal):
 
 
 async def apply(db, service, grant_id, body, principal, facts):
-    require(principal.startswith('local-admin:'), 'ADMIN_REQUIRED', 403)
+    require(principal.startswith(('local-admin:', 'ssh-admin:')), 'ADMIN_REQUIRED', 403)
     await admin_lock(db)
     request = request_payload(grant_id, body)
     old = await replay(db, body.operation_id, principal, request)

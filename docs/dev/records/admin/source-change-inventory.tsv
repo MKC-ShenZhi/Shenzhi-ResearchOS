@@ -1,0 +1,115 @@
+文件	决策	说明
+.github/workflows/agent-management.yml	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/admin/Dockerfile	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/admin/README.md	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/admin/src/features/CapabilitiesPage.tsx	沿用删除	旧只读前端已由真实 Registry 目录替代，Backend 兼容接口保留
+apps/admin/src/features/agent/AgentConfigCenter.tsx	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/admin/src/features/agent/AgentConfigForm.tsx	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/admin/src/features/agent/AgentManagement.tsx	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/admin/src/features/agent/agent.css	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/admin/src/main.tsx	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/admin/src/style.css	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/admin/src/useResource.ts	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/admin/tests/agent-management-smoke.mjs	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/agent/.env.example	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/agent/Dockerfile	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/migrations/env.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/migrations/versions/0004_agent_management.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/migrations/versions/0005_config_management.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/migrations/versions/0006_config_fencing.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/migrations/versions/0007_worker_lifecycle.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/migrations/versions/0008_management_operations.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/scripts/sign_config_approval.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/api/config_management.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/api/management.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/agent/src/agent_app/api/routes.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/agent/src/agent_app/api/v2.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/application/composition.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/src/agent_app/config_approval.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/config_artifact_history.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/config_deployment.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/config_scheduling.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/control/repository.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/src/agent_app/execution/config_profile.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/execution/metering.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/src/agent_app/execution/runtime.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/src/agent_app/extensions/skills.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/src/agent_app/fleet_history.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/infrastructure/config_management_models.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/infrastructure/management_models.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/integrations/llm/resolver.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/src/agent_app/main.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/agent/src/agent_app/management_catalog.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/agent/src/agent_app/management_checks.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/management_diagnostics.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/management_observations.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/management_operations.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/management_workers.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/worker/host.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/src/agent_app/worker/management_reporter.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/src/agent_app/worker_main.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/tests/integration/phase4-sshd.Dockerfile	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/tests/integration/phase4_container_acceptance.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/tests/integration/test_a_line_postgres.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/tests/integration/test_management_operations_postgres.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/tests/test_a_line_persistence.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/tests/test_formal_plans.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/tests/test_management.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/tests/test_management_bridge.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/tests/test_management_config.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/tests/test_management_operations.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/tests/test_management_phase2.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/agent/tests/unit/test_agent_fast_search.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/tests/unit/test_task_runs.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/agent/tests/unit/test_worker_takeover.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/backend/.env.example	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/backend/Dockerfile	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/backend/app/api/admin_console.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/backend/app/api/agent_config_management.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/api/agent_management.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/backend/app/api/agent_management_phase2.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/core/admin_auth.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/backend/app/data/model_metadata.json	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/backend/app/integrations/agent_management.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/backend/app/integrations/model_metadata.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/main.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/backend/app/models/agent_management.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/schemas/model_metadata.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/backend/app/services/agent_config_barrier.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/services/agent_config_management.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/services/agent_config_reconciler.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/services/agent_gateway/v2.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/services/agent_health_summary.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/services/agent_management.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/services/agent_management_audit.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/services/agent_management_operations.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/app/services/model_metadata.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+apps/backend/migrations/env.py	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+apps/backend/migrations/versions/029_agent_management.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/migrations/versions/030_agent_config_entitlement_barrier.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+apps/backend/tests/test_admin_tunnel.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+docs/admin/agent-management-console.md	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+docs/admin/agent-management-design.md	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+docs/admin/agent-management-phase1-implementation.md	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+docs/admin/agent-management-phase2-implementation.md	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+docs/admin/agent-management-phase3-implementation.md	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+docs/admin/agent-management-phase3.1-production-readiness.md	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+docs/admin/agent-management-phase3.2-readiness.md	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+docs/dev/records/agent/admin-capability-review-20261126.md	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+docs/dev/records/agent/phase32-chain-acceptance-20261126.md	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+docs/dev/records/agent/phase4-implementation-20261126.md	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+docs/engineering/architecture-confirmation.md	保留一级分支	不引入旧协议、配置发布、Worker 调度、诊断或旧架构改动
+docs/engineering/deployment.md	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+infra/docker/ADMIN.md	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+infra/docker/compose.admin.yml	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+infra/docker/compose.yml	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+infra/docker/env/agent.env.example	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+infra/docker/env/backend.env.example	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+infra/docker/nginx/admin.conf.template	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+infra/docker/nginx/public-admin-deny.conf	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+infra/docker/nginx/start-admin.sh	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+infra/docker/scripts/agent_deployment_plan.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+packages/agent-contracts/src/agent_contracts/management.py	保留/适配	只读目录、静态资料、可信入口、部署或对应文档/测试；按当前平台适配
+packages/agent-contracts/src/agent_contracts/management_config.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+packages/agent-contracts/src/agent_contracts/management_operations.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留
+packages/agent-contracts/src/agent_contracts/management_phase2.py	不引入	超出只读目录/入口部署范围；无实现、import、迁移或开关残留

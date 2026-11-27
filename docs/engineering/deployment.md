@@ -39,7 +39,7 @@ Compose dev 仅绑定宿主 loopback，生产 override 不发布数据库端口�
 Web loopback 端口供宿主 HTTPS 反向代理接入。所有跨容器调用使用匹配的服务凭据，禁用本地 BFF 免密。
 Docker 配置集中于本地 `infra/docker/.env`、`env/*.env`、`secrets/`，不修改原生应用环境文件。
 生产配置仍需正式域名、TLS、授权/模型预算批准、监控、备份恢复演练及镜像发布流程；不表示可直接上线。
-Admin 仅加入开发 override 的 full profile，宿主 loopback:3101 发布；与 Backend 共享网络命名空间，代理仍经 loopback。默认开发凭据和随机 Session Secret 仅由开发 override 注入，生产 override 清空管理认证配置。Backend local-only 保持，Vite 开发入口校验 Host/Origin，不信任转发 Header。此开发接入不表示已实现下文生产 SSH 隧道入口。
+Admin 开发入口加入开发 override 的 full profile，宿主 loopback:3101 发布；与 Backend 共享网络命名空间，代理仍经 loopback。默认开发凭据和随机 Session Secret 仅由开发 override 注入，生产 override 清空管理认证配置。Backend local-only 保持，Vite 开发入口校验 Host/Origin，不信任转发 Header。生产 SSH 隧道入口需显式叠加 `compose.admin.yml`，配置与上线条件见下文。
 公共 Web BFF 显式拒绝 `admin-console` 路径（包括编码的路径段），不将管理请求转发给 Backend。
 
 ## 二、环境变量与运行约束
@@ -98,14 +98,12 @@ ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCo
 
 ### 当前实现与部署前必须完成的工作
 
-**目前仍只实现 `local_password`＋管理 Cookie；SSH 隧道免密码模式尚未实现。本节确定部署方向，不表示可以立即删除密码或关闭现有认证。**
+Backend `core/admin_auth.py` 支持显式 `ADMIN_AUTH_MODE=ssh_tunnel`；默认生产 override 仍禁用 Admin，开发继续使用 `local_password`。隧道模式同时校验真实 loopback 对端、专用入口密钥、Host、Origin 与 Sec-Fetch-Site；缺失或错误配置拒绝访问。专用 Nginx 将服务端入口密钥覆盖注入请求，浏览器不持有此密钥。仅凭 loopback、Cookie 或浏览器身份 Header 均不能绕过入口校验。
 
-部署 Agent 必须先完成以下适配，再按上述方式上线：
+`GET /auth/me` 在可信入口自动签发 HttpOnly、SameSite=Strict 管理 Cookie；写操作继续要求原有同源 Header 与预览/确认流程。所有请求均重新验证入口。固定身份由 `ADMIN_TUNNEL_PRINCIPAL` 指定，审计记为 `ssh-admin:<principal>`；历史 `local-admin:` 记录继续可查，对账接受两种受信任管理身份。该身份不是 SSH 协议提供的逐用户身份。退出清除 Cookie；仍持有 SSH 权限时重新进入可建立会话，彻底断开访问须关闭隧道。
 
-1. 在 Backend 现有 `core/admin_auth.py` 边界实现显式启用的隧道管理模式，并调整前端会话检查与登录入口。未配置或配置错误时仍拒绝访问；不能只删除登录页、将现有密码置空或关闭 local-only 校验。具体配置名以实现后同步更新的 `.env.example` 为准，当前没有可直接启用的免密码环境变量。
-2. 管理 API 需要明确的入口隔离。不能只根据请求来自 loopback 就放行，也不能信任浏览器传来的管理员身份 Header；公共代理必须阻断管理路径，专用管理入口与 Backend 之间的可信校验方式须在实现时落实并测试。
-3. 保留同源写请求校验、Origin/Host 校验及防跨站请求措施，避免其他网页借已开启的本地隧道触发管理操作；套餐发布和批量权益调整继续保留预览／确认与审计。
-4. 为该单管理员配置稳定的审计身份，并同步调整审计查询的身份过滤。SSH 转发本身不会向 HTTP 请求传递已认证的 SSH 用户名，不能从 Header 或来源 IP 伪造逐 SSH 用户归因。
-5. 测试覆盖：未开隧道不能访问；公开站点不能访问管理路径；错误入口及跨站写请求被拒绝；开启隧道后免密码访问、发布／分配及审计工作正常；关闭隧道后连接失效。实施认证切换和 SSH 配置变更时保留已有运维连接，验证新连接后再关闭旧连接，避免锁死管理入口。
+配置：`ADMIN_ENTRY_SECRET_FILE` 指向含 64 位小写十六进制随机密钥的文件；`ADMIN_SESSION_SECRET` 至少 32 字符且与入口密钥不同；`ADMIN_TUNNEL_PRINCIPAL` 为稳定的 ASCII 身份；`ADMIN_TUNNEL_ALLOWED_HOSTS` 默认只允许 `127.0.0.1:3101 localhost:3101`。生产 Compose 通过独立的 `ADMIN_TUNNEL_SESSION_SECRET` 插值覆盖 `compose.prod.yml` 的空 Session Secret，防止继承开发凭据。
 
-完成适配后同步维护本节、[Admin README](../../apps/admin/README.md)、环境变量示例及相关认证测试。若任务只涉及部署，也必须检查上述实现状态，不能跳过。
+`apps/admin/Dockerfile` 的 production target 提供非 root Nginx 静态镜像；`infra/docker/compose.admin.yml` 为显式启用的生产管理入口，与 Backend 共享网络命名空间，仅发布宿主 `127.0.0.1:3101`，使用只读根文件系统、tmpfs、入口 secret。叠加顺序为 `compose.yml`、`compose.prod.yml`、`compose.admin.yml`，不要与开发 override 混用。完整配置见 [Admin Docker 指南](../../infra/docker/ADMIN.md)。基础 Compose 和普通生产启动不启用 Admin。
+
+部署前仍须在真实服务器核验 SSH 公钥、禁用密码认证、PermitOpen、主机指纹与本地转发绑定；确认公共反向代理不发布 Admin 静态站点且包含 [管理路径拒绝规则](../../infra/docker/nginx/public-admin-deny.conf)，并验收编码/规范化路径。Web BFF 已阻断管理路径。不得把专用入口密钥注入公共代理。核验权限受控的 secret 文件及其轮换、Backend `--no-proxy-headers`、容器重建后的网络关联、开隧道访问/关隧道失效及套餐发布/分配/审计。实施 SSH 变更时保留已有运维连接，验证新连接后再关闭旧连接。本地测试不代表远程 SSH 或公网反向代理已部署验收。
