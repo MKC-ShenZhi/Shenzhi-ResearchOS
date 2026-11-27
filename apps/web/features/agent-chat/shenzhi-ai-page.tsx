@@ -25,6 +25,7 @@ import { ComposerShell, type ComposerSkill } from "@/components/common/composer/
 import type { WorkspaceFile } from "@/components/common/composer/attachment-menu";
 import { AppShell } from "@/components/common/layout/app-shell";
 import { useAuth } from "@/components/auth/auth-provider";
+import { MarkdownRenderer } from "@/components/renderers/markdown-renderer";
 import { StreamdownRenderer } from "./components/streamdown-renderer";
 import { MessageRenderer } from "./components/message-renderer";
 import { MessageActions } from "./components/message-actions";
@@ -730,8 +731,9 @@ export function ShenzhiAiPage() {
             )}
             {turns.map((turn, index) => turn.role === "user"
               ? <div key={turn.id} className="mb-6 flex flex-col items-end">
-                  <div className="max-w-[90%] break-words sm:max-w-[75%] rounded-3xl bg-chip px-4 py-2.5 text-[15px] leading-7 text-ink">
-                    <div className="whitespace-pre-wrap">{turn.content}</div>
+                  <div className="min-w-0 max-w-[90%] break-words sm:max-w-[75%] rounded-3xl bg-chip px-4 py-2.5 text-[15px] leading-7 text-ink">
+                    <MarkdownRenderer content={turn.content}
+                      className="[&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_p]:whitespace-pre-wrap" />
                     {!!turn.attachments?.length && <div className="mt-2 flex flex-wrap gap-1.5">
                       {turn.attachments.map((attachment, attachmentIndex) => <span key={`${turn.id}:attachment:${attachmentIndex}`} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-card px-2 py-1 text-xs text-muted" title={attachment.title ?? undefined}><FileText className="size-3.5 shrink-0" /><span className="truncate">{attachment.title || "附件"}</span></span>)}
                     </div>}
