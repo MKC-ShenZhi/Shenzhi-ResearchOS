@@ -356,6 +356,14 @@ class AgentSessionProjectionTests(unittest.IsolatedAsyncioTestCase):
         self.gateway.enqueue(final_text='部分答案', events=[
             {'name': 'delta', 'data': {'turn': 0, 'text': '部分答案'}},
         ], event_error=RuntimeError('Agent events unavailable'))
+        original_run = self.gateway.run
+
+        async def unavailable_report(run_id, owner):
+            if self.gateway.runs[run_id]['event_error']:
+                return {'report': None}
+            return await original_run(run_id, owner)
+
+        self.gateway.run = unavailable_report
         response = await self.request('POST', f'/api/v2/agent/sessions/{session_id}/run',
                                       json_body={'prompt': '投影失败'})
         self.assertEqual(response.status_code, 200)

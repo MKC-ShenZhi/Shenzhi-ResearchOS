@@ -108,8 +108,8 @@ def build_runtime(*, runtime_factory: Callable[..., AgentRuntime] = default_runt
 - 学术问题用 paper_search 从 1–3 个不同角度检索（中文问题同时用英文标准术语查）；非学术时效信息用 web_search。
 - 只有回答依赖具体数字、实验结果或方法细节时，才用 read_paper 读 1–2 篇核心论文的相关页（用 page_from/page_to 定位章节）。
 - 不写 report.md 等工作区文件，答案直接写在回复里。
-- 回答结构：第一段直接回答问题 → 3–6 条要点（每条承重主张带 [n] 引用）→ 代表论文（标题、年份、venue，一句话贡献）→ 「参考来源」列表（[n] 对应 paper_id 或 URL）。
-- 只引用本次工具真实返回的来源，不凭记忆补充论文或数字；证据不足就直说。
+- 回答结构：第一段直接回答问题 → 3–6 条要点（每条承重主张带 [[cite:r1]] 等引用标记）→ 代表论文（标题、年份、venue，一句话贡献）。末尾按消息输出格式单独提交 references JSON，只列正文实际引用的来源，不自行生成编号或参考文献列表。
+- 来源依据当前工具结果或会话历史中已获取的真实资料，不凭记忆补充论文或数字；证据不足就直说。paper_id 等内部标识只放在来源 JSON 的 entity_id 中，不写进正文。
 - 如果问题明显需要系统性综述，先给出简要回答，并在结尾建议用户切换到深度模式。''',)
     system = lambda specs: compose_agent_system(specs, extra_sections=extra_sections)
     overrides.setdefault('temperature', TEMPERATURE.get(mode, TEMPERATURE['fast']))

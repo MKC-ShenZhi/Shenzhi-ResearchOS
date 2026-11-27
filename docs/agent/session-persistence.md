@@ -12,6 +12,8 @@ Agent 执行库另存 Task、Run、事件和控制记录。Backend 在 Turn 的 
 
 Migration `007_agent_sessions` 创建两张表；`agent_turns` 的幂等键、Worker ID 与租约字段由 `016_request_idempotency` 增加。Agent 附件解析文本另存于 `011_agent_uploads` 创建的表，见下文 API。
 
+Migration `029_agent_message` 为 `agent_turns` 增加可空 `message` JSONB 列，保存 Agent 结构化消息快照。部署新 Backend 前先执行迁移；既有记录保持 SQL NULL，不重写旧正文或推造引用。
+
 ### `agent_sessions`
 
 - `id`：`ses_` 前缀的不可猜 UUID。
@@ -29,6 +31,7 @@ Migration `007_agent_sessions` 创建两张表；`agent_turns` 的幂等键、Wo
 一条 Turn 对应一次“用户输入 → Agent 运行结果”，不存每个 SSE token。字段包括：
 
 - `user_content`、`assistant_content`、`reasoning`。
+- `message` JSONB：完整 AIMessage（Metadata、当前支持的 Markdown Blocks 和 References）；旧记录为 `null`。
 - `settings` JSONB：该轮的模型、模式、附件、Skill 和 workspace。
 - `process` JSONB：按到达顺序保存 reasoning / text / tool timeline，工具条目含参数、完成状态、耗时、摘要与错误状态。
 - `steers`、`report`、`sources`、`question`、`warnings`。
@@ -38,6 +41,16 @@ Migration `007_agent_sessions` 创建两张表；`agent_turns` 的幂等键、Wo
 - `created_at` / `completed_at`。
 
 Session 删除时 Turn 通过外键 `ON DELETE CASCADE` 删除。`status = 'running'` 的部分唯一索引保证同一 Session 最多一个 active run，其他操作竞争时返回 409。`POST /sessions/{id}/run` 使用 `Idempotency-Key` 请求头；相同 owner、Session、键和请求复用原 Turn，不重复执行模型或工具。同键请求内容不同返回 409。新一轮任务必须使用新键。键和指纹随 Turn 在一条数据库事务中建立，因此事务失败不会留下脱离业务资源的键记录。
+
+### 结构化消息投影
+
+Backend 通过共享 `agent_contracts.messages` 校验六类消息事件和完整消息。唯一 V2 Gateway、首次运行、恢复运行及兼容的无状态运行均保留消息载荷。Backend 不拼接/重写 Block，不重新编号引用，也不把 `references` 混入旧 `output.sources`。
+
+最终 SSE `result.message` 与历史接口 `turns[].message` 使用同一结构。优先保存报告的 `result.message`；报告缺少该字段时使用同一执行尝试的 `message_end.message`。两者同时存在但不一致、消息状态与运行终态不符、消息结构无效，或已收到结构化事件却没有最终快照时，记录诊断并丢弃结构化快照，不修改消息自身状态。已有明确 ExecutionReport 终态时仍保存 Turn 终态、普通文本、Timeline、原始 transcript 和 Usage，不因展示快照异常停留在 running。若事件读取失败但本次已读取封存报告，使用报告继续投影；没有报告的读取失败仍保留 running 并释放投影租约以供恢复。
+
+校验后保存原始 JSON：保留 Markdown 空格/换行、数组顺序、系统字段、嵌套 metadata，以及显式 `null` 与省略字段的区别。JSONB 对象键顺序不属于协议语义。内存存储、公开消息和 SSE 缓冲使用独立消息副本，避免后续对象修改污染已保存或可重放的数据。
+
+每次重试的 `run_start` 清空当前消息快照，只把最后一次尝试的消息保存到 Turn；此前尝试的原始消息事件继续在 SSE 中按原顺序回放。恢复仍使用现有 SSE 游标，不额外插入消息事件。旧记录及旧 localStorage 导入没有结构化快照时，`message=null`，原 `assistant_content`、报告、来源、过程和 transcript 保持可读；不会在读取时回填或改写数据库。
 
 ## 生命周期
 

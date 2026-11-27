@@ -166,3 +166,20 @@ test("paper assistant errors show the requestId kept on the client ApiError", ()
   assert.match(http, /export function requestIdForApiError/);
   assert.match(http, /error instanceof ApiError \? error\.requestId/);
 });
+
+
+test("follow-up transcript retains all structured body and actual reference identifiers", () => {
+  const message = { id: "m1", role: "assistant" as const, status: "done" as const,
+    created_at: 1, schema_version: 1 as const,
+    blocks: [{ id: "b1", type: "markdown" as const, content: "First [[cite:r1]]" },
+      { id: "b2", type: "markdown" as const, content: "Second" }],
+    references: [{ id: "r1", type: "paper" as const, title: "Actual paper", doi: "10.1/actual",
+      url: "https://example.test/paper", entity_id: "paper:actual" }] };
+  const state = paperAgentReducer(startedState(), { type: "result", assistantId: "assistant-1", result: result({ message }) });
+  const history = paperAgentHistory(state.turns);
+  const assistant = history.at(-1)!;
+  assert.equal(assistant.kind, "assistant");
+  assert.equal(Object.hasOwn(assistant, "blocks"), false);
+  for (const value of ["First", "Second", "Actual paper", "10.1/actual", "https://example.test/paper", "paper:actual"])
+    assert.ok(String(assistant.content).includes(value));
+});

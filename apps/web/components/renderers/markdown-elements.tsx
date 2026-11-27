@@ -1,4 +1,4 @@
-import type { Components } from "streamdown";
+import type { Components } from "react-markdown";
 
 export const markdownElements = {
   p: ({ children }) => <p className="my-2">{children}</p>,

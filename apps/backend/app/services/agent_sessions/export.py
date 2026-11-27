@@ -78,6 +78,19 @@ def _render_message(message: dict) -> str:
     parts = ['<div class="assistant"><div class="who">ShenzhiAi</div>']
     for call in message.get('tool_calls') or []:
         parts.append(f'<div class="tool">→ {html.escape(str(call.get("name") or ""))}</div>')
+    snapshot = message.get('message')
+    if isinstance(snapshot, dict):
+        for block in snapshot.get('blocks') or []:
+            if isinstance(block, dict) and block.get('type') == 'markdown':
+                parts.append(f'<pre>{html.escape(str(block.get("content") or ""))}</pre>')
+        references = snapshot.get('references') or []
+        if references:
+            parts.append('<section><h3>参考来源</h3><ul>')
+            for reference in references:
+                parts.append('<li>' + html.escape(json.dumps(reference, ensure_ascii=False)) + '</li>')
+            parts.append('</ul></section>')
+        parts.append('</div>')
+        return ''.join(parts)
     text = str(message.get('content') or '').strip()
     if text:
         parts.append(f'<p>{html.escape(text)}</p>')

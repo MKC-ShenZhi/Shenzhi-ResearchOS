@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import httpx
-from agent_contracts import TaskSubmission
+from agent_contracts import AIMessage, TaskSubmission
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
@@ -145,6 +145,51 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         run = self.session.get(RunRow, claim['run']['run_id'])
         self.assertEqual(run.report_json['status'], 'completed')
         self.assertEqual(run.report_json['result']['final_text'], 'complete')
+        message = AIMessage.model_validate(run.report_json['result']['message'])
+        self.assertEqual(message.blocks[0].content, 'complete')
+        end = next(row for row in rows if row.name == 'message_end')
+        self.assertEqual(AIMessage.model_validate(end.data['message']), message)
+
+    async def test_message_event_delivery_failure_seals_failed_report(self):
+        for fail_after in ('message_start', 'message_end'):
+            with self.subTest(fail_after=fail_after):
+                if fail_after == 'message_end':
+                    # Use a fresh Task after the first failed Run.
+                    from agent_contracts.v2 import TaskSubmissionV2
+                    from agent_contracts.wire import TaskSubmissionWire
+                    from agent_contracts.canonical import request_digest_v1
+                    submission = TaskSubmission(owner_id='owner', prompt='second')
+                    request = TaskSubmissionWire(owner_id='owner', prompt='second')
+                    metering = TaskSubmissionV2(schema_version=1, request=request, owner_id='owner',
+                        metering_profile_id='profile:second', metering_context='observation_only',
+                        submission_id=None, request_digest=request_digest_v1(request.model_dump(mode='json')),
+                        agent_audience='agent-test', budget_grant=None, permission_snapshot=None, call_bounds={})
+                    task = await repository.submit(self.db, submission, metering=metering)
+                    profile = await self.db.get(TaskMeteringRow, task.task_id)
+                    profile.binding_status = 'bound'
+                    await self.db.commit()
+                claim = await self.control.claim('worker-fault')
+                original_post = self.control.post
+                delivered = False
+
+                async def post(path, payload):
+                    nonlocal delivered
+                    if path.endswith('/events'):
+                        if delivered:
+                            raise RuntimeError('simulated event delivery failure')
+                        response = await original_post(path, payload)
+                        if payload['name'] == fail_after:
+                            delivered = True
+                        return response
+                    return await original_post(path, payload)
+
+                with patch.object(self.control, 'post', side_effect=post):
+                    await self.execute(claim, 'worker-fault')
+                run = self.session.get(RunRow, claim['run']['run_id'])
+                self.assertTrue(delivered)
+                self.assertEqual(run.report_json['status'], 'failed')
+                self.assertIsNone((run.report_json.get('result') or {}).get('message'))
+                self.assertTrue(any(row.name == fail_after for row in self.events(run.run_id)))
 
     async def test_takeover_worker_continues_sequence_and_completes(self):
         first = await self.control.claim('worker-a')

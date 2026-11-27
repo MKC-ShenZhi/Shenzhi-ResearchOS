@@ -1,4 +1,6 @@
 """Agent communication Gateway over the shared authenticated HTTP client."""
+import logging
+from pydantic import ValidationError
 import base64
 import os
 
@@ -14,6 +16,7 @@ from agent_contracts import (
 from agent_contracts.canonical import digest, request_digest_v1
 from agent_contracts.v2 import CallStartFact, TaskSubmissionV2
 from agent_contracts.wire import TaskSubmissionWire
+from agent_contracts.messages import AIMessage, MESSAGE_EVENT_MODELS
 from app.core.database import session_scope
 from app.core.errors import BusinessError
 from app.models.agent_entitlements import (
@@ -23,6 +26,17 @@ from app.services.agent_entitlements.config import entitlement_service
 from app.services.agent_entitlements.policy import EntitlementPolicy
 from app.services.agent_entitlements.service import require, uid
 from .client import AgentHttpClient
+
+
+logger = logging.getLogger(__name__)
+
+
+def _validate_presentation(model, value):
+    try:
+        model.model_validate(value)
+    except ValidationError:
+        # Keep original payload/order; capture discards invalid presentation.
+        logger.warning('Invalid Agent message payload', exc_info=True)
 
 
 class AgentGateway(AgentHttpClient):
@@ -188,15 +202,24 @@ class AgentGateway(AgentHttpClient):
         return await self.request('GET', f'/internal/v2/tasks/{task_id}', params={'owner_id': owner})
 
     async def run(self, run_id, owner):
-        return await self.request('GET', f'/internal/v2/runs/{run_id}', params={'owner_id': owner})
+        response = await self.request('GET', f'/internal/v2/runs/{run_id}', params={'owner_id': owner})
+        result = (response.get('report') or {}).get('result') or {}
+        if result.get('message') is not None:
+            _validate_presentation(AIMessage, result['message'])
+        return response
 
     async def task_runs(self, task_id, owner):
         response = await self.request('GET', f'/internal/v2/tasks/{task_id}/runs', params={'owner_id': owner})
         return TaskRunsResponseWire.model_validate(response).run_ids
 
     async def events(self, run_id, owner, after_seq):
-        return (await self.request('GET', f'/internal/v2/runs/{run_id}/events',
-                                   params={'owner_id': owner, 'after_seq': after_seq}))['events']
+        events = (await self.request('GET', f'/internal/v2/runs/{run_id}/events',
+                                    params={'owner_id': owner, 'after_seq': after_seq}))['events']
+        for event in events:
+            model = MESSAGE_EVENT_MODELS.get(event['name'])
+            if model is not None:
+                _validate_presentation(model, event['data'])
+        return events
 
     async def cancel(self, task_id, owner):
         return await self.request('POST', f'/internal/v2/tasks/{task_id}/cancel', params={'owner_id': owner})

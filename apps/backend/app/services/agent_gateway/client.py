@@ -57,5 +57,12 @@ async def read_run_update(gateway: AgentHttpClient, run_id: str, owner: str,
     If it does not, the caller must poll again instead of emitting a result.
     """
     run = await gateway.run(run_id, owner)
-    events = await gateway.events(run_id, owner, after_seq)
+    try:
+        events = await gateway.events(run_id, owner, after_seq)
+    except Exception:
+        if not run.get('report'):
+            raise
+        import logging
+        logging.getLogger(__name__).exception('Agent terminal event delivery failed: %s', run_id)
+        events = []
     return run, events

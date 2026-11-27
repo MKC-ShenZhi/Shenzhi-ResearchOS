@@ -13,6 +13,7 @@ from app.core.errors import BusinessError
 from app.core.idempotency import ensure_same_request
 from app.core.worker_lease import current_worker_id
 from app.services.agent_sessions.entities import AgentSession, AgentTurn
+from app.services.agent_sessions.messages import copy_message
 
 __all__ = [
     'AgentSession', 'AgentTurn', 'AgentSessionRepository', 'MemoryAgentSessionRepository',
@@ -189,6 +190,9 @@ class MemoryAgentSessionRepository:
                 raise BusinessError(20004, 'Agent 轮次不存在或已经结束', 404)
             if worker_id is not None and turn.worker_id != worker_id:
                 raise BusinessError(20004, 'Agent 轮次不存在或已经结束', 404)
+            payload = dict(payload)
+            if 'message' in payload:
+                payload['message'] = copy_message(payload['message'], status=payload.get('status', turn.status))
             for key, value in payload.items():
                 if hasattr(turn, key):
                     setattr(turn, key, value)
