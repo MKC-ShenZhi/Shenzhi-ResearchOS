@@ -8,6 +8,7 @@ import Link from "next/link";
 import { ArrowRight, Check, ChevronDown, CreditCard, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UsagePanel } from "./usage-panel";
+import { purchaseBlock, billingMessage } from "./billing-state";
 import { CheckoutDialog } from "./checkout-dialog";
 import { Button } from "@/components/ui/button";
 
@@ -33,7 +34,7 @@ const text = {
     method: "支付方式", wechat: "微信支付", alipay: "支付宝", recent: "近期订单", pay: "前往支付宝支付",
     scan: "请使用微信扫描二维码支付", confirm: "模拟支付成功", refresh: "查询支付 / 重试履约",
     pending: "等待支付", paid: "已支付，等待权益到账", completed: "支付完成，权益已到账", closed: "订单已关闭",
-    prepare: "获取支付入口", loading: "加载中…", renew: "主动购买和续费；有效期内仅支持同套餐续费。管理员长期付费权益不能被购买覆盖。",
+    prepare: "获取支付入口", loading: "加载中…", renew: "支持购买、同套餐续费和 Pro → Research 差价升级。长期高级权益需管理员设置期限后再购买。",
     drain: "请等待当前 Agent 任务及用量结算结束，再重试权益发放。", blocked: "当前权益已变更，暂时无法发放；请联系管理员处理此已支付订单。",
     managed: "当前权益由管理员维护，不能通过购买覆盖。", change: "有效期内不可切换套餐",
     conflict: "已有其他套餐的未完成订单，请先完成支付及权益到账，再购买其他套餐。",
@@ -47,7 +48,7 @@ const text = {
     method: "Payment method", wechat: "WeChat Pay", alipay: "Alipay", recent: "Recent orders", pay: "Continue to Alipay",
     scan: "Scan with WeChat to pay", confirm: "Simulate successful payment", refresh: "Check payment / retry fulfillment",
     pending: "Awaiting payment", paid: "Paid, awaiting fulfillment", completed: "Payment complete, entitlement delivered", closed: "Order closed",
-    prepare: "Get payment link", loading: "Loading…", renew: "Manual purchases and renewals. Active subscriptions support same-plan renewal only. Permanent paid Admin grants are preserved.",
+    prepare: "Get payment link", loading: "Loading…", renew: "Purchase, renew, or upgrade Pro to Research for the remaining term. Permanent paid grants require an administrator to set an expiry.",
     drain: "Wait for current Agent tasks and usage settlement to finish, then retry fulfillment.", blocked: "Your entitlement has changed. Contact an administrator about this paid order.",
     managed: "Your current entitlement is managed by an administrator and cannot be replaced by a purchase.", change: "Plan change unavailable",
     conflict: "An unfinished order exists for another plan. Complete payment and fulfillment before buying another plan.",
@@ -65,6 +66,11 @@ function SubscriptionForUser({ locale, userId }: { locale: SettingsLocale; userI
   const cache = useQueryClient();
   const key = ["billing", userId];
   const [selected, setSelected] = useState<BillingPlan | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
   const ordersSection = useRef<HTMLElement>(null);
   const query = useQuery({
     queryKey: key,
@@ -81,7 +87,6 @@ function SubscriptionForUser({ locale, userId }: { locale: SettingsLocale; userI
   });
   const zh = locale === "zh-CN";
   const data = query.data;
-  const adminManaged = data?.subscription.status === "active" && data.subscription.source !== "billing";
   const error = mutation.error ?? query.error;
   const planName = (id: string | null) => data?.plans.items.find((plan) => plan.plan_id === id)?.name ?? id ?? t.none;
   const money = (amount: number, currency: string) => new Intl.NumberFormat(locale, { style: "currency", currency }).format(amount / 100);
@@ -100,22 +105,25 @@ function SubscriptionForUser({ locale, userId }: { locale: SettingsLocale; userI
       <section aria-labelledby="plans-heading">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-2"><h2 id="plans-heading" className="text-base font-semibold">{zh ? "为你的下一步研究" : "For your next discovery"}</h2><span className="text-xs text-muted">{zh ? "按次购买 · 手动续费" : "One-time purchase · Manual renewal"}</span></div>
         <div className="grid gap-4 md:grid-cols-3">{data.plans.items.map((plan) => {
+          const upgrade = data.subscription.status === "active" && data.subscription.plan_id === "pro" && plan.plan_id === "research";
           const current = data.subscription.status === "active" && data.subscription.plan_id === plan.plan_id;
-          const blocked = !plan.purchasable || data.plans.payment_mode === "disabled" || adminManaged || data.subscription.status === "disabled" || (data.subscription.status === "active" && !current);
-          const reason = !plan.purchasable ? t.unpublished : data.plans.payment_mode === "disabled" ? t.unavailable : adminManaged ? (zh ? "管理员维护" : "Admin managed") : data.subscription.status === "disabled" ? t.disabled : t.change;
+          const blockReason = purchaseBlock(data.subscription, plan);
+          const blocked = !!blockReason || data.plans.payment_mode === "disabled";
+          const reason = blockReason ? billingMessage(blockReason, zh) : t.unavailable;
           return <article key={plan.plan_id} className={cn("relative flex flex-col rounded-2xl border bg-card p-5 transition-shadow hover:shadow-card sm:p-6", current ? "border-primary ring-1 ring-primary/10" : "border-line")}>
             <div className="mb-5 flex min-h-6 items-center justify-between gap-2"><span className="text-sm font-semibold">{locale === "en" ? plan.plan_id : plan.name}</span>{current && <span className="rounded-full bg-primary-soft px-2 py-1 text-[10px] font-medium text-primary">{zh ? "当前套餐" : "Your plan"}</span>}</div>
             <p className="min-h-10 text-xs leading-5 text-muted">{descriptions[plan.plan_id] ?? (zh ? "探索适合你的科研额度" : "Explore your research allowance")}</p>
-            <p className="mt-4 flex flex-wrap items-baseline gap-1"><span className="text-3xl font-semibold tracking-tight">{money(plan.amount, plan.currency)}</span><span className="text-xs text-muted">/ {plan.duration_days} {t.days}</span></p>
+            <p className="mt-4 flex flex-wrap items-baseline gap-1"><span className="text-3xl font-semibold tracking-tight">{money(plan.amount, plan.currency)}</span><span className="text-xs text-muted">/ {plan.plan_id === "basic" ? (zh ? "永久免费" : "free forever") : (zh ? `${plan.duration_months} 个自然月` : `${plan.duration_months} calendar month`)}</span></p>
             <p className="mt-2 min-h-4 text-[10px] text-muted">{plan.test_price ? t.test : (zh ? "单次购买价格" : "Per purchase")}</p>
-            <Button className="mt-6 w-full" variant={current ? "default" : "outline"} disabled={blocked || mutation.isPending} aria-describedby={blocked ? `plan-reason-${plan.plan_id}` : undefined} onClick={() => { mutation.reset(); setSelected(plan); }}>{blocked ? (zh ? "暂不可选" : "Unavailable") : current ? (zh ? "续费套餐" : "Renew plan") : (zh ? "选择套餐" : "Select plan")}{!blocked && <ArrowRight aria-hidden="true" />}</Button>
+            <Button className="mt-6 w-full" variant={current ? "default" : "outline"} disabled={blocked || mutation.isPending} aria-describedby={blocked ? `plan-reason-${plan.plan_id}` : undefined} onClick={() => { mutation.reset(); setSelected(plan); }}>{blocked ? (zh ? "暂不可选" : "Unavailable") : upgrade ? (zh ? "差价升级" : "Upgrade") : current ? (zh ? "续费套餐" : "Renew plan") : (zh ? "选择套餐" : "Select plan")}{!blocked && <ArrowRight aria-hidden="true" />}</Button>
             <div className="mt-6 border-t border-line pt-5"><p className="text-[10px] tracking-wide text-muted">{zh ? "每日研究额度" : "DAILY ALLOWANCE"}</p><p className="mt-2 text-xl font-semibold tabular-nums">{plan.daily_tokens.toLocaleString(locale)}<span className="ml-1.5 text-xs font-normal text-muted">Token</span></p><p className="mt-3 flex items-center gap-2 text-xs text-ink-2"><Check className="size-3.5 text-agent" aria-hidden="true" />{zh ? "每日额度，按实际用量结算" : "Daily allowance, settled by actual usage"}</p><p className="mt-3 min-h-8 text-[11px] leading-4 text-muted" id={`plan-reason-${plan.plan_id}`}>{blocked ? reason : (zh ? "购买前可确认金额与支付方式" : "Review price and payment method before purchase")}</p></div>
           </article>;
         })}</div>
-        <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-muted"><ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{adminManaged ? t.managed : zh ? "有效期内支持同套餐续费，暂不支持切换套餐。续费会延长有效期，不会重置当日额度。" : "Renew your current plan during its active term. Plan changes are unavailable. Renewal extends validity without resetting today's allowance."}</p>
+        <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-muted"><ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{zh ? "有效期内可同套餐续费，或按后端报价从 Pro 差价升级至 Research。升级保留原到期时间，不重置当日 Token 用量；Research 不支持主动降级。" : "Renew your current plan or upgrade Pro to Research at the backend-quoted price. Upgrades keep your expiry and today's token usage. Research cannot be downgraded."}</p>
       </section>
-      {selected && <CheckoutDialog plan={selected} locale={locale} userId={userId} paymentMode={data.plans.payment_mode}
-        pendingOrder={data.orders.items.find((order) => order.plan_id === selected.plan_id && order.payment_status === "pending")}
+      {selected && <CheckoutDialog plan={selected} locale={locale} userId={userId} paymentMode={data.plans.payment_mode} now={now}
+        upgrade={data.subscription.status === "active" && data.subscription.plan_id === "pro" && selected.plan_id === "research"}
+        pendingOrder={data.orders.items.find((order) => order.plan_id === selected.plan_id && order.payment_status === "pending" && !(order.action === "upgrade" && order.quote_expires_at && Date.parse(order.quote_expires_at) <= now))}
         onClose={() => setSelected(null)}
         onUpdated={() => { void cache.invalidateQueries({ queryKey: key }); void cache.invalidateQueries({ queryKey: ["entitlement-usage", userId] }); }}
         onViewOrders={() => {
@@ -127,8 +135,10 @@ function SubscriptionForUser({ locale, userId }: { locale: SettingsLocale; userI
         {data.orders.items.length === 0 ? <p className="p-6 text-sm text-muted">{zh ? "还没有订单，选择套餐开启你的研究之旅。" : "No orders yet. Choose a plan to get started."}</p> : <div className="divide-y divide-line">{data.orders.items.map((order) => <details key={order.order_id} open={order.fulfillment_status !== "completed" && order.payment_status !== "closed"} className="group p-5 sm:px-6">
           <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary"><div className="min-w-0 flex-1"><p className="text-sm font-medium">{planName(order.plan_id)}<span className="ml-3 font-normal text-muted">{money(order.amount, order.currency)}</span></p><p className="mt-1 text-xs text-muted">{new Date(order.created_at).toLocaleDateString(locale)} · {t[order.channel]}</p></div><span className={cn("text-xs", order.fulfillment_status === "completed" ? "text-agent" : "text-muted")}>{order.fulfillment_status === "completed" ? (zh ? "已完成" : "Completed") : t[order.payment_status]}</span><ChevronDown className="size-4 text-muted transition-transform group-open:rotate-180" aria-hidden="true" /></summary>
           <div className="mt-4 space-y-3 border-t border-line pt-4"><p className="break-all text-[11px] text-muted">{zh ? "订单号：" : "Order: "}{order.order_id}</p><p role="status" className="text-xs">{order.fulfillment_status === "completed" ? t.completed : t[order.payment_status]}</p>
-            {order.fulfillment_error && <p className="text-sm text-muted">{order.fulfillment_error === "ACTIVE_GRANTS_REQUIRE_DRAIN" ? t.drain : t.blocked}</p>}
-            {order.payment_status === "pending" && <>
+            {order.action === "upgrade" && <p className="text-sm text-muted">{zh ? "Pro → Research 差价升级订单，保留原有效期。" : "Pro → Research upgrade, keeping the original expiry."}</p>}
+            {order.fulfillment_error && <p className="text-sm text-muted">{order.fulfillment_error === "ENTITLEMENT_CHANGED" ? t.blocked : billingMessage(order.fulfillment_error, zh)}</p>}
+            {order.action === "upgrade" && order.payment_status === "pending" && order.quote_expires_at && Date.parse(order.quote_expires_at) <= now && <p className="text-xs text-muted">{billingMessage("QUOTE_EXPIRED", zh)}</p>}
+            {order.payment_status === "pending" && !(order.action === "upgrade" && (!order.quote_expires_at || Date.parse(order.quote_expires_at) <= now)) && <>
               {order.payment.code_url && <div className="w-fit rounded-xl border border-line bg-white p-3"><PaymentCode key={order.payment.code_url} value={order.payment.code_url} label={t.scan} /><p className="mt-2 text-center text-xs text-gray-600">{t.scan}</p></div>}
               {order.payment.redirect_url && <a className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary-deep" href={order.payment.redirect_url} target="_blank" rel="noopener noreferrer">{t.pay}<ArrowRight className="size-3.5" aria-hidden="true" /></a>}
               {!order.payment.kind && <Button disabled={mutation.isPending} onClick={() => mutation.mutate({ order, action: "payment" })}>{t.prepare}</Button>}

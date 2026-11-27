@@ -13,7 +13,7 @@ function elements(node: unknown): Element[] {
   return [element, ...elements(element.props.children)];
 }
 
-function setup(pendingOrder?: Record<string, unknown>, busy = false) {
+function setup(pendingOrder?: Record<string, unknown>, busy = false, upgrade = false, quoteData?: Record<string, unknown>) {
   let options: { mutationFn: () => Promise<unknown>; onSuccess: (order: unknown) => void; onError: () => void };
   let effect: () => () => void;
   const calls: unknown[][] = [];
@@ -22,16 +22,25 @@ function setup(pendingOrder?: Record<string, unknown>, busy = false) {
   let restored = 0;
   let modalOpened = 0;
   let modalClosed = 0;
+  let quoteEnabled = false;
   class FocusTarget { isConnected = true; focus() { restored++; } }
   const document = { body: { style: { overflow: "auto" } }, activeElement: new FocusTarget() };
   const dialog = { showModal() { modalOpened++; }, close() { modalClosed++; } };
   const exports: Record<string, unknown> = {};
-  const mutation = { isPending: busy, data: undefined, error: null, mutate() { calls.push(["mutate"]); } };
+  const mutation = { isPending: busy, data: undefined, error: null, mutate() { calls.push(["mutate"]); }, reset() { calls.push(["reset"]); } };
   const deps: Record<string, unknown> = {
     react: { useEffect: (callback: typeof effect) => { effect = callback; }, useId: () => "checkout-title", useRef: () => ({ current: dialog }) },
     "react/jsx-runtime": { jsx, jsxs: jsx },
-    "@tanstack/react-query": { useMutation: (input: typeof options) => { options = input; return mutation; } },
+    "@tanstack/react-query": {
+      useMutation: (input: typeof options) => { options = input; return mutation; },
+      useQuery: (input: { enabled: boolean }) => {
+        quoteEnabled = input.enabled;
+        return { data: quoteData, isFetching: false, isPending: !quoteData, error: null,
+          refetch: () => { calls.push(["quote-refetch"]); } };
+      },
+    },
     "lucide-react": {},
+    "./billing-state": { billingMessage: (code: string) => code },
     "@/clients/backend/billing": { billing: {
       create: async (...args: unknown[]) => { calls.push(["create", ...args]); return {}; },
       action: async (...args: unknown[]) => { calls.push(["action", ...args]); return {}; },
@@ -44,20 +53,36 @@ function setup(pendingOrder?: Record<string, unknown>, busy = false) {
     require: (id: string) => { assert.ok(id in deps, `Unexpected import: ${id}`); return deps[id]; },
   });
   const render = exports.CheckoutDialog as (props: unknown) => unknown;
-  const tree = elements(render({ plan: { plan_id: "pro", name: "Pro 专业版", amount: 2, currency: "CNY", daily_tokens: 1000000, duration_days: 30, test_price: true },
-    pendingOrder, paymentMode: "live", userId: "user-a", locale: "zh-CN", onClose: () => closeCount++, onUpdated: () => updates++, onViewOrders: () => calls.push(["view-orders"]),
+  const tree = elements(render({ plan: { plan_id: upgrade ? "research" : "pro", name: upgrade ? "Research 研究版" : "Pro 专业版", amount: upgrade ? 4990 : 1990, currency: "CNY", daily_tokens: 1000000, duration_months: 1, test_price: true },
+    pendingOrder, upgrade, paymentMode: "live", userId: "user-a", locale: "zh-CN", onClose: () => closeCount++, onUpdated: () => updates++, onViewOrders: () => calls.push(["view-orders"]),
   }));
-  return { tree, calls, mutation, document, dialog, options: () => options!, effect: () => effect!(), counts: () => ({ closeCount, updates, restored, modalOpened, modalClosed }) };
+  return { tree, calls, mutation, document, dialog, quoteEnabled, options: () => options!, effect: () => effect!(), counts: () => ({ closeCount, updates, restored, modalOpened, modalClosed }) };
 }
 
 test("opening checkout is read-only; confirmation creates only an Alipay order", async () => {
   const h = setup();
   assert.deepEqual(h.calls, []);
+  assert.equal(h.quoteEnabled, false);
   const radios = h.tree.filter((node) => node.type === "input");
   assert.equal(radios[0].props.checked, true);
   assert.equal(radios[1].props.disabled, true);
   await h.options().mutationFn();
   assert.deepEqual(h.calls, [["create", "user-a", "pro", "alipay"]]);
+});
+
+test("upgrade sends the reviewed backend quote and can refresh an expired quote", async () => {
+  const quote = { amount: 1500, currency: "CNY", quoted_at: new Date().toISOString(),
+    quote_token: "backend-quote", quote_expires_at: new Date(Date.now() + 300000).toISOString() };
+  const h = setup(undefined, false, true, quote);
+  assert.equal(h.quoteEnabled, true);
+  await h.options().mutationFn();
+  assert.deepEqual(JSON.parse(JSON.stringify(h.calls)), [["create", "user-a", "research", "alipay", { quoted_at: quote.quoted_at, quote_token: quote.quote_token }]]);
+  const expired = setup(undefined, false, true, { ...quote, quote_expires_at: "2020-01-01T00:00:00Z" });
+  assert.throws(() => expired.options().mutationFn(), /QUOTE_EXPIRED/);
+  assert.deepEqual(expired.calls, []);
+  const refresh = expired.tree.find((node) => node.type === "button" && node.props.children === "重新获取报价")!;
+  (refresh.props.onClick as () => void)();
+  assert.deepEqual(expired.calls, [["reset"], ["quote-refetch"]]);
 });
 
 test("pending orders reuse their ID; only pending live Alipay results navigate", async () => {

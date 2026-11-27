@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Check, CreditCard, LoaderCircle, X } from "lucide-react";
 import { billing, type BillingOrder, type BillingPlan } from "@/clients/backend/billing";
 import type { SettingsLocale } from "@/clients/settings";
+import { billingMessage } from "./billing-state";
 import { Button } from "@/components/ui/button";
 
-export function CheckoutDialog({ plan, pendingOrder, paymentMode, userId, locale, onClose, onUpdated, onViewOrders }: {
+export function CheckoutDialog({ plan, pendingOrder, upgrade = false, now = 0, paymentMode, userId, locale, onClose, onUpdated, onViewOrders }: {
   plan: BillingPlan;
   pendingOrder?: BillingOrder;
+  upgrade?: boolean;
+  now?: number;
   paymentMode: string;
   userId: string;
   locale: SettingsLocale;
@@ -21,10 +24,25 @@ export function CheckoutDialog({ plan, pendingOrder, paymentMode, userId, locale
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descriptionId = useId();
+  const quote = useQuery({
+    queryKey: ["billing-quote", userId, plan.plan_id],
+    queryFn: () => billing.quote(userId, plan.plan_id),
+    enabled: upgrade && !pendingOrder,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
   const mutation = useMutation({
-    mutationFn: () => pendingOrder
-      ? billing.action(userId, pendingOrder.order_id, "payment")
-      : billing.create(userId, plan.plan_id, "alipay"),
+    mutationFn: () => {
+      if (pendingOrder) return billing.action(userId, pendingOrder.order_id, "payment");
+      if (upgrade) {
+        if (!quote.data) throw new Error("QUOTE_REQUIRED");
+        if (Date.now() >= Date.parse(quote.data.quote_expires_at)) throw new Error("QUOTE_EXPIRED");
+        return billing.create(userId, plan.plan_id, "alipay", { quoted_at: quote.data.quoted_at, quote_token: quote.data.quote_token });
+      }
+      return billing.create(userId, plan.plan_id, "alipay");
+    },
     onSuccess: (order) => {
       onUpdated();
       if (order.mode === "live" && order.payment_status === "pending" && order.channel === "alipay" && order.payment.redirect_url) {
@@ -39,7 +57,11 @@ export function CheckoutDialog({ plan, pendingOrder, paymentMode, userId, locale
   });
   const order = mutation.data ?? pendingOrder;
   const legacyWechat = order?.channel === "wechat";
-  const amount = new Intl.NumberFormat(locale, { style: "currency", currency: order?.currency ?? plan.currency }).format((order?.amount ?? plan.amount) / 100);
+  const quoted = upgrade && !order ? quote.data : undefined;
+  const quoteExpired = !!quoted && now >= Date.parse(quoted.quote_expires_at);
+  const amount = upgrade && !order && !quoted ? "—" : new Intl.NumberFormat(locale, { style: "currency", currency: order?.currency ?? quoted?.currency ?? plan.currency }).format((order?.amount ?? quoted?.amount ?? plan.amount) / 100);
+  const expiresAt = order?.subscription_expires_at ?? quoted?.subscription_expires_at;
+  const isUpgrade = upgrade || order?.action === "upgrade";
   const busy = mutation.isPending;
 
   useEffect(() => {
@@ -81,7 +103,7 @@ export function CheckoutDialog({ plan, pendingOrder, paymentMode, userId, locale
       <div className="px-6 pb-6">
         <div className="mt-5 rounded-xl border border-primary/10 bg-primary-soft/50 p-4">
           <div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-card text-primary"><CreditCard className="size-4" aria-hidden="true" /></span><h3 className="text-sm font-semibold">{locale === "en" ? plan.plan_id : plan.name}</h3></div>
-          <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2"><span className="text-xs text-muted">{plan.duration_days} {zh ? "天使用权益" : "days of access"}</span><span className="text-2xl font-semibold tabular-nums tracking-tight">{amount}</span></div>
+          <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2"><span className="text-xs text-muted">{isUpgrade ? (zh ? "Pro → Research 差价升级" : "Pro → Research upgrade") : `${plan.duration_months} ${zh ? "个自然月使用权益" : "calendar month of access"}`}</span><span className="text-2xl font-semibold tabular-nums tracking-tight">{amount}</span></div>
           <p className="mt-3 border-t border-primary/10 pt-3 text-xs text-ink-2">{plan.daily_tokens.toLocaleString(locale)} Token / {zh ? "天" : "day"}</p>
         </div>
 
@@ -94,16 +116,22 @@ export function CheckoutDialog({ plan, pendingOrder, paymentMode, userId, locale
 
         <div className="mt-4 space-y-2 text-[11px] leading-5 text-muted">
           <p>{paymentMode === "mock" ? (zh ? "开发测试模式，不会真实扣款。" : "Development mode. No real charge.") : plan.test_price ? (zh ? "当前为测试价格，不代表正式售价。" : "Test price, not final pricing.") : (zh ? "单次购买，不会自动续费。" : "One-time purchase. No automatic renewal.")}</p>
-          <p>{legacyWechat ? (zh ? "已有微信待支付订单，需在近期订单中继续处理，无法改为支付宝。" : "An existing WeChat order must be continued in your order history; its channel cannot be changed.") : order ? (zh ? "将继续已有待支付订单，无需重复下单。" : "Continue your pending order without creating another.") : (zh ? "续费从当前到期时间延长；已到期则从购买时间起算。" : "Renewals extend your current expiry, or start at purchase if expired.")}</p>
+          <p>{legacyWechat ? (zh ? "已有微信待支付订单，需在近期订单中继续处理，无法改为支付宝。" : "An existing WeChat order must be continued in your order history; its channel cannot be changed.") : order ? (zh ? "将继续已有待支付订单，无需重复下单。" : "Continue your pending order without creating another.") : isUpgrade ? (zh ? "本次支付后使用 Research Policy 和额度。" : "Use Research policy and allowance after payment.") : (zh ? "同套餐续费延长当前有效期；新购从权益实际到账时起按自然月计算。" : "Same-plan renewals extend your term. New purchases start at fulfillment, measured in calendar months.")}</p>
         </div>
 
-        {mutation.error && <p role="alert" className="mt-3 rounded-lg bg-danger-soft p-3 text-xs leading-5 text-danger">{mutation.error.message === "UNFINISHED_ORDER_PLAN_CONFLICT" ? (zh ? "已有其他套餐的未完成订单，请先到近期订单处理。" : "Resolve the unfinished order for another plan in your order history first.") : (zh ? "暂时无法获取支付入口，请重试或在近期订单中继续。" : "Payment is unavailable. Retry or continue from your order history.")}</p>}
+        {expiresAt && <p className="mt-2 text-xs text-muted">{zh ? "预计有效期至：" : "Expected expiry: "}{new Date(expiresAt).toLocaleString(locale)}</p>}
+        {isUpgrade && <p className="mt-2 text-xs text-muted">{zh ? "支付成功后立即升级，保留原到期时间，不重置当日 Token 用量。" : "Upgrade after payment, keeping your expiry and today's token usage."}</p>}
+        {upgrade && !order && <div className="mt-3 text-xs text-muted">
+          {quote.isPending ? <p role="status">{zh ? "正在获取升级报价…" : "Getting upgrade quote…"}</p> : quote.error ? <p role="alert">{billingMessage(quote.error.message, zh)}</p> : quoted && <p>{quoteExpired ? billingMessage("QUOTE_EXPIRED", zh) : `${zh ? "报价有效期至：" : "Quote valid until: "}${new Date(quoted.quote_expires_at).toLocaleString(locale)}`}</p>}
+          <Button variant="ghost" size="sm" disabled={quote.isFetching || busy} onClick={() => { mutation.reset(); void quote.refetch(); }}>{zh ? "重新获取报价" : "Get a new quote"}</Button>
+        </div>}
+        {mutation.error && <p role="alert" className="mt-3 rounded-lg bg-danger-soft p-3 text-xs leading-5 text-danger">{billingMessage(mutation.error.message, zh)}</p>}
         {mutation.data && !legacyWechat && !mutation.data.payment.redirect_url && <p role="status" className="mt-3 text-xs leading-5 text-muted">{zh ? "订单已保存，请在近期订单中查看支付或权益到账状态。" : "Order saved. Check payment and entitlement status in your orders."}</p>}
 
         <div className="mt-5 flex items-center justify-between border-t border-line pt-4"><span className="text-xs text-muted">{zh ? "本次应付" : "Amount due"}</span><strong className="text-lg tabular-nums">{amount}</strong></div>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" disabled={busy} onClick={onClose}>{zh ? "取消" : "Cancel"}</Button>
-          {legacyWechat || (mutation.data && (mutation.data.payment_status !== "pending" || !mutation.data.payment.redirect_url)) ? <Button onClick={onViewOrders}>{zh ? "查看订单" : "View orders"}</Button> : mutation.data?.payment.redirect_url ? <a href={mutation.data.payment.redirect_url} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground outline-none hover:bg-primary-deep focus-visible:ring-2 focus-visible:ring-primary">{zh ? "继续前往支付宝" : "Continue to Alipay"}<ArrowUpRight className="size-4" aria-hidden="true" /></a> : <Button disabled={busy || paymentMode === "disabled"} onClick={() => mutation.mutate()}>{busy ? <><LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" />{zh ? "正在获取支付入口…" : "Preparing payment…"}</> : <>{paymentMode === "mock" ? (zh ? "创建测试订单" : "Create test order") : (zh ? "前往支付宝支付" : "Continue to Alipay")}<ArrowUpRight aria-hidden="true" /></>}</Button>}
+          {legacyWechat || (mutation.data && (mutation.data.payment_status !== "pending" || !mutation.data.payment.redirect_url)) ? <Button onClick={onViewOrders}>{zh ? "查看订单" : "View orders"}</Button> : mutation.data?.payment.redirect_url ? <a href={mutation.data.payment.redirect_url} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground outline-none hover:bg-primary-deep focus-visible:ring-2 focus-visible:ring-primary">{zh ? "继续前往支付宝" : "Continue to Alipay"}<ArrowUpRight className="size-4" aria-hidden="true" /></a> : <Button disabled={busy || paymentMode === "disabled" || (upgrade && !pendingOrder && (!quoted || quote.isFetching || !!quote.error || quoteExpired))} onClick={() => mutation.mutate()}>{busy ? <><LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" />{zh ? "正在获取支付入口…" : "Preparing payment…"}</> : <>{paymentMode === "mock" ? (zh ? "创建测试订单" : "Create test order") : (zh ? "前往支付宝支付" : "Continue to Alipay")}<ArrowUpRight aria-hidden="true" /></>}</Button>}
         </div>
       </div>
     </div>
