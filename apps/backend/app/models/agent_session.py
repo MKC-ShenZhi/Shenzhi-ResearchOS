@@ -47,6 +47,7 @@ class AgentTurnRow(Base):
     user_content: Mapped[str] = mapped_column(Text, nullable=False)
     settings: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     assistant_content: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    message: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     reasoning: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
     process: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     steers: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))

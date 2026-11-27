@@ -7,7 +7,7 @@ import { normalizeMathDelimiters } from "../../components/renderers/math-delimit
 test("Agent markdown enables KaTeX rendering for inline and display dollar math", () => {
   const page = readFileSync("features/agent-chat/shenzhi-ai-page.tsx", "utf8");
   const timeline = readFileSync("features/agent-chat/timeline-view.tsx", "utf8");
-  const source = readFileSync("components/renderers/streamdown-renderer.tsx", "utf8");
+  const source = readFileSync("features/agent-chat/components/streamdown-renderer.tsx", "utf8");
   const inline = "The distance is $d(x,y)=\\sqrt{x^2+y^2}$.";
   const display = "$$\n\\sum_{i=1}^{n} x_i\n$$";
 

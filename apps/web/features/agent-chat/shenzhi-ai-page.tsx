@@ -12,33 +12,31 @@ import { Download, FileText, MessageCircleQuestion, Quote, Sparkles, Zap } from 
 import {
   attachAgentSessionRun, createWorkspace, exportAgentSession, fetchAgentConfig, getAgentSession, steerAgentRun,
   stopAgentRun, streamAgentSessionRun, uploadWorkspaceFile,
-  type AgentConfig, type AgentQuestion, type AgentQuestionOption, type AgentRunInput,
-  type AgentRunResult, type AgentStoredTurn,
+  type AgentConfig, type AgentQuestionOption, type AgentRunInput,
+  type AgentRunResult,
 } from "@/clients/backend/agent";
 import { ApiError } from "@/clients/backend/http";
 import { ReportDialog } from "./report-dialog";
 import { Timeline } from "./timeline-view";
 import {
-  applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, restoreEntries, visibleNotes, startRunStream,
-  type Entry, type StreamState,
+  applyDelta, applyToolCall, applyToolEnd, initialStreamState, isMeaningful, visibleNotes, startRunStream,
 } from "./timeline";
 import { ComposerShell, type ComposerSkill } from "@/components/common/composer/composer";
 import type { WorkspaceFile } from "@/components/common/composer/attachment-menu";
 import { AppShell } from "@/components/common/layout/app-shell";
 import { useAuth } from "@/components/auth/auth-provider";
-import { StreamdownRenderer } from "@/components/renderers/streamdown-renderer";
+import { StreamdownRenderer } from "./components/streamdown-renderer";
+import { MessageRenderer } from "./components/message-renderer";
 import type { ComposerAttachment, ComposerConfig } from "@/types/ai-search";
 import { takeAgentLaunch } from "./launch-store";
 import { notifyAgentSessionsChanged } from "./session-events";
+import { sessionExportMessages } from "./session-export";
+import { storedTurns, type AgentChatTurn as Turn } from "./session-state";
+import { applyMessageEvent, initialMessageState, reconcileMessage, startMessageRun } from "./message-state";
 
 // 类型别名而非 interface：报告渲染器（ReportView）要的是带索引签名的 AgentSource，
 // interface 不满足索引签名（TS2322），别名可以直接赋给它。
 type Source = { title?: string; url?: string };
-
-/** 问题轮次回传历史时的文本形态：模型需要在下一轮看到"自己问过什么"。 */
-function askedText(question?: AgentQuestion): string {
-  return question?.question ?? "";
-}
 
 // 过程流（思考 → 工具 → 思考）的全部状态机在 ./timeline.ts，渲染在 ./timeline-view.tsx。
 // 这两块曾经内联在本文件里，无法被测试，导致同一个显示 bug 反复出现——所以彻底搬了出去。
@@ -92,29 +90,6 @@ function QuestionCard({ question, onAnswer, busy }: {
 /** 引用回复：选中历史回答片段 → 新消息自动附原文锚点（ChatGPT reply-to-message 同类交互）。 */
 interface QuoteDraft { text: string }
 
-interface SteerNote { text: string; kind: "steer" | "follow_up" | "system" }
-
-interface Turn {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  attachments?: ComposerAttachment[];
-  reasoning: string;
-  /** 过程流的全部状态（思考 / 正文 / 工具按到达顺序交错）；渲染与持久化都从它派生。 */
-  stream: StreamState;
-  steers: SteerNote[];
-  report?: string;
-  sources?: Source[];
-  /** agent 反问的问题（status=awaiting_input）：界面据此渲染候选项。一次一个。 */
-  question?: AgentQuestion;
-  warnings?: string[];
-  error?: string;
-  stopped?: boolean;
-  /** 终态原因（timeout / cancelled / max_turns…）：同一句"已停止"说不清是到点了还是你停的。 */
-  stopReason?: string;
-  status?: AgentStoredTurn["status"];
-}
-
 interface RunContext {
   sessionId: string;
   generation: number;
@@ -138,31 +113,6 @@ function stopLabel(reason?: string): string {
     case "error": return "（运行出错，见上方提示）";
     default: return "（本轮已停止）";
   }
-}
-
-/** 持久化形状 → 过程流（旧会话只有 activity 时按工具顺序恢复）。 */
-function fromStoredTurn(turn: AgentStoredTurn): StreamState {
-  const segments = turn.process;
-  const entries: Entry[] = segments?.length
-    ? segments.map((segment) => segment.kind === "tool"
-        ? { kind: "tool" as const, tool: segment.tool }
-        : { kind: segment.kind === "text" ? "text" as const : "thinking" as const, text: segment.text })
-    : restoreEntries(undefined, undefined);
-  return { ...initialStreamState(), entries, runStartIndex: entries.length };
-}
-
-function storedTurns(turns: AgentStoredTurn[]): Turn[] {
-  return turns.flatMap((turn) => [
-    { id: `${turn.id}:user`, role: "user" as const, content: turn.user_content, reasoning: "",
-      attachments: (turn.settings.attachments ?? []) as ComposerAttachment[],
-      stream: initialStreamState(), steers: [] },
-    { id: `${turn.id}:assistant`, role: "assistant" as const, content: turn.assistant_content,
-      reasoning: turn.reasoning ?? "", stream: fromStoredTurn(turn),
-      steers: turn.steers ?? [], report: turn.report ?? undefined,
-      sources: turn.sources, question: turn.question ?? undefined,
-      warnings: turn.warnings, error: turn.error ?? undefined,
-      stopped: turn.stopped, stopReason: turn.stop_reason ?? undefined, status: turn.status },
-  ]);
 }
 
 const FALLBACK_CONFIG: AgentConfig = {
@@ -329,8 +279,11 @@ export function ShenzhiAiPage() {
         onAccepted?.();
         if (isCurrent()) runIdRef.current = runId;
         patchAssistant(context, (turn) => ({ ...turn, content: "", reasoning: "",
-          stream: startRunStream(turn.stream) }));
+          stream: startRunStream(turn.stream), structured: startMessageRun(turn.structured, runId) }));
       },
+      onMessageEvent: (event) => patchAssistant(context, (turn) => ({
+        ...turn, structured: applyMessageEvent(turn.structured, event),
+      })),
       onDelta: (text, reasoning, turn) => patchAssistant(context, (current) => {
         // 状态机全在 timeline.ts（可测）。这里只负责把它与页面的 Turn 接起来。
         return {
@@ -371,6 +324,7 @@ export function ShenzhiAiPage() {
             stopped: result.status === "stopped" || result.status === "timeout",
             stopReason: result.stop_reason,
             status: result.status,
+            structured: reconcileMessage(turn.structured, result.message, true),
             // The persisted final_text is authoritative, including failure/timeout partials.
             content: result.question ? "" : result.final_text || "",
           };
@@ -425,7 +379,7 @@ export function ShenzhiAiPage() {
         if (lastTurn?.status === "running") {
           const assistant = restored.at(-1)!;
           Object.assign(assistant, {
-            stream: initialStreamState(), content: "", reasoning: "", steers: [],
+            stream: initialStreamState(), content: "", reasoning: "", steers: [], structured: initialMessageState(),
           });
         }
         setTurns(restored);
@@ -540,10 +494,10 @@ export function ShenzhiAiPage() {
     const context = { sessionId, generation, assistantId };
     const userTurn: Turn = {
       id: userId, role: "user", content: prompt, attachments: runInput.attachments as ComposerAttachment[],
-      reasoning: "", stream: initialStreamState(), steers: [],
+      reasoning: "", stream: initialStreamState(), structured: initialMessageState(), steers: [],
     };
     const assistantTurn: Turn = {
-      id: assistantId, role: "assistant", content: "", reasoning: "", stream: initialStreamState(), steers: [], status: "running",
+      id: assistantId, role: "assistant", content: "", reasoning: "", stream: initialStreamState(), structured: initialMessageState(), steers: [], status: "running",
     };
     setTurns((previous) => {
       if (retry && previous.some((turn) => turn.id === userId)
@@ -692,17 +646,7 @@ export function ShenzhiAiPage() {
     if (turns.length === 0 || exporting) return;
     setExporting(true);
     try {
-      const messages = turns
-        .filter((turn) => turn.role === "user"
-          || (turn.role === "assistant" && (turn.content || turn.report || turn.question)))
-        .map((turn) => turn.role === "user"
-          ? { kind: "user", text: turn.content }
-          : { kind: "assistant", content: turn.report ?? turn.content ?? askedText(turn.question),
-              reasoning: turn.reasoning || "",
-              tool_calls: turn.stream.entries
-                .filter((entry): entry is Extract<Entry, { kind: "tool" }> => entry.kind === "tool")
-                .map((entry) => ({ id: entry.tool.toolCallId, name: entry.tool.name, arguments: entry.tool.arguments })),
-              stop_reason: "stop" });
+      const messages = sessionExportMessages(turns);
       const { blob, filename } = await exportAgentSession({ title: sessionTitle, messages, format });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -792,11 +736,11 @@ export function ShenzhiAiPage() {
                   </div>
                 </div>
               : <div key={turn.id} className="mb-8">
-                  <p role="status" className="mb-2 text-xs text-muted">{turn.status === "running"
+                  {!turn.structured.message && <p role="status" className="mb-2 text-xs text-muted">{turn.status === "running"
                     ? running && index === turns.length - 1 ? "任务执行中…" : "执行状态待同步，请刷新结果"
-                    : ({ done: "已完成", failed: "执行失败", timeout: "执行超时", stopped: "已停止", awaiting_input: "等待你的回答" }[turn.status ?? "done"])}</p>
+                    : ({ done: "已完成", failed: "执行失败", timeout: "执行超时", stopped: "已停止", awaiting_input: "等待你的回答" }[turn.status ?? "done"])}</p>}
                   {/* 过程流：思考 / 正文 / 工具按到达顺序交错（pi 的结构）。空时不渲染任何盒子。 */}
-                  <Timeline state={turn.stream} live={running && index === turns.length - 1} />
+                  <Timeline state={turn.stream} live={running && index === turns.length - 1} includeText={!turn.structured.message} />
                   {visibleNotes(turn.steers).map((note, noteIndex) => (
                     <div key={noteIndex} className="mb-3 flex items-center justify-end gap-1.5">
                       <span className="rounded-full bg-agent-soft px-2 py-0.5 text-[10px] font-medium text-agent">
@@ -811,13 +755,17 @@ export function ShenzhiAiPage() {
                   {turn.warnings?.length ? (
                     <div className="mb-2 text-xs text-amber-600 dark:text-amber-400">⚠ {turn.warnings.join("；")}</div>
                   ) : null}
-                  {(isMeaningful(turn.reasoning) || isMeaningful(turn.content)
+                  {(turn.structured.message || isMeaningful(turn.reasoning) || isMeaningful(turn.content)
                     || turn.report || turn.question || turn.error || turn.stopped) && (
                   <div className="flex gap-3">
                     <AssistantAvatar />
                     <div className="min-w-0 flex-1" data-quote-source>
                       {/* 只有标点的正文不渲染：模型常在工具轮之间吐孤立的 "."。 */}
-                      {turn.content && isMeaningful(turn.content) && (
+                      {turn.structured.message ? (
+                        <MessageRenderer message={turn.structured.message}
+                          activeBlockId={turn.structured.activeBlockId}
+                          isStreaming={running && index === turns.length - 1} />
+                      ) : turn.content && isMeaningful(turn.content) && (
                         <StreamdownRenderer content={turn.content} isStreaming={running && index === turns.length - 1} />
                       )}
                       {turn.report && (
@@ -838,7 +786,7 @@ export function ShenzhiAiPage() {
                           onAnswer={(text) => answerQuestion(text)}
                         />
                       ) : null}
-                      {turn.sources && !turn.report && <Sources sources={turn.sources} />}
+                      {!turn.structured.message && turn.sources && !turn.report && <Sources sources={turn.sources} />}
                       {turn.error && <div className="mt-1 text-sm text-red-600 dark:text-red-400">{turn.error}</div>}
                       {turn.stopped && (
                         <div className="mt-1 text-xs text-muted">{stopLabel(turn.stopReason)}</div>

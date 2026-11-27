@@ -8,7 +8,7 @@
  * 收起时也看得出 agent 正在干什么。
  */
 import { Loader2 } from "lucide-react";
-import { StreamdownRenderer } from "@/components/renderers/streamdown-renderer";
+import { StreamdownRenderer } from "./components/streamdown-renderer";
 
 import { previewLine, renderEntries, type Activity, type Entry, type StreamState } from "./timeline";
 
@@ -76,8 +76,8 @@ function entryPreview(entry: Entry | undefined): string {
   return previewLine(entry.text);
 }
 
-export function Timeline({ state, live }: { state: StreamState; live: boolean }) {
-  const entries = renderEntries(state);
+export function Timeline({ state, live, includeText = true }: { state: StreamState; live: boolean; includeText?: boolean }) {
+  const entries = renderEntries(state).filter((entry) => includeText || entry.kind !== "text");
   if (entries.length === 0 && !live) return null;
   const lastIndex = entries.length - 1;
 

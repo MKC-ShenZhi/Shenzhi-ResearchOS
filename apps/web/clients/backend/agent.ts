@@ -1,10 +1,12 @@
 import type { ModelOption } from "./model-types";
 import { agentApiJson, agentApiPath } from "./http";
 import { readSseStream, type SseEvent } from "./sse";
+import { parseAgentMessage, parseAgentMessageEvent, type AgentMessage, type AgentMessageEvent } from "./agent-message";
+export type { AgentMessage, AgentMessageEvent, ContentBlock, MarkdownBlock, Reference } from "./agent-message";
 
 /**
  * Agent 基座（ShenzhiAi）客户端：产品路径使用 Backend Session；无状态 run 仅保留兼容。
- * 事件协议见 apps/backend/app/services/agent/types.py 与 docs/agent/README.md §9。
+ * 消息与事件协议见 docs/agent/message-blocks.md。
  */
 
 export interface AgentSource { title?: string; url?: string; [key: string]: unknown }
@@ -31,6 +33,7 @@ export interface AgentRunResult {
   /** 终态原始原因（stop/cancelled/timeout/max_turns/error…）：界面据此区分"到点了"与"你停的"。 */
   stop_reason?: string;
   final_text: string;
+  message?: AgentMessage | null;
   output?: { kind?: string; report?: string; sources?: AgentSource[] } | null;
   /** 等待回答时的问题（后端已提到顶层，无需解析 output 判别联合）。 */
   question?: AgentQuestion | null;
@@ -83,6 +86,7 @@ export interface AgentStoredTurn {
   id: string;
   user_content: string;
   assistant_content: string;
+  message?: AgentMessage | null;
   reasoning: string;
   process: Array<
     { kind: "reasoning" | "text"; text: string } |
@@ -150,8 +154,11 @@ export function listAgentSessions(limit = 10, cursor?: string | null) {
   return agentApiJson<AgentSessionPage>(`/agent/sessions?${query.toString()}`);
 }
 
-export function getAgentSession(sessionId: string) {
-  return agentApiJson<AgentSessionDetail>(`/agent/sessions/${encodeURIComponent(sessionId)}`);
+export async function getAgentSession(sessionId: string) {
+  const session = await agentApiJson<AgentSessionDetail>(`/agent/sessions/${encodeURIComponent(sessionId)}`);
+  return { ...session, turns: session.turns.map((turn) => turn.message == null ? turn
+    : { ...turn, message: parseAgentMessage(turn.message, turn.status) }) };
+
 }
 
 export function renameAgentSession(sessionId: string, title: string) {
@@ -221,6 +228,7 @@ export async function streamAgentRun(
     onRunStart?: (runId: string) => void;
     onMessage?: (text: string, kind: "steer" | "follow_up" | "system") => void;
     onCompaction?: (data: { before_chars: number; after_chars: number }) => void;
+    onMessageEvent?: (event: AgentMessageEvent) => void;
     onResult: (result: AgentRunResult) => void;
   },
   signal?: AbortSignal,
@@ -276,6 +284,11 @@ async function streamAgentEndpoint(
 }
 
 function dispatchAgentEvent(event: SseEvent, handlers: Parameters<typeof streamAgentRun>[1]): void {
+  const messageEvent = parseAgentMessageEvent(event);
+  if (messageEvent !== null) {
+    handlers.onMessageEvent?.(messageEvent);
+    return;
+  }
   const data = JSON.parse(event.data);
   switch (event.event) {
     case "run_start":
@@ -304,6 +317,7 @@ function dispatchAgentEvent(event: SseEvent, handlers: Parameters<typeof streamA
       handlers.onToolEnd(data.tool_call_id, Boolean(data.is_error), data.duration_ms ?? 0, data.summary ?? "", Boolean(data.cancelled));
       break;
     case "result":
+      if (data.message != null) data.message = parseAgentMessage(data.message, data.status);
       handlers.onResult(data as AgentRunResult);
       break;
     default:

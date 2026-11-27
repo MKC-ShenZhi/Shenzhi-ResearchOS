@@ -120,7 +120,9 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.final_text, '你好')
         self.assertEqual(result.turns, 1)
         self.assertEqual([e.name for e in events],
-                         ['run_start', 'turn_start', 'delta', 'turn_end', 'run_end'])
+                         ['run_start', 'message_start', 'turn_start', 'block_start',
+                          'block_delta', 'block_delta', 'delta', 'block_end', 'turn_end',
+                          'message_end', 'run_end'])
         self.assertEqual(events[0].data['model'], 'deepseek/deepseek-chat')
         self.assertEqual(events[-1].data['status'], 'done')
 

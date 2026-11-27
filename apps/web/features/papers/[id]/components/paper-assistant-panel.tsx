@@ -6,6 +6,7 @@ import type { KnowledgePaperDetail } from "@/clients/knowledge";
 import { ErrorBubble } from "./error-bubble";
 import { MarkdownContent } from "./markdown-content";
 import { usePaperAgent } from "../use-paper-agent";
+import { MessageRenderer } from "../../../agent-chat/components/message-renderer";
 
 const PAPER_PROMPTS = [
   { icon: Target, text: "这篇论文主要解决什么问题？" },
@@ -75,15 +76,17 @@ export function PaperAssistantPanel({ paper }: { paper: KnowledgePaperDetail }) 
               ? <p className="mb-1 text-xs font-semibold text-muted">你</p>
               : <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted"><Sparkles className="size-3.5 text-primary" />Assistant</p>}
             {turn.role === "user" ? <p className="whitespace-pre-wrap">{turn.content}</p> : <>
-              {turn.content && <MarkdownContent text={turn.content} />}
-              {running && turn.status === "streaming" && !turn.content && (
+              {turn.structured?.message ? <MessageRenderer message={turn.structured.message}
+                activeBlockId={turn.structured.activeBlockId} isStreaming={running && turn.status === "streaming"} />
+                : turn.content && <MarkdownContent text={turn.content} />}
+              {running && turn.status === "streaming" && !turn.content && !turn.structured?.message?.blocks.length && (
                 <p role="status" className="animate-pulse">
                   {activity === "reading_pdf" ? "正在阅读论文 PDF…" : "正在分析问题…"}
                 </p>
               )}
               {turn.warnings.map((warning) => <p key={warning} className="mt-2 text-xs text-muted">{warning}</p>)}
               {turn.error && <ErrorBubble message={turn.error} requestId={turn.requestId} canResume={false} onResume={() => {}} />}
-              {turn.status === "stopped" && <p className="mt-2 text-xs text-muted">已停止生成</p>}
+              {turn.status === "stopped" && !turn.structured?.message && <p className="mt-2 text-xs text-muted">已停止生成</p>}
             </>}
           </div>
         ))}
