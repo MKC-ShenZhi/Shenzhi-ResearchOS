@@ -342,3 +342,15 @@ class BillingPostgresTests(unittest.IsolatedAsyncioTestCase):
             async with self.scope() as db:
                 count = await db.scalar(select(func.count()).select_from(EntitlementAuditRow).where(EntitlementAuditRow.principal == 'billing'))
                 self.assertEqual(count, 1)
+
+    async def test_tunnel_and_local_admin_audits_are_both_visible(self):
+        from app.models.agent_entitlements import EntitlementAuditRow
+        from app.services.agent_entitlements.admin import list_audit
+        async with self.factory() as db, db.begin():
+            for principal in ['local-admin:legacy', 'ssh-admin:operator', 'system:billing']:
+                db.add(EntitlementAuditRow(audit_id=str(uuid.uuid4()), operation_id=str(uuid.uuid4()),
+                    principal=principal, reason='identity-test', payload={}, created_at=now_utc()))
+        async with self.factory() as db:
+            rows = await list_audit(db, page=1, page_size=100)
+        principals = {row['principal'] for row in rows['items']}
+        self.assertEqual(principals, {'local-admin:test', 'local-admin:legacy', 'ssh-admin:operator'})

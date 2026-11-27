@@ -57,7 +57,7 @@ def role(env):
     async def dependency(authorization: str | None = Header(default=None)):
         expected = os.getenv(env, '').strip()
         others = [os.getenv(n, '').strip() for n in ('AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN',
-                  'AGENT_WORKER_TOKEN', 'AGENT_CONTROL_TOKEN', 'AGENT_SERVICE_TOKEN') if n != env]
+                  'AGENT_WORKER_TOKEN', 'AGENT_CONTROL_TOKEN', 'AGENT_SERVICE_TOKEN', 'AGENT_MANAGEMENT_TOKEN') if n != env]
         check(expected and expected not in others, 'ROLE_CREDENTIALS_NOT_ISOLATED')
         check(hmac.compare_digest(authorization or '', f'Bearer {expected}'), 'ROLE_UNAUTHORIZED')
     return dependency

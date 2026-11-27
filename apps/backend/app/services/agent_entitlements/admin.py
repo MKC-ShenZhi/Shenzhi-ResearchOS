@@ -1,6 +1,6 @@
 """Audited Admin-only plan operations. Each caller owns a database transaction."""
 from datetime import datetime
-from sqlalchemy import bindparam, select, text
+from sqlalchemy import bindparam, or_, select, text
 from agent_contracts.canonical import digest
 from app.models.agent_entitlements import (PlanReleaseRow, EntitlementPolicyRow, OwnerEntitlementRow,
     EntitlementAuditRow, GrantRootRow, SubmissionRow, WindowCounterRow)
@@ -11,7 +11,8 @@ from .service import require, uid, now_utc
 
 async def list_audit(db, *, page, page_size):
     rows = (await db.scalars(select(EntitlementAuditRow).where(
-        EntitlementAuditRow.principal.startswith('local-admin:')).order_by(
+        or_(EntitlementAuditRow.principal.startswith('local-admin:'),
+            EntitlementAuditRow.principal.startswith('ssh-admin:'))).order_by(
         EntitlementAuditRow.created_at.desc(), EntitlementAuditRow.audit_id.desc())
         .offset((page - 1) * page_size).limit(page_size))).all()
     targets = []

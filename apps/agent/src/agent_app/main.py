@@ -4,9 +4,11 @@ from fastapi.responses import JSONResponse
 
 from agent_app.api.routes import router as v2_router
 from agent_app.errors import BusinessError
+from agent_app.api.management import router as management_router
 
 app = FastAPI(title='ShenZhi Agent Platform', version='0.1.0')
 app.include_router(v2_router)
+app.include_router(management_router)
 
 
 @app.exception_handler(BusinessError)

@@ -65,6 +65,8 @@ services:
     logging: *logging
 
   auth-migrate:
+    environment:
+      AGENT_MANAGEMENT_TOKEN: ''
     <<: *python
     profiles: [app, full]
     image: ${IMAGE_PREFIX:-shenzhi}/backend:${IMAGE_TAG:-local}
@@ -80,6 +82,8 @@ services:
       postgres: {condition: service_healthy}
 
   backend-migrate:
+    environment:
+      AGENT_MANAGEMENT_TOKEN: ''
     <<: *python
     profiles: [app, full]
     image: ${IMAGE_PREFIX:-shenzhi}/backend:${IMAGE_TAG:-local}
@@ -144,6 +148,8 @@ services:
     logging: *logging
 
   agent-migrate:
+    environment:
+      AGENT_MANAGEMENT_TOKEN: ''
     <<: *agent
     profiles: [agent, full, usage]
     restart: 'no'
@@ -163,6 +169,8 @@ services:
       retries: 12
 
   agent-worker:
+    environment:
+      AGENT_MANAGEMENT_TOKEN: ''
     <<: *agent
     profiles: [agent, full]
     command: [python, -m, agent_app.worker_main]
@@ -170,6 +178,8 @@ services:
       agent-api: {condition: service_healthy}
 
   agent-usage-worker:
+    environment:
+      AGENT_MANAGEMENT_TOKEN: ''
     <<: *agent
     profiles: [usage, full]
     command: [python, -m, agent_app.usage_worker]
