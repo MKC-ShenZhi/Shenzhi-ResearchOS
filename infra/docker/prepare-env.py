@@ -178,10 +178,10 @@ def main(argv=None):
     paired('PAYMENT_SERVICE_TOKEN', ('backend', 'payment'))
     for key in ('WECHAT_APP_ID', 'WECHAT_MCH_ID'):
         paired(key, ('backend', 'payment'), generate=False)
-    for key in ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN'):
+    for key in ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN', 'AGENT_MANAGEMENT_TOKEN'):
         paired(key, ('backend', 'agent'))
     agent['AGENT_WORKER_TOKEN'] = agent['AGENT_WORKER_TOKEN'] or secrets.token_urlsafe(48)
-    if len({agent[k] for k in ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN', 'AGENT_WORKER_TOKEN')}) != 5:
+    if len({agent[k] for k in ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN', 'AGENT_WORKER_TOKEN', 'AGENT_MANAGEMENT_TOKEN')}) != 6:
         raise ValueError('Agent role credentials must be distinct')
     for key in ('AGENT_AUDIENCE', 'AGENT_GRANT_ISSUER'):
         # Existing configured admission identity is authoritative; never synthesize

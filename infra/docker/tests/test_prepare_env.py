@@ -112,7 +112,7 @@ class PrepareEnvTests(unittest.TestCase):
 
     def test_empty_credentials_are_generated_and_shared(self):
         self.docker('web', {'BETTER_AUTH_SECRET': '', 'BACKEND_BFF_SECRET': ''})
-        roles = ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN')
+        roles = ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN', 'AGENT_MANAGEMENT_TOKEN')
         self.docker('backend', dict.fromkeys((*roles, 'BACKEND_BFF_SECRET'), ''))
         self.docker('agent', dict.fromkeys((*roles, 'AGENT_WORKER_TOKEN'), ''))
         self.run_setup()
@@ -120,11 +120,36 @@ class PrepareEnvTests(unittest.TestCase):
         for key in roles:
             self.assertTrue(agent[key])
             self.assertEqual(agent[key], self.read('backend')[key])
-        self.assertEqual(len({agent[key] for key in (*roles, 'AGENT_WORKER_TOKEN')}), 5)
+        self.assertEqual(len({agent[key] for key in (*roles, 'AGENT_WORKER_TOKEN')}), 6)
         self.assertTrue(self.read('web')['BETTER_AUTH_SECRET'])
         before = self.snapshot()
         self.run_setup()
         self.assertEqual(before, self.snapshot())
+
+    def test_management_token_syncs_existing_peer_without_rotating_credentials(self):
+        self.run_setup(local=False)
+        key = 'AGENT_MANAGEMENT_TOKEN'
+        original = {name: self.read(name) for name in ('backend', 'agent')}
+        for name in ('backend', 'agent'):
+            with self.subTest(name=name):
+                self.docker(name, {**original[name], key: ''})
+                self.run_setup(local=False)
+                for peer, values in original.items():
+                    self.assertEqual(self.read(peer), values)
+
+    def test_management_token_cannot_reuse_any_agent_role(self):
+        roles = ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN',
+                 'AGENT_CONTROL_TOKEN', 'AGENT_WORKER_TOKEN')
+        self.run_setup(local=False)
+        original = self.read('agent')
+        for role in roles:
+            with self.subTest(role=role):
+                self.docker('agent', {**original, 'AGENT_MANAGEMENT_TOKEN': original[role]})
+                self.docker('backend', {**self.read('backend'), 'AGENT_MANAGEMENT_TOKEN': original[role]})
+                before = self.snapshot()
+                with self.assertRaisesRegex(ValueError, 'Agent role credentials must be distinct'):
+                    self.run_setup(local=False)
+                self.assertEqual(before, self.snapshot())
 
     def test_empty_values_import_native_without_modifying_native_files(self):
         self.native('web', {'BETTER_AUTH_SECRET': 'fixture-secret-auth', 'BACKEND_BFF_SECRET': 'fixture-secret-bff'})
@@ -176,7 +201,7 @@ class PrepareEnvTests(unittest.TestCase):
         self.assertEqual((self.root / 'apps/agent/.env').read_bytes(), native_before)
 
     def test_all_role_tokens_import_native_into_empty_docker_values(self):
-        roles = ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN')
+        roles = ('AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN', 'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN', 'AGENT_MANAGEMENT_TOKEN')
         fixtures = {key: f'fixture-secret-{index}' for index, key in enumerate(roles)}
         self.native('backend', fixtures)
         self.native('agent', {**fixtures, 'AGENT_WORKER_TOKEN': 'fixture-secret-worker'})
@@ -196,7 +221,7 @@ class PrepareEnvTests(unittest.TestCase):
 
     def test_shared_credential_conflicts_fail_without_writes(self):
         for key in ('BACKEND_BFF_SECRET', 'AGENT_SERVICE_TOKEN', 'AGENT_GATEWAY_TOKEN',
-                    'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN', 'AGENT_AUDIENCE', 'AGENT_GRANT_ISSUER'):
+                    'AGENT_FACT_READER_TOKEN', 'AGENT_CONTROL_TOKEN', 'AGENT_MANAGEMENT_TOKEN', 'AGENT_AUDIENCE', 'AGENT_GRANT_ISSUER'):
             with self.subTest(key=key):
                 other = 'web' if key == 'BACKEND_BFF_SECRET' else 'agent'
                 self.docker('backend', {key: 'fixture-secret-one'})
