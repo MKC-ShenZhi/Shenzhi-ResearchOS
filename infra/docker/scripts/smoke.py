@@ -57,7 +57,7 @@ async def main():
     print('PASS: Web/BFF/Backend, auth session endpoint, business schema, rejected missing BFF credential and Admin access')
     if args.full:
         request('http://agent-api:8101/internal/v2/health')
-        request('http://agent-api:8101/internal/v2/config', expected=401)
+        request('http://agent-api:8101/internal/v2/config', expected=403)
         request('http://agent-api:8101/internal/v1/config', expected=404)
         service = {'Authorization': 'Bearer ' + os.environ['AGENT_SERVICE_TOKEN']}
         request('http://agent-api:8101/internal/v2/config', headers=service)
