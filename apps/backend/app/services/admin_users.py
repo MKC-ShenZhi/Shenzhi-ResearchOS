@@ -4,7 +4,8 @@ from datetime import timedelta
 from sqlalchemy import text, select, func, DateTime, cast
 from pydantic import ValidationError
 
-from app.models.agent_entitlements import EntitlementPolicyRow, WindowCounterRow, UsageLedgerRow, ReservationAllocationRow
+from app.models.agent_entitlements import (EntitlementPolicyRow, WindowCounterRow, UsageLedgerRow,
+    ReservationAllocationRow, GrantRootRow, SubmissionRow)
 from app.services.agent_entitlements.policy import EntitlementPolicy
 from app.services.agent_entitlements.service import now_utc
 
@@ -29,7 +30,7 @@ async def list_users(db, *, page, page_size, search, plan_id):
               'limit': page_size, 'offset': (page - 1) * page_size}
     total = await db.scalar(text(f'SELECT count(*) {JOIN} {filters}'), params)
     rows = (await db.execute(text(f'''SELECT u.id AS user_id, u.name, u.email, u."createdAt" AS created_at,
-        e.plan_id, e.policy_revision, e.enabled AS entitlement_enabled,
+        e.plan_id, e.policy_revision, e.enabled AS entitlement_enabled, e.expires_at, e.source,
         {ANOMALY} AS abnormal {JOIN} {filters}
         ORDER BY u."createdAt" DESC, u.id LIMIT :limit OFFSET :offset'''), params)).mappings().all()
     items = []
@@ -39,6 +40,14 @@ async def list_users(db, *, page, page_size, search, plan_id):
         item.pop('abnormal', None)
         item['usage_windows'] = []
         item['model_calls_enabled'] = False
+        expired = bool(item['plan_id'] in ('pro', 'research') and item['expires_at']
+                       and item['expires_at'] <= now)
+        if expired and item['entitlement_enabled']:
+            active = await db.scalar(select(GrantRootRow.grant_id).join(SubmissionRow,
+                SubmissionRow.submission_id == GrantRootRow.submission_id).where(
+                SubmissionRow.owner_id == f"user:{item['user_id']}",
+                GrantRootRow.status != 'closed').limit(1))
+            item['entitlement_status'] = 'expiry_pending' if active else 'expired'
         policy_row = await db.get(EntitlementPolicyRow, item['policy_revision']) if item['policy_revision'] else None
         if policy_row:
             try:
@@ -47,7 +56,8 @@ async def list_users(db, *, page, page_size, search, plan_id):
                 item['entitlement_status'] = 'abnormal'
             else:
                 item['model_calls_enabled'] = bool(policy.model_risk_profile and policy_row.approved
-                                                   and not policy_row.test_only and item['entitlement_enabled'])
+                                                   and not policy_row.test_only and item['entitlement_enabled']
+                                                   and not expired and policy.plan_id == item['plan_id'])
                 owner = f"user:{item['user_id']}"
                 for rule in policy.rules:
                     window = rule.window(owner, policy.policy_revision, now)

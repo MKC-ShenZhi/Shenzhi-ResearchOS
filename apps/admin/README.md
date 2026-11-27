@@ -94,7 +94,7 @@ Cookie 为 HttpOnly、SameSite=Strict，Path 限制 `/api/v1/admin-console`，HT
 
 ## 正式套餐与 Admin 操作
 
-套餐固定为 Basic/basic（200000）、Pro/pro（1000000）、Research/research（3000000）Token/上海自然日，暂时全部免费。计量输入＋输出；仅 Research 包含 deep-research。模型与通用工具/技能不按套餐区分，来自同一受控 Worker 能力导出。新用户默认待分配，旧注册通知端点仅兼容返回 initialized=0，不再自动授予 Free。
+套餐固定为 Basic/basic（200000）、Pro/pro（1000000）、Research/research（3000000）Token/上海自然日。Basic 永久免费，Pro/Research 使用集中 Billing Catalog 的测试价格。计量输入＋输出；仅 Research 包含 deep-research。模型与通用工具/技能权限保持原配置，来自同一受控 Worker 能力导出。邮箱／OAuth 新用户通过注册通知幂等初始化已发布的永久 Basic；发布或 Backend 暂不可用时不阻止注册，可通过历史初始化补齐。
 
 先在 Backend 执行迁移（先备份，使用本地服务环境）：
 
@@ -135,9 +135,9 @@ uv run --env-file .env python -m app.services.agent_entitlements.plans --capabil
 逐模型预算由部署负责人在本地审核文件中维护，不再提供仓库内固定 Provider 预算。使用 `--model-budgets <REVIEWED_MODEL_BUDGETS_JSON>` 合并覆盖，或通过 `--previous-bundle` 复用已经批准的预算。历史 `context_window_tokens` 字段继续兼容；真实上下文上限仅采用 Worker Registry 明确声明的值。
 
 3. Admin → 套餐管理 → 发布与迁移 → 发布套餐新版本 → 上传发布包 → 填写原因、Policy 审批引用、模型风险审批引用（如有）→ 确认发布。Backend 校验受控身份摘要、固定三档规则与当前 Agent 的公开 Model/Skill 集合。Tool build 身份由离线导出和管理员审批保证，当前配置 HTTP 接口无法远程验证 build 摘要。
-4. 用户管理 → 勾选一个/多个用户 → 选择套餐、原因 → 预览 → 确认执行。成功、失败和部分成功均分用户返回；失败不覆盖该用户权益。网络失败保留操作 ID 供原请求重试。
+4. 用户管理 → 勾选一个/多个用户 → 选择套餐、原因；Pro/Research 必选 1～12 个自然月，Basic 永久免费 → 预览原权益与目标有效期 → 确认覆盖。有效期从实际执行时间重新计算，不叠加，可能缩短已有权益；预览时间仅供参考。成功、失败和部分成功均分用户返回；失败不覆盖该用户权益。网络失败保留操作 ID 供原请求重试。
 5. 历史用户：套餐管理 → 发布与迁移 → 历史账号迁移预览，填写明确的注册时间截止点，预览待分配用户后批量初始化 Basic。只补缺失分配，不覆盖现有特殊/禁用/人工权益；有历史 Free 的用户可在用户列表由管理员显式调整。
-6. 停用/恢复使用同一预览、确认和审计流程。审计页查看管理员、时间、操作 ID、原因、审批引用及各用户前后套餐/Policy。
+6. 停用/恢复使用同一预览、确认和审计流程。已停用用户须显式恢复后才能分配／购买，恢复不延长原到期日。审计页查看管理员、时间、操作 ID、原因、审批引用及各用户前后套餐/Policy/有效期。Admin 赠予和用户购买共用同一权益记录，来源仅供审计，不限制有限期权益续费／升级。
 
 写 API 全部要求独立管理会话及 X-Admin-Request: 1，不开放 CORS，local-only 限制保持。正式套餐 CLI assign/install-policy 不作为分配/发布旁路。
 
@@ -145,7 +145,7 @@ uv run --env-file .env python -m app.services.agent_entitlements.plans --capabil
 |---|---|---|
 | GET | /plans | 发布版本、固定额度、能力与风险门禁状态 |
 | POST | /plans/publish | 发布三档不可变 Policy；operation_id/reason/approval_ref/policies/capabilities/risk_approval_ref |
-| POST | /entitlements/assign | user_ids（最多100）、action（assign/disable/restore）、plan_id、policy_revision、reason、operation_id、preview、initialize_only |
+| POST | /entitlements/assign | user_ids（最多100）、action（assign/disable/restore）、plan_id、policy_revision、reason、operation_id、preview、initialize_only、duration_months（Pro/Research 分配必填，1～12） |
 | POST | /migration/preview | before（带时区）、limit（最多100）；只读预览历史缺失用户 |
 | GET | /audit?page=1&page_size=20 | 管理操作审计 |
 

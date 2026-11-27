@@ -7,6 +7,7 @@ from app.models.agent_entitlements import (PlanReleaseRow, EntitlementPolicyRow,
 from .policy import EntitlementPolicy
 from .plans import PLANS, POOL, build
 from .service import require, uid, now_utc
+from .dates import add_calendar_months
 
 
 async def list_audit(db, *, page, page_size):
@@ -136,7 +137,9 @@ async def change_one(db, body, user_id, principal):
     owner=await db.scalar(select(OwnerEntitlementRow).where(OwnerEntitlementRow.owner_id==owner_id)
                           .with_for_update().execution_options(populate_existing=True))
     before={'plan_id':owner.plan_id if owner else None,'policy_revision':owner.policy_revision if owner else None,
-            'enabled':owner.enabled if owner else None}
+            'enabled':owner.enabled if owner else None,
+            'expires_at':owner.expires_at.isoformat() if owner and owner.expires_at else None,
+            'source':owner.source if owner else None}
     if body.initialize_only:
         require(owner is None and body.action=='assign' and body.plan_id=='basic', 'EXISTING_ASSIGNMENT_PRESERVED')
     if body.action=='assign':
@@ -144,15 +147,17 @@ async def change_one(db, body, user_id, principal):
         release=await db.get(PlanReleaseRow,body.plan_id)
         require(release is not None and release.policy_revision==body.policy_revision, 'PLAN_RELEASE_CHANGED')
         from .assignment import assign_policy
+        expires_at = add_calendar_months(now_utc(), body.duration_months) if body.duration_months else None
         owner, after = await assign_policy(db, owner, owner_id, body.plan_id, body.policy_revision,
-                                          preview=body.preview)
+                                          preview=body.preview, expires_at=expires_at, source='admin')
+        after={**after, 'expires_at':expires_at.isoformat() if expires_at else None, 'source':'admin'}
     else:
         require(owner is not None, 'ENTITLEMENT_UNASSIGNED',403)
         require(body.action!='restore' or owner.plan_id in PLANS, 'FORMAL_PLAN_REQUIRED',403)
         if body.action == 'restore':
             row = await db.get(EntitlementPolicyRow, owner.policy_revision)
             require(row and row.approved and not row.test_only, 'POLICY_NOT_APPROVED',403)
-        after={**before,'enabled':body.action=='restore'}
+        after={**before,'enabled':body.action=='restore','source':'admin'}
         if not body.preview:
             owner.enabled=after['enabled']
             owner.source='admin'

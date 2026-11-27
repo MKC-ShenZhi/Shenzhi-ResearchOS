@@ -7,6 +7,7 @@ export type UsageWindow = {
 export type AdminUser = {
   user_id: string; name: string | null; email: string; created_at: string;
   plan_id: string | null; policy_revision: string | null;
+  expires_at: string | null; source: string | null;
   entitlement_enabled: boolean | null; entitlement_status: string; model_calls_enabled: boolean; usage_windows: UsageWindow[];
 };
 export type AdminUsers = {

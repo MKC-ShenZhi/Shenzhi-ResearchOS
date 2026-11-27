@@ -5,7 +5,8 @@ Synthetic identities/risk approvals are test fixtures only; no real Provider.
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
-from sqlalchemy import select, text
+from zoneinfo import ZoneInfo
+from sqlalchemy import select, text, event
 from agent_contracts.canonical import digest
 from agent_contracts.v2 import SkillIdentity
 from agent_contracts.execution_v2 import CallIntent
@@ -18,6 +19,16 @@ from app.services.agent_entitlements.plans import build
 from app.services.agent_entitlements.policy import EntitlementPolicy
 from app.services.agent_entitlements.service import EntitlementError
 from app.schemas.admin_plans import AssignPlans, PublishPlans
+
+
+@event.listens_for(OwnerEntitlementRow, 'load')
+def restore_sqlite_gift_timezone(owner, context):
+    # SQLite discards offsets from DateTime(timezone=True). These formal-plan
+    # fixtures only write finite expiries via the Shanghai Admin gift helper;
+    # real expiry/locking tests use PostgreSQL, which preserves the offset.
+    if (context.session.bind.dialect.name == 'sqlite' and owner.expires_at is not None
+            and owner.expires_at.tzinfo is None):
+        owner.expires_at = owner.expires_at.replace(tzinfo=ZoneInfo('Asia/Shanghai'))
 
 
 class FormalPlanTests(unittest.IsolatedAsyncioTestCase):
@@ -62,7 +73,8 @@ class FormalPlanTests(unittest.IsolatedAsyncioTestCase):
     async def mutate(self, plan='basic', action='assign', ids=None, op='assign-test', preview=False, initialize=False):
         body=AssignPlans(operation_id=op,reason='test reason',action=action,user_ids=ids or ['test'],
             plan_id=plan if action=='assign' else None,policy_revision=self.policies[plan].policy_revision if action=='assign' else None,
-            preview=preview,initialize_only=initialize)
+            preview=preview,initialize_only=initialize,
+            duration_months=1 if action=='assign' and plan in ('pro','research') else None)
         async with self.backend() as db,db.begin():
             return await admin.assign(db,body,'local-admin:test')
 
@@ -144,13 +156,15 @@ class FormalPlanTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(rows), 2)
             self.assertTrue(all(row.principal == 'local-admin:shenzhi' for row in rows))
 
-    async def test_formal_registration_never_auto_assigns(self):
+    async def test_formal_registration_initializes_basic_without_overwrite(self):
         from app.services.agent_entitlements.defaults import initialize_free
         await self.formal_setup()
         async with self.backend() as db,db.begin():
+            self.assertEqual(await initialize_free(db,'new'),1)
+            owner=await self.service.owner(db,'user:new')
+            self.assertEqual(owner.plan_id,'basic')
+            self.assertIsNone(owner.expires_at)
             self.assertEqual(await initialize_free(db,'new'),0)
-            self.assertIsNone(await db.get(OwnerEntitlementRow,'user:new'))
-            with self.assertRaises(EntitlementError):await self.service.owner(db,'user:new')
 
     async def test_formal_per_call_no_task_ceiling_and_unknown_preserved(self):
         await self.formal_setup()

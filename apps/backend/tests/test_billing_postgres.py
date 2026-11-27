@@ -103,7 +103,7 @@ class BillingPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def assign(self, plan='basic', action='assign'):
         async with self.scope() as db:
             return await admin.assign(db, AssignPlans(operation_id=uuid.uuid4().hex, reason='test', user_ids=['test'],
-                action=action, plan_id=plan if action == 'assign' else None,
+                action=action, duration_months=1 if action == 'assign' and plan != 'basic' else None, plan_id=plan if action == 'assign' else None,
                 policy_revision=plan + '-v1-test' if action == 'assign' else None, preview=False), 'local-admin:test')
 
     async def grant(self):
