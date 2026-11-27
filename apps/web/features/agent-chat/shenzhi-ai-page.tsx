@@ -2,7 +2,7 @@
 
 // ShenzhiAi 持久化对话页（ChatGPT 式排版）：
 // 左：全局 AppSidebar 中的 Backend Agent 会话历史
-// 中：用户右气泡 / 回答左通栏（头像 + 思考折叠 + 过程卡）/ 运行中插话右气泡
+// 中：用户右气泡 / 回答左通栏（思考折叠 + 过程卡）/ 运行中插话右气泡
 // 空状态：轻量提示并引导回深知 AI 新对话页（/agents）
 // 下：居中悬浮 Composer；运行中发送 = 插话（steer，不打断当前工具批）
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -25,11 +25,13 @@ import { ComposerShell, type ComposerSkill } from "@/components/common/composer/
 import type { WorkspaceFile } from "@/components/common/composer/attachment-menu";
 import { AppShell } from "@/components/common/layout/app-shell";
 import { useAuth } from "@/components/auth/auth-provider";
-import { MarkdownRenderer } from "@/components/renderers/markdown-renderer";
+import { UserPrompt } from "./components/user-prompt";
+import { quotedPromptParts, withQuote } from "./quoted-prompt";
 import { StreamdownRenderer } from "./components/streamdown-renderer";
 import { MessageRenderer } from "./components/message-renderer";
 import { MessageActions } from "./components/message-actions";
 import { MessageCopyButton } from "./components/message-copy-button";
+import { SelectionQuoteAction, type QuoteDraft } from "./components/selection-quote-action";
 import type { ComposerAttachment, ComposerConfig } from "@/types/ai-search";
 import { takeAgentLaunch } from "./launch-store";
 import { notifyAgentSessionsChanged } from "./session-events";
@@ -90,9 +92,6 @@ function QuestionCard({ question, onAnswer, busy }: {
   );
 }
 
-/** 引用回复：选中历史回答片段 → 新消息自动附原文锚点（ChatGPT reply-to-message 同类交互）。 */
-interface QuoteDraft { text: string }
-
 interface RunContext {
   sessionId: string;
   generation: number;
@@ -136,12 +135,6 @@ function Sources({ sources }: { sources: Source[] }) {
         </li>;
       })}
     </ol>
-  </div>;
-}
-
-function AssistantAvatar() {
-  return <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-agent text-white shadow-card" aria-hidden>
-    <Sparkles className="size-4" strokeWidth={2} />
   </div>;
 }
 
@@ -537,7 +530,9 @@ export function ShenzhiAiPage() {
     } catch (error) {
       if (!accepted && isCurrent()) {
         setTurns((previous) => previous.filter((turn) => turn.id !== userId && turn.id !== assistantId));
-        setInput(prompt);
+        const draft = quotedPromptParts(prompt);
+        setInput(draft.question);
+        if (draft.quote) setQuote({ text: draft.quote, messageId: "" });
         setAttachments(runInput.attachments as ComposerAttachment[]);
       }
       if (!controller.signal.aborted && (error as Error).name !== "AbortError" && isCurrent()) {
@@ -564,8 +559,7 @@ export function ShenzhiAiPage() {
     if (!prompt || running) return;
     const skillsForRun = selectedSkills.map((skill) => skill.name);
     if (quote) {
-      const quoted = quote.text.slice(0, 2_000);
-      prompt = `针对之前回答中的这段内容：\n\n${quoted}\n\n我的问题/意见是：${prompt}`;
+      prompt = withQuote(prompt, quote);
       setQuote(null);
     }
     if (prompt.startsWith("/research ")) {
@@ -604,12 +598,13 @@ export function ShenzhiAiPage() {
     setInput("");
     setSteerError(null);
     try {
-      await steerAgentRun(runIdRef.current, text);
+      await steerAgentRun(runIdRef.current, withQuote(text, quote));
+      setQuote(null);
     } catch (error) {
       setInput(text);
       setSteerError(error instanceof Error ? error.message : "插话失败，请重试");
     }
-  }, [input, running]);
+  }, [input, running, quote]);
 
   const stop = useCallback(async () => {
     if (stopping) return;
@@ -629,20 +624,6 @@ export function ShenzhiAiPage() {
       setRunError(error instanceof Error ? error.message : "停止失败，请重试");
     }
   }, [stopping]);
-
-  /** 引用回复：mouseup 后若在回答区（data-quote-source）内有选区，展示引用条。 */
-  const captureQuote = useCallback(() => {
-    const selection = window.getSelection();
-    const text = selection?.toString().trim() ?? '';
-    if (text.length >= 2 && text.length <= 2_000 && selection?.anchorNode) {
-      const el = (selection.anchorNode.nodeType === 1
-        ? selection.anchorNode : selection.anchorNode.parentElement) as HTMLElement | null;
-      if (el?.closest('[data-quote-source]')) {
-        setQuote({ text });
-        return;
-      }
-    }
-  }, []);
 
   /** 导出当前会话：POST 本地轮次 → 下载 HTML/JSONL（pi session-export 同构）。 */
   const exportSession = useCallback(async (format: "html" | "jsonl") => {
@@ -689,7 +670,6 @@ export function ShenzhiAiPage() {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 sm:px-6">
           <h1 className="max-w-[45%] truncate text-base font-semibold">{sessionTitle}</h1>
           <div className="flex items-center gap-2">
-            <span className="mr-1 hidden text-[11px] text-faint sm:inline">选中回答文本可引用追问</span>
             <button type="button" disabled={turns.length === 0 || exporting} onClick={() => void exportSession("html")}
               className="flex cursor-pointer items-center gap-1 rounded-lg border border-line px-2.5 py-1 text-[12px] text-ink-2 transition-colors hover:border-primary/40 hover:text-primary disabled:cursor-default disabled:opacity-40">
               <Download className="size-3.5" strokeWidth={2} aria-hidden />
@@ -704,8 +684,8 @@ export function ShenzhiAiPage() {
         {agentConfig.models.some((item) => item.value === "demo/m1") && (
           <p role="status" className="px-4 py-2 text-sm text-amber-700 dark:text-amber-400">Mock 演示：受控模拟执行，不调用真实模型或检索服务。</p>
         )}
+        <SelectionQuoteAction key={sessionId} containerRef={scrollRef} onQuote={setQuote} />
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto"
-          onMouseUp={captureQuote}
           onScroll={(event) => {
             const el = event.currentTarget;
             stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
@@ -731,15 +711,13 @@ export function ShenzhiAiPage() {
             )}
             {turns.map((turn, index) => turn.role === "user"
               ? <div key={turn.id} className="mb-6 flex flex-col items-end">
-                  <div className="min-w-0 max-w-[90%] break-words sm:max-w-[75%] rounded-3xl bg-chip px-4 py-2.5 text-[15px] leading-7 text-ink">
-                    <MarkdownRenderer content={turn.content}
-                      className="[&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_p]:whitespace-pre-wrap" />
+                  <UserPrompt content={turn.content}>
                     {!!turn.attachments?.length && <div className="mt-2 flex flex-wrap gap-1.5">
                       {turn.attachments.map((attachment, attachmentIndex) => <span key={`${turn.id}:attachment:${attachmentIndex}`} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-card px-2 py-1 text-xs text-muted" title={attachment.title ?? undefined}><FileText className="size-3.5 shrink-0" /><span className="truncate">{attachment.title || "附件"}</span></span>)}
                     </div>}
-                  </div>
+                  </UserPrompt>
                   {turn.content.trim() && <div className="mt-1 flex items-center gap-1">
-                    <MessageCopyButton text={turn.content} label="复制提问" />
+                    <MessageCopyButton text={quotedPromptParts(turn.content).question} label="复制提问" />
                   </div>}
                 </div>
               : <div key={turn.id} className="mb-8">
@@ -754,9 +732,7 @@ export function ShenzhiAiPage() {
                         {note.kind === "steer" ? "⚡ 插话"
                         : "→ 追问"}
                       </span>
-                      <div className="max-w-[70%] rounded-2xl rounded-br-md border border-agent/30 bg-agent-soft px-3.5 py-2 text-[14px] leading-6 text-ink">
-                        {note.text}
-                      </div>
+                      <UserPrompt content={note.text} appearance="steer" />
                     </div>
                   ))}
                   {turn.warnings?.length ? (
@@ -764,43 +740,40 @@ export function ShenzhiAiPage() {
                   ) : null}
                   {(turn.structured.message || isMeaningful(turn.reasoning) || isMeaningful(turn.content)
                     || turn.report || turn.question || turn.error || turn.stopped) && (
-                  <div className="flex gap-3">
-                    <AssistantAvatar />
-                    <div className="min-w-0 flex-1" data-quote-source>
-                      {/* 只有标点的正文不渲染：模型常在工具轮之间吐孤立的 "."。 */}
-                      {turn.structured.message ? (
-                        <MessageRenderer message={turn.structured.message} appearance="document"
-                          activeBlockId={turn.structured.activeBlockId}
-                          isStreaming={running && index === turns.length - 1} />
-                      ) : turn.content && isMeaningful(turn.content) && (
-                        <StreamdownRenderer content={turn.content} isStreaming={running && index === turns.length - 1} />
-                      )}
-                      {turn.report && (
-                        // 报告只在按钮里看全文：正文内联渲染会把几十页 markdown 铺满对话。
-                        <ReportSummary
-                          text={turn.report}
-                          sources={turn.sources}
-                          onOpen={() => setOpenReport({ text: turn.report!, sources: turn.sources })}
-                        />
-                      )}
-                      {turn.question ? (
-                        // 只有"正在跑"时才禁用：此前写成 `running || index !== turns.length - 1`，
-                        // 而问题到达时 run 已结束、它那一轮又不是最后一轮，于是按钮被永久锁死
-                        // （能看到问题但点不动）。
-                        <QuestionCard
-                          question={turn.question}
-                          busy={running}
-                          onAnswer={(text) => answerQuestion(text)}
-                        />
-                      ) : null}
-                      {!turn.structured.message && turn.sources && !turn.report && <Sources sources={turn.sources} />}
-                      {turn.error && <div className="mt-1 text-sm text-red-600 dark:text-red-400">{turn.error}</div>}
-                      {turn.stopped && (
-                        <div className="mt-1 text-xs text-muted">{stopLabel(turn.stopReason)}</div>
-                      )}
-                      <MessageActions message={turn.structured.message} content={turn.content}
-                        status={turn.status} isStreaming={running && index === turns.length - 1} />
-                    </div>
+                  <div className="min-w-0" data-quote-source={turn.id}>
+                    {/* 只有标点的正文不渲染：模型常在工具轮之间吐孤立的 "."。 */}
+                    {turn.structured.message ? (
+                      <MessageRenderer message={turn.structured.message} appearance="document"
+                        activeBlockId={turn.structured.activeBlockId}
+                        isStreaming={running && index === turns.length - 1} />
+                    ) : turn.content && isMeaningful(turn.content) && (
+                      <StreamdownRenderer content={turn.content} isStreaming={running && index === turns.length - 1} />
+                    )}
+                    {turn.report && (
+                      // 报告只在按钮里看全文：正文内联渲染会把几十页 markdown 铺满对话。
+                      <ReportSummary
+                        text={turn.report}
+                        sources={turn.sources}
+                        onOpen={() => setOpenReport({ text: turn.report!, sources: turn.sources })}
+                      />
+                    )}
+                    {turn.question ? (
+                      // 只有"正在跑"时才禁用：此前写成 `running || index !== turns.length - 1`，
+                      // 而问题到达时 run 已结束、它那一轮又不是最后一轮，于是按钮被永久锁死
+                      // （能看到问题但点不动）。
+                      <QuestionCard
+                        question={turn.question}
+                        busy={running}
+                        onAnswer={(text) => answerQuestion(text)}
+                      />
+                    ) : null}
+                    {!turn.structured.message && turn.sources && !turn.report && <Sources sources={turn.sources} />}
+                    {turn.error && <div className="mt-1 text-sm text-red-600 dark:text-red-400">{turn.error}</div>}
+                    {turn.stopped && (
+                      <div className="mt-1 text-xs text-muted">{stopLabel(turn.stopReason)}</div>
+                    )}
+                    <MessageActions message={turn.structured.message} content={turn.content}
+                      status={turn.status} isStreaming={running && index === turns.length - 1} />
                   </div>)}
                 </div>)}
             <div ref={bottomRef} />

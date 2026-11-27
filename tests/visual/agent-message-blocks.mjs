@@ -37,6 +37,8 @@ let completed = false;
 let finishCitation;
 let finishStream;
 let postCount = 0;
+const quotePrompts = [];
+const quoteSteers = [];
 let streamDisconnected = false;
 const failures = [];
 const checks = [];
@@ -65,7 +67,9 @@ async function mock(request, response) {
   } });
   if (path.endsWith(`/sessions/${sessionId}`)) return json(response, { code: 0, data: { ...summary, turns: completed ? [turn()] : [] } });
   if (path.endsWith("/sessions/legacy-browser")) return json(response, { code: 0, data: {
-    ...summary, id: "legacy-browser", turns: [{ ...turn(null), assistant_content: "旧会话仍可阅读。", sources: [] }],
+    ...summary, id: "legacy-browser", turns: [{ ...turn(null), assistant_content: "旧会话仍可阅读。", sources: [] },
+      ...quotePrompts.map((prompt, index) => ({ ...turn(null), id: `quote-${index}`, user_content: prompt,
+        assistant_content: "引用追问完成。", sources: [], process: [] }))],
   } });
   if (path.endsWith("/sessions/unknown-browser")) return json(response, { code: 0, data: {
     ...summary, id: "unknown-browser", turns: [turn({ ...message, references: [], blocks: [
@@ -111,6 +115,20 @@ async function mock(request, response) {
         output: { sources: [{ title: "不应重复显示的旧来源" }] }, turns: 1, duration_ms: 7 });
       response.end();
     } finally { clearInterval(heartbeat); }
+    return;
+  }
+  if (path.endsWith("/agent/run/run_browser/steer")) {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    quoteSteers.push(JSON.parse(body).text);
+    return json(response, { code: 0, data: { injected: true } });
+  }
+  if (path.endsWith("/sessions/legacy-browser/run") && request.method === "POST") {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    quotePrompts.push(JSON.parse(body).prompt);
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    response.end('event: run_start\ndata: {"run_id":"quote-run"}\n\nevent: result\ndata: {"status":"done","final_text":"引用追问完成。","stop_reason":"stop"}\n\n');
     return;
   }
   if (path.startsWith("/api/")) return json(response, { code: 0, data: {} });
@@ -226,6 +244,18 @@ try {
   assert.equal(await evaluate("document.querySelector('article section[aria-label=参考来源]') === null"), true);
   assert.equal(await evaluate("document.querySelector('article').innerText.includes('[[cite:')"), false);
   checks.push("live SSE renders Markdown, table, math, incomplete code and citation before message_end");
+  await evaluate(`(() => {
+    document.activeElement?.blur();const range=document.createRange();range.selectNodeContents(document.querySelector('article p'));getSelection().removeAllRanges();getSelection().addRange(range);
+  })()`);
+  await waitFor("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='询问深知AI')", "streaming quote action");
+  const streamingQuote = await evaluate("getSelection().toString().trim()");
+  await evaluate("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='询问深知AI').click()");
+  await evaluate(`(() => {const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'运行中引用问题');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  await waitFor("!document.querySelector('button[aria-label=发送]').disabled", "streaming quote input");
+  await evaluate("document.querySelector('button[aria-label=发送]').click()");
+  await waitFor("!document.querySelector('[aria-label=取消引用]')", "streaming quote delivered");
+  assert.equal(quoteSteers[0], `针对之前回答中的这段内容：\n\n${streamingQuote}\n\n我的问题/意见是：运行中引用问题`);
+  checks.push("streaming quote reuses the existing steer endpoint with complete quote text");
   await screenshot("message-streaming.png");
   finishStream();
   await waitFor("document.querySelector('article [role=status]')?.textContent === '已完成' && document.querySelectorAll('article sup a').length === 2", "terminal message");
@@ -268,10 +298,117 @@ try {
       assert.equal(await evaluate("window.__messageXss === undefined && document.querySelectorAll('article img').length === 0"), true);
     }
   }
+  // Exercise the selection → explicit action → existing Composer → session run loop.
+  await cdp("Page.navigate", { url: `${origin}/agents?session=legacy-browser` }, session);
+  await waitFor("document.querySelector('[data-quote-source] p') && !document.querySelector('textarea').disabled", "quote fixture");
+  await evaluate(`(() => {
+    const p = document.querySelector('[data-quote-source] p');
+    p.textContent = '第一段回答内容。';
+    const second = document.createElement('p'); second.textContent = '第二段回答内容。'; p.after(second);
+  })()`);
+  const action = "Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === '询问深知AI')";
+  const select = async () => {
+    await evaluate(`(() => {
+      document.activeElement?.blur();
+      const paragraphs = document.querySelectorAll('[data-quote-source] p');
+      const range = document.createRange(); range.setStart(paragraphs[0].firstChild, 0); range.setEnd(paragraphs[1].firstChild, paragraphs[1].textContent.length);
+      const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    })()`);
+    await waitFor(action, "selection action");
+  };
+  await select();
+  const selected = await evaluate("getSelection().toString().trim()");
+  assert.match(selected, /第一段回答内容。/); assert.match(selected, /第二段回答内容。/);
+  assert.equal(await evaluate("!!document.querySelector('[aria-label=取消引用]')"), false);
+  assert.equal(quotePrompts.length, 0);
+  assert.equal(await evaluate(`(() => {const r=(${action}).getBoundingClientRect();return r.left>=0 && r.right<=innerWidth && r.top>=0 && r.bottom<=innerHeight;})()`), true);
+  await evaluate("document.dispatchEvent(new KeyboardEvent('keydown', {key:'c',ctrlKey:true,bubbles:true}))");
+  assert.equal(await evaluate("getSelection().toString().trim()"), selected);
+  await evaluate("getSelection().removeAllRanges()");
+  await waitFor(`!(${action})`, "cleared selection");
+  await select();
+  await evaluate("document.body.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))");
+  await waitFor(`!(${action})`, "outside pointer");
+  await select();
+  await evaluate("document.querySelector('[data-quote-source]').parentElement.dispatchEvent(new Event('scroll'))");
+  await waitFor(`!(${action})`, "scroll dismissal");
+  await select();
+  // Keyboard extension must update the action without mouseup.
+  await evaluate("getSelection().collapseToStart()");
+  await waitFor(`!(${action})`, "collapsed selection");
+  await evaluate("getSelection().modify('extend','forward','character')");
+  await waitFor(action, "keyboard selection");
+  await evaluate(`(${action}).focus()`);
+  await cdp("Input.dispatchKeyEvent", {type:"keyDown", key:"Enter", code:"Enter", windowsVirtualKeyCode:13, text:"\r"}, session);
+  await cdp("Input.dispatchKeyEvent", {type:"keyUp", key:"Enter", code:"Enter", windowsVirtualKeyCode:13}, session);
+  await waitFor("document.querySelector('[aria-label=取消引用]')", "keyboard activation");
+  assert.equal(await evaluate("document.querySelector('[aria-label=取消引用]').parentElement.querySelector('p').textContent"), "第");
+  await evaluate("document.querySelector('[aria-label=取消引用]').click()");
+  await select();
+  await evaluate(`(() => {
+    const input=document.createElement('textarea');input.value='非回答输入';document.querySelector('[data-quote-source]').append(input);input.focus();input.select();
+  })()`);
+  await waitFor(`!(${action})`, "nested textarea excluded");
+  await evaluate("document.querySelector('[data-quote-source] textarea').remove()");
+  await select();
+  await evaluate(`(() => {
+    const range=getSelection().getRangeAt(0);range.setEndAfter(document.querySelector('[data-quote-source]'));document.dispatchEvent(new Event('selectionchange'));
+  })()`);
+  await waitFor(`!(${action})`, "selection leaving the message rejected");
+  await select();
+  await screenshot("quote-action-mobile.png");
+  await select();
+  // Real pointer events verify preventDefault protects Selection until onClick commits the saved text.
+  const point = await evaluate(`(() => {const r=(${action}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+  await cdp("Input.dispatchMouseEvent", { type: "mousePressed", ...point, button: "left", clickCount: 1 }, session);
+  await cdp("Input.dispatchMouseEvent", { type: "mouseReleased", ...point, button: "left", clickCount: 1 }, session);
+  await waitFor("document.querySelector('[aria-label=取消引用]')", "quote draft");
+  assert.equal(await evaluate("document.querySelector('[aria-label=取消引用]').parentElement.querySelector('p').textContent"), selected);
+  assert.equal(quotePrompts.length, 0);
+  assert.equal(await evaluate("document.activeElement === document.querySelector('textarea')"), true);
+  const fill = async (text) => {
+    await evaluate(`(() => {const input=document.querySelector('textarea');input.focus();Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,${JSON.stringify(text)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await waitFor("!document.querySelector('button[aria-label=发送]').disabled", "quote question editing");
+  };
+  await fill("请解释这两段");
+  await evaluate("document.querySelector('textarea').select()");
+  await waitFor(`!(${action})`, "input selection excluded");
+  await evaluate("document.querySelector('button[aria-label=发送]').click()");
+  await waitFor("document.body.innerText.includes('引用追问完成。')", "quoted response");
+  assert.equal(quotePrompts[0], `针对之前回答中的这段内容：\n\n${selected}\n\n我的问题/意见是：请解释这两段`);
+  const questionBubble = "Array.from(document.querySelectorAll('[data-user-question]')).find(el=>el.textContent==='请解释这两段')";
+  await waitFor(questionBubble, "original question bubble");
+  assert.equal(await evaluate("Array.from(document.querySelectorAll('[data-user-question]')).some(el=>el.textContent.includes('针对之前回答中的这段内容：'))"), false);
+  await evaluate("Object.defineProperty(navigator, 'clipboard', {configurable:true,value:{writeText:async text=>{window.__copiedQuestion=text;}}})");
+  await evaluate(`(${questionBubble}).parentElement.parentElement.querySelector('button[aria-label=复制提问]').click()`);
+  assert.equal(await evaluate("window.__copiedQuestion"), "请解释这两段");
+  const quotePreview = "document.querySelector('[data-user-quote]')";
+  await evaluate("document.activeElement?.blur()");
+  await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:1,y:1}, session);
+  assert.equal(await evaluate(`getComputedStyle((${quotePreview}).querySelector('[role=tooltip]')).visibility`), "hidden");
+  const quotePoint = await evaluate(`(() => {const r=(${quotePreview}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+  await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",...quotePoint}, session);
+  await waitFor(`getComputedStyle((${quotePreview}).querySelector('[role=tooltip]')).visibility === 'visible'`, "hover quote preview");
+  assert.equal(await evaluate(`(${quotePreview}).querySelector('blockquote').textContent`), selected);
+  await screenshot("quote-question-separated-mobile.png");
+  await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:1,y:1}, session);
+  await waitFor(`getComputedStyle((${quotePreview}).querySelector('[role=tooltip]')).visibility === 'hidden'`, "quote preview dismissed after hover");
+  await fill("继续追问");
+  await evaluate("document.querySelector('button[aria-label=发送]').click()");
+  await waitFor("document.querySelectorAll('[data-quote-source]').length >= 3", "follow-up completed");
+  assert.equal(quotePrompts[1], "继续追问");
+  const beforeQuoteReload = await evaluate("performance.timeOrigin");
+  await cdp("Page.reload", {}, session);
+  await waitFor(`performance.timeOrigin !== ${beforeQuoteReload} && Array.from(document.querySelectorAll('[data-user-question]')).some(el=>el.textContent==='请解释这两段')`, "quoted history presentation after reload");
+  assert.equal(await evaluate("document.querySelector('[data-user-quote] blockquote').textContent"), selected);
+  assert.equal(quotePrompts.length, 2);
+  assert.equal(await evaluate("Array.from(document.querySelectorAll('[data-user-question]')).some(el=>el.textContent.includes('针对之前回答中的这段内容：'))"), false);
+  checks.push("question-only bubble and copy, hover quote preview and dismissal, raw request context and reload persistence");
+  checks.push("selection does not commit/send; multiline text, viewport bounds, copy shortcut, clear/outside/scroll dismissal, real action click, input exclusion, editable quote submission and subsequent session turn");
   checks.push("legacy fallback, unknown block isolation and unsafe URL/HTML protection");
   assert.equal(streamDisconnected, false);
   assert.deepEqual(failures, []);
-  const result = { checks, screenshots: ["message-streaming.png", "message-desktop.png", "message-mobile.png"], postCount, browserErrors: failures };
+  const result = { checks, screenshots: ["message-streaming.png", "message-desktop.png", "message-mobile.png", "quote-action-mobile.png", "quote-question-separated-mobile.png"], postCount, browserErrors: failures };
   writeFileSync(join(output, "result.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
 } catch (error) {
