@@ -103,7 +103,7 @@ export function CheckoutDialog({ plan, pendingOrder, upgrade = false, now = 0, p
       <div className="px-6 pb-6">
         <div className="mt-5 rounded-xl border border-primary/10 bg-primary-soft/50 p-4">
           <div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-card text-primary"><CreditCard className="size-4" aria-hidden="true" /></span><h3 className="text-sm font-semibold">{locale === "en" ? plan.plan_id : plan.name}</h3></div>
-          <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2"><span className="text-xs text-muted">{isUpgrade ? (zh ? "Pro → Research 差价升级" : "Pro → Research upgrade") : `${plan.duration_months} ${zh ? "个自然月使用权益" : "calendar month of access"}`}</span><span className="text-2xl font-semibold tabular-nums tracking-tight">{amount}</span></div>
+          <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2"><span className="text-xs text-muted">{isUpgrade ? (zh ? "Pro → Research 差价升级" : "Pro → Research upgrade") : `${plan.duration_months} ${zh ? "个月使用权益" : "month of access"}`}</span><span className="text-2xl font-semibold tabular-nums tracking-tight">{amount}</span></div>
           <p className="mt-3 border-t border-primary/10 pt-3 text-xs text-ink-2">{plan.daily_tokens.toLocaleString(locale)} Token / {zh ? "天" : "day"}</p>
         </div>
 
@@ -116,7 +116,7 @@ export function CheckoutDialog({ plan, pendingOrder, upgrade = false, now = 0, p
 
         <div className="mt-4 space-y-2 text-[11px] leading-5 text-muted">
           <p>{paymentMode === "mock" ? (zh ? "开发测试模式，不会真实扣款。" : "Development mode. No real charge.") : (zh ? "单次购买，不会自动续费。" : "One-time purchase. No automatic renewal.")}</p>
-          <p>{legacyWechat ? (zh ? "已有微信待支付订单，需在近期订单中继续处理，无法改为支付宝。" : "An existing WeChat order must be continued in your order history; its channel cannot be changed.") : order ? (zh ? "将继续已有待支付订单，无需重复下单。" : "Continue your pending order without creating another.") : isUpgrade ? (zh ? "本次支付后即可使用 Research 研究版。" : "Access Research features after payment.") : (zh ? "同套餐续费延长当前有效期；新购从权益实际到账时起按自然月计算。" : "Same-plan renewals extend your term. New purchases start at fulfillment, measured in calendar months.")}</p>
+          <p>{legacyWechat ? (zh ? "已有微信待支付订单，需在近期订单中继续处理，无法改为支付宝。" : "An existing WeChat order must be continued in your order history; its channel cannot be changed.") : order ? (zh ? "将继续已有待支付订单，无需重复下单。" : "Continue your pending order without creating another.") : isUpgrade ? (zh ? "本次支付后即可使用 Research 研究版。" : "Access Research features after payment.") : (zh ? "同套餐续费延长当前有效期；新购从权益实际到账时起按月计算。" : "Same-plan renewals extend your term. New purchases start at fulfillment, measured in months.")}</p>
         </div>
 
         {expiresAt && <p className="mt-2 text-xs text-muted">{zh ? "预计有效期至：" : "Expected expiry: "}{new Date(expiresAt).toLocaleString(locale)}</p>}
