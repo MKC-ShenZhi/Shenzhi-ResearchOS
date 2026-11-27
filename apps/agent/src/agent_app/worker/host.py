@@ -17,7 +17,7 @@ from agent_app.application.composition import build_runtime
 from agent_app.application.policies import MAX_EXECUTION_TURNS, run_deadline_s, tool_call_budget
 from agent_app.errors import BusinessError
 from agent_app.execution.types import (
-    TOOL_CALL, TOOL_END, AgentEvent, RunChannel, RunResult, message_from_dict, message_to_dict,
+    TOOL_CALL, TOOL_END, AgentEvent, RunChannel, RunResult, StopReason, UserMessage, message_from_dict, message_to_dict,
 )
 from agent_app.extensions.workspace import Workspace, ensure_session_workspace, read_session_file
 
@@ -27,21 +27,20 @@ logger = logging.getLogger('agent.worker')
 class AgentControlClient:
     def __init__(self, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
         base = os.getenv('AGENT_INTERNAL_URL', 'http://127.0.0.1:8101').rstrip('/')
-        self.protocol = 2 if os.getenv('AGENT_WORKER_PROTOCOL') == '2' else 1
         self.execution_id = None
-        token = os.getenv('AGENT_WORKER_TOKEN' if self.protocol == 2 else 'AGENT_SERVICE_TOKEN', '').strip()
+        token = os.getenv('AGENT_WORKER_TOKEN', '').strip()
         if not token:
-            raise RuntimeError('AGENT_SERVICE_TOKEN is required by Agent Worker')
+            raise RuntimeError('AGENT_WORKER_TOKEN is required by Agent Worker protocol v2')
         self.client = httpx.AsyncClient(base_url=base, timeout=20, transport=transport,
                                         headers={'Authorization': f'Bearer {token}'})
 
     async def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        if self.protocol == 2 and path.startswith('/internal/v2/'):
+        if path.startswith('/internal/v2/'):
             body = dict(body, schema_version=1)
             if '/worker/claim' not in path and self.execution_id is not None:
                 body.setdefault('execution_id', self.execution_id)
         response = await self.client.post(path, json=body)
-        if response.is_error and self.protocol == 2:
+        if response.is_error:
             try:
                 error = response.json().get('error', {})
                 reason = error.get('reason_code')
@@ -58,20 +57,21 @@ class AgentControlClient:
         return response.json()
 
     async def claim(self, worker_id: str):
-        if self.protocol == 2:
-            return await self.post('/internal/v2/worker/claim', {'schema_version': 1, 'worker_id': worker_id})
-        return await self.post('/internal/v1/worker/claim', {
-            'worker_id': worker_id, 'demo_mode': os.getenv('AGENT_DEMO_MODE') == '1',
+        claim = await self.post('/internal/v2/worker/claim', {
+            'schema_version': 1, 'worker_id': worker_id,
+            'demo_mode': os.getenv('AGENT_DEMO_MODE') == '1',
         })
+        if claim.get('run') is not None:
+            self.execution_id = claim['execution_id']
+        return claim
 
     async def heartbeat(self, run_id: str, worker_id: str,
                         lease_token: int) -> WorkerHeartbeatResponseWire:
         request = WorkerHeartbeatRequestWire(worker_id=worker_id, lease_token=lease_token)
         response = await self.post(
-            f'/internal/v{self.protocol}/runs/{run_id}/heartbeat', request.model_dump(mode='json'),
+            f'/internal/v2/runs/{run_id}/heartbeat', request.model_dump(mode='json'),
         )
-        if self.protocol == 2:
-            response.pop('schema_version', None)
+        response.pop('schema_version', None)
         return WorkerHeartbeatResponseWire.model_validate(response)
 
     async def close(self) -> None:
@@ -168,6 +168,7 @@ def report_payload(request: dict[str, Any], result: RunResult | None,
             'truncated': result.truncated, 'prompt_tokens': result.prompt_tokens,
             'completion_tokens': result.completion_tokens, 'tool_calls': result.tool_calls,
             'usage_measured': result.usage_measured, 'question': result.question,
+            'message': result.message.model_dump(mode='json', exclude_none=True) if result.message else None,
             'error': ({'code': result.error.code, 'message': result.error.message}
                       if result.error else None),
         }
@@ -187,15 +188,16 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
     token = int(claim['lease_token'])
     event_seq = int(claim['event_seq'])
     run_id = request['run_id']
-    protocol = 2 if claim.get('schema_version') == 1 else 1
-    prefix = f'/internal/v{protocol}'
-    if protocol == 2:
-        control.execution_id = claim['execution_id']
+    if claim.get('schema_version') != 1 or not claim.get('execution_id'):
+        raise BusinessError(20004, 'Agent Worker 只接受 V2 执行任务', 502)
+    prefix = '/internal/v2'
+    control.execution_id = claim['execution_id']
     stop = asyncio.Event()
     channel = RunChannel()
     queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
     report_files = ReportFileOperations()
     delivery_error: Exception | None = None
+    interruption_error: Exception | None = None
 
     def on_event(event: AgentEvent) -> None:
         queue.put_nowait(event)
@@ -224,6 +226,7 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
         queue.task_done()
 
     async def maintain_lease() -> None:
+        nonlocal interruption_error
         failures = 0
         while not stop.is_set():
             await asyncio.sleep(12)
@@ -237,33 +240,49 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
                 rejected = (isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code < 500
                             or isinstance(exc, BusinessError) and exc.status < 500)
                 if rejected or failures >= 2:
+                    interruption_error = exc
                     stop.set()
                     return
                 # Retry once on the next heartbeat. Control still rejects all
                 # new calls after the persisted lease actually expires.
                 continue
-            except Exception:
+            except Exception as exc:
                 logger.exception('Agent Worker heartbeat rejected run_id=%s', run_id)
+                interruption_error = exc
                 stop.set()
                 return
             failures = 0
-            if not state.active or state.cancel_requested:
+            if not state.active:
+                interruption_error = BusinessError(20004, 'Worker 租约已失效', 409)
+                stop.set()
+                return
+            if state.cancel_requested:
                 stop.set()
                 return
 
     async def receive_controls() -> None:
+        nonlocal interruption_error
         after_seq = 0
         while not stop.is_set():
             try:
                 payload = await control.get(
                     f'{prefix}/runs/{run_id}/controls',
-                    params=({'owner_id': request['owner_id'], 'after_seq': after_seq} if protocol == 1 else
-                            {'worker_id': worker_id, 'lease_token': token, 'execution_id': claim['execution_id'], 'after_seq': after_seq}),
+                    params={'worker_id': worker_id, 'lease_token': token,
+                            'execution_id': claim['execution_id'], 'after_seq': after_seq},
                 )
+                if payload.get('cancel_requested'):
+                    stop.set()
+                    return
                 for item in payload.get('controls') or []:
                     after_seq = max(after_seq, int(item['seq']))
                     if item.get('name') == 'steer':
                         channel.steer(str(item.get('text') or ''))
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code < 500:
+                    interruption_error = exc
+                    stop.set()
+                    return
+                logger.warning('Agent control poll failed run_id=%s', run_id, exc_info=True)
             except Exception:
                 logger.warning('Agent control poll failed run_id=%s', run_id, exc_info=True)
             await asyncio.sleep(0.5)
@@ -271,10 +290,11 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
     result: RunResult | None = None
     execution_error: Exception | None = None
     from agent_app.execution.metering import WorkerMeter, current_meter
-    meter = (WorkerMeter(control, run_id=run_id, execution_id=claim['execution_id'],
+    meter = WorkerMeter(control, run_id=run_id, execution_id=claim['execution_id'],
              worker_id=worker_id, lease_token=token, context=claim['metering_context'], stop=stop,
-             risk_profile=claim.get('risk_profile'), dynamic_budget=claim.get('dynamic_model_budget', False)) if protocol == 2 else None)
+             risk_profile=claim.get('risk_profile'), dynamic_budget=claim.get('dynamic_model_budget', False))
     meter_token = current_meter.set(meter)
+    history = [message_from_dict(item) for item in request.get('history') or []]
     publisher = asyncio.create_task(publish_events())
     heartbeat = asyncio.create_task(maintain_lease())
     controls = asyncio.create_task(receive_controls())
@@ -310,16 +330,24 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
             else tool_call_budget(request.get('mode', 'fast')),
         )
         runtime.strict_tool_budget = True
-        if meter is not None and not getattr(runtime.provider, 'supports_call_metering', False):
+        if meter is not None and not getattr(getattr(runtime, 'provider', runtime), 'supports_call_metering', False):
             stop.set()
             raise BusinessError(20004, 'Provider 未声明调用级门禁能力', 403)
-        history = [message_from_dict(item) for item in request.get('history') or []]
-        result = await runtime.run(request['prompt'], history=history,
+        result = await runtime.run(request['prompt'], run_id=run_id, history=history,
                                    stop=stop, on_event=on_event, channel=channel)
+        if meter.failure is not None or interruption_error is not None:
+            raise meter.failure or interruption_error
         await queue.join()
         if delivery_error:
             raise RuntimeError('Agent event persistence failed') from delivery_error
         await asyncio.to_thread(attach_report_output, request, result, report_files.latest_path())
+    except asyncio.CancelledError:
+        if asyncio.current_task().cancelling() or not stop.is_set():
+            raise
+        # Cancellation can also arrive while activating forced skills, before Runtime starts.
+        result = RunResult(stop_reason=StopReason.CANCELLED,
+                           messages=[*history, UserMessage(request['prompt'])])
+        on_event(AgentEvent(1, 0, 'run_end', {'status': 'stopped', 'stop_reason': 'cancelled'}))
     except Exception as exc:
         execution_error = exc
         result = None
@@ -333,7 +361,7 @@ async def execute_claim(control: AgentControlClient, claim: dict[str, Any], work
         controls.cancel()
         await asyncio.gather(heartbeat, controls, return_exceptions=True)
     payload = report_payload(request, result, execution_error)
-    if meter is not None and stop.is_set() and (execution_error is not None or (result and result.status == 'failed')):
+    if isinstance(meter.failure, BusinessError) and meter.failure.status == 403:
         payload['error_code'] = 'authorization_denied'
     payload.update(worker_id=worker_id, lease_token=token)
     try:
@@ -353,9 +381,8 @@ async def run_worker_forever(*, runtime_factory=None) -> None:
     try:
         while True:
             try:
-                if control.protocol == 2:
-                    from agent_app.execution.metering import replay_observation_spool
-                    await replay_observation_spool(control)
+                from agent_app.execution.metering import replay_observation_spool
+                await replay_observation_spool(control)
                 claim = await control.claim(worker_id)
                 if claim.get('run') is None:
                     await asyncio.sleep(1)

@@ -21,18 +21,18 @@ from .service import require, now_utc, uid
 async def execute(action, payload):
     service = entitlement_service()
     if action == 'recover-submission':
-        from app.services.agent_gateway.v2 import AgentGatewayV2
-        task = await AgentGatewayV2().recover_submission(payload['owner_id'], payload['client_key'])
+        from app.services.agent_gateway.gateway import AgentGateway
+        task = await AgentGateway().recover_submission(payload['owner_id'], payload['client_key'])
         return {'task_id': task['task_id'], 'binding_status': task['binding_status']}
     if action == 'reprocess-usage':
         from agent_contracts.v2 import UsageDelta
-        from app.services.agent_gateway.v2 import AgentGatewayV2
+        from app.services.agent_gateway.gateway import AgentGateway
         from .usage import UsageSettlement
         async with session_scope() as db:
             row = await db.get(UsageInboxRow, payload['measurement_id'])
             require(row is not None, 'MEASUREMENT_NOT_FOUND', 404)
             usage = UsageDelta.model_validate(row.payload)
-        fact = await AgentGatewayV2().start_fact(usage.task_id, usage.call_id)
+        fact = await AgentGateway().start_fact(usage.task_id, usage.call_id)
         async with session_scope() as db:
             receipt = await UsageSettlement(service).ingest(db, usage, fact, principal=payload['principal'])
         return receipt.model_dump(mode='json')
@@ -68,11 +68,11 @@ async def execute(action, payload):
             db.add(EntitlementAuditRow(audit_id=uid(), operation_id=payload['operation_id'], principal=payload['principal'],
                 reason=action, payload=payload, created_at=now_utc()))
     if action == 'revise':
-        from app.services.agent_gateway.v2 import AgentGatewayV2
-        await AgentGatewayV2().request('POST', f'/internal/v2/grants/{grant.grant_id}/revisions', payload=grant.model_dump(mode='json'))
+        from app.services.agent_gateway.gateway import AgentGateway
+        await AgentGateway().request('POST', f'/internal/v2/grants/{grant.grant_id}/revisions', payload=grant.model_dump(mode='json'))
     if action == 'revoke':
-        from app.services.agent_gateway.v2 import AgentGatewayV2
-        await AgentGatewayV2().request('POST', f"/internal/v2/grants/{payload['grant_id']}/revocations", payload=revocation)
+        from app.services.agent_gateway.gateway import AgentGateway
+        await AgentGateway().request('POST', f"/internal/v2/grants/{payload['grant_id']}/revocations", payload=revocation)
     return {'status': 'recorded'}
 
 

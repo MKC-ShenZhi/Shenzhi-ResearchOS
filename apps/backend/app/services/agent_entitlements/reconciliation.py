@@ -95,7 +95,7 @@ async def historical_carry(db, service, counter, ledger_used):
 
 async def reconcile(grant_id, body, principal):
     from .config import entitlement_service
-    from app.services.agent_gateway.v2 import AgentGatewayV2
+    from app.services.agent_gateway.gateway import AgentGateway
 
     request = request_payload(grant_id, body)
     async with session_scope() as db:
@@ -107,13 +107,13 @@ async def reconcile(grant_id, body, principal):
         require(root is not None and root.bound_task_id, 'BOUND_GRANT_REQUIRED')
         task_id = root.bound_task_id
     # Trusted environment only; no caller-provided evidence is accepted as facts.
-    facts = await AgentGatewayV2().close_facts(task_id)
+    facts = await AgentGateway().close_facts(task_id)
     async with session_scope() as db:
         return await apply(db, entitlement_service(), grant_id, body, principal, facts)
 
 
 async def apply(db, service, grant_id, body, principal, facts):
-    require(principal.startswith('local-admin:'), 'ADMIN_REQUIRED', 403)
+    require(principal.startswith(('local-admin:', 'ssh-admin:')), 'ADMIN_REQUIRED', 403)
     await admin_lock(db)
     request = request_payload(grant_id, body)
     old = await replay(db, body.operation_id, principal, request)

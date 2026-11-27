@@ -1,0 +1,116 @@
+x-web-source-sync: &web-source-sync
+  action: sync
+  initial_sync: true
+  # Paths are relative to each watched directory. Never sync host dependencies,
+  # build output or local credentials, including files nested in source folders.
+  ignore:
+    - .env*
+    - '**/.env*'
+    - '*.env'
+    - '**/*.env'
+    - '*.pem'
+    - '**/*.pem'
+    - secrets/
+    - '**/secrets/'
+    - node_modules/
+    - '**/node_modules/'
+    - .next/
+    - '**/.next/'
+
+services:
+  web:
+    image: ${IMAGE_PREFIX:-shenzhi}/web:${IMAGE_TAG:-local}-dev
+    build:
+      target: development
+    command: [pnpm, dev, --hostname, 0.0.0.0]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - web-next:/repo/apps/web/.next
+    develop:
+      watch:
+        # Write into the container filesystem so Turbopack receives file events
+        # on Windows as well as Linux. Do not bind mount these same paths.
+        - { <<: *web-source-sync, path: ../../apps/web/app, target: /repo/apps/web/app }
+        - { <<: *web-source-sync, path: ../../apps/web/clients, target: /repo/apps/web/clients }
+        - { <<: *web-source-sync, path: ../../apps/web/components, target: /repo/apps/web/components }
+        - { <<: *web-source-sync, path: ../../apps/web/config, target: /repo/apps/web/config }
+        - { <<: *web-source-sync, path: ../../apps/web/features, target: /repo/apps/web/features }
+        - { <<: *web-source-sync, path: ../../apps/web/hooks, target: /repo/apps/web/hooks }
+        - { <<: *web-source-sync, path: ../../apps/web/lib, target: /repo/apps/web/lib }
+        - { <<: *web-source-sync, path: ../../apps/web/providers, target: /repo/apps/web/providers }
+        - { <<: *web-source-sync, path: ../../apps/web/public, target: /repo/apps/web/public }
+        - { <<: *web-source-sync, path: ../../apps/web/stores, target: /repo/apps/web/stores }
+        - { <<: *web-source-sync, path: ../../apps/web/styles, target: /repo/apps/web/styles }
+        - { <<: *web-source-sync, path: ../../apps/web/types, target: /repo/apps/web/types }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/web/next.config.mjs, target: /repo/apps/web/next.config.mjs }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/web/tsconfig.json, target: /repo/apps/web/tsconfig.json }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/web/postcss.config.mjs, target: /repo/apps/web/postcss.config.mjs }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/web/proxy.ts, target: /repo/apps/web/proxy.ts }
+        - { action: rebuild, path: ../../apps/web/package.json }
+        - { action: rebuild, path: ../../apps/web/pnpm-lock.yaml }
+        - { action: rebuild, path: ../../apps/web/pnpm-workspace.yaml }
+  backend:
+    command: [uvicorn, 'app.main:app', --host, 0.0.0.0, --port, '8000', --reload, --no-proxy-headers]
+    environment:
+      ENVIRONMENT: development
+      WATCHFILES_FORCE_POLLING: 'true'
+      ADMIN_AUTH_MODE: local_password
+      ADMIN_AUTH_LOCAL_ONLY: 'true'
+      ADMIN_LOCAL_USERNAME: shenzhi
+      ADMIN_LOCAL_PASSWORD: shenzhi-dev
+      ADMIN_SESSION_SECRET: ${ADMIN_DEV_SESSION_SECRET:?Run prepare-env.py first}
+    ports:
+      - 127.0.0.1:${BACKEND_PORT:-8800}:8000
+      # Admin shares this network namespace; its proxy reaches Backend via loopback.
+      - 127.0.0.1:3101:3101
+    volumes:
+      - ../../apps/backend/app:/repo/apps/backend/app
+      - ../../packages/agent-contracts/src:/repo/packages/agent-contracts/src
+  admin:
+    profiles: [full]
+    image: ${IMAGE_PREFIX:-shenzhi}/admin:${IMAGE_TAG:-local}-dev
+    build:
+      context: ../..
+      dockerfile: apps/admin/Dockerfile
+      target: development
+    init: true
+    restart: unless-stopped
+    network_mode: service:backend
+    environment:
+      NODE_ENV: development
+      ADMIN_DOCKER_DEV: 'true'
+      ADMIN_BACKEND_ORIGIN: http://127.0.0.1:8000
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://localhost:3101/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    develop:
+      watch:
+        - { <<: *web-source-sync, path: ../../apps/admin/src, target: /repo/apps/admin/src }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/admin/vite.config.ts, target: /repo/apps/admin/vite.config.ts }
+        - { action: sync+restart, initial_sync: true, path: ../../apps/admin/index.html, target: /repo/apps/admin/index.html }
+        - { action: rebuild, path: ../../apps/admin/package.json }
+        - { action: rebuild, path: ../../apps/admin/pnpm-lock.yaml }
+        - { action: rebuild, path: ../../apps/admin/pnpm-workspace.yaml }
+  agent-api:
+    ports:
+      - 127.0.0.1:${AGENT_PORT:-8811}:8101
+    volumes:
+      - ../../apps/agent/src:/repo/apps/agent/src
+      - ../../apps/agent/skills:/repo/apps/agent/skills
+      - ../../packages/agent-contracts/src:/repo/packages/agent-contracts/src
+  agent-worker:
+    volumes:
+      - ../../apps/agent/src:/repo/apps/agent/src
+      - ../../apps/agent/skills:/repo/apps/agent/skills
+      - ../../packages/agent-contracts/src:/repo/packages/agent-contracts/src
+  agent-usage-worker:
+    volumes:
+      - ../../apps/agent/src:/repo/apps/agent/src
+      - ../../packages/agent-contracts/src:/repo/packages/agent-contracts/src
+volumes:
+  web-next:

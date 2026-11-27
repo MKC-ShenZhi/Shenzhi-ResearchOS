@@ -1,10 +1,12 @@
 import type { ModelOption } from "./model-types";
-import { apiJson, apiPath } from "./http";
+import { agentApiJson, agentApiPath } from "./http";
 import { readSseStream, type SseEvent } from "./sse";
+import { parseAgentMessage, parseAgentMessageEvent, type AgentMessage, type AgentMessageEvent } from "./agent-message";
+export type { AgentMessage, AgentMessageEvent, ContentBlock, MarkdownBlock, Reference } from "./agent-message";
 
 /**
  * Agent 基座（ShenzhiAi）客户端：产品路径使用 Backend Session；无状态 run 仅保留兼容。
- * 事件协议见 apps/backend/app/services/agent/types.py 与 docs/agent/README.md §9。
+ * 消息与事件协议见 docs/agent/message-blocks.md。
  */
 
 export interface AgentSource { title?: string; url?: string; [key: string]: unknown }
@@ -31,6 +33,7 @@ export interface AgentRunResult {
   /** 终态原始原因（stop/cancelled/timeout/max_turns/error…）：界面据此区分"到点了"与"你停的"。 */
   stop_reason?: string;
   final_text: string;
+  message?: AgentMessage | null;
   output?: { kind?: string; report?: string; sources?: AgentSource[] } | null;
   /** 等待回答时的问题（后端已提到顶层，无需解析 output 判别联合）。 */
   question?: AgentQuestion | null;
@@ -43,6 +46,7 @@ export interface AgentRunResult {
 }
 
 export interface AgentActivity {
+  cancelled?: boolean;
   toolCallId: string;
   name: string;
   arguments: string;
@@ -82,6 +86,7 @@ export interface AgentStoredTurn {
   id: string;
   user_content: string;
   assistant_content: string;
+  message?: AgentMessage | null;
   reasoning: string;
   process: Array<
     { kind: "reasoning" | "text"; text: string } |
@@ -123,22 +128,22 @@ export interface AgentRunInput {
 }
 
 export function fetchAgentConfig() {
-  return apiJson<AgentConfig>("/agent/config");
+  return agentApiJson<AgentConfig>("/agent/config");
 }
 
 export function steerAgentRun(runId: string, text: string) {
-  return apiJson<{ injected: boolean }>(
+  return agentApiJson<{ injected: boolean }>(
     `/agent/run/${encodeURIComponent(runId)}/steer`,
     { method: "POST", body: JSON.stringify({ text }) });
 }
 
 export function stopAgentRun(runId: string) {
-  return apiJson<{ stopping: boolean }>(
+  return agentApiJson<{ stopping: boolean }>(
     `/agent/run/${encodeURIComponent(runId)}/stop`, { method: "POST" });
 }
 
 export function createAgentSession(input: AgentRunInput) {
-  return apiJson<AgentSessionSummary>("/agent/sessions", {
+  return agentApiJson<AgentSessionSummary>("/agent/sessions", {
     method: "POST", body: JSON.stringify(input),
   });
 }
@@ -146,21 +151,24 @@ export function createAgentSession(input: AgentRunInput) {
 export function listAgentSessions(limit = 10, cursor?: string | null) {
   const query = new URLSearchParams({ limit: String(limit) });
   if (cursor) query.set("cursor", cursor);
-  return apiJson<AgentSessionPage>(`/agent/sessions?${query.toString()}`);
+  return agentApiJson<AgentSessionPage>(`/agent/sessions?${query.toString()}`);
 }
 
-export function getAgentSession(sessionId: string) {
-  return apiJson<AgentSessionDetail>(`/agent/sessions/${encodeURIComponent(sessionId)}`);
+export async function getAgentSession(sessionId: string) {
+  const session = await agentApiJson<AgentSessionDetail>(`/agent/sessions/${encodeURIComponent(sessionId)}`);
+  return { ...session, turns: session.turns.map((turn) => turn.message == null ? turn
+    : { ...turn, message: parseAgentMessage(turn.message, turn.status) }) };
+
 }
 
 export function renameAgentSession(sessionId: string, title: string) {
-  return apiJson<AgentSessionSummary>(`/agent/sessions/${encodeURIComponent(sessionId)}`, {
+  return agentApiJson<AgentSessionSummary>(`/agent/sessions/${encodeURIComponent(sessionId)}`, {
     method: "PATCH", body: JSON.stringify({ title }),
   });
 }
 
 export function deleteAgentSession(sessionId: string) {
-  return apiJson<{ ok: boolean }>(`/agent/sessions/${encodeURIComponent(sessionId)}`, {
+  return agentApiJson<{ ok: boolean }>(`/agent/sessions/${encodeURIComponent(sessionId)}`, {
     method: "DELETE",
   });
 }
@@ -169,7 +177,7 @@ export function importLegacyAgentSession(body: {
   import_key: string; title: string; created_at?: number; updated_at?: number;
   branched_from?: string; turns: Array<Record<string, unknown>>;
 }) {
-  return apiJson<AgentSessionSummary>("/agent/sessions/import", {
+  return agentApiJson<AgentSessionSummary>("/agent/sessions/import", {
     method: "POST", body: JSON.stringify(body),
   });
 }
@@ -178,7 +186,7 @@ export function importLegacyAgentSession(body: {
 export async function exportAgentSession(
   body: { title: string; messages: Array<Record<string, unknown>>; format: "html" | "jsonl" },
 ): Promise<{ blob: Blob; filename: string }> {
-  const res = await fetch(apiPath("/agent/session/export"), {
+  const res = await fetch(agentApiPath("/agent/session/export"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -194,7 +202,7 @@ export async function exportAgentSession(
 }
 
 export function createWorkspace() {
-  return apiJson<{ workspace_id: string }>("/agent/workspace", { method: "POST" });
+  return agentApiJson<{ workspace_id: string }>("/agent/workspace", { method: "POST" });
 }
 
 export interface WorkspaceUploadResult { path: string; size: number }
@@ -203,7 +211,7 @@ export function uploadWorkspaceFile(workspaceId: string, file: File, relativePat
   const body = new FormData();
   body.append("file", file);
   body.append("path", relativePath);
-  return apiJson<WorkspaceUploadResult>(
+  return agentApiJson<WorkspaceUploadResult>(
     `/agent/workspace/${encodeURIComponent(workspaceId)}/files`, { method: "POST", body });
 }
 
@@ -216,16 +224,18 @@ export async function streamAgentRun(
     onDelta: (text: string, reasoning: string, turn: number) => void;
     onMeta: (data: { warnings?: string[] }) => void;
     onToolCall: (activity: AgentActivity, turn: number) => void;
-    onToolEnd: (toolCallId: string, isError: boolean, durationMs: number, summary: string) => void;
+    onToolEnd: (toolCallId: string, isError: boolean, durationMs: number, summary: string, cancelled?: boolean) => void;
     onRunStart?: (runId: string) => void;
     onMessage?: (text: string, kind: "steer" | "follow_up" | "system") => void;
     onCompaction?: (data: { before_chars: number; after_chars: number }) => void;
+    onMessageEvent?: (event: AgentMessageEvent) => void;
     onResult: (result: AgentRunResult) => void;
   },
   signal?: AbortSignal,
+  idempotencyKey?: string,
 ): Promise<void> {
-  await streamAgentEndpoint(apiPath("/agent/run"), body, handlers, signal,
-    { "Idempotency-Key": crypto.randomUUID() });
+  await streamAgentEndpoint(agentApiPath("/agent/run"), body, handlers, signal,
+    { "Idempotency-Key": idempotencyKey ?? crypto.randomUUID() });
 }
 
 export async function streamAgentSessionRun(
@@ -236,7 +246,7 @@ export async function streamAgentSessionRun(
   signal?: AbortSignal,
 ): Promise<void> {
   await streamAgentEndpoint(
-    apiPath(`/agent/sessions/${encodeURIComponent(sessionId)}/run`), body, handlers, signal,
+    agentApiPath(`/agent/sessions/${encodeURIComponent(sessionId)}/run`), body, handlers, signal,
     { "Idempotency-Key": idempotencyKey },
   );
 }
@@ -247,7 +257,7 @@ export async function attachAgentSessionRun(
   signal?: AbortSignal,
 ): Promise<void> {
   await streamAgentEndpoint(
-    apiPath(`/agent/sessions/${encodeURIComponent(sessionId)}/run/stream?after=0`),
+    agentApiPath(`/agent/sessions/${encodeURIComponent(sessionId)}/run/stream?after=0`),
     undefined, handlers, signal,
   );
 }
@@ -274,6 +284,11 @@ async function streamAgentEndpoint(
 }
 
 function dispatchAgentEvent(event: SseEvent, handlers: Parameters<typeof streamAgentRun>[1]): void {
+  const messageEvent = parseAgentMessageEvent(event);
+  if (messageEvent !== null) {
+    handlers.onMessageEvent?.(messageEvent);
+    return;
+  }
   const data = JSON.parse(event.data);
   switch (event.event) {
     case "run_start":
@@ -299,9 +314,10 @@ function dispatchAgentEvent(event: SseEvent, handlers: Parameters<typeof streamA
       }, data.turn ?? 0);
       break;
     case "tool_end":
-      handlers.onToolEnd(data.tool_call_id, Boolean(data.is_error), data.duration_ms ?? 0, data.summary ?? "");
+      handlers.onToolEnd(data.tool_call_id, Boolean(data.is_error), data.duration_ms ?? 0, data.summary ?? "", Boolean(data.cancelled));
       break;
     case "result":
+      if (data.message != null) data.message = parseAgentMessage(data.message, data.status);
       handlers.onResult(data as AgentRunResult);
       break;
     default:

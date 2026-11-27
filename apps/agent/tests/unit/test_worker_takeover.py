@@ -6,23 +6,28 @@ repository's predicates, persistence and fencing, with an explicit lease clock.
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timedelta
+import asyncio
+import tempfile
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import httpx
-from agent_contracts import TaskSubmission
+from agent_contracts import AIMessage, TaskSubmission
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from agent_app.control import repository
 from agent_app.execution.runtime import AgentRuntime
-from agent_app.execution.types import StopReason
+from agent_app.execution.types import StopReason, ToolCall
+from agent_app.control.metering import GateDenied, MeteringControl
+from agent_app.errors import BusinessError
 from agent_app.infrastructure.database import get_session
 from agent_app.infrastructure.models import Base, RunEventRow, RunRow, TaskRow
-from agent_app.integrations.llm.agent_stream import Finish, TextDelta
+from agent_app.infrastructure.metering_models import TaskMeteringRow
+from agent_app.integrations.llm.agent_stream import Finish, TextDelta, ToolCallEvent
 from agent_app.main import app
 from agent_app.worker import host
-from tests.unit.test_agent import FakeProvider
+from tests.unit.test_agent import FakeProvider, HANG, make_echo
 
 
 class MemorySession:
@@ -36,6 +41,9 @@ class MemorySession:
 
     async def execute(self, statement):
         return self.session.execute(statement)
+
+    async def get(self, model, identity, **kwargs):
+        return self.session.get(model, identity)
 
     async def scalar(self, statement):
         return self.session.scalar(statement)
@@ -52,9 +60,15 @@ class MemorySession:
 
 class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.enterContext(patch.dict('os.environ', {'AGENT_SERVICE_TOKEN': 'test-token'}))
+        spool = self.enterContext(tempfile.TemporaryDirectory())
+        self.enterContext(patch.dict('os.environ', {
+            'AGENT_WORKER_TOKEN': 'worker-token', 'AGENT_AUDIENCE': 'agent-test',
+            'AGENT_GRANT_ISSUER': 'backend-test', 'AGENT_USAGE_OUTBOX_CAPACITY': '100',
+            'AGENT_USAGE_SPOOL_ROOT': spool, 'AGENT_MODEL_ROUTE_REVISION': 'test-route',
+            'AGENT_TOOL_CONFIGURATION_RELEASE': 'test-tools',
+        }))
         # SQLite returns naive datetimes; keep the controlled clock consistent.
-        self.now = datetime(2026, 11, 18, 12)
+        self.now = datetime.now(timezone.utc).replace(tzinfo=None)
         self.enterContext(patch.object(repository, '_now', side_effect=lambda: self.now))
         engine = create_engine('sqlite:///:memory:')
         self.addCleanup(engine.dispose)
@@ -69,14 +83,28 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch.dict(app.dependency_overrides, {get_session: session_dependency}))
         self.control = host.AgentControlClient(transport=httpx.ASGITransport(app=app))
         self.addAsyncCleanup(self.control.close)
-        self.task = await repository.submit(self.db, TaskSubmission(owner_id='owner', prompt='run'))
+        submission = TaskSubmission(owner_id='owner', prompt='run')
+        from agent_contracts.v2 import TaskSubmissionV2
+        from agent_contracts.wire import TaskSubmissionWire
+        from agent_contracts.canonical import request_digest_v1
+        request = TaskSubmissionWire(owner_id='owner', prompt='run')
+        metering = TaskSubmissionV2(schema_version=1, request=request, owner_id='owner',
+            metering_profile_id='profile:'+submission.idempotency_key if submission.idempotency_key else 'profile:test',
+            metering_context='observation_only', submission_id=None,
+            request_digest=request_digest_v1(request.model_dump(mode='json')),
+            agent_audience='agent-test', budget_grant=None, permission_snapshot=None, call_bounds={})
+        self.task = await repository.submit(self.db, submission, metering=metering)
+        profile = await self.db.get(TaskMeteringRow, self.task.task_id)
+        profile.binding_status = 'bound'
+        await self.db.commit()
 
     def expire_lease(self):
-        self.now += timedelta(seconds=46)
+        self.now += timedelta(seconds=repository.WORKER_LEASE_SECONDS + 1)
 
     async def emit(self, claim, worker, seq, *, text='partial'):
         run = claim['run']
-        return await self.control.post(f"/internal/v1/runs/{run['run_id']}/events", {
+        self.control.execution_id = claim['execution_id']
+        return await self.control.post(f"/internal/v2/runs/{run['run_id']}/events", {
             'task_id': run['task_id'], 'run_id': run['run_id'], 'seq': seq,
             'turn': 1, 'name': 'delta', 'data': {'text': text},
             'occurred_at': self.now.isoformat(),
@@ -85,16 +113,18 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
 
     async def report(self, claim, worker, *, status='completed', text='complete'):
         run = claim['run']
-        return await self.control.post(f"/internal/v1/runs/{run['run_id']}/report", {
+        self.control.execution_id = claim['execution_id']
+        return await self.control.post(f"/internal/v2/runs/{run['run_id']}/report", {
             'task_id': run['task_id'], 'run_id': run['run_id'], 'status': status,
             'result': {'final_text': text}, 'usage': {},
             'worker_id': worker, 'lease_token': claim['lease_token'],
         })
 
     async def rejected(self, operation):
-        with self.assertRaises(httpx.HTTPStatusError) as error:
+        with self.assertRaises((httpx.HTTPStatusError, BusinessError)) as error:
             await operation
-        self.assertEqual(error.exception.response.status_code, 409)
+        status = error.exception.response.status_code if isinstance(error.exception, httpx.HTTPStatusError) else error.exception.status
+        self.assertIn(status, (403, 409))
 
     def events(self, run_id):
         return self.session.scalars(select(RunEventRow).where(
@@ -113,10 +143,125 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((claim['lease_token'], claim['event_seq']), (1, 0))
         await self.execute(claim, 'worker-a')
         rows = self.events(claim['run']['run_id'])
+        self.assertEqual(rows[0].name, 'run_start')
+        self.assertEqual(rows[0].data['run_id'], claim['run']['run_id'])
         self.assertEqual([row.seq for row in rows], list(range(1, len(rows) + 1)))
         run = self.session.get(RunRow, claim['run']['run_id'])
         self.assertEqual(run.report_json['status'], 'completed')
         self.assertEqual(run.report_json['result']['final_text'], 'complete')
+        message = AIMessage.model_validate(run.report_json['result']['message'])
+        self.assertEqual(message.blocks[0].content, 'complete')
+        end = next(row for row in rows if row.name == 'message_end')
+        self.assertEqual(AIMessage.model_validate(end.data['message']), message)
+
+    async def test_message_event_delivery_failure_seals_failed_report(self):
+        for fail_after in ('message_start', 'message_end'):
+            with self.subTest(fail_after=fail_after):
+                if fail_after == 'message_end':
+                    # Use a fresh Task after the first failed Run.
+                    from agent_contracts.v2 import TaskSubmissionV2
+                    from agent_contracts.wire import TaskSubmissionWire
+                    from agent_contracts.canonical import request_digest_v1
+                    submission = TaskSubmission(owner_id='owner', prompt='second')
+                    request = TaskSubmissionWire(owner_id='owner', prompt='second')
+                    metering = TaskSubmissionV2(schema_version=1, request=request, owner_id='owner',
+                        metering_profile_id='profile:second', metering_context='observation_only',
+                        submission_id=None, request_digest=request_digest_v1(request.model_dump(mode='json')),
+                        agent_audience='agent-test', budget_grant=None, permission_snapshot=None, call_bounds={})
+                    task = await repository.submit(self.db, submission, metering=metering)
+                    profile = await self.db.get(TaskMeteringRow, task.task_id)
+                    profile.binding_status = 'bound'
+                    await self.db.commit()
+                claim = await self.control.claim('worker-fault')
+                original_post = self.control.post
+                delivered = False
+
+                async def post(path, payload):
+                    nonlocal delivered
+                    if path.endswith('/events'):
+                        if delivered:
+                            raise RuntimeError('simulated event delivery failure')
+                        response = await original_post(path, payload)
+                        if payload['name'] == fail_after:
+                            delivered = True
+                        return response
+                    return await original_post(path, payload)
+
+                with patch.object(self.control, 'post', side_effect=post):
+                    await self.execute(claim, 'worker-fault')
+                run = self.session.get(RunRow, claim['run']['run_id'])
+                self.assertTrue(delivered)
+                self.assertEqual(run.report_json['status'], 'failed')
+                self.assertIsNone((run.report_json.get('result') or {}).get('message'))
+                self.assertTrue(any(row.name == fail_after for row in self.events(run.run_id)))
+
+    async def test_controls_cancel_worker_and_persist_clean_terminal_events(self):
+        claim = await self.control.claim('worker-a')
+        provider = FakeProvider([[TextDelta('partial'), HANG]])
+        runtime = AgentRuntime(provider=provider)
+        with patch.object(host, 'build_runtime', return_value=runtime):
+            worker = asyncio.create_task(host.execute_claim(self.control, claim, 'worker-a'))
+            try:
+                await asyncio.wait_for(provider.started.wait(), 1)
+                await repository.request_cancel(self.db, self.task.task_id, 'owner')
+                await asyncio.wait_for(worker, 2)
+            finally:
+                if not worker.done():
+                    worker.cancel()
+                await asyncio.gather(worker, return_exceptions=True)
+        run = self.session.get(RunRow, claim['run']['run_id'])
+        self.assertEqual(run.status, 'cancelled')
+        self.assertIsNone(run.report_json['error_code'])
+        self.assertIsNone(run.report_json['error_message'])
+        self.assertEqual(run.report_json['result']['final_text'], 'partial')
+        self.assertEqual(self.events(run.run_id)[-1].name, 'run_end')
+        self.assertEqual(self.events(run.run_id)[-1].data['stop_reason'], 'cancelled')
+        pending = [t for t in asyncio.all_tasks() if not t.done()
+                   and 'execute_claim.<locals>' in t.get_coro().__qualname__]
+        self.assertEqual(pending, [])
+
+    async def test_cancel_allows_current_worker_events_but_not_stale_worker(self):
+        claim = await self.control.claim('worker-a')
+        await repository.request_cancel(self.db, self.task.task_id, 'owner')
+        await self.emit(claim, 'worker-a', 1)
+        await self.rejected(self.emit(claim, 'worker-old', 2))
+        await self.report(claim, 'worker-a', status='cancelled')
+        await self.rejected(self.emit(claim, 'worker-a', 2))
+
+    async def test_cancel_rejects_new_authorization_with_explicit_reason(self):
+        from agent_contracts.execution_v2 import WorkerIdentity
+        claim = await self.control.claim('worker-a')
+        await repository.request_cancel(self.db, self.task.task_id, 'owner')
+        identity = WorkerIdentity(schema_version=1, worker_id='worker-a',
+                                  lease_token=claim['lease_token'], execution_id=claim['execution_id'])
+        with self.assertRaises(GateDenied) as error:
+            control = MeteringControl(issuer='backend-test', audience='agent-test',
+                                      public_keys={}, outbox_capacity=100)
+            await control.lock_execution(self.db, identity, run_id=claim['run']['run_id'])
+        self.assertEqual(error.exception.reason, 'TASK_CANCELLED')
+
+    async def test_real_authorization_denial_stays_failed(self):
+        claim = await self.control.claim('worker-a')
+        provider = FakeProvider([[
+            ToolCallEvent(ToolCall('c1', 'echo', {'value': 'a'})), Finish(StopReason.TOOL_CALLS),
+        ]])
+        runtime = AgentRuntime(provider=provider, tools=[make_echo()])
+        with patch.object(host, 'build_runtime', return_value=runtime), patch.object(
+                MeteringControl, 'intent', side_effect=GateDenied('CAPABILITY_NOT_AUTHORIZED')):
+            await asyncio.wait_for(host.execute_claim(self.control, claim, 'worker-a'), 2)
+        run = self.session.get(RunRow, claim['run']['run_id'])
+        self.assertEqual(run.status, 'failed')
+        self.assertEqual(run.report_json['error_code'], 'authorization_denied')
+
+    async def test_cancel_completion_race_keeps_first_report(self):
+        claim = await self.control.claim('worker-a')
+        await repository.request_cancel(self.db, self.task.task_id, 'owner')
+        await self.report(claim, 'worker-a', status='completed')
+        await repository.request_cancel(self.db, self.task.task_id, 'owner')
+        await self.rejected(self.report(claim, 'worker-a', status='cancelled'))
+        run = self.session.get(RunRow, claim['run']['run_id'])
+        self.assertEqual(run.status, 'completed')
+        self.assertEqual(self.session.get(TaskRow, self.task.task_id).status, 'completed')
 
     async def test_takeover_worker_continues_sequence_and_completes(self):
         first = await self.control.claim('worker-a')
@@ -130,6 +275,7 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([row.seq for row in rows], list(range(1, len(rows) + 1)))
         self.assertEqual(rows[0].data, {'text': 'partial'})
         self.assertEqual(rows[1].name, 'run_start')
+        self.assertEqual(rows[1].data['run_id'], second['run']['run_id'])
         self.assertEqual(self.session.get(RunRow, first['run']['run_id']).status, 'completed')
 
     async def test_stale_token_cannot_publish_renew_or_finish_new_lease(self):
@@ -139,8 +285,11 @@ class WorkerTakeoverTests(unittest.IsolatedAsyncioTestCase):
         second = await self.control.claim('worker-b')
         await self.rejected(self.emit(first, 'worker-a', 2, text='stale'))
         await self.rejected(self.report(first, 'worker-a', status='failed', text='stale'))
-        stale = await self.control.heartbeat(first['run']['run_id'], 'worker-a', 1)
-        self.assertFalse(stale.active)
+        self.control.execution_id = first['execution_id']
+        with self.assertRaises(BusinessError) as stale:
+            await self.control.heartbeat(first['run']['run_id'], 'worker-a', 1)
+        self.assertEqual(stale.exception.message, 'LEASE_INACTIVE')
+        self.control.execution_id = second['execution_id']
         current = await self.control.heartbeat(second['run']['run_id'], 'worker-b', 2)
         self.assertTrue(current.active)
         run = self.session.get(RunRow, second['run']['run_id'])

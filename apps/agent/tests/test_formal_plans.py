@@ -5,7 +5,8 @@ Synthetic identities/risk approvals are test fixtures only; no real Provider.
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
-from sqlalchemy import select, text
+from zoneinfo import ZoneInfo
+from sqlalchemy import select, text, event
 from agent_contracts.canonical import digest
 from agent_contracts.v2 import SkillIdentity
 from agent_contracts.execution_v2 import CallIntent
@@ -18,6 +19,16 @@ from app.services.agent_entitlements.plans import build
 from app.services.agent_entitlements.policy import EntitlementPolicy
 from app.services.agent_entitlements.service import EntitlementError
 from app.schemas.admin_plans import AssignPlans, PublishPlans
+
+
+@event.listens_for(OwnerEntitlementRow, 'load')
+def restore_sqlite_gift_timezone(owner, context):
+    # SQLite discards offsets from DateTime(timezone=True). These formal-plan
+    # fixtures only write finite expiries via the Shanghai Admin gift helper;
+    # real expiry/locking tests use PostgreSQL, which preserves the offset.
+    if (context.session.bind.dialect.name == 'sqlite' and owner.expires_at is not None
+            and owner.expires_at.tzinfo is None):
+        owner.expires_at = owner.expires_at.replace(tzinfo=ZoneInfo('Asia/Shanghai'))
 
 
 class FormalPlanTests(unittest.IsolatedAsyncioTestCase):
@@ -62,7 +73,8 @@ class FormalPlanTests(unittest.IsolatedAsyncioTestCase):
     async def mutate(self, plan='basic', action='assign', ids=None, op='assign-test', preview=False, initialize=False):
         body=AssignPlans(operation_id=op,reason='test reason',action=action,user_ids=ids or ['test'],
             plan_id=plan if action=='assign' else None,policy_revision=self.policies[plan].policy_revision if action=='assign' else None,
-            preview=preview,initialize_only=initialize)
+            preview=preview,initialize_only=initialize,
+            duration_months=1 if action=='assign' and plan in ('pro','research') else None)
         async with self.backend() as db,db.begin():
             return await admin.assign(db,body,'local-admin:test')
 
@@ -86,13 +98,73 @@ class FormalPlanTests(unittest.IsolatedAsyncioTestCase):
             rows=(await db.scalars(select(EntitlementAuditRow).where(EntitlementAuditRow.operation_id=='assign-test'))).all()
             self.assertEqual(len(rows),1)
 
-    async def test_formal_registration_never_auto_assigns(self):
+    async def test_admin_http_policy_upload_publish_and_assignment(self):
+        """Real routes and business transactions; only the Agent catalog is synthetic."""
+        import json
+        import os
+        import httpx
+        from contextlib import asynccontextmanager
+        from fastapi import FastAPI
+        from app.api import admin_console
+
+        await self.formal_setup()
+        bundle = build(self.catalog, release='http-test',
+            model_budgets=self.bundle['policies'][0]['model_budget_profiles'],
+            risk_profile='test-risk-explicitly-approved')
+        runtime = {'models': [{'value': 'test/m1', 'enabled': True}], 'skills': [{'name': 'deep-research'}]}
+
+        @asynccontextmanager
+        async def scope():
+            async with self.backend() as db, db.begin():
+                yield db
+
+        app = FastAPI()
+        app.include_router(admin_console.router)
+        with patch.object(admin_console, 'session_scope', scope), patch.object(
+                admin_console, 'get_capabilities', return_value=runtime), patch.dict(os.environ, {
+                    'ENVIRONMENT': 'development', 'ADMIN_AUTH_MODE': 'local_password',
+                    'ADMIN_AUTH_LOCAL_ONLY': 'true', 'ADMIN_LOCAL_USERNAME': 'shenzhi',
+                    'ADMIN_LOCAL_PASSWORD': 'shenzhi-dev', 'ADMIN_SESSION_SECRET': 'test-secret-' * 4}):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=('127.0.0.1', 123)),
+                    base_url='http://localhost:3101', headers={'x-admin-request': '1'}) as browser:
+                response = await browser.post('/api/v1/admin-console/auth/login',
+                    json={'username': 'shenzhi', 'password': 'shenzhi-dev'})
+                self.assertEqual(response.status_code, 200)
+                # Same JSON payload that the existing file-upload UI submits.
+                payload = json.loads(json.dumps(bundle))
+                payload.update(operation_id='http-publish', reason='test upload',
+                    approval_ref='test-policy-review', risk_approval_ref='test-risk-review')
+                response = await browser.post('/api/v1/admin-console/plans/publish', json=payload)
+                self.assertEqual(response.status_code, 200, response.text)
+                response = await browser.get('/api/v1/admin-console/plans')
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(all(p['published'] for p in response.json()['data']['items']))
+                assignment = dict(operation_id='http-assign', reason='test assignment', user_ids=['new'],
+                    plan_id='basic', policy_revision='basic-v1-http-test', preview=True)
+                response = await browser.post('/api/v1/admin-console/entitlements/assign', json=assignment)
+                self.assertEqual(response.json()['data']['items'][0]['status'], 'preview')
+                async with self.backend() as db:
+                    self.assertIsNone(await db.get(OwnerEntitlementRow, 'user:new'))
+                assignment['preview'] = False
+                for _ in range(2):
+                    response = await browser.post('/api/v1/admin-console/entitlements/assign', json=assignment)
+                    self.assertEqual(response.json()['data']['items'][0]['status'], 'success')
+        async with self.backend() as db:
+            self.assertEqual((await db.get(OwnerEntitlementRow, 'user:new')).policy_revision, 'basic-v1-http-test')
+            rows = (await db.scalars(select(EntitlementAuditRow).where(
+                EntitlementAuditRow.operation_id.in_(['http-publish', 'http-assign'])))).all()
+            self.assertEqual(len(rows), 2)
+            self.assertTrue(all(row.principal == 'local-admin:shenzhi' for row in rows))
+
+    async def test_formal_registration_initializes_basic_without_overwrite(self):
         from app.services.agent_entitlements.defaults import initialize_free
         await self.formal_setup()
         async with self.backend() as db,db.begin():
+            self.assertEqual(await initialize_free(db,'new'),1)
+            owner=await self.service.owner(db,'user:new')
+            self.assertEqual(owner.plan_id,'basic')
+            self.assertIsNone(owner.expires_at)
             self.assertEqual(await initialize_free(db,'new'),0)
-            self.assertIsNone(await db.get(OwnerEntitlementRow,'user:new'))
-            with self.assertRaises(EntitlementError):await self.service.owner(db,'user:new')
 
     async def test_formal_per_call_no_task_ceiling_and_unknown_preserved(self):
         await self.formal_setup()
@@ -268,7 +340,7 @@ class FormalPlanTests(unittest.IsolatedAsyncioTestCase):
         await self.formal_setup();await self.prepare()
         self.model_budget=self.model_budget.model_copy(update={'input_bytes':300000})
         with self.assertRaises(AssertionError) as exc:await self.start_call('no-input-room')
-        self.assertIn('MODEL_INPUT_BUDGET_EXHAUSTED',str(exc.exception))
+        self.assertIn('QUOTA_EXHAUSTED',str(exc.exception))
         async with self.backend() as db,db.begin():
             row=await db.get(EntitlementPolicyRow,self.policy.policy_revision)
             row.payload={**row.payload,'model_budget_profiles':{}}

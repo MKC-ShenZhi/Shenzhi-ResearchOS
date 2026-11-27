@@ -234,7 +234,7 @@ Topic Catalog、分页上限、错误重试、数据核对与本地验收见
 当前 Knowledge MVP 打通 Search → 统一 Paper Detail → Graph；Agent 通过
 `services/agent/knowledge_tools.py` 以工具形式复用同一 Knowledge Service。论文详情页的
 Assistant 运行在 Agent Runtime 上：`features/papers/[id]/use-paper-agent.ts` 经
-`streamAgentRun` 调用 `POST /api/v1/agent/run`，提示词显式绑定当前 `paperId` 与标题，
+`streamAgentRun` 调用 `POST /api/v2/agent/run`，提示词显式绑定当前 `paperId` 与标题，
 涉及正文内容时要求调用 `read_paper` 工具。`apps/backend/app/services/agent/read_paper.py`
 经知识库详情的 `pdf_url`（及 arXiv / OpenReview / DOI 候选）读取 PDF 分页文本并保留页号，
 单次返回有长度上限并显式标记截断；PDF 不可达时退回网页正文并标明不是全文。

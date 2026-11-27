@@ -102,6 +102,9 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         async with self.agent() as db:
             task = await repository.submit(db, TaskSubmission(owner_id=owner, prompt=prompt, model='test/m1',
                         idempotency_key='v2:'+self.profile_id), metering=envelope)
+            local = await db.get(TaskMeteringRow, task.task_id)
+            local.binding_status = 'bound'
+            await db.commit()
             self.task_id = task.task_id
         return task
 
@@ -119,7 +122,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
 
     async def claim(self, worker='worker'):
         async with self.agent() as db:
-            result = await repository.claim_run(db, worker, v2=True)
+            result = await repository.claim_run(db, worker)
             self.run, token, _ = result
             execution = await db.scalar(select(ExecutionRow).where(ExecutionRow.run_id == self.run.run_id,
                                                                   ExecutionRow.lease_token == token))
@@ -186,11 +189,28 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         await deliver_once(self.agent, Bridge(), producer_id='agent-test', batch_size=200,
                            max_attempts=5, retry_base_seconds=1, retry_max_seconds=10)
 
-    async def test_pending_cannot_claim_and_v1_worker_cannot_see_v2(self):
-        await self.submit()
+    async def test_worker_claims_only_metered_tasks(self):
+        from agent_contracts import TaskSubmission
+        from agent_contracts.v2 import TaskSubmissionV2
+        from agent_contracts.canonical import request_digest_v1
+        unmetered = TaskSubmission(owner_id='legacy-owner', prompt='legacy task', model='test/m1')
+        wire = TaskSubmissionWire(owner_id='legacy-owner', prompt='legacy task', model='test/m1')
+        envelope = TaskSubmissionV2(schema_version=1, metering_profile_id='unbound-profile',
+            metering_context='observation_only', agent_audience='agent-test', owner_id='legacy-owner',
+            request_digest=request_digest_v1(wire.model_dump(mode='json')), submission_id=None, budget_grant=None,
+            permission_snapshot=None, call_bounds={}, request=wire)
         async with self.agent() as db:
-            self.assertIsNone(await repository.claim_run(db,'legacy'))
-            self.assertIsNone(await repository.claim_run(db,'v2-worker',v2=True))
+            legacy = await repository.submit(db, unmetered, metering=envelope)
+        async with self.agent() as db:
+            self.assertIsNone(await repository.claim_run(db, 'worker-pending'))
+            local = await db.get(TaskMeteringRow, legacy.task_id)
+            self.assertEqual(local.binding_status, 'pending')
+            self.assertIsNone(await repository.claim_run(db, 'unbound-worker'))
+        await self.submit()
+        await self.bind()
+        async with self.agent() as db:
+            v2_claim = await repository.claim_run(db, 'authorized-worker')
+            self.assertEqual(v2_claim[0].task_id, self.task_id)
 
     async def test_submission_retries_share_original_reservation_and_conflict(self):
         await self.submit()
@@ -535,7 +555,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual((await db.get(WindowCounterRow, target_id)).held, 30)
                     await db.rollback()
 
-    async def test_sync_settlement_requires_backend_ack_and_keeps_original_outbox(self):
+    async def test_pending_settlement_keeps_outbox_without_blocking_new_calls(self):
         from agent_app.control.usage_delivery import settle_observation
         from agent_contracts.v2 import UsageBatch, UsageBatchAck
         await self.prepare()
@@ -547,8 +567,9 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         async with self.agent() as db:
             with self.assertRaises(TimeoutError):
                 await settle_observation(db, Unavailable(), completed)
-        with self.assertRaises(GateDenied):
-            await self.start_call('before-ack')
+        # Pending usage remains reserved at Backend; it does not globally
+        # block another call while the durable Outbox is below its cap.
+        await self.start_call('before-ack')
         async with self.agent() as db:
             self.assertEqual((await db.get(UsageOutboxRow, completed.measurement_id)).state, 'pending')
         suite = self
@@ -563,7 +584,6 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         async with self.backend() as db:
             counter = await db.scalar(select(WindowCounterRow))
             self.assertEqual((counter.used, counter.held), (10, 30))
-        await self.start_call('after-ack')
 
     async def test_partial_retains_unmeasured_reservation(self):
         await self.prepare()
@@ -692,9 +712,10 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         from unittest.mock import patch
         import httpx
         from fastapi import FastAPI
-        from app.api import agent_v2 as backend_api
-        from app.services.agent_gateway import v2 as gateway_module
-        from agent_app.api import v2 as agent_api
+        from app.api import agent_control as backend_api
+        from app.api import agent as product_api
+        from app.services.agent_gateway import gateway as gateway_module
+        from agent_app.api import routes as agent_api
         from agent_app.infrastructure.database import get_session
         from agent_app.execution.metering import WorkerMeter,current_meter,model_identity
         from agent_app.integrations.llm.agent_stream import OpenAICompatProvider
@@ -703,6 +724,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         from agent_app.worker.host import AgentControlClient
         backend_app,agent_app=FastAPI(),FastAPI()
         backend_app.include_router(backend_api.router)
+        backend_app.include_router(product_api.router)
         agent_app.include_router(agent_api.router)
         async def agent_db():
             async with self.agent() as db:
@@ -732,11 +754,12 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as spool,patch.dict(os.environ,{
             'AGENT_GATEWAY_TOKEN':'gateway-test','AGENT_FACT_READER_TOKEN':'reader-test',
             'AGENT_WORKER_TOKEN':'worker-test','AGENT_CONTROL_TOKEN':'control-test','AGENT_SERVICE_TOKEN':'legacy-test',
-            'AGENT_V2_ADMISSION':'authorized','AGENT_V1_ADMISSION':'drain_only','AGENT_WORKER_PROTOCOL':'2','AGENT_MODEL_ROUTE_REVISION':'test-route',
+            'AGENT_V2_ADMISSION':'authorized','AGENT_MODEL_ROUTE_REVISION':'test-route',
             'AGENT_USAGE_SPOOL_ROOT':spool,'BACKEND_BFF_SECRET':'bff-test'}),patch.object(backend_api,'session_scope',backend_scope),\
             patch.object(gateway_module,'session_scope',backend_scope),patch.object(gateway_module,'entitlement_service',lambda:self.service),\
             patch.object(agent_api,'EntitlementClient',Bridge),\
-            patch.object(backend_api,'AgentGatewayV2',lambda:gateway_module.AgentGatewayV2(transport=agent_transport)):
+            patch.object(backend_api,'AgentGateway',lambda:gateway_module.AgentGateway(transport=agent_transport)),\
+            patch.object(product_api,'submission_gateway',lambda:gateway_module.AgentGateway(transport=agent_transport)):
             provider=OpenAICompatProvider(ModelConfig(key='test-only',base_url='https://provider.invalid/v1',model='qwen-plus',
                 models=('qwen-plus',),provider='dashscope'),transport=httpx.MockTransport(provider_send))
             resolved=provider.registry.resolve_model('qwen-plus','agent')
@@ -756,22 +779,26 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                 row.payload=self.policy.model_dump(mode='json')
             async with httpx.AsyncClient(transport=backend_transport,base_url='http://backend.invalid',
                 headers={'x-shenzhi-bff-secret':'bff-test','x-shenzhi-user-id':'test','Idempotency-Key':'http-test'}) as browser:
-                response=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
+                # Obsolete V1 admission settings cannot affect V2 execution.
+                with patch.dict(os.environ, {'AGENT_V1_ADMISSION':'legacy'}):
+                    held=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
+                self.assertEqual(held.status_code,200,held.text)
+                response=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
                 self.assertEqual(response.status_code,200,response.text)
                 task=response.json()['task']
                 # Product retry reuses the durable Submission and original Task.
-                replay=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
+                replay=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
                 self.assertEqual(replay.status_code,200,replay.text)
                 self.assertEqual(replay.json()['task']['task_id'],task['task_id'])
                 with patch.dict(os.environ,{'AGENT_V2_ADMISSION':'observation_only'}):
-                    pinned=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
+                    pinned=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
                     self.assertEqual(pinned.status_code,200,pinned.text)
                     self.assertEqual(pinned.json()['task']['metering_context'],'authorized')
                 async with self.backend() as db,db.begin():
                     root=await db.scalar(select(GrantRootRow))
                     revision=await self.service.revise(db,root.grant_id,expected_revision=1,expected_binding_revision=1,
                         expires_at=(await db.get(GrantRevisionRow,(root.grant_id,1))).payload['expires_at'])
-                replay=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
+                replay=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'research','model':resolved.spec.id})
                 self.assertEqual(replay.status_code,200,replay.text)
                 control_client=AgentControlClient(transport=agent_transport)
                 try:
@@ -800,7 +827,7 @@ class ALinePersistenceTests(unittest.IsolatedAsyncioTestCase):
                             current_meter.reset(token)
                         self.assertEqual(len(sends),1)
                         browser.headers['Idempotency-Key']='cannot-bypass-by-new-task'
-                        denied=await browser.post('/api/v2/agent/run',json={'schema_version':1,'prompt':'another','model':resolved.spec.id})
+                        denied=await browser.post('/api/v2/agent/submissions',json={'schema_version':1,'prompt':'another','model':resolved.spec.id})
                         self.assertEqual(denied.status_code,403,denied.text)
                         self.assertEqual(denied.json()['error']['reason_code'],'QUOTA_EXHAUSTED')
                         return

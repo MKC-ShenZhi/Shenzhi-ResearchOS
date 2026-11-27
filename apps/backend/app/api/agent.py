@@ -15,6 +15,8 @@ from agent_contracts import (
     KnowledgeGraphQueryWire, KnowledgePaperDetailWire, KnowledgePaperGraphWire,
     KnowledgeSearchRequestWire, KnowledgeSearchResponseWire, validate_history,
 )
+from agent_contracts.canonical import digest
+from agent_contracts.v2 import V2
 
 from app.api._support.upload_reader import read_upload
 from app.core.config import MAX_FILES, UPLOAD_ACCEPT
@@ -32,34 +34,120 @@ from app.services.agent_sessions.service import (
     get_session_detail, resume_session_run, start_session_run,
 )
 from app.services.agent_sessions import export as agent_export
-from app.services.agent_gateway.client import agent_gateway, read_run_update
+from app.services.agent_gateway.client import read_run_update
 from app.services.agent_attachments import resolve_agent_attachments
 from app.services.agent_uploads import agent_upload_store
 from app.services.uploads.parser import parse_document
 from app.schemas.knowledge import KnowledgeSearchRequest
+from app.api.agent_control import V2Route
 
-router = APIRouter(prefix='/api/v1/agent', tags=['agent'])
+router = APIRouter(prefix='/api/v2/agent', tags=['agent'])
+product_router = APIRouter(route_class=V2Route)
 logger = logging.getLogger(__name__)
 
 
-def product_gateway(owner):
-    if owner.startswith('user:'):
-        from app.services.agent_gateway.v2 import AgentGatewayV2
-        return AgentGatewayV2()
-    return agent_gateway
+def submission_gateway():
+    """Create the only execution Gateway used by product Agent traffic."""
+    from app.services.agent_gateway.gateway import AgentGateway
+    return AgentGateway()
+
+
+def _client_request_digest(body: AgentRunBody) -> str:
+    """Freeze the parsed product request before expiring upload slots are read."""
+    serialized = json.dumps(body.model_dump(mode='json'), sort_keys=True, ensure_ascii=False,
+                            allow_nan=False, separators=(',', ':'))
+    return digest(serialized)
+
+
+class ProductRun(AgentRunBody, V2):
+    """JSON adapter for the same stateless V2 submission accepted by SSE."""
+
+
+def _product_client_request_digest(body: ProductRun) -> str:
+    serialized = json.dumps(body.model_dump(mode='json'), sort_keys=True, ensure_ascii=False,
+                            allow_nan=False, separators=(',', ':'))
+    return digest(serialized)
+
+
+async def _recover_stateless_submission(gateway, owner: str, key: str,
+                                        body: AgentRunBody, *, client_digest: str | None = None) -> tuple[dict | None, str | None]:
+    """Recover a previously admitted V2 request before resolving short-lived uploads."""
+    from sqlalchemy import select
+    from app.core.database import database_url, session_scope
+    from app.models.agent_entitlements import SubmissionRow, ObservationAdmissionRow
+
+    client_digest = client_digest if client_digest is not None else _client_request_digest(body)
+    if not database_url():
+        return None, client_digest
+    async with session_scope() as db:
+        row = await db.scalar(select(SubmissionRow).where(
+            SubmissionRow.owner_id == owner, SubmissionRow.client_key == key))
+        if row is None:
+            row = await db.scalar(select(ObservationAdmissionRow).where(
+                ObservationAdmissionRow.owner_id == owner, ObservationAdmissionRow.client_key == key))
+        stored_client_digest = row.client_request_digest if row is not None else None
+    if row is None:
+        # Fresh requests create an admission during submit; persist their source
+        # fingerprint so later retries can recover before resolving uploads.
+        return None, client_digest
+    if stored_client_digest is None:
+        # Preserve retries for rows created before product fingerprints were
+        # recorded; their normalized Task request is still checked by V2 submit.
+        return None, None
+    if stored_client_digest != client_digest:
+        raise BusinessError(20009, 'Idempotency-Key 已用于不同请求', 409)
+    return await gateway.recover_submission(owner, key), client_digest
+
+
+async def _submit_stateless_request(gateway, owner: str, key: str, body: AgentRunBody,
+                                   *, client_digest: str | None = None):
+    """Share fingerprint recovery, attachment resolution and V2 submission across product adapters."""
+    recovered, submit_digest = await _recover_stateless_submission(
+        gateway, owner, key, body, client_digest=client_digest)
+    if recovered is not None:
+        return recovered, [], None
+    attachment_text, warnings, files = await resolve_agent_attachments(body.attachments, owner)
+    payload = {
+        'owner_id': owner, 'prompt': body.prompt + attachment_text,
+        'session_id': body.session_id, 'mode': body.mode, 'model': body.model,
+        'workspace_id': body.workspace_id, 'skills': body.skills, 'history': body.history,
+        'idempotency_key': key,
+    }
+    task = await gateway.submit(payload, client_request_digest=submit_digest)
+    return task, warnings, files
+
+
+@product_router.post('/submissions')
+async def run_product(body: ProductRun, owner: str = Depends(request_owner),
+                      client_key: str = Header(alias='Idempotency-Key', min_length=1, max_length=200)):
+    client_key = validate_idempotency_key(client_key)
+    if client_key is None:
+        raise BusinessError(20001, 'Idempotency-Key 必填', 422)
+    if body.session_id is not None:
+        raise BusinessError(20001, 'USE_SESSION_RUN_ENDPOINT', 422)
+    try:
+        validate_history(body.history)
+    except ValueError as exc:
+        raise BusinessError(20001, '历史消息格式无效', 400) from exc
+    gateway = submission_gateway()
+    task, warnings, files = await _submit_stateless_request(
+        gateway, owner, client_key, body, client_digest=_product_client_request_digest(body))
+    if files:
+        try:
+            await agent_upload_store.consume(owner, list(files))
+        except Exception:
+            logger.exception('Failed to consume Agent attachments after submit')
+    return dict(schema_version=1, task=task, warnings=warnings)
+
+
+router.include_router(product_router)
 
 
 async def gateway_for_run(run_id, owner):
-    gateway = product_gateway(owner)
-    if gateway is not agent_gateway:
-        try:
-            return gateway, await gateway.run(run_id, owner)
-        except BusinessError as exc:
-            if exc.status != 404:
-                raise
-            # Read-only lookup of legacy runs during drain. This never retries
-            # a submission or changes its authorization/metering context.
-    return agent_gateway, await agent_gateway.run(run_id, owner)
+    """Resolve an existing Run through the V2 execution Gateway."""
+    gateway = submission_gateway()
+    return gateway, await gateway.run(run_id, owner)
+
 
 # Workspace bytes are untrusted documents, including HTML and SVG. Apply this
 # to both download/preview routes, regardless of the filename or MIME type.
@@ -105,7 +193,7 @@ async def agent_knowledge_graph(paper_id: str, depth: int = Query(default=1, ge=
 @router.get('/config')
 async def config(_credential: None = Depends(require_bff)):
     """运行配置：可选模型、技能清单、附件限制。"""
-    config = await agent_gateway.config()
+    config = await submission_gateway().config()
     return ok({
         'models': config.get('models', []),
         'default_model': config.get('default_model'),
@@ -117,24 +205,16 @@ async def config(_credential: None = Depends(require_bff)):
 @router.post('/run')
 async def run(body: AgentRunBody, owner: str = Depends(request_owner),
               idempotency_key: str | None = Header(default=None, alias='Idempotency-Key')):
-    gateway = product_gateway(owner)
+    gateway = submission_gateway()
     key = validate_idempotency_key(idempotency_key)
-    if gateway is not agent_gateway and key is None:
+    # The V2 execution boundary requires a stable retry key for submission.
+    if key is None:
         raise BusinessError(20001, 'Idempotency-Key 必填', 422)
     try:
         validate_history(body.history)
     except ValueError as exc:
         raise BusinessError(20001, '历史消息格式无效', 400) from exc
-    attachment_text, warnings, files = await resolve_agent_attachments(body.attachments, owner)
-    payload = {
-        'owner_id': owner, 'prompt': body.prompt + attachment_text,
-        'session_id': body.session_id, 'mode': body.mode, 'model': body.model,
-        'workspace_id': body.workspace_id,
-        'skills': body.skills, 'history': body.history,
-    }
-    if key is not None:
-        payload['idempotency_key'] = key
-    task = await gateway.submit(payload)
+    task, warnings, files = await _submit_stateless_request(gateway, owner, key, body)
     if files:
         try:
             await agent_upload_store.consume(owner, list(files))
@@ -146,10 +226,13 @@ async def run(body: AgentRunBody, owner: str = Depends(request_owner),
 
 
 async def _agent_task_stream(owner: str, task: dict, warnings: list[str], *, gateway=None):
-    gateway = gateway or agent_gateway
+    from app.services.agent_sessions.messages import MessageCapture
+
+    gateway = gateway or submission_gateway()
     task_id = task['task_id']
     run_id = task['current_run_id']
     after_seq = 0
+    capture = MessageCapture()
     if warnings:
         yield f"event: meta\ndata: {json.dumps({'warnings': warnings}, ensure_ascii=False)}\n\n"
     yield f"event: run_start\ndata: {json.dumps({'run_id': run_id}, ensure_ascii=False)}\n\n"
@@ -157,6 +240,7 @@ async def _agent_task_stream(owner: str, task: dict, warnings: list[str], *, gat
     while True:
         run, events = await read_run_update(gateway, run_id, owner, after_seq)
         for event in events:
+            capture.event(event['name'], event['data'])
             after_seq = max(after_seq, int(event['seq']))
             event_id = f"id: {after_seq}\n"
             yield (f"{event_id}event: {event['name']}\n"
@@ -166,6 +250,7 @@ async def _agent_task_stream(owner: str, task: dict, warnings: list[str], *, gat
         report = run.get('report')
         if report and current_run_id and current_run_id != run_id:
             run_id, after_seq = current_run_id, 0
+            capture.event('run_start', {})
             yield f"event: run_start\ndata: {json.dumps({'run_id': run_id}, ensure_ascii=False)}\n\n"
             continue
         if report:
@@ -176,6 +261,7 @@ async def _agent_task_stream(owner: str, task: dict, warnings: list[str], *, gat
             result = {
                 'status': status, 'stop_reason': result_data.get('stop_reason') or 'error',
                 'final_text': result_data.get('final_text', ''),
+                'message': capture.result(result_data, status=status),
                 'output': result_data.get('output'), 'question': result_data.get('question'),
                 'turns': result_data.get('turns', 0),
                 'duration_ms': result_data.get('duration_ms', 0),
@@ -284,8 +370,9 @@ async def run_agent_session(
     owner: str = Depends(request_owner),
 ):
     key = validate_idempotency_key(idempotency_key)
-    gateway = product_gateway(owner)
-    if gateway is not agent_gateway and key is None:
+    gateway = submission_gateway()
+    # The V2 execution boundary requires a stable retry key for submission.
+    if key is None:
         raise BusinessError(20001, 'Idempotency-Key 必填', 422)
     live = await start_session_run(
         owner=owner, session_id=session_id, prompt=body.prompt, model=body.model,
@@ -335,7 +422,7 @@ async def session_file(session_id: str, path: str, download: bool = False,
     # session has been deleted.  The existence/owner check is deliberately at
     # the HTTP boundary, before resolving the physical path.
     await agent_session_repository.get(session_id, owner)
-    content, media_type = await agent_gateway.read_session_file(owner, session_id, path)
+    content, media_type = await submission_gateway().read_session_file(owner, session_id, path)
     filename = PurePosixPath(path).name or 'file'
     disposition = 'attachment' if download else 'inline'
     return Response(
@@ -361,7 +448,7 @@ async def session_asset(session_id: str, path: str, owner: str = Depends(request
     图片继续 inline 展示；只放行图形所需的内联样式和 data 图片。
     """
     await agent_session_repository.get(session_id, owner)
-    content, media_type = await agent_gateway.read_session_file(owner, session_id, path)
+    content, media_type = await submission_gateway().read_session_file(owner, session_id, path)
     filename = PurePosixPath(path).name or 'asset'
     headers = {
         # Deletion must take effect for a previously copied URL as well; a
@@ -393,7 +480,7 @@ def export_session(body: ExportBody, _credential: None = Depends(require_bff)):
 
 @router.post('/workspace')
 async def create_workspace(owner: str = Depends(request_owner)):
-    return ok(await agent_gateway.create_workspace(owner))
+    return ok(await submission_gateway().create_workspace(owner))
 
 
 @router.post('/workspace/{workspace_id}/files')
@@ -406,4 +493,4 @@ async def upload_workspace_file(workspace_id: str, request: Request,
     if not isinstance(upload, UploadFile) or not relative_path:
         raise BusinessError(20001, '需要 file 与 path 字段')
     data = await upload.read()
-    return ok(await agent_gateway.write_workspace_file(workspace_id, owner, relative_path, data))
+    return ok(await submission_gateway().write_workspace_file(workspace_id, owner, relative_path, data))

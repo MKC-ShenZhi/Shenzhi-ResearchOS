@@ -4,7 +4,7 @@
 
 ## 结构与 API
 
-- `src/main.tsx`：登录、会话检查、管理布局与 hash 路由（总览、用户、能力）。
+- `src/main.tsx`：登录、会话检查、管理布局与 hash 路由（总览、用户、套餐、审计、Agent 目录）。
 - `src/features/`：用户权益、套餐发布、审计与能力目录页面。
 - `src/api.ts`、`useResource.ts`：同源 Cookie 请求、错误与可取消加载。
 - `src/types.ts`：管理用户 API 类型；统计口径由 Backend Service 维护。
@@ -57,6 +57,22 @@ pnpm dev --host 127.0.0.1 --port 3101
 
 访问 http://127.0.0.1:3101 。Admin `.env.local` 可配置服务端 `ADMIN_BACKEND_ORIGIN`（默认 http://127.0.0.1:8000），没有 VITE_ 前缀，不暴露到浏览器。检查：`pnpm typecheck`、`pnpm build`。Backend：`uv run python -m unittest discover -s tests -p test_admin_console.py`。
 
+## Docker 开发
+
+从仓库根目录执行：
+
+```powershell
+python infra/docker/prepare-env.py
+cd infra/docker
+docker compose -f compose.yml -f compose.dev.yml --profile full up -d --build --wait
+```
+
+访问 http://localhost:3101 ，开发账号 `shenzhi`，密码 `shenzhi-dev`。Session Secret 由现有 prepare-env.py 随机生成到本地 `.env` 的 `ADMIN_DEV_SESSION_SECRET`，重复运行保持不变。默认凭据只由 dev override 注入 Backend，生产 override 清空管理认证配置，并拒绝在非 development 环境使用该密码。
+
+Admin 与 Backend 共享网络命名空间，Vite 以 `127.0.0.1:8000` 代理 Backend，Backend 保留 loopback、Cookie 和写操作门禁。3101 端口仅在宿主 `127.0.0.1` 发布；Vite 仅在显式 Docker development 模式接受容器入口流量，校验本地 Host/Origin、拒绝 cross-site 请求并移除转发 Header。普通 Web 不代理管理 API。
+
+开发 Admin 定义在 compose.dev.yml 的 full profile；生产需显式叠加 compose.admin.yml。开发镜像只安装现有锁定依赖。源码同步可执行 `docker compose -f compose.yml -f compose.dev.yml --profile full watch --no-up admin`。Backend 重建/重新创建后，执行相同 up 命令重新关联 Admin 网络命名空间；不要只更新 Backend 后继续使用旧 Admin 容器。
+
 ## 认证与部署边界
 
 认证独立封装于 Backend `core/admin_auth.py`。常量时间比较账号密码；会话包含签发时间、随机 nonce 与 HMAC-SHA256 签名；校验签名、时间及配置。轮换密码或密钥使已有会话失效。退出清除浏览器 Cookie；V1 无服务端撤销列表，被复制的已签发 Cookie 在过期或密钥轮换前仍有效。
@@ -65,20 +81,20 @@ Cookie 为 HttpOnly、SameSite=Strict，Path 限制 `/api/v1/admin-console`，HT
 
 生产部署已确定采用 **SSH 密钥＋本地隧道，目标为 Admin 免账号密码**，完整拓扑、命令模板及上线条件见 [部署文档：Admin 管理入口](../../docs/engineering/deployment.md#四admin-管理入口ssh-密钥与隧道)。管理入口只监听服务器 loopback，提供 `dist/` 静态构建并同源代理管理 API；公网入口必须阻断管理路径。两端本机 HTTP 链路之间由 SSH 加密，不对公网提供 HTTP 管理入口，不开放 CORS。
 
-**当前代码仍为 `local_password`＋Cookie，免密码模式尚未实现。** 部署前必须在现有认证边界完成隧道模式、可信入口校验、同源写保护及审计身份适配。不能仅删登录页、关闭 local-only 或把公网代理转换成 loopback 来绕过认证。上文环境变量及启动命令描述的是当前本地开发方式。
+**当前支持 `local_password` 与显式启用的 `ssh_tunnel`，两者均使用管理 Cookie。** 隧道模式校验 loopback、入口 secret、Host/Origin，并保留同源写保护和稳定审计身份。上文环境变量及启动命令描述本地开发方式；真实 SSH 与公共代理仍需部署验收。
 
 ## 数据与后续边界
 
 用户查询复用 `admin_users.list_users` 与 `AdminUsersResponse`，多规则 Token 单列显示，不相加；缺失权益为未知，Partial 为已知下界，预留不等同于实际消耗。
 
-Model/Skill 来自 Agent `/internal/v1/config`（10 秒超时，不继承环境 HTTP 代理），字段仅使用实际响应；Agent demo 配置会如实展示其 Mock 标签。Tool 目录尚未接入；配置不可用返回 503，不伪装为空。运行配置视图不是授权视图。
+兼容 `/capabilities` API 继续读取 Agent `/internal/v2/config`；新 Agent 目录通过 `/internal/v2/management` 读取 Provider、Model、Tool、Skill。连接不继承环境 HTTP 代理，不可用返回503，不伪装为空。目录状态不是授权或健康状态。
 
 正式套餐的 Policy 发布、权益分配、停用/恢复及审计已接入；能力目录本身仍只读，不提供任意能力编辑。请求期间不执行离线 export_capabilities 脚本。原 Web 用户管理页面及菜单入口已移除，管理界面统一使用本工程；旧 Backend `/api/v1/admin/*` API 与 `SHENZHI_ADMIN_USER_IDS` 配置已移除。
 
 
 ## 正式套餐与 Admin 操作
 
-套餐固定为 Basic/basic（200000）、Pro/pro（1000000）、Research/research（3000000）Token/上海自然日，暂时全部免费。计量输入＋输出；仅 Research 包含 deep-research。模型与通用工具/技能不按套餐区分，来自同一受控 Worker 能力导出。新用户默认待分配，旧注册通知端点仅兼容返回 initialized=0，不再自动授予 Free。
+套餐固定为 Basic/basic（200000）、Pro/pro（1000000）、Research/research（3000000）Token/上海自然日。Basic 永久免费，Pro/Research 使用集中 Billing Catalog 的测试价格。计量输入＋输出；仅 Research 包含 deep-research。模型与通用工具/技能权限保持原配置，来自同一受控 Worker 能力导出。邮箱／OAuth 新用户通过注册通知幂等初始化已发布的永久 Basic；发布或 Backend 暂不可用时不阻止注册，可通过历史初始化补齐。
 
 先在 Backend 执行迁移（先备份，使用本地服务环境）：
 
@@ -92,7 +108,7 @@ uv run --env-file .env alembic upgrade head
 2. 在 Backend 目录生成发布包：
 
 ```powershell
-uv run --env-file .env python -m app.services.agent_entitlements.plans --capabilities ../agent/workspace/formal-capabilities.json --release 20261120 --model-budgets workspace/reviewed-model-budgets.json --output workspace/formal-plans-20261120.json
+uv run --env-file .env python -m app.services.agent_entitlements.plans --capabilities ../agent/workspace/formal-capabilities.json --release 20261120 --model-budgets workspace/reviewed-model-budgets.json --risk-profile <APPROVED_PROFILE> --output workspace/formal-plans-20261120.json
 ```
 
 三个版本为 basic-v1-20261120、pro-v1-20261120、research-v1-20261120。正式套餐不再使用 --call-upper-bound：每日规则的 reservation_units/call_upper_bound 均为0，明确由 dynamic_model_budget=true 的独立逐调用预算路径处理，不代表无限授权。旧策略仍保留旧字段语义。
@@ -116,12 +132,12 @@ uv run --env-file .env python -m app.services.agent_entitlements.plans --capabil
 
 `model_risk_profile=null` 的历史包会拒绝 TOKEN_BOUND_UNPROVEN；生成命令现在提前拒绝风险配置或逐模型预算为空的发布包。指定 `--risk-profile <APPROVED_PROFILE>` 和 `--model-budgets <BUDGET_JSON>`，并在控制台填写对应风险记录。允许仅为本次要启用的模型提供约束；其他模型仍拒绝 MODEL_BUDGET_UNCONFIGURED，不因共享风险引用而放行。`--model-budgets` 按模型ID合并覆盖旧包配置，保留未指定的其他模型预算。
 
-DeepSeek 的有限预算配置见 `apps/backend/app/data/agent_deepseek_model_budget.json`：输出最多4096 Token、输入按完整请求UTF-8字节加1024余量预留。历史context_window_tokens=32768字段仅保留兼容，不再作为单次输入限额；输入按每日剩余额度检查，真实上下文上限仅采用Worker Registry明确声明的值。输出限制语义仍依赖已接入Provider的max_tokens契约，不代表本次做过新的实测。使用时须确认现有Provider遵守包含思考Token的completion输出上限。
+逐模型预算由部署负责人在本地审核文件中维护，不再提供仓库内固定 Provider 预算。使用 `--model-budgets <REVIEWED_MODEL_BUDGETS_JSON>` 合并覆盖，或通过 `--previous-bundle` 复用已经批准的预算。历史 `context_window_tokens` 字段继续兼容；真实上下文上限仅采用 Worker Registry 明确声明的值。
 
 3. Admin → 套餐管理 → 发布与迁移 → 发布套餐新版本 → 上传发布包 → 填写原因、Policy 审批引用、模型风险审批引用（如有）→ 确认发布。Backend 校验受控身份摘要、固定三档规则与当前 Agent 的公开 Model/Skill 集合。Tool build 身份由离线导出和管理员审批保证，当前配置 HTTP 接口无法远程验证 build 摘要。
-4. 用户管理 → 勾选一个/多个用户 → 选择套餐、原因 → 预览 → 确认执行。成功、失败和部分成功均分用户返回；失败不覆盖该用户权益。网络失败保留操作 ID 供原请求重试。
+4. 用户管理 → 勾选一个/多个用户 → 选择套餐、原因；Pro/Research 必选 1～12 个自然月，Basic 永久免费 → 预览原权益与目标有效期 → 确认覆盖。有效期从实际执行时间重新计算，不叠加，可能缩短已有权益；预览时间仅供参考。成功、失败和部分成功均分用户返回；失败不覆盖该用户权益。网络失败保留操作 ID 供原请求重试。
 5. 历史用户：套餐管理 → 发布与迁移 → 历史账号迁移预览，填写明确的注册时间截止点，预览待分配用户后批量初始化 Basic。只补缺失分配，不覆盖现有特殊/禁用/人工权益；有历史 Free 的用户可在用户列表由管理员显式调整。
-6. 停用/恢复使用同一预览、确认和审计流程。审计页查看管理员、时间、操作 ID、原因、审批引用及各用户前后套餐/Policy。
+6. 停用/恢复使用同一预览、确认和审计流程。已停用用户须显式恢复后才能分配／购买，恢复不延长原到期日。审计页查看管理员、时间、操作 ID、原因、审批引用及各用户前后套餐/Policy/有效期。Admin 赠予和用户购买共用同一权益记录，来源仅供审计，不限制有限期权益续费／升级。
 
 写 API 全部要求独立管理会话及 X-Admin-Request: 1，不开放 CORS，local-only 限制保持。正式套餐 CLI assign/install-policy 不作为分配/发布旁路。
 
@@ -129,7 +145,7 @@ DeepSeek 的有限预算配置见 `apps/backend/app/data/agent_deepseek_model_bu
 |---|---|---|
 | GET | /plans | 发布版本、固定额度、能力与风险门禁状态 |
 | POST | /plans/publish | 发布三档不可变 Policy；operation_id/reason/approval_ref/policies/capabilities/risk_approval_ref |
-| POST | /entitlements/assign | user_ids（最多100）、action（assign/disable/restore）、plan_id、policy_revision、reason、operation_id、preview、initialize_only |
+| POST | /entitlements/assign | user_ids（最多100）、action（assign/disable/restore）、plan_id、policy_revision、reason、operation_id、preview、initialize_only、duration_months（Pro/Research 分配必填，1～12） |
 | POST | /migration/preview | before（带时区）、limit（最多100）；只读预览历史缺失用户 |
 | GET | /audit?page=1&page_size=20 | 管理操作审计 |
 
@@ -143,7 +159,7 @@ DeepSeek 的有限预算配置见 `apps/backend/app/data/agent_deepseek_model_bu
 
 迁移028只新增 agent_plan_releases 发布指针表；历史 Policy/Grant/Usage/Audit 不更新或删除。回滚先停止新准入并排空已签 per_call Grant，保留 Control、结算与 Usage Worker；不得在存量任务中直接回退预算代码。撤回发布应新建版本并显式重新分配。数据库 downgrade 只移除发布指针表，不恢复旧自动 Free，也不删除历史账本；应用回滚前须保留授权/用量接收能力。
 
-上线前必须核对：迁移028、独立本机管理员密钥、Agent 的 authorized 准入与 v1 drain_only、隔离角色 Token、签名私钥/历史公钥、实际 Worker 导出/版本、真实模型风险批准、Usage Worker 与持久 spool。未完成风险批准时界面可分配套餐，但模型门禁继续拒绝；不得称已具备生产模型授权。Web Deep Research 页面仍是演示工作台，真实 Skill 权限走 Agent 任务链路，普通科研检索不依赖该专用 Skill。
+上线前必须核对：迁移028、独立本机管理员密钥、Agent 的 authorized 准入、隔离角色 Token、签名私钥/历史公钥、实际 Worker 导出/版本、真实模型风险批准、Usage Worker 与持久 spool。未完成风险批准时界面可分配套餐，但模型门禁继续拒绝；不得称已具备生产模型授权。Web Deep Research 页面仍是演示工作台，真实 Skill 权限走 Agent 任务链路，普通科研检索不依赖该专用 Skill。
 
 
 ## 动态单次模型预算
@@ -155,3 +171,9 @@ Permit 的 model_budget 记录 basis/input_tokens/output_tokens/reserved_tokens�
 预算协商字段是持久 JSON 中的可选扩展，不需新增数据库迁移；缺省字段序列化时不写出，历史 Permit/Intent/Usage 保持原始兼容。签名 Grant 的 model_call_budget=dynamic_v1 区分新路径。历史 Grant 按其原风险审批与固定预算路径执行及结算，不原地更换旧授权；部署时应排空旧任务或保留对应版本 Worker。新协议混部不匹配时拒绝，不降级绕过。Unknown/Partial、封闭证明、超额和账本规则不变。
 
 审计列表的 `target_accounts` 通过记录中的用户 ID 批量关联当前账户邮箱（每项为 `user_id`、`email`）。页面优先显示当前邮箱，账户不存在或邮箱为空时回退到 ID；未记录目标账户的操作显示“—”。这是只读展示补充，不是操作发生时的邮箱快照，原始审计 payload 保持不变。
+
+## Agent Registry 只读目录与生产入口
+
+Provider、Model、Tool、Skill 的列表、详情、参数 Schema 与文档预览见 [目录说明](../../docs/admin/agent-management-console.md)。浏览器不直接调用 Agent，不持有内部 Token；Backend 通过独立 `AGENT_MANAGEMENT_TOKEN` 读取真实 Registry。模型资料及价格为静态快照，没有官网刷新或配置写接口。
+
+生产支持显式启用 SSH 隧道认证与独立 Nginx 静态镜像，开发账号登录继续保留。默认生产 override 仍关闭 Admin；部署时显式叠加 `compose.admin.yml`，通过独立 Session Secret 与入口 secret 隔离公共代理，配置及上线条件见 [Admin Docker 指南](../../infra/docker/ADMIN.md)。现有套餐发布、权益调整与审计继续使用原有预览/确认流程；不新增 Agent 专用操作审计。

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from pydantic import BaseModel, ValidationError
+from agent_contracts.messages import Reference
 
 from agent_app.execution.metering import actual_call, tool_identity, current_meter
 from agent_contracts.canonical import request_digest_v1
@@ -32,6 +33,7 @@ class ToolOutput:
     content: str = ''
     terminal: Any = None
     added_tool_names: tuple[str, ...] = ()
+    references: tuple[Reference, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -212,8 +214,13 @@ class ToolRegistry:
         except Exception as exc:
             return ToolResult(call.call_id, call.name, f'工具执行失败: {exc}', is_error=True)
         if isinstance(output, ToolOutput):
+            try:
+                references = tuple(Reference.model_validate(ref) for ref in output.references)
+            except (ValidationError, TypeError) as exc:
+                return ToolResult(call.call_id, call.name, f'工具来源校验失败: {exc}', is_error=True)
             result = ToolResult(call.call_id, call.name, output.content,
-                                terminal=output.terminal, added_tool_names=output.added_tool_names)
+                                terminal=output.terminal, added_tool_names=output.added_tool_names,
+                                references=references)
         else:
             result = ToolResult(call.call_id, call.name, str(output))
         if after is not None:

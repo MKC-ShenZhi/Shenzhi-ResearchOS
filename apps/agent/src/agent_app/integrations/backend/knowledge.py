@@ -18,7 +18,7 @@ from agent_app.errors import BusinessError
 class BackendKnowledgeClient:
     def __init__(self):
         self.base_url = os.getenv(
-            'BACKEND_INTERNAL_URL', 'http://127.0.0.1:8000/api/v1/agent',
+            'BACKEND_INTERNAL_URL', 'http://127.0.0.1:8000/api/v2/agent',
         ).rstrip('/')
         self.token = os.getenv('AGENT_SERVICE_TOKEN', '').strip()
 

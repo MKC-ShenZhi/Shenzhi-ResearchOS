@@ -37,9 +37,13 @@ export function requestIdForApiError(error: unknown): string | undefined {
   return error instanceof ApiError ? error.requestId ?? undefined : undefined;
 }
 
-export function apiPath(path: string) {
+export function apiPath(path: string, version: "v1" | "v2" = "v1") {
   const p = path.startsWith("/") ? path : `/${path}`;
-  return `${API_PREFIX}${p}`;
+  return `/api/${version}${p}`;
+}
+
+export function agentApiPath(path: string) {
+  return apiPath(path, "v2");
 }
 
 /** Backend identity is supplied only by the same-origin BFF. */
@@ -70,6 +74,7 @@ async function ensureBackendIdentity() {
 export async function apiJson<T>(
   path: string,
   init: RequestInit = {},
+  version: "v1" | "v2" = "v1",
 ): Promise<T> {
   init.signal?.throwIfAborted();
   await ensureBackendIdentity();
@@ -79,7 +84,7 @@ export async function apiJson<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(apiPath(path), { ...init, headers, signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000) });
+  const res = await fetch(apiPath(path, version), { ...init, headers, signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000) });
   const requestId = res.headers.get("X-Request-ID");
   if (res.status === 204) return undefined as T;
   let payload: unknown;
@@ -112,6 +117,10 @@ export async function apiJson<T>(
   }
 
   return envelope.data;
+}
+
+export function agentApiJson<T>(path: string, init: RequestInit = {}) {
+  return apiJson<T>(path, init, "v2");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -10,6 +10,8 @@ import { AccountSection } from "./account-section";
 import { NotificationsPanel } from "./notifications-panel";
 import { PlaceholderPanel } from "./placeholder-panel";
 import { ProfilePanel } from "./profile-panel";
+import { SubscriptionPanel } from "./subscription/subscription-panel";
+import { UsagePanel } from "./subscription/usage-panel";
 import { isSettingsTab, SETTINGS_TABS } from "./tab-config";
 
 export { McpIcon } from "./tab-config";
@@ -56,7 +58,9 @@ function SettingsTabsForIdentity() {
         </TabsList>
       </div>
       <TabsContent id="settings-panel-profile" aria-labelledby="settings-tab-profile" value="profile" className="mt-6"><ProfilePanel account={<AccountSection key={session?.user.id ?? "anonymous"} locale={settings.locale} />} user={session?.user ?? null} locale={settings.locale} themeMode={settings.themeMode} themePreset={settings.themePreset} loading={settings.loading} notice={settings.notice} error={settings.error} onLocaleChange={(value) => void settings.setLocale(value)} onThemeChange={(value) => void settings.setTheme(value)} onThemePresetChange={settings.setThemePreset} /></TabsContent>
-      {(["subscription", "usage", "agent", "mcp", "api"] as const).map((value) => <TabsContent key={value} id={`settings-panel-${value}`} aria-labelledby={`settings-tab-${value}`} value={value} className="mt-6"><PlaceholderPanel locale={settings.locale} name={t[value]} /></TabsContent>)}
+      <TabsContent id="settings-panel-subscription" aria-labelledby="settings-tab-subscription" value="subscription" className="mt-6"><SubscriptionPanel locale={settings.locale} userId={session?.user.id} /></TabsContent>
+      <TabsContent id="settings-panel-usage" aria-labelledby="settings-tab-usage" value="usage" className="mt-6"><UsagePanel locale={settings.locale} userId={session?.user.id} /></TabsContent>
+      {(["agent", "mcp", "api"] as const).map((value) => <TabsContent key={value} id={`settings-panel-${value}`} aria-labelledby={`settings-tab-${value}`} value={value} className="mt-6"><PlaceholderPanel locale={settings.locale} name={t[value]} /></TabsContent>)}
       <TabsContent id="settings-panel-notifications" aria-labelledby="settings-tab-notifications" value="notifications" className="mt-6"><NotificationsPanel locale={settings.locale} values={settings.notifications} loading={settings.loading} notice={settings.notice} error={settings.error} onChange={(value) => void settings.setNotifications(value)} /></TabsContent>
     </Tabs>
   </>;

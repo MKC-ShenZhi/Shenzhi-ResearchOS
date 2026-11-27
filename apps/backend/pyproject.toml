@@ -3,8 +3,9 @@ name = "backend"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-	"agent-contracts",
+    "agent-contracts",
     "alembic>=1.19.1",
+    "alipay-sdk-python>=3.7.1467",
     "asyncpg>=0.31.0",
     "cryptography>=44",
     "fastapi>=0.115.0",

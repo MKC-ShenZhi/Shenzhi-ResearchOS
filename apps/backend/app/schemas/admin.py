@@ -29,7 +29,9 @@ class AdminUser(BaseModel):
     plan_id: str | None
     policy_revision: str | None
     entitlement_enabled: bool | None
-    entitlement_status: Literal['ready', 'abnormal', 'pending_initialization']
+    expires_at: datetime | None = None
+    source: str | None = None
+    entitlement_status: Literal['ready', 'abnormal', 'pending_initialization', 'expired', 'expiry_pending']
     model_calls_enabled: bool
     usage_windows: list[AdminUsageWindow]
 

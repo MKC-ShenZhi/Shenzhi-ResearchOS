@@ -11,8 +11,11 @@ from app.core.request_context import (
     get_request_id,
 )
 from app.core.database import dispose_engine
-from app.api.agent_v2 import router as agent_v2_router
+from app.api.agent_control import router as agent_control_router
 from app.api.admin_console import router as admin_console_router
+from app.api.agent_management import router as agent_management_router
+from app.api.billing import router as billing_router
+from app.api.payment_webhooks import router as payment_webhooks_router
 from app.services.agent_entitlements.service import EntitlementError
 from app.services.agent_sessions.repository import agent_session_repository
 
@@ -29,8 +32,11 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title='ShenZhi AI API', version='1.0.0', lifespan=lifespan)
-app.include_router(agent_v2_router)
+app.include_router(agent_control_router)
 app.include_router(admin_console_router)
+app.include_router(agent_management_router)
+app.include_router(billing_router)
+app.include_router(payment_webhooks_router)
 configure_logging()
 logger = logging.getLogger(__name__)
 for router in (

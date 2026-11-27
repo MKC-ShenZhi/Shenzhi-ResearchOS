@@ -1,17 +1,19 @@
 """Audited Admin-only plan operations. Each caller owns a database transaction."""
 from datetime import datetime
-from sqlalchemy import bindparam, select, text
+from sqlalchemy import bindparam, or_, select, text
 from agent_contracts.canonical import digest
 from app.models.agent_entitlements import (PlanReleaseRow, EntitlementPolicyRow, OwnerEntitlementRow,
     EntitlementAuditRow, GrantRootRow, SubmissionRow, WindowCounterRow)
 from .policy import EntitlementPolicy
 from .plans import PLANS, POOL, build
 from .service import require, uid, now_utc
+from .dates import add_calendar_months
 
 
 async def list_audit(db, *, page, page_size):
     rows = (await db.scalars(select(EntitlementAuditRow).where(
-        EntitlementAuditRow.principal.startswith('local-admin:')).order_by(
+        or_(EntitlementAuditRow.principal.startswith('local-admin:'),
+            EntitlementAuditRow.principal.startswith('ssh-admin:'))).order_by(
         EntitlementAuditRow.created_at.desc(), EntitlementAuditRow.audit_id.desc())
         .offset((page - 1) * page_size).limit(page_size))).all()
     targets = []
@@ -135,39 +137,30 @@ async def change_one(db, body, user_id, principal):
     owner=await db.scalar(select(OwnerEntitlementRow).where(OwnerEntitlementRow.owner_id==owner_id)
                           .with_for_update().execution_options(populate_existing=True))
     before={'plan_id':owner.plan_id if owner else None,'policy_revision':owner.policy_revision if owner else None,
-            'enabled':owner.enabled if owner else None}
+            'enabled':owner.enabled if owner else None,
+            'expires_at':owner.expires_at.isoformat() if owner and owner.expires_at else None,
+            'source':owner.source if owner else None}
     if body.initialize_only:
         require(owner is None and body.action=='assign' and body.plan_id=='basic', 'EXISTING_ASSIGNMENT_PRESERVED')
     if body.action=='assign':
         require(body.plan_id and body.policy_revision, 'PLAN_REVISION_REQUIRED',422)
         release=await db.get(PlanReleaseRow,body.plan_id)
         require(release is not None and release.policy_revision==body.policy_revision, 'PLAN_RELEASE_CHANGED')
-        row=await db.get(EntitlementPolicyRow,release.policy_revision)
-        require(row and row.approved and not row.test_only, 'POLICY_NOT_APPROVED',403)
-        policy=EntitlementPolicy.model_validate(row.payload)
-        require(policy.plan_id==body.plan_id and policy.reservation_mode=='per_call', 'FORMAL_POLICY_CONFLICT')
-        if owner and owner.policy_revision!=policy.policy_revision:
-            active=await db.scalar(select(GrantRootRow.grant_id).join(SubmissionRow,
-                SubmissionRow.submission_id==GrantRootRow.submission_id).where(
-                SubmissionRow.owner_id==owner_id,GrantRootRow.status!='closed').limit(1))
-            require(active is None, 'ACTIVE_GRANTS_REQUIRE_DRAIN')
-        after={'plan_id':body.plan_id,'policy_revision':policy.policy_revision,'enabled':True}
-        if not body.preview:
-            if owner:
-                owner.plan_id=body.plan_id;owner.policy_revision=policy.policy_revision;owner.enabled=True
-            else:
-                owner=OwnerEntitlementRow(owner_id=owner_id,**after);db.add(owner);await db.flush()
-            rule=policy.rules[0];window=rule.window(owner_id,policy.policy_revision,now_utc())
-            counter=await db.get(WindowCounterRow,window.window_id)
-            if counter:counter.limit_units=rule.limit_units
+        from .assignment import assign_policy
+        expires_at = add_calendar_months(now_utc(), body.duration_months) if body.duration_months else None
+        owner, after = await assign_policy(db, owner, owner_id, body.plan_id, body.policy_revision,
+                                          preview=body.preview, expires_at=expires_at, source='admin')
+        after={**after, 'expires_at':expires_at.isoformat() if expires_at else None, 'source':'admin'}
     else:
         require(owner is not None, 'ENTITLEMENT_UNASSIGNED',403)
         require(body.action!='restore' or owner.plan_id in PLANS, 'FORMAL_PLAN_REQUIRED',403)
         if body.action == 'restore':
             row = await db.get(EntitlementPolicyRow, owner.policy_revision)
             require(row and row.approved and not row.test_only, 'POLICY_NOT_APPROVED',403)
-        after={**before,'enabled':body.action=='restore'}
-        if not body.preview:owner.enabled=after['enabled']
+        after={**before,'enabled':body.action=='restore','source':'admin'}
+        if not body.preview:
+            owner.enabled=after['enabled']
+            owner.source='admin'
     return {'user_id':user_id,'status':'preview' if body.preview else 'success','before':before,'after':after}
 
 

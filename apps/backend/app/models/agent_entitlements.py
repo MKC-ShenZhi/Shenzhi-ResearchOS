@@ -24,6 +24,8 @@ class OwnerEntitlementRow(Base):
     policy_revision: Mapped[str] = mapped_column(ForeignKey('agent_entitlement_policies.policy_revision'))
     plan_id: Mapped[str] = mapped_column(String(255))
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source: Mapped[str] = mapped_column(String(32), default='admin', server_default='admin')
 
 
 class MeteringProfileRow(Base):

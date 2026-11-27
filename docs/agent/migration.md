@@ -17,7 +17,7 @@
 | `app/services/agent_contracts/` | `packages/agent-contracts/src/agent_contracts/` | 共享领域契约和 Pydantic HTTP Wire Model；包含 Task/Run/Event/Report、Knowledge、配置、Workspace 与产物文件 |
 | `app/services/agent/cli.py`、`__main__.py` | `apps/agent/src/agent_app/cli.py`、`__main__.py` | 保留独立 CLI 入口并改为 Agent 自有导入 |
 
-Agent 源码及测试未发现 `app.*` Backend 包导入。Agent Knowledge 工具只经 `BackendKnowledgeClient` 调用受服务凭据保护的产品 API；Agent 进程使用独立数据库配置。Backend 对 Agent 的请求均经 `AgentGateway` 和共享 Wire Model。
+Agent 源码及测试未发现 `app.*` Backend 包导入。Agent Knowledge 工具只经 `BackendKnowledgeClient` 调用受服务凭据保护的产品 API；Agent 进程使用独立数据库配置。Backend 对 Agent 的执行请求均经 `AgentGateway`（`app/services/agent_gateway/gateway.py`）和共享 Wire Model。该文件名按单一正式 Gateway 职责命名，V2 HTTP 路径及契约不变。
 
 ## Backend 保留范围
 

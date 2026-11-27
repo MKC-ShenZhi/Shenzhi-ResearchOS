@@ -20,8 +20,8 @@ export function AgentHomePage() {
 
   return (
     <AppShell>
-      <div className="app-workspace-height flex min-h-0 flex-col items-center justify-center overflow-y-auto px-4 py-10 sm:px-6">
-        <div className="w-full max-w-[860px]">
+      <div className="app-workspace-height flex min-h-0 flex-col items-center overflow-y-auto px-4 py-10 sm:px-6">
+        <div className="my-auto w-full max-w-[860px] shrink-0">
           <div className="mb-8 text-center">
             <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-agent text-white shadow-card" aria-hidden>
               <Sparkles className="size-6" strokeWidth={2} />

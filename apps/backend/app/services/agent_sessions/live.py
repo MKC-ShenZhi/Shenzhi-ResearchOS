@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
@@ -36,7 +37,7 @@ def invalidate(live: LiveRun) -> None:
 
 
 def append(live: LiveRun, name: str, data: dict) -> None:
-    live.events.append((name, data))
+    live.events.append((name, deepcopy(data)))
     changed, live.changed = live.changed, asyncio.Event()
     changed.set()
 
@@ -60,7 +61,7 @@ async def subscribe(live: LiveRun, after: int = 0) -> AsyncIterator[tuple[int, s
         changed = live.changed
         while index < len(live.events):
             name, data = live.events[index]
-            yield index, name, data
+            yield index, name, deepcopy(data)
             index += 1
         if live.done:
             return

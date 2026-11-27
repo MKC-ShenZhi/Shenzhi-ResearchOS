@@ -227,7 +227,7 @@ export const auth = betterAuth({
             await initializeUserEntitlement(user.id);
           } catch {
             // Do not break Better Auth registration on Backend unavailability.
-            // First authorized use and the idempotent backfill repair this state.
+            // Admin initialize_only backfill can repair a missing assignment.
             console.error("auth.entitlement_initialization_pending");
           }
           // 仅在 OAuth 回调首次创建用户时补齐 credential 凭证。

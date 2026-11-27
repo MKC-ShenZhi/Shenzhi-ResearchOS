@@ -1,4 +1,4 @@
-import { apiJson, ApiError } from "./http";
+import { agentApiJson, ApiError } from "./http";
 
 export interface UploadFileResult {
   file_id: string;
@@ -16,7 +16,7 @@ export async function uploadAgentFile(file: File) {
   const body = new FormData();
   body.append("file", file);
   try {
-    return await apiJson<UploadFileResult>("/agent/uploads", { method: "POST", body });
+    return await agentApiJson<UploadFileResult>("/agent/uploads", { method: "POST", body });
   } catch (error) {
     if (error instanceof ApiError && error.status === 413) {
       throw new ApiError(error.code, "附件超过上传大小限制（20 MB），请选择更小的文件", 413,

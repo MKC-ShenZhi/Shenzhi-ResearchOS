@@ -2,159 +2,174 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "ShenZhi: 前端开发",
-      "type": "shell",
-      "command": "pnpm dev",
-      "options": {
-        "cwd": "${workspaceFolder}/apps/web"
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": false
-      },
-      "runOptions": {
-        "instanceLimit": 1
-      }
-    },
-    {
-      "label": "ShenZhi: 后端开发",
-      "type": "shell",
-      "command": "uv run --locked --env-file .env uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload",
-      "options": {
-        "cwd": "${workspaceFolder}/apps/backend"
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": false
-      },
-      "runOptions": {
-        "instanceLimit": 1
-      }
-    },
-    {
-      "label": "ShenZhi: 全栈开发",
-      "dependsOn": [
-        "ShenZhi: 后端开发",
-        "ShenZhi: 前端开发",
-        "ShenZhi: Agent API",
-        "ShenZhi: Agent Worker",
-        "ShenZhi: Agent Usage Worker"
+      "label": "Docker：初始化环境",
+      "type": "process",
+      "command": "python",
+      "args": [
+        "infra/docker/prepare-env.py",
+        "--from-local"
       ],
-      "dependsOrder": "parallel",
-      "problemMatcher": []
-    },
-    {
-      "label": "ShenZhi: Agent API",
-      "type": "shell",
-      "command": "uv run --locked --env-file .env uvicorn agent_app.main:app --host 127.0.0.1 --port 8101",
-      "options": {
-        "cwd": "${workspaceFolder}/apps/agent"
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": false
-      },
-      "runOptions": {
-        "instanceLimit": 1
-      }
-    },
-    {
-      "label": "ShenZhi: Agent Worker",
-      "type": "shell",
-      "command": "uv run --locked --env-file .env python -m agent_app.worker_main",
-      "options": {
-        "cwd": "${workspaceFolder}/apps/agent"
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": false
-      },
-      "runOptions": {
-        "instanceLimit": 1
-      }
-    },
-    {
-      "label": "ShenZhi: Agent Usage Worker",
-      "type": "shell",
-      "command": "uv run --locked --env-file .env python -m agent_app.usage_worker",
-      "options": {
-        "cwd": "${workspaceFolder}/apps/agent"
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": false
-      },
-      "runOptions": {
-        "instanceLimit": 1
-      }
-    },
-    {
-      "label": "ShenZhi: Agent 开发",
-      "dependsOn": [
-        "ShenZhi: Agent API",
-        "ShenZhi: Agent Worker",
-        "ShenZhi: Agent Usage Worker"
-      ],
-      "dependsOrder": "parallel",
-      "problemMatcher": []
-    },
-    {
-      "label": "ShenZhi: Agent 数据库迁移",
-      "type": "shell",
-      "command": "uv run --locked --env-file .env alembic upgrade head",
-      "options": {
-        "cwd": "${workspaceFolder}/apps/agent"
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      },
-      "runOptions": {
-        "instanceLimit": 1
-      }
-    },
-    {
-      "label": "ShenZhi: 数据库迁移",
-      "type": "shell",
-      "command": "uv run --locked --env-file .env alembic upgrade head",
-      "options": {
-        "cwd": "${workspaceFolder}/apps/backend"
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      },
-      "runOptions": {
-        "instanceLimit": 1
-      }
-    },
-    {
-      "label": "ShenZhi: 更新依赖",
-      "type": "shell",
-      "command": "cd apps/backend && uv sync && cd ../web && pnpm install",
       "options": {
         "cwd": "${workspaceFolder}"
       },
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      }
+        "panel": "dedicated",
+        "clear": false
+      },
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "detail": "首次配置 Docker 环境时执行；从本机配置导入变量，生成 Docker 环境文件和内部凭据。不会自动启动容器。"
+    },
+    {
+      "label": "Docker：启动 Full",
+      "type": "process",
+      "command": "docker",
+      "args": [
+        "compose",
+        "-f",
+        "compose.yml",
+        "-f",
+        "compose.dev.yml",
+        "--profile",
+        "full",
+        "up",
+        "-d",
+        "--wait"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/infra/docker"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      },
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "detail": "启动完整开发环境；复用已有镜像，环境初始化需单独完成。"
+    },
+    {
+      "label": "Docker：Web + Admin 热更新",
+      "type": "process",
+      "command": "docker",
+      "args": [
+        "compose",
+        "-f",
+        "compose.yml",
+        "-f",
+        "compose.dev.yml",
+        "--profile",
+        "full",
+        "watch",
+        "--no-up",
+        "web",
+        "admin"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/infra/docker"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      },
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "detail": "先启动 Full；持续同步 Web 和 Admin，使用“终止任务”或“重启正在运行的任务”管理。",
+      "isBackground": true
+    },
+    {
+      "label": "Docker：重启 Agent",
+      "type": "process",
+      "command": "docker",
+      "args": [
+        "compose",
+        "-f",
+        "compose.yml",
+        "-f",
+        "compose.dev.yml",
+        "--profile",
+        "full",
+        "restart",
+        "agent-api",
+        "agent-worker",
+        "agent-usage-worker"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/infra/docker"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      },
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "detail": "统一重启三个 Agent 进程；保留共享 Workspace / Spool；不重新加载 env_file。"
+    },
+    {
+      "label": "Docker：重建指定服务",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "$services = '${input:dockerRebuildServices}'.Split(' '); & docker compose -f compose.yml -f compose.dev.yml --profile full up -d --build --force-recreate --wait @services; exit $LASTEXITCODE"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/infra/docker"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      },
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "detail": "按选择重建并重新创建；Backend 联动 Admin 与迁移，Agent 联动三个运行服务与迁移；保留依赖检查及持久卷。"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "dockerRebuildServices",
+      "type": "pickString",
+      "description": "选择重建服务组（保留依赖检查，不删除持久卷）",
+      "options": [
+        {
+          "label": "Web",
+          "value": "web"
+        },
+        {
+          "label": "Backend + Admin（含共享镜像迁移服务）",
+          "value": "auth-migrate backend-migrate backend admin"
+        },
+        {
+          "label": "Admin",
+          "value": "admin"
+        },
+        {
+          "label": "Agent（三个运行服务 + 迁移）",
+          "value": "agent-migrate agent-api agent-worker agent-usage-worker"
+        },
+        {
+          "label": "Payment（内部支付服务）",
+          "value": "payment"
+        }
+      ],
+      "default": "web"
     }
   ]
 }

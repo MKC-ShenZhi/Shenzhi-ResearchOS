@@ -8,6 +8,8 @@ import {
   initialPaperAgentState,
   paperAgentReducer,
   paperAgentRunRequest,
+  pendingPaperAgentRetry,
+  type PendingPaperAgentRun,
 } from "./paper-agent";
 
 export function usePaperAgent(paper: Pick<KnowledgePaperDetail, "id" | "title">) {
@@ -15,11 +17,13 @@ export function usePaperAgent(paper: Pick<KnowledgePaperDetail, "id" | "title">)
   const abortRef = useRef<AbortController | null>(null);
   const sendLockedRef = useRef(false);
   const sequenceRef = useRef(0);
+  const pendingRunsRef = useRef(new Map<string, PendingPaperAgentRun>());
 
   useEffect(() => {
     abortRef.current?.abort();
     abortRef.current = null;
     sendLockedRef.current = false;
+    pendingRunsRef.current.clear();
     dispatch({ type: "reset", paperId: paper.id });
     return () => abortRef.current?.abort();
   }, [paper.id]);
@@ -35,11 +39,20 @@ export function usePaperAgent(paper: Pick<KnowledgePaperDetail, "id" | "title">)
     const controller = new AbortController();
     const readingCalls = new Set<string>();
     let receivedResult = false;
+    const retry = pendingPaperAgentRetry(pendingRunsRef.current, question);
+    const operation = retry ?? {
+      question,
+      request: paperAgentRunRequest(paper, question, state.turns),
+      idempotencyKey: crypto.randomUUID(),
+    };
+    pendingRunsRef.current.set(question, operation);
     abortRef.current = controller;
     dispatch({ type: "start", question, userId, assistantId });
 
     try {
-      await streamAgentRun(paperAgentRunRequest(paper, question, state.turns), {
+      await streamAgentRun(operation.request, {
+        onRunStart: (runId) => dispatch({ type: "run_start", assistantId, runId }),
+        onMessageEvent: (event) => dispatch({ type: "message_event", assistantId, event }),
         onDelta: (text, _reasoning, turn) => {
           dispatch({ type: "delta", assistantId, text, turn });
         },
@@ -62,9 +75,10 @@ export function usePaperAgent(paper: Pick<KnowledgePaperDetail, "id" | "title">)
         },
         onResult: (result) => {
           receivedResult = true;
+          if (pendingRunsRef.current.get(question) === operation) pendingRunsRef.current.delete(question);
           dispatch({ type: "result", assistantId, result });
         },
-      }, controller.signal);
+      }, controller.signal, operation.idempotencyKey);
       if (!receivedResult) {
         dispatch({ type: "failure", assistantId, message: "Agent 未返回运行结果，请重试", aborted: false });
       }

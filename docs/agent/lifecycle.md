@@ -2,6 +2,14 @@
 
 Task/Run 是 Agent 执行生命周期的权威来源；Session/Turn 只保存产品对话、Transcript、展示事件及必要状态投影。Agent PostgreSQL 持久化 Task/Run/事件/Outbox 与 Worker Lease。Backend Gateway 已把 Agent Task/Run/持久事件投影到产品 Session/Turn；本页记录静态代码边界，不表示独立进程恢复和重连已经验收。
 
+## V2 用户取消
+
+取消请求先将 Task 标记为 `cancelling`。Worker 通过现有 controls 的 0.5 秒轮询读取 `cancel_requested`，心跳仍负责租约续期。Control 立即拒绝新的调用授权及启动，但允许租约、身份均有效的当前 Worker 写入事件和最终报告；已启动调用的用量沿用既有 Observation / Outbox 收尾，不因取消归零。
+
+Runtime 收到停止信号后中断模型流和在途工具协程，等待清理完成，保留已完成结果，并为未完成的工具补 `tool_end`（`cancelled: true`）。用户取消返回 `stopped / cancelled`；进程或父任务取消仍向上抛出 `CancelledError`。取消本地协程不保证撤销上游已经接受的请求。
+
+Worker 将用户取消报告为 `cancelled`，真正的授权拒绝仍为失败。正常完成与取消竞争时，以有效 Worker 首次提交的终态报告为准；已完成任务的取消请求不修改原结果，冲突报告被拒绝。Backend 持久化工具的 `cancelled` 标记并投影为产品 `result`；Web 在请求停止后显示“正在停止…”，收到最终结果后显示“已手动停止”，工具取消使用中性样式，刷新后沿用持久化状态。
+
 ## 状态推进
 
 | 阶段 | Task | 当前 Run | 约定 |

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.agent_sessions.messages import MessageCapture
+
 
 class TimelineCapture:
     """Capture the same interleaved timeline that the Web UI renders during SSE."""
@@ -15,8 +17,11 @@ class TimelineCapture:
         self.run_start_index = 0
         self.reasoning_index = -1
         self.text_index = -1
+        self.messages = MessageCapture()
 
     def event(self, name: str, data: dict[str, Any]) -> None:
+        if self.messages.event(name, data):
+            return
         turn = int(data.get('turn') or 0)
         if name == 'run_start':
             # Runtime turn numbers restart for each execution attempt.
@@ -50,6 +55,7 @@ class TimelineCapture:
                     item['tool'].update({
                         'done': True,
                         'isError': bool(data.get('is_error')),
+                        'cancelled': bool(data.get('cancelled')),
                         'durationMs': int(data.get('duration_ms') or 0),
                         'summary': str(data.get('summary') or ''),
                     })

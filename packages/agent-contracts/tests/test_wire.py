@@ -56,9 +56,10 @@ def test_platform_event_envelope_contains_durable_replay_identity() -> None:
 
 def test_task_run_history_preserves_order_and_requires_complete_nonempty_field() -> None:
     assert TaskRunsResponseWire(run_ids=['r1', 'r2', 'r3']).model_dump(mode='json') == {
+        'schema_version': 1,
         'run_ids': ['r1', 'r2', 'r3'],
     }
-    for payload in ({}, {'run_ids': []}, {'run_ids': ['r1'], 'cursor': 'partial'}):
+    for payload in ({}, {'run_ids': []}, {'run_ids': ['r1'], 'cursor': 'partial'}, {'schema_version': 2, 'run_ids': ['r1']}):
         with pytest.raises(ValueError):
             TaskRunsResponseWire.model_validate(payload)
 

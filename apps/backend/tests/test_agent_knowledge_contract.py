@@ -25,7 +25,7 @@ class AgentKnowledgeContractTests(unittest.IsolatedAsyncioTestCase):
             'app.api.knowledge.service.search', new=AsyncMock(return_value=result),
         ) as search:
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-                response = await client.post('/api/v1/agent/internal/knowledge/search',
+                response = await client.post('/api/v2/agent/internal/knowledge/search',
                     headers={'Authorization': 'Bearer test-knowledge-token'},
                     json={'query': 'knowledge editing large language models', 'topK': 10})
         self.assertEqual(response.status_code, 200, response.text)
@@ -43,7 +43,7 @@ class AgentKnowledgeContractTests(unittest.IsolatedAsyncioTestCase):
             'app.api.knowledge.service.get_paper', new=AsyncMock(return_value=result),
         ):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-                response = await client.get('/api/v1/agent/internal/knowledge/papers/paper-knowledge-editing',
+                response = await client.get('/api/v2/agent/internal/knowledge/papers/paper-knowledge-editing',
                     headers={'Authorization': 'Bearer test-knowledge-token'})
         self.assertEqual(response.status_code, 200, response.text)
         wire = KnowledgePaperDetailWire.model_validate(response.json())

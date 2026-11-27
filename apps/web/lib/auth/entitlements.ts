@@ -1,6 +1,6 @@
 import { backendConfig, backendConnectionIsAllowed } from "@/config/backend";
 
-/** Compatibility notification only; Backend leaves new accounts unassigned. Admin assigns plans. */
+/** Best-effort registration notification; Backend initializes published Basic idempotently. */
 export async function initializeUserEntitlement(userId: string): Promise<void> {
   if (!backendConfig.url || !backendConnectionIsAllowed(backendConfig)) {
     throw new Error("Entitlement backend unavailable");
@@ -15,4 +15,8 @@ export async function initializeUserEntitlement(userId: string): Promise<void> {
     cache: "no-store",
   });
   if (!response.ok) throw new Error("Entitlement initialization unconfirmed");
+  const result = await response.json();
+  if (result.data?.initialized === 0) {
+    console.info("auth.entitlement_initialization_no_change");
+  }
 }

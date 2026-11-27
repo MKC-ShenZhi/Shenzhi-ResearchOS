@@ -1,0 +1,2 @@
+# Entrypoint scripts must work in Linux containers from Windows checkouts.
+infra/docker/**/*.sh text eol=lf

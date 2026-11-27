@@ -22,10 +22,11 @@ ToolRegistry 在 `execute_prepared` 登记，prepare/校验失败不登记。顺
 
 | 调用方 | 路径 | 用途 |
 | --- | --- | --- |
-| BFF/用户 | `POST /api/v2/agent/run` | 非 Session 提交；必需 Idempotency-Key，owner 来自可信 BFF |
-| BFF/用户 | `POST /api/v2/agent/sessions/{id}/run` | 复用原 Session/Turn 服务，稳定 Turn→Submission |
-| BFF/用户 | `GET /api/v2/agent/sessions/{id}/run/stream` | 原 Task 及全部 Run 回放；每条 SSE data 含 schema_version |
-| BFF/用户 | `POST /api/v2/agent/run/{id}/stop`、`/steer` | v2 owner 过滤的运行控制 |
+| BFF/用户 | `POST /api/v2/agent/run` | 非 Session SSE 提交；必需 Idempotency-Key，owner 来自可信 BFF |
+| BFF/用户 | `POST /api/v2/agent/submissions` | 独立 Task JSON 提交；与 SSE 入口使用不同路径 |
+| BFF/用户 | `POST /api/v2/agent/sessions/{id}/run` | Session/Turn SSE 提交，稳定 Turn→Submission |
+| BFF/用户 | `GET /api/v2/agent/sessions/{id}/run/stream` | 产品 SSE 续接与历史恢复 |
+| BFF/用户 | `POST /api/v2/agent/run/{id}/stop`、`/steer` | 产品运行控制；V2 存量先查，明确 404 时才查历史 V1 Run |
 | BFF/用户 | `GET /api/v2/agent/entitlements` | 当前 policy、权限快照、逐规则窗口/used/held/remaining |
 | BFF/用户 | `GET /api/v2/agent/tasks/{id}/usage`、`/ledger` | 实测、估算、未知、预留/已用/释放、结算/对账和审计引用 |
 | Gateway | `/internal/v2/tasks`、`/tasks/{id}`、`/tasks/{id}/runs`、`/submissions/{id}` | 提交、pending 绑定恢复及查询；submissions 不接受 obs: ID |
@@ -70,9 +71,9 @@ TaskCloseManifest 核对 Permit/call、Run/execution、所有 sequence/revision�
 
 分别在 Backend、Agent 执行已有 Alembic `upgrade head`，当前版本为 Backend `028_formal_plans`（授权基础表始于 `027_agent_entitlements`）、Agent `0003_agent_metering`。迁移冻结建表定义，分别含 15 和 8 张新表；原 Task/Run/Session 表不加新协议字段。新增唯一约束、FK、状态/关联/投递索引随各库独立维护。生产连接隐藏 SQL 参数，避免日志包含租约/签名封套。
 
-API/Worker/Backend 的角色 Token 必须互不相同，并与旧 AGENT_SERVICE_TOKEN 隔离。Backend 私钥/Agent 公钥文件、issuer/audience、Agent 的模型路由和工具非敏感配置修订、持久 spool、Usage Worker 的容量/退避/批量参数均需显式配置；见各 `.env.example`。`BACKEND_ENTITLEMENTS_URL` 是服务 origin，不能复用带 `/api/v1/agent` 的 Knowledge `BACKEND_INTERNAL_URL`。
+API/Worker/Backend 的角色 Token 必须互不相同，并与旧 AGENT_SERVICE_TOKEN 隔离。Backend 私钥/Agent 公钥文件、issuer/audience、Agent 的模型路由和工具非敏感配置修订、持久 spool、Usage Worker 的容量/退避/批量参数均需显式配置；见各 `.env.example`。`BACKEND_ENTITLEMENTS_URL` 是服务 origin，不能复用带 `/api/v2/agent` 的 Knowledge `BACKEND_INTERNAL_URL`。
 
-Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 与 admission revision；A2 改 authorized 前停止旧 observation 新准入，已有 Task 模式不变、按原 ID 排空。A2 同时设置 Agent `AGENT_V1_ADMISSION=drain_only`，新旧 Worker 以 `AGENT_WORKER_PROTOCOL=2/1` 分开；旧 Worker 不能领取、操作或序列化 v2 Task。示例保留 v1 默认值，仅在完成评审后显式切换。
+Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 与 admission revision；A2 改 authorized 前停止旧 observation 新准入，已有 Task 模式不变、按原 ID 排空。当前 Agent 执行 API 与 Worker 仅支持 V2；V1 router、V1 Worker 分支及 admission 配置已退役。V2 授权准入由 Backend `AGENT_V2_ADMISSION` 和签名 Grant 控制。历史 V1 Task/Run/Turn 保留供审计，不由新代码调用旧协议执行。
 
 本 Adapter 没有可信输入 tokenizer 上界验证器，任意 evidence_ref 字符串不被视为证明；没有批准的 model_risk_profile 时拒绝正式模型调用。批准风险策略不等于数学意义上保证真实消耗不超额。显式 max_model_tokens 的单 Run 限制仍沿用原 Worker 的执行前拒绝。
 
@@ -82,7 +83,7 @@ Backend 默认 `AGENT_V2_ADMISSION=disabled`。A1 明确设置 observation_only 
 
 ## V1 正式套餐与 Admin
 
-正式套餐为 basic/pro/research，上海自然日 Token 额度分别 200000/1000000/3000000，暂时免费，prompt_plus_completion。新用户待分配，initialize_free 与注册通知兼容入口不再写入权益；唯一业务分配入口是独立 Admin。历史 Free Policy、Grant 与用量记录保留，但不再作为注册默认值。历史初始化须在 Admin 按截止时间预览并确认，仅补缺失，不覆盖显式分配。
+正式套餐为 basic/pro/research，上海自然日 Token 额度分别 200000/1000000/3000000，prompt_plus_completion。Basic 永久免费，Pro/Research 使用 Billing 集中配置的测试价格。邮箱及 OAuth 首次注册通过已有通知入口调用 `initialize_free`，仅在没有权益记录、正式 Basic 已发布时初始化永久 Basic；已有权益（包括停用及异常记录）不覆盖。Backend 或发布暂不可用时记录问题，不阻止注册。历史用户通过 Admin 按截止时间预览、确认 `initialize_only` 批量补齐 Basic。历史 Free Policy、Grant 与用量记录保留，不作为新注册默认值。
 
 Admin 发布三档不可变 Policy，固定 daily quota_pool 跨 plan/revision，共享同日使用和预留。旧的上海日 daily-tokens 余额也纳入统一检查，不把多规则限额相加。发布指针位于迁移028新增的 agent_plan_releases；改变指针不改变既有 Assignment。
 
@@ -126,13 +127,7 @@ uv run --env-file .env python -m app.services.agent_entitlements.plans --capabil
 
 这会复用现有逐模型预算与风险配置，不伪造审批。如果旧包的风险引用或逐模型预算为空，命令提前报错，不再生成到运行时才失败的包。`--model-budgets` 按模型ID合并覆盖旧配置；允许只配置要启用的模型，其余没有预算的模型仍拒绝调用。只有决定采用较宽松的输入估算时才追加 `--input-bytes-per-token 2`，并记录该风险参数的依据；不追加则保持原值。无旧发布包时继续使用原 `--model-budgets`、`--risk-profile` 参数。生成文件在现有 Admin「套餐管理」上传发布，再在「用户管理」预览并分配新修订；发布不自动迁移用户，也不重置当日余额。不需要数据库迁移或新增服务。
 
-仅补齐 DeepSeek 风险预算时，在 Backend 目录使用：
-
-```powershell
-uv run --env-file .env python -m app.services.agent_entitlements.plans --capabilities ../agent/workspace/formal-capabilities.json --previous-bundle workspace/formal-plans-availability.json --model-budgets app/data/agent_deepseek_model_budget.json --risk-profile autodl-deepseek-bounded-v1 --release 20261120-availability-deepseek-budget-r1 --output workspace/formal-plans-deepseek-budget.json
-```
-
-此配置将 DeepSeek 的输出上限设为4096，输入UTF-8字节按1:1加1024封装余量预留。历史兼容字段context_window_tokens=32768保留在Policy中，但不再作为额外的单次输入限额；真实模型上下文上限只采用Worker Registry明确声明的值，未知时不编造上限。风险ID本身不证明Provider语义；现有Provider必须遵守max_tokens覆盖completion（含思考）的接入契约。Policy预算O经Permit/start回传后覆盖实际请求max_tokens，发送前再次核对正文摘要、O与唯一发送权；不修改模型身份，因此单纯补Policy预算不需重新导出能力。复用现有Admin风险记录和发布/分配流程，不自动修改已发布Policy。
+逐模型预算由部署负责人在本地审核文件中维护，通过 `--model-budgets <REVIEWED_MODEL_BUDGETS_JSON>` 合并到正式三档套餐；仓库不再内置 Free 演示 Policy 或某个 Provider 的固定预算 JSON。历史 Policy、task_fixed Grant 与消费记录继续按既有兼容逻辑读取和结算，不删除数据库记录。
 
 开发环境可显式设置 `ENVIRONMENT=development` 与 `AGENT_ALLOW_TEST_POLICY=true` 使用已批准并已分配的 test_only Policy；不自动创建用户、分配权益或绕过认证。生产环境必须保持该开关为false；在非显式development环境开启会拒绝服务。开发联调也可直接复用上述正式发布包生成方式，使用现有 Admin 分配，不必建立第二套注册或授权流程。
 
@@ -141,3 +136,10 @@ uv run --env-file .env python -m app.services.agent_entitlements.plans --capabil
 Agent 目录：`uv run --no-sync python -m pytest tests/test_a_line_persistence.py tests/unit/test_metering_boundaries.py ../../packages/agent-contracts/tests -q`。SQLite 两库事务与 HTTP/MockTransport 测试不证明 PostgreSQL 行锁或真实 Provider。
 
 显式设置 `AGENT_A_LINE_TEST_DATABASE_URL`、`BACKEND_A_LINE_TEST_DATABASE_URL` 为两个不同本机 `shenzhi_a_line_*` PostgreSQL 库后运行 `uv run --no-sync python -m pytest tests/integration/test_a_line_postgres.py -q`。测试创建随机 `a_line_*` schema，实际执行两个新增迁移并只清理自身 schema，覆盖并发预留、同 Submission 竞争、撤销/start、Saga 旧缓存 Lease、void/tombstone、修订、投递、结算、关闭与迁移回滚。不连接生产 Provider；真实 Provider 另需批准环境和费用策略。
+
+## Billing 订阅有效期
+
+用户购买、续费及 Pro → Research 差价升级通过 Backend Billing 复用现有权益行和公共分配函数，说明见 [Billing](../billing/README.md)。
+Basic 的 `expires_at=NULL` 表示永久免费；历史永久 Pro/Research 保留并由 Admin 显式调整。购买、续费及 Admin 赠予共用上海自然月函数，目标月份无对应日期取月末；历史订单的固定 30 天快照继续按原约定履约。有限期 Pro（含 Admin 赠予）可按后端报价差价升级至 Research，固定订单 Policy Revision、保留原到期时间与当日 used/held；Research 不支持主动降级。付款期间权益变化时保留 paid/pending，不覆盖新权益。
+`lifecycle.reconcile_owner` 在用户行锁内按需将已到期 Pro/Research 切回已批准的正式 Basic，并追加审计。未关闭 Grant 时返回真实到期状态及 `ACTIVE_GRANTS_REQUIRE_DRAIN`，后续查询／授权重试；Basic 未发布或原权益异常时保持原记录并返回原因。停用状态不触发回落。owner/permit/start 仍实时拒绝已过期高级权限，结算接受历史已启动调用。切换不删除 Grant、订单或账本，也不重置同日 used/held。
+Admin 的发布、预览、分配与审计入口保留，跨 Revision 切换继续要求 `ACTIVE_GRANTS_REQUIRE_DRAIN`，购买不重置日额度。

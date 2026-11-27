@@ -5,6 +5,8 @@ import {
   ArrowUp,
   ChevronRight,
   Globe,
+  Maximize2,
+  Minimize2,
   Plus,
   Search,
   Sparkles,
@@ -15,6 +17,7 @@ import { popoverPosition, usePopoverPlacement } from "@/lib/use-popover-placemen
 import { DEFAULT_MODEL, FALLBACK_COMPOSER_CONFIG } from "./config";
 import { AttachmentMenu, type WorkspaceFile } from "./attachment-menu";
 import { ComposerControlPicker } from "./composer-control-picker";
+import { useComposerTextarea } from "./use-composer-textarea";
 import { questionSchema } from "@/lib/validations";
 import type { ComposerEntryMode } from "@/types";
 import type {
@@ -314,6 +317,11 @@ export function ComposerShell({
 }) {
   const isHome = variant === "home";
   const [uploading, setUploading] = useState(false);
+  // Associate expansion with the current draft; clearing always returns to compact mode.
+  const [expandedDraft, setExpandedDraft] = useState(false);
+  if (!value && expandedDraft) setExpandedDraft(false);
+  const expanded = expandedDraft && value.length > 0;
+  const { textareaRef, overflowing } = useComposerTextarea(value, expanded, isHome);
 
   const [innerEntryMode, setInnerEntryMode] = useState<ComposerEntryMode>("ai");
   const [innerMode, setInnerMode] = useState<ReplyMode>("fast");
@@ -414,9 +422,13 @@ export function ComposerShell({
       )}
 
       <textarea
+        ref={textareaRef}
         value={value}
         disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          if (!e.target.value) setExpandedDraft(false);
+          onChange(e.target.value);
+        }}
         onKeyDown={(e) => {
           if (
             e.key === "Enter" &&
@@ -437,9 +449,16 @@ export function ComposerShell({
           }
         }}
         placeholder={placeholder}
+        aria-label={placeholder}
         rows={2}
         maxLength={2000}
-        className="min-h-[3.25rem] w-full resize-none bg-transparent px-0.5 text-base sm:text-[15px] leading-relaxed text-ink outline-none placeholder:text-faint"
+        className={cn(
+          "block w-full resize-none bg-transparent px-0.5 py-0 text-base sm:text-[15px] leading-6 text-ink outline-none placeholder:text-faint",
+          isHome ? "min-h-[52px]" : "min-h-[72px]",
+          expanded
+            ? "max-h-[min(420px,50dvh)]"
+            : isHome ? "max-h-[min(160px,24dvh)]" : "max-h-[min(240px,30dvh)]",
+        )}
       />
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -484,6 +503,16 @@ export function ComposerShell({
         )}
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          {(overflowing || expanded) && <button type="button"
+            className={`${PLAIN_BTN} outline-none focus-visible:ring-2 focus-visible:ring-primary/40`}
+            title={expanded ? "收起输入框" : "展开输入框"}
+            aria-label={expanded ? "收起输入框" : "展开输入框"} aria-expanded={expanded}
+            onClick={() => {
+              setExpandedDraft(!expanded);
+              textareaRef.current?.focus({ preventScroll: true });
+            }}>
+            {expanded ? <Minimize2 className="size-4" aria-hidden="true" /> : <Maximize2 className="size-4" aria-hidden="true" />}
+          </button>}
           {busy && onStop ? (
             <button
               type="button"

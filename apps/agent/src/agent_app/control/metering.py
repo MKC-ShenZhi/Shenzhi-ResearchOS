@@ -67,7 +67,8 @@ class MeteringControl:
         check(grant.task_id in (None, task_id) and grant.binding_receipt_id in (None, receipt.receipt_id), 'ROOT_BINDING_CONFLICT')
         check(receipt.grant_payload_digest == digest(historical.model_dump(mode='json', exclude={'signature'})), 'BINDING_DIGEST_CONFLICT')
 
-    async def lock_execution(self, db, identity: WorkerIdentity, *, run_id=None, task_id=None):
+    async def lock_execution(self, db, identity: WorkerIdentity, *, run_id=None, task_id=None,
+                             allow_cancel_requested=False):
         execution = await db.get(ExecutionRow, identity.execution_id)
         check(execution is not None, 'EXECUTION_NOT_FOUND')
         # Task -> Run -> Call is also the claim/cancel/report order.
@@ -79,10 +80,13 @@ class MeteringControl:
         check(run_id is None or run.run_id == run_id, 'RUN_CONFLICT')
         check(task_id is None or task.task_id == task_id, 'TASK_CONFLICT')
         check((execution.worker_id, execution.lease_token) == (identity.worker_id, identity.lease_token), 'EXECUTION_CONFLICT')
-        check(not execution.sealed and run.status == 'running' and task.status == 'running'
-              and not task.cancel_requested and run.worker_id == identity.worker_id
+        task_active = task.status == 'running' or (
+            task.status == 'cancelling' and task.cancel_requested)
+        check(not execution.sealed and run.status == 'running' and task_active
+              and run.worker_id == identity.worker_id
               and run.lease_token == identity.lease_token and run.lease_expires_at is not None
               and run.lease_expires_at.replace(tzinfo=timezone.utc) > now_utc(), 'LEASE_INACTIVE')
+        check(allow_cancel_requested or not task.cancel_requested, 'TASK_CANCELLED')
         check(profile.binding_status == 'bound' and not profile.revoked, 'TASK_BINDING_PENDING')
         return execution, task, run, profile
 

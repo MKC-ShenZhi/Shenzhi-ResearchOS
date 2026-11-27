@@ -20,6 +20,8 @@ from contextlib import aclosing
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from agent_contracts.messages import AIMessage
+from agent_app.execution.message_stream import MessageStream, OUTPUT_INSTRUCTIONS
 from agent_app.errors import BusinessError
 from agent_app.application.policies import MAX_EXECUTION_TURNS
 from agent_app.execution.compaction import (
@@ -74,8 +76,8 @@ DELIVERY_NUDGE_AT = 0.83
 
 
 class _RunState:
-    def __init__(self) -> None:
-        self.run_id = uuid.uuid4().hex
+    def __init__(self, run_id: str | None = None) -> None:
+        self.run_id = run_id or uuid.uuid4().hex
         self.seq = 0
         self.turn = 0
         self.messages: list[AgentMessage] = []
@@ -99,6 +101,8 @@ class _RunState:
         self.summary = ''
         self.read_files: list[str] = []
         self.modified_files: list[str] = []
+        self.presentation: MessageStream | None = None
+        self.presentation_snapshot: AIMessage | None = None
 
     def event(self, turn: int, name: str, data: dict) -> AgentEvent:
         self.seq += 1
@@ -131,7 +135,7 @@ class _RunState:
         )
 
 
-def _close_pending(state: _RunState, emit: Callable, reason: str) -> None:
+def _close_pending(state: _RunState, emit: Callable, reason: str, *, cancelled: bool = False) -> None:
     """批次闭合（幂等）：为最后一条 assistant 中尚无结果的 tool_call 合成 is_error 结果。
 
     这保证 RunResult.messages 在任何停止路径（max_turns / stop / 取消 / terminal
@@ -148,7 +152,8 @@ def _close_pending(state: _RunState, emit: Callable, reason: str) -> None:
             continue
         state.messages.append(ToolResultMessage(call.call_id, call.name, reason, is_error=True))
         emit(state.turn, TOOL_END, {'tool_call_id': call.call_id, 'name': call.name,
-                                    'is_error': True, 'duration_ms': 0, 'summary': reason[:200]})
+                                    'is_error': True, 'cancelled': cancelled,
+                                    'duration_ms': 0, 'summary': reason[:200]})
 
 
 def _emitter(state: _RunState, on_event: Callable[[AgentEvent], None] | None) -> Callable:
@@ -241,6 +246,7 @@ class AgentRuntime:
         # pi coding-agent buildSystemPrompt 的 visibleTools 同机制）
         self.system = (system([tool.spec for tool in self.registry.tools.values()])
                        if callable(system) else system)
+        self.system = f'{self.system}\n\n{OUTPUT_INSTRUCTIONS}'
         # system 装配：业务 system → 技能清单（pi 两级注入；技能正文按需经 read_skill 装载）
         if skills is not None and skills.names():
             listing = skills.listing_prompt()
@@ -266,13 +272,14 @@ class AgentRuntime:
         self.model = model or ''
 
 
-    async def run(self, prompt: str, *, history: Sequence[AgentMessage] = (),
+    async def run(self, prompt: str, *, run_id: str | None = None,
+                  history: Sequence[AgentMessage] = (),
                   on_event: Callable[[AgentEvent], None] | None = None,
                   stop: asyncio.Event | None = None,
                   channel: RunChannel | None = None) -> RunResult:
         """跑完整个循环返回终态；观察走 on_event，业务停止走 stop 事件，
         运行中插话/排队追问走 channel（pi steer/followUp）。"""
-        state = _RunState()
+        state = _RunState(run_id)
         state.messages = [*history, UserMessage(prompt)]
         emit = _emitter(state, on_event)
         return await self._drive(state, emit, stop, channel=channel)
@@ -288,6 +295,9 @@ class AgentRuntime:
         """
         state = _RunState()
         state.run_id = checkpoint.run_id
+        state.seq = checkpoint.event_seq
+        if checkpoint.presentation is not None:
+            state.presentation_snapshot = AIMessage.model_validate(checkpoint.presentation)
         state.turn = checkpoint.turn
         state.messages = checkpoint.decoded_messages()
         # pi agent-loop:71-77/128-134：续跑前校验 transcript 形状，违规直接报错——
@@ -316,9 +326,20 @@ class AgentRuntime:
         if self._active_run:
             raise BusinessError(20009, 'Agent 正在运行中，请等待本轮结束')
         self._active_run = True
+        execution = asyncio.create_task(self._drive_locked(state, emit, stop, resumed=resumed, channel=channel))
+        stopping = asyncio.create_task(stop.wait()) if stop is not None else None
         try:
-            return await self._drive_locked(state, emit, stop, resumed=resumed, channel=channel)
+            if stopping is not None:
+                await asyncio.wait((execution, stopping), return_when=asyncio.FIRST_COMPLETED)
+                if not execution.done():
+                    execution.cancel()
+            return await execution
         finally:
+            for task in (execution, stopping):
+                if task is not None and not task.done():
+                    task.cancel()
+            await asyncio.gather(*(task for task in (execution, stopping) if task is not None),
+                                 return_exceptions=True)
             self._active_run = False
 
     async def _drive_locked(self, state: _RunState, emit: Callable,
@@ -333,9 +354,15 @@ class AgentRuntime:
         state.deadline_at = time.monotonic() + self.deadline_s
         emit(0, RUN_START, {'run_id': state.run_id, 'model': self.model, 'resumed': resumed,
                             'tools': list(self.registry.enabled)})
+        state.presentation = MessageStream(
+            lambda name, data: emit(state.turn, name, data), model=self.model,
+            snapshot=state.presentation_snapshot,
+        )
+        state.presentation.start()
         logger.info('agent.run.start run_id=%s model=%s resumed=%s tools=%s',
                     state.run_id, self.model, resumed, list(self.registry.enabled))
         started = time.monotonic()
+        cancelled_error = None
         try:
             async with asyncio.timeout(self.deadline_s):
                 while True:
@@ -344,7 +371,7 @@ class AgentRuntime:
                         state.messages.append(message)
                         emit(state.turn, MESSAGE, {'text': message.text, 'kind': 'steer'})
                     if stop_requested():
-                        _close_pending(state, emit, '未执行：已停止')
+                        _close_pending(state, emit, '未执行：已停止', cancelled=True)
                         state.finalize(StopReason.CANCELLED)
                         break
                     outcome = await self._run_turn(state, emit, stop_requested, pending_steering)
@@ -414,18 +441,22 @@ class AgentRuntime:
                         if outcome is None:
                             continue  # 本轮执行了交付工具 → 让模型继续收口
                         break  # 自然停笔（交付完成）或已被终态化（停止/错误）
-            except asyncio.CancelledError:
-                raise
+            except asyncio.CancelledError as exc:
+                _close_pending(state, emit, '已取消', cancelled=True)
+                state.finalize(StopReason.CANCELLED)
+                if not stop_requested():
+                    cancelled_error = exc
             except Exception:
                 logger.exception('agent.run.delivery_window run_id=%s', state.run_id)
             state.finalize(StopReason.TIMEOUT)
-        except asyncio.CancelledError:
-            _close_pending(state, emit, '未执行：运行被取消')
+        except asyncio.CancelledError as exc:
+            _close_pending(state, emit, '已取消', cancelled=True)
             state.finalize(StopReason.CANCELLED)
             state.duration_ms = int((time.monotonic() - started) * 1000)
             logger.info('agent.run.end run_id=%s status=stopped(cancelled) turns=%s',
                         state.run_id, state.turn)
-            raise
+            if not stop_requested():
+                cancelled_error = exc
         except BusinessError as exc:
             # transcript 恒闭合（types.py 的契约）：任何失败路径都不得留下未答的 tool_call，
             # 否则这份 messages 作为 history/resume 再发就会被上游拒收
@@ -437,6 +468,8 @@ class AgentRuntime:
             state.finalize(StopReason.ERROR, BusinessError(20004, 'Agent 运行发生错误，请重试'))
         state.duration_ms = int((time.monotonic() - started) * 1000)
         result = state.build()
+        result.message = state.presentation.finish(result.status, duration_ms=state.duration_ms)
+        result.final_text = state.presentation.last_text
         emit(state.turn, RUN_END, {
             'status': result.status, 'stop_reason': result.stop_reason.value,
             'turns': result.turns, 'duration_ms': result.duration_ms,
@@ -445,6 +478,8 @@ class AgentRuntime:
         })
         logger.info('agent.run.end run_id=%s status=%s turns=%s duration_ms=%s',
                     state.run_id, result.status, result.turns, result.duration_ms)
+        if cancelled_error is not None:
+            raise cancelled_error
         return result
 
     def _budget_spent(self, state: _RunState) -> bool:
@@ -478,7 +513,9 @@ class AgentRuntime:
             modified_files=state.modified_files,
             loaded_skills=sorted(state.loaded_skills),
             pinned_chars=state.pinned_chars,
-            executed_tools=state.executed_tools)
+            executed_tools=state.executed_tools,
+            presentation=state.presentation.snapshot().model_dump(mode='json'),
+            event_seq=state.seq)
 
     async def _run_turn(self, state: _RunState, emit: Callable, stop_requested: Callable,
                         pending_steering: Callable[[], list[UserMessage]]) -> StopReason | None:
@@ -488,6 +525,7 @@ class AgentRuntime:
         None 表示继续下一轮。位点顺序照 pi：turn_end 在工具执行**之后**发，
         steering / 预算治理由 _drive 在 turn_end 之后依次处理。
         """
+        state.presentation.begin_response()  # Close partial output before a deadline grace turn.
         state.turn += 1
         emit(state.turn, TURN_START, {'turn': state.turn})
         await self._maybe_compact(state, emit)  # pi transformContext 位点：下一请求前按需压缩
@@ -523,7 +561,9 @@ class AgentRuntime:
                     break
                 if isinstance(event, TextDelta):
                     assistant.content += event.text
-                    delta_buffer.append(event.text)
+                    visible = state.presentation.append(event.text)
+                    if visible:
+                        delta_buffer.append(visible)
                     if sum(len(piece) for piece in delta_buffer) >= 24:
                         emit(state.turn, DELTA, {'text': ''.join(delta_buffer)})
                         delta_buffer.clear()
@@ -552,13 +592,19 @@ class AgentRuntime:
                                                    + event.usage.completion_tokens)
                     else:
                         state.usage_measured = False
+        tail = state.presentation.end_block()
+        if tail:
+            delta_buffer.append(tail)
+        if delta_buffer:
+            emit(state.turn, DELTA, {'text': ''.join(delta_buffer)})
+            delta_buffer.clear()
         calls = assistant.tool_calls
         # stop_reason 从不改写（pi agent-loop:222-233）：是否续跑只看"有没有工具调用"，
         # transcript 里保留模型给的原始语义（此前把 stop+calls 改成 tool_calls、
         # 把空 calls 改成 stop，等于篡改事实）。
         outcome: StopReason | None = None
         if stop_requested():
-            _close_pending(state, emit, '未执行：已停止')
+            _close_pending(state, emit, '未执行：已停止', cancelled=True)
             state.finalize(StopReason.CANCELLED)
             outcome = StopReason.CANCELLED
         elif assistant.stop_reason is StopReason.ERROR:
@@ -677,7 +723,7 @@ class AgentRuntime:
             if activated:
                 emit(state.turn, 'tools_enabled', {'names': activated})
         if stop_requested():
-            _close_pending(state, emit, '未执行：已停止')
+            _close_pending(state, emit, '未执行：已停止', cancelled=True)
             state.finalize(StopReason.CANCELLED)
             return StopReason.CANCELLED
         return None
@@ -737,6 +783,11 @@ class AgentRuntime:
                 # 上层的 _close_pending 兜底闭合）。
                 for future in tasks:
                     future.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                for future, (call, _) in tasks.items():
+                    if not future.cancelled() and future.exception() is None:
+                        result, duration_ms = future.result()
+                        self._record_tool_result(state, emit, call, result, duration_ms)
                 raise
             for future in done:
                 call = tasks[future][0]
@@ -764,7 +815,7 @@ class AgentRuntime:
             _close_pending(state, emit, '未执行：运行已交付最终制品')
             return self._finalize_terminal(state, terminal_output)
         if stop_requested():
-            _close_pending(state, emit, '未执行：已停止')
+            _close_pending(state, emit, '未执行：已停止', cancelled=True)
             state.finalize(StopReason.CANCELLED)
             return StopReason.CANCELLED
         return None
@@ -772,7 +823,8 @@ class AgentRuntime:
     def _record_tool_result(self, state: _RunState, emit: Callable, call: ToolCall,
                             result: ToolResult, duration_ms: int) -> None:
         state.messages.append(ToolResultMessage(result.call_id, result.name,
-                                                result.content, result.is_error, result.pinned))
+                                                result.content, result.is_error, result.pinned,
+                                                result.references))
         emit(state.turn, TOOL_END, {'tool_call_id': result.call_id, 'name': result.name,
                                     'is_error': result.is_error, 'duration_ms': duration_ms,
                                     'summary': result.content[:200]})

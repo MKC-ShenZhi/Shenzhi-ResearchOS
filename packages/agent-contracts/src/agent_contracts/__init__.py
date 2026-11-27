@@ -2,6 +2,7 @@
 
 from .budgets import BudgetLimits, UsageReport
 from .events import PlatformEvent
+from .messages import AIMessage, MarkdownBlock, MessageMetadata, Reference
 from .knowledge import (
     KnowledgeGraphEdgeWire, KnowledgeGraphNodeWire, KnowledgeGraphQueryWire,
     KnowledgePaperDetailWire, KnowledgePaperGraphWire, KnowledgePaperResultWire,
@@ -22,6 +23,7 @@ from .wire import (
 )
 
 __all__ = [
+    'AIMessage', 'MarkdownBlock', 'MessageMetadata', 'Reference',
     'BudgetLimits', 'ExecutionReport', 'PlatformEvent', 'RunRequest',
     'RunRecord', 'RunStatus', 'TaskRecord', 'TaskStatus', 'TaskSubmission', 'UsageReport',
     'BudgetLimitsWire', 'ExecutionReportWire', 'PlatformEventWire', 'RunRecordWire',

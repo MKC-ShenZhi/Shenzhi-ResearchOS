@@ -34,6 +34,8 @@ class Checkpoint:
     pinned_chars: int = 0
     executed_tools: int = 0
     created_at: float = field(default_factory=time.time)
+    presentation: dict | None = None
+    event_seq: int = 0
 
     def to_json(self) -> str:
         return json.dumps({
@@ -43,6 +45,7 @@ class Checkpoint:
             'modified_files': self.modified_files, 'loaded_skills': self.loaded_skills,
             'pinned_chars': self.pinned_chars, 'executed_tools': self.executed_tools,
             'created_at': self.created_at,
+            'presentation': self.presentation, 'event_seq': self.event_seq,
         }, ensure_ascii=False)
 
     @classmethod
@@ -58,7 +61,8 @@ class Checkpoint:
                    loaded_skills=list(data.get('loaded_skills', [])),
                    pinned_chars=int(data.get('pinned_chars', 0)),
                    executed_tools=int(data.get('executed_tools', 0)),
-                   created_at=float(data.get('created_at', time.time())))
+                   created_at=float(data.get('created_at', time.time())),
+                   presentation=data.get('presentation'), event_seq=int(data.get('event_seq', 0)))
 
     def decoded_messages(self) -> list[AgentMessage]:
         return [message_from_dict(item) for item in self.messages]

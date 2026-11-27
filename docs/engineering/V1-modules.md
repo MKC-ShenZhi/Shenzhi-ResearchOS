@@ -1,7 +1,7 @@
 # V1 模块边界
 
 - `apps/web/app`：URL 和薄页面入口。保留 `/agents`、`/agents/deep-research`、`/agents/auto-research`、`/agents/deep-search`。
-- `features/agent-chat`：深知 AI 主对话（`/agents`），经 `clients/backend/agent.ts` 调用 FastAPI Agent Runtime（`/api/v1/agent/*`）；论文详情助手（`features/papers/[id]`）同样走 Agent Runtime。论文助手的错误气泡与 Markdown 渲染在 `features/papers/[id]/components`，公共 Composer 及其兜底配置在 `components/common/composer`，匿名数据认领在 `components/auth`。`features/deep-research`、`features/auto-research`：各自业务。旧 deep-search 是静态搜索结果原型，归 `features/search`。
+- `features/agent-chat`：深知 AI 主对话（`/agents`），经 `clients/backend/agent.ts` 调用 FastAPI Agent 产品 API（`/api/v2/agent/*`）；产品 SSE 契约保留，无状态论文详情助手的独立 Task JSON 入口为 `/api/v2/agent/submissions`。论文详情助手（`features/papers/[id]`）同样走 Agent Runtime。论文助手的错误气泡与 Markdown 渲染在 `features/papers/[id]/components`，公共 Composer 及其兜底配置在 `components/common/composer`，匿名数据认领在 `components/auth`。`features/deep-research`、`features/auto-research`：各自业务。旧 deep-search 是静态搜索结果原型，归 `features/search`。
 - `clients/backend`：HTTP、SSE 和 Next BFF 转发；不在 `lib/api` / `services/backend` 保留重复实现。
 - `components/common`：跨 Feature 布局/图谱/静态引用；`components/ui`：基础组件。
 - `apps/backend/app/api`：校验、身份边界与响应；`schemas`：输入约束；`services`：实际业务；`core`：配置/身份/错误；`main.py`：应用、路由、生命周期。

@@ -69,6 +69,16 @@ class AdminConsoleTests(unittest.TestCase):
         https = TestClient(app, base_url='https://testserver', client=('::1', 5555))
         self.assertIn('Secure', self.login(https).headers['set-cookie'])
 
+    def test_docker_development_credentials_are_rejected_outside_development(self):
+        with patch.dict(os.environ, {'ADMIN_LOCAL_USERNAME': 'shenzhi', 'ADMIN_LOCAL_PASSWORD': 'shenzhi-dev'}):
+            for environment in ('', 'production', 'staging'):
+                with patch.dict(os.environ, {'ENVIRONMENT': environment}):
+                    response = self.client.post(PATH + '/auth/login', json={'username': 'shenzhi', 'password': 'shenzhi-dev'})
+                    self.assertEqual(response.status_code, 503)
+            with patch.dict(os.environ, {'ENVIRONMENT': 'development'}):
+                response = self.client.post(PATH + '/auth/login', json={'username': 'shenzhi', 'password': 'shenzhi-dev'})
+                self.assertEqual(response.status_code, 200)
+
     def test_capabilities_real_projection_and_failures(self):
         self.login()
         payload = {'models': [{'value':'test/model','label':'Test','provider':'test','enabled':True}],
@@ -79,6 +89,7 @@ class AdminConsoleTests(unittest.TestCase):
             self.assertEqual(r.json()['data']['models'], payload['models'])
             self.assertEqual(r.json()['data']['tools_status'], 'not_connected')
             self.assertEqual(call.call_args.kwargs['headers']['Authorization'], 'Bearer test-token')
+            self.assertTrue(call.call_args.args[0].endswith('/internal/v2/config'))
         with patch('app.integrations.admin_console.capabilities.httpx.AsyncClient.get', new=AsyncMock(side_effect=httpx.ConnectError('offline'))):
             self.assertEqual(self.client.get(PATH + '/capabilities').status_code, 503)
         with patch.dict(os.environ, {'AGENT_SERVICE_TOKEN':''}):

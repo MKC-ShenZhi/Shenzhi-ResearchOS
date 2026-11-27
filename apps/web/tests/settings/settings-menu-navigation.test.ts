@@ -85,6 +85,8 @@ test("appearance scroll waits for the active profile panel, handles hash changes
     "../hooks/use-user-settings": { useUserSettings: () => ({ locale: "zh-CN" }) },
     "../i18n": { settingsMessages: { "zh-CN": {} } },
     "./account-section": {}, "./notifications-panel": {}, "./placeholder-panel": {}, "./profile-panel": {},
+    "./subscription/subscription-panel": {},
+    "./subscription/usage-panel": {},
     "./tab-config": { isSettingsTab: () => true, SETTINGS_TABS: [] },
   }, {
     window: {

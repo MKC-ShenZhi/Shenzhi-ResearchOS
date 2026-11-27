@@ -1,0 +1,107 @@
+[
+  {
+    "model": "openlux/deepseek-v4.1-flash",
+    "status": 200,
+    "requested_max_tokens": 64,
+    "usage": {
+      "prompt_tokens": 31,
+      "completion_tokens": 64,
+      "total_tokens": 95,
+      "completion_tokens_details": {
+        "reasoning_tokens": 64,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0,
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "length",
+    "content_nonempty": false,
+    "reasoning_fields": [
+      "reasoning_content"
+    ],
+    "completion_within_limit": true
+  },
+  {
+    "model": "openlux/qwen3.8-flash",
+    "status": 200,
+    "requested_max_tokens": 64,
+    "usage": {
+      "prompt_tokens": 95,
+      "completion_tokens": 64,
+      "total_tokens": 159,
+      "completion_tokens_details": {
+        "reasoning_tokens": 64
+      }
+    },
+    "finish_reason": "length",
+    "content_nonempty": false,
+    "reasoning_fields": [
+      "reasoning_content"
+    ],
+    "completion_within_limit": true
+  },
+  {
+    "model": "openlux/glm-5.3-flash",
+    "status": 200,
+    "requested_max_tokens": 64,
+    "usage": {
+      "prompt_tokens": 31,
+      "completion_tokens": 64,
+      "total_tokens": 95,
+      "completion_tokens_details": {
+        "reasoning_tokens": 26,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0,
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "length",
+    "content_nonempty": true,
+    "reasoning_fields": [
+      "reasoning_content"
+    ],
+    "completion_within_limit": true
+  },
+  {
+    "model": "openlux/kimi-k2.6",
+    "status": 200,
+    "requested_max_tokens": 64,
+    "usage": {
+      "prompt_tokens": 31,
+      "completion_tokens": 64,
+      "total_tokens": 95,
+      "completion_tokens_details": {
+        "reasoning_tokens": 1,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0,
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "length",
+    "content_nonempty": true,
+    "reasoning_fields": [],
+    "completion_within_limit": true
+  },
+  {
+    "model": "openlux/gemini-3.8-flash",
+    "status": 200,
+    "requested_max_tokens": 64,
+    "usage": {
+      "prompt_tokens": 23,
+      "completion_tokens": 4160,
+      "total_tokens": 4183,
+      "completion_tokens_details": {
+        "text_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 268
+      }
+    },
+    "finish_reason": "stop",
+    "content_nonempty": true,
+    "reasoning_fields": [],
+    "completion_within_limit": false
+  }
+]

@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .runs import RunStatus
+from .messages import AIMessage, MESSAGE_EVENT_MODELS, Reference
 
 
 class WireModel(BaseModel):
@@ -160,6 +161,11 @@ def validate_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if any(field in message and not isinstance(message[field], bool)
                    for field in ('is_error', 'pinned')):
                 raise ValueError(f'history[{index}] tool result flags must be booleans')
+            references = message.get('references', [])
+            if not isinstance(references, list):
+                raise ValueError(f'history[{index}].references must be a list')
+            for reference in references:
+                Reference.model_validate(reference)
         else:
             raise ValueError(f'history[{index}].kind is invalid')
     return history
@@ -179,6 +185,7 @@ class TaskRecordWire(WireModel):
 class TaskRunsResponseWire(WireModel):
     """All Run IDs for one Task, ordered by its immutable, unique attempt."""
 
+    schema_version: Literal[1] = 1
     run_ids: list[str] = Field(min_length=1)
 
 
@@ -203,6 +210,13 @@ class PlatformEventWire(WireModel):
     data: dict[str, Any]
     occurred_at: datetime
 
+    @model_validator(mode='after')
+    def valid_message_event(self):
+        model = MESSAGE_EVENT_MODELS.get(self.name)
+        if model is not None:
+            model.model_validate(self.data)
+        return self
+
 
 class UsageReportWire(WireModel):
     prompt_tokens: int | None = Field(default=None, ge=0)
@@ -224,6 +238,8 @@ class ExecutionReportWire(WireModel):
     def terminal_status(self):
         if self.status in (RunStatus.PENDING, RunStatus.RUNNING):
             raise ValueError('execution report requires a terminal status')
+        if self.result is not None and self.result.get('message') is not None:
+            AIMessage.model_validate(self.result['message'])
         return self
 
 

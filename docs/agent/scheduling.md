@@ -1,6 +1,6 @@
 # 用户级调度契约
 
-本文定义 Control 与 Execution 并行开发使用的目标契约。当前实现通过 PostgreSQL Outbox 和 Run 租约派发，尚无独立 Attempt 或跨 Worker 的用户并发限制。现有 /internal/v1 接口按共享契约中的当前行为运行。
+本文定义 Control 与 Execution 并行开发使用的调度目标契约。当前实现通过 PostgreSQL Outbox 和 Run 租约派发，尚无独立 Attempt 或跨 Worker 的用户并发限制。当前 HTTP 执行接口统一为 `/internal/v2/*`；文中较早的 V1 示例视为历史协议，不可调用。
 
 ## 责任与准入
 

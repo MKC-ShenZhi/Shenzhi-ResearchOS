@@ -15,6 +15,9 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from agent_contracts import ExecutionReport, RunStatus, TaskSubmission
+from agent_contracts.v2 import TaskSubmissionV2
+from agent_contracts.wire import TaskSubmissionWire
+from agent_contracts.canonical import request_digest_v1
 from agent_app.control import repository
 from agent_app.errors import BusinessError
 from agent_app.infrastructure.models import RunRow, TaskRow
@@ -45,8 +48,40 @@ class ControlPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
 
     async def submit(self, **kwargs):
+        submission = TaskSubmission(owner_id=self.owner, **kwargs)
+        request = self.wire(submission)
+        envelope = self.envelope(request)
         async with self.factory() as db:
-            return await repository.submit(db, TaskSubmission(owner_id=self.owner, **kwargs))
+            task = await repository.submit(db, submission, metering=envelope)
+            await self.bind_profile(db, task.task_id)
+            return task
+
+    @staticmethod
+    def wire(submission):
+        return TaskSubmissionWire(owner_id=submission.owner_id, prompt=submission.prompt,
+            session_id=submission.session_id, turn_id=submission.turn_id,
+            input_ref=submission.input_ref, idempotency_key=submission.idempotency_key,
+            mode=submission.mode, model=submission.model, workspace_id=submission.workspace_id,
+            skills=list(submission.skills), budget={
+                'max_duration_s': submission.budget.max_duration_s,
+                'max_tool_calls': submission.budget.max_tool_calls,
+                'max_model_tokens': submission.budget.max_model_tokens,
+            }, history=list(submission.history))
+
+    def envelope(self, request):
+        return TaskSubmissionV2(schema_version=1, request=request, owner_id=self.owner,
+            metering_profile_id='profile:'+uuid.uuid4().hex, metering_context='observation_only',
+            submission_id=None, request_digest=request_digest_v1(request.model_dump(mode='json')),
+            agent_audience='agent-test', budget_grant=None, permission_snapshot=None, call_bounds={})
+
+    async def bind_profile(self, db, task_id):
+        from agent_app.infrastructure.metering_models import TaskMeteringRow
+        profile = await db.get(TaskMeteringRow, task_id)
+        profile.binding = {'schema_version': 1, 'task_id': task_id,
+                           'metering_profile_id': profile.profile_id, 'owner_id': self.owner,
+                           'metering_context': 'observation_only'}
+        profile.binding_status = 'bound'
+        await db.commit()
 
     async def race_submissions(self, prompts):
         ready = asyncio.Event()
@@ -69,9 +104,13 @@ class ControlPostgresTests(unittest.IsolatedAsyncioTestCase):
         factory = async_sessionmaker(self.engine, class_=RacingSession, expire_on_commit=False)
 
         async def send(prompt):
+            submission = TaskSubmission(owner_id=self.owner, prompt=prompt, idempotency_key='concurrent-key')
+            request = self.wire(submission)
+            envelope = self.envelope(request)
             async with factory() as db:
-                return await repository.submit(db, TaskSubmission(
-                    owner_id=self.owner, prompt=prompt, idempotency_key='concurrent-key'))
+                task = await repository.submit(db, submission, metering=envelope)
+                await self.bind_profile(db, task.task_id)
+                return task
 
         return await asyncio.wait_for(asyncio.gather(
             *(send(prompt) for prompt in prompts), return_exceptions=True), timeout=10)
